@@ -1,0 +1,25 @@
+packages:
+  - apps/*
+  - packages/*
+minimumReleaseAgeExclude:
+  - '@swc/core-darwin-arm64@1.16.18'
+  - '@swc/core-darwin-x64@1.16.18'
+  - '@swc/core-linux-arm-gnueabihf@1.16.18'
+  - '@swc/core-linux-arm64-gnu@1.16.18'
+  - '@swc/core-linux-arm64-musl@1.16.18'
+  - '@swc/core-linux-ppc64-gnu@1.16.18'
+  - '@swc/core-linux-s390x-gnu@1.16.18'
+  - '@swc/core-linux-x64-gnu@1.16.18'
+  - '@swc/core-linux-x64-musl@1.16.18'
+  - '@swc/core-win32-arm64-msvc@1.16.18'
+  - '@swc/core-win32-ia32-msvc@1.16.18'
+  - '@swc/core-win32-x64-msvc@1.16.18'
+  - '@swc/core@1.16.18'
+  - zod@4.6.6
+  - '@tanstack/query-core@5.104.2'
+  - '@tanstack/react-query@5.104.2'
+
+# Dependencies allowed to run install scripts (pnpm blocks all others by default).
+allowBuilds:
+  '@swc/core': true
+  esbuild: true

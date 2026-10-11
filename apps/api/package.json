@@ -1,0 +1,40 @@
+{
+  "name": "@arabat/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n tsc,api -c blue,green \"tsc -p tsconfig.build.json --watch --preserveWatchOutput\" \"node scripts/wait-for-build.mjs && node --env-file-if-exists=../../.env --watch-path=dist --enable-source-maps dist/main.js\"",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node --env-file-if-exists=../../.env --enable-source-maps dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "node --env-file-if-exists=../../.env dist/database/cli/migrate.js",
+    "db:seed": "node --env-file-if-exists=../../.env dist/database/cli/seed.js"
+  },
+  "dependencies": {
+    "@arabat/contracts": "workspace:*",
+    "@arabat/money": "workspace:*",
+    "@arabat/permissions": "workspace:*",
+    "@fastify/cookie": "^11.1.3",
+    "@fastify/helmet": "^13.1.2",
+    "@fastify/static": "^10.1.6",
+    "@nestjs/common": "^12.1.2",
+    "@nestjs/core": "^12.1.2",
+    "@nestjs/platform-fastify": "^12.1.2",
+    "drizzle-orm": "^0.45.4",
+    "fastify": "^5.12.5",
+    "pg": "^8.23.1",
+    "pino": "^10.4.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "zod": "^4.6.6"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "^12.1.2",
+    "@types/pg": "^8.23.1",
+    "concurrently": "^10.0.6",
+    "drizzle-kit": "^0.31.11",
+    "pino-pretty": "^13.2.0"
+  }
+}

@@ -43,13 +43,35 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
 9. **i18n:** no missing translation keys in `ar` or `en`; no physical
    left/right CSS classes (lint).
 
-## 4. Commands *(defined at scaffold — milestone M0)*
-```
-pnpm test          # all unit + integration tests
-pnpm test:e2e      # Playwright
-pnpm lint
-pnpm typecheck
-```
+## 4. Commands and infrastructure (implemented in M0)
+
+| Command | Vitest project / tool | What runs | Needs |
+|---|---|---|---|
+| `pnpm test` | `unit` + `web` | money, permissions, API kernel (Nest app via Fastify `inject`), env config; React apps and shared web packages in jsdom | nothing |
+| `pnpm test:integration` | `integration` | `apps/api/**/*.int.test.ts` against real PostgreSQL: migrations, seeds, runtime role privileges, RLS isolation, rollback, readiness | `pnpm db:up`, `.env` with `TEST_DATABASE_URL` and `TEST_DATABASE_OWNER_URL` |
+| `pnpm test:e2e` | Playwright | Built apps served by the API (`SERVE_WEB=true`, port 3100): separate bundles, redirects to login, API status, RTL/LTR switch, default-deny API, touch target size, no browser errors | `pnpm db:up && pnpm db:migrate && pnpm build` |
+| `pnpm verify` | all static checks | lint, format check, typecheck, build, `pnpm test` | nothing |
+
+- Config: `vitest.config.ts` (projects `unit`, `integration`, `web`),
+  `vitest.web-setup.ts`, `playwright.config.ts`, specs in `e2e/`.
+- API tests build the real application with `createTestApp()`
+  (`apps/api/src/testing/test-app.ts`); a test-only `HeaderSessionResolver`
+  injects actors to exercise the guard matrix. It is never registered in the real
+  application.
+- Web tests render each app's real route tree with `renderApp()` from
+  `@arabat/web-core/testing` and a fake `fetch` that answers like the API.
+- Playwright uses the browsers installed by `playwright install`, or
+  `PLAYWRIGHT_CHROMIUM_EXECUTABLE` if set (cloud sandbox: `/opt/pw-browsers/chromium`).
+- CI (`.github/workflows/ci.yml`): job `verify`, then job `integration` with a
+  `postgres:18` service (roles created by `docker/postgres/init`), migrations,
+  seeds, integration tests and E2E.
+
+### Results at the end of M0 (2026-10-11, local run)
+- `pnpm verify`: lint ✓, format ✓, typecheck ✓ (11 projects), build ✓, 79 tests ✓.
+- `pnpm test:integration`: 10 tests ✓ (PostgreSQL 18.6 via Docker Compose).
+- `pnpm test:e2e`: 12 tests ✓ (Chromium desktop + tablet touch profile).
+- The GitHub Actions workflow has not run yet (not pushed to a branch with CI
+  triggers when written); first run must be checked.
 
 ## 5. Coverage expectations
 - `packages/money` and authorization logic: ~100% branch coverage.

@@ -1,15 +1,13 @@
 # Database
 
-Status: **Conventions and initial entity design defined. No migrations exist yet.**
+Status: **Conventions and entity design defined. Migration infrastructure implemented (M0); business tables start in M1.**
 The tenant is called **merchant** in the schema (`merchant_id`).
 
 ---
 
 ## 1. Engine and access
-- PostgreSQL **18.x** in all environments (local Docker image `postgres:18`).
-  Until CI is pinned, schema must also run on PostgreSQL 16+ (the cloud sandbox
-  has 16) — so no reliance on PG18-only features (UUIDv7 is generated in the
-  application, not with PG18 `uuidv7()`).
+- PostgreSQL **18.x** in all environments (local Docker image `postgres:18`, CI
+  service `postgres:18`). UUIDv7 is generated in the application.
 - Access via Drizzle ORM + node-postgres. Schema changes **only** through
   versioned SQL migrations in the repo (drizzle-kit generate → hand review).
 - Roles:
@@ -36,8 +34,8 @@ The tenant is called **merchant** in the schema (`merchant_id`).
   alter table <t> enable row level security;
   alter table <t> force row level security;
   create policy merchant_isolation on <t>
-    using (merchant_id = current_setting('app.merchant_id', true)::uuid)
-    with check (merchant_id = current_setting('app.merchant_id', true)::uuid);
+    using (merchant_id = app_current_merchant_id())
+    with check (merchant_id = app_current_merchant_id());
   ```
   `app.merchant_id` is set per transaction with `SET LOCAL` by the kernel's
   `withMerchantTx()`. When it is unset, no rows are visible.
@@ -335,7 +333,30 @@ erDiagram
   can be added without changing application code.
 - Barcode lookup: `unique (merchant_id, barcode)`.
 
-## 8. Migration workflow
+## 8. Implemented migrations
+
+| File | Content |
+|---|---|
+| `apps/api/drizzle/0000_bootstrap.sql` | `GRANT USAGE` on schema to `app_runtime`; default privileges (DML on tables, sequences, functions) for objects created by `app_owner`; function `app_current_merchant_id()` (NULL when unset) for RLS policies |
+| `apps/api/drizzle/0001_currencies.sql` | `currencies` reference table (code, exponent, `name_en`, `name_ar`); `app_runtime` is read-only on it |
+
+Seeds (`apps/api/src/database/seeds`, run as `app_owner` in one transaction,
+idempotent, each seed declares the environments it may run in):
+`001-currencies` (KWD=3, BHD=3, OMR=3, SAR, AED, QAR, USD, EUR = 2).
+
+Connection management: `DatabaseService` owns one `pg.Pool` (size
+`DATABASE_POOL_MAX`, statement timeout, idle-error handler), exposes
+`withTransaction()` and `withMerchantTx(merchantId)` — the latter validates the
+UUID and runs `set_config('app.merchant_id', id, true)` (transaction-local). The
+pool is closed on shutdown. Role/database bootstrap: `docker/postgres/init/`.
+
+RLS policy template (verified by `database.int.test.ts`):
+```sql
+using (merchant_id = app_current_merchant_id())
+with check (merchant_id = app_current_merchant_id())
+```
+
+## 9. Migration workflow
 1. Change the Drizzle schema in the owning module (`modules/<m>/infrastructure/schema.ts`).
 2. `pnpm db:generate` → review SQL by hand; add RLS policies, grants, checks.
 3. `pnpm db:migrate` locally; run integration tests incl. isolation tests.

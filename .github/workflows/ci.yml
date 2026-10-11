@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint, typecheck, build, unit & web tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: pnpm test
+
+  integration:
+    name: Database integration & end-to-end tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      PGHOST: localhost
+      PGPASSWORD: postgres_ci
+      POSTGRES_USER: postgres
+      APP_OWNER_PASSWORD: app_owner_ci
+      APP_RUNTIME_PASSWORD: app_runtime_ci
+      APP_DATABASES: arabat_dev arabat_test
+      DATABASE_URL: postgres://app_runtime:app_runtime_ci@localhost:5432/arabat_dev
+      DATABASE_OWNER_URL: postgres://app_owner:app_owner_ci@localhost:5432/arabat_dev
+      TEST_DATABASE_URL: postgres://app_runtime:app_runtime_ci@localhost:5432/arabat_test
+      TEST_DATABASE_OWNER_URL: postgres://app_owner:app_owner_ci@localhost:5432/arabat_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: Create database roles and databases (same script as Docker Compose)
+        run: bash docker/postgres/init/01-roles-and-databases.sh
+      - run: pnpm build
+      - run: pnpm db:migrate
+      - run: pnpm db:seed
+      - run: pnpm test:integration
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 7

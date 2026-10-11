@@ -19,14 +19,15 @@ Global "Definition of Done" for every slice:
 - [x] Project instructions and documentation structure (Prompt 1)
 - [x] System architecture design (Prompt 2)
 
-## M0 — Engineering foundation
+## M0 — Engineering foundation ✅ (2026-10-11)
 Scope: monorepo, API skeleton, DB tooling, three SPA shells, money package, CI.
 
 Acceptance criteria:
 1. `pnpm install && pnpm build` succeeds from a clean clone on Node 24.
-2. `docker compose up` starts PostgreSQL 18 and Mailpit; `pnpm db:migrate`
+2. `docker compose up` starts PostgreSQL 18 (Mailpit moved to M1); `pnpm db:migrate`
    applies migrations using `app_owner`; API connects as `app_runtime`.
-3. `GET /api/v1/health` returns 200 with DB status.
+3. `GET /api/v1/health/ready` returns 200 with DB status (503 when the DB is down);
+   `GET /api/v1/health/live` for liveness.
 4. `/manager`, `/pos`, `/platform` load as **three separate bundles**, each with
    its own layout; switching AR/EN flips `dir` correctly.
 5. `packages/money` passes tests for KWD 3-decimal add/subtract/multiply,
@@ -36,6 +37,9 @@ Acceptance criteria:
 7. `withMerchantTx` sets `app.merchant_id`; an RLS test proves rows of
    another merchant are invisible with a raw query.
 8. CI workflow runs lint, typecheck, unit, integration (PostgreSQL), build.
+
+Status: criteria 1–7 verified locally by automated tests; criterion 8 — workflow
+written, first GitHub run pending. Details in `PROGRESS.md`.
 
 ## M1 — Identity, merchants, branches, roles & access
 Blocked by: OQ-010 (merchant sign-up path), OQ-006 (POS login style; e-mail +

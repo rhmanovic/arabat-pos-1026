@@ -151,3 +151,45 @@ ADR; supersede it.
 - **Decision:** One container image (API + worker entrypoints), static SPAs on
   CDN/proxy, managed PostgreSQL 18 with PITR, object storage, GitHub Actions CI.
   No deployment until approved.
+
+---
+
+## ADR-0019 — Integration tests use a dedicated database instead of Testcontainers
+- **Date:** 2026-10-11 · **Status:** Accepted (amends ADR-0017)
+- **Decision:** Integration tests connect to `arabat_test` (created by the same init
+  script as `arabat_dev`) through `TEST_DATABASE_URL` / `TEST_DATABASE_OWNER_URL`.
+  CI uses a `postgres:18` service container. Missing configuration fails the run;
+  tests never skip silently.
+- **Rationale:** Same behaviour locally and in CI, no Docker-in-Docker requirement,
+  faster runs. Testcontainers can be added later for parallel isolated databases.
+
+## ADR-0020 — Package build strategy and `source` export condition
+- **Date:** 2026-10-11 · **Status:** Accepted
+- **Decision:** Universal packages used by the API (`money`, `permissions`,
+  `contracts`) compile to `dist/` with `tsc`; their `exports` also expose a
+  `source` condition pointing to `src/`, used by Vite and Vitest. Browser-only
+  packages (`api-client`, `i18n`, `ui`, `web-core`) are source-only and compiled by
+  each app's Vite build. The API is compiled with `tsc` (decorator metadata) and run
+  with plain Node; tests use SWC for the same reason.
+
+## ADR-0021 — API can serve the built SPAs (single origin)
+- **Date:** 2026-10-11 · **Status:** Accepted
+- **Decision:** With `SERVE_WEB=true` the API serves `/manager/*`, `/pos/*`,
+  `/platform/*` from each app's `dist/` (SPA fallback per app, 404 for missing
+  assets, immutable caching for hashed assets). Used for production-like local runs
+  and E2E tests. A CDN/reverse proxy may replace it in production (ADR-0018).
+
+## ADR-0022 — M0 session resolver denies everything
+- **Date:** 2026-10-11 · **Status:** Accepted (temporary until M1)
+- **Decision:** The `SessionResolver` abstraction is bound to `NoSessionStoreResolver`
+  (always "no session"). Combined with the default-deny `AccessGuard` and the boot
+  time route auditor, only `@Public` routes (health) are reachable. The login forms
+  are visibly disabled — no fake login exists. M1 replaces the resolver with the
+  database-backed session store.
+
+## ADR-0023 — Frontend primitives without Radix for now
+- **Date:** 2026-10-11 · **Status:** Accepted (refines ADR-0009)
+- **Decision:** M0 primitives (Button, Input, Field, Card, Alert, Badge, Segmented,
+  Spinner, EmptyState) are plain accessible components with
+  `class-variance-authority` + `tailwind-merge`. Radix primitives are added when the
+  first complex widget (dialog, menu, popover) is needed (M1).

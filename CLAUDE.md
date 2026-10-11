@@ -102,6 +102,7 @@ approval from the product owner and a new entry in `docs/DECISIONS.md`.
 | `docs/ARCHITECTURE.md`   | Stack, app boundaries, modules & dependencies, routing, API, i18n, deployment |
 | `docs/AUTH.md`           | Authentication, sessions, permissions, branch scoping, overrides |
 | `docs/ROUTES.md`         | Frontend routes per app and API namespaces                  |
+| `README.md`              | Startup procedure and everyday commands                     |
 | `docs/DATABASE.md`       | Database conventions, schema catalogue, migrations          |
 | `docs/BUSINESS_RULES.md` | Confirmed business rules and open business questions        |
 | `docs/DECISIONS.md`      | Architecture Decision Records (ADR log)                     |
@@ -119,8 +120,49 @@ written into the appropriate document in the same session.
   branch (or all branches). See `docs/AUTH.md`.
 - **Order** = mutable intent document; **Sale** = immutable financial document.
 
-## 8. Repository status
+## 8. Repository map and commands
 
-Documentation and architecture design only. No application code has been
-scaffolded yet (next: milestone M0).
+```
+apps/api            NestJS + Fastify modular monolith (/api/v1), Drizzle, migrations in apps/api/drizzle
+apps/manager-web    React SPA, basename /manager (ManagerLayout)
+apps/pos-web        React SPA, basename /pos (POSLayout)
+apps/platform-web   React SPA, basename /platform (PlatformLayout)
+packages/money        bigint Money (KWD 3 decimals)          — built to dist (used by API)
+packages/permissions  permission catalog + can()             — built to dist (used by API)
+packages/contracts    Zod API contracts                      — built to dist (used by API)
+packages/api-client   typed fetch client, ApiError           — source-only (web)
+packages/i18n         i18next setup, ar/en common strings    — source-only (web)
+packages/ui           design tokens + primitives             — source-only (web)
+packages/web-core     providers, auth state, guards          — source-only (web)
+```
+
+Commands (see README.md): `pnpm setup:local`, `pnpm dev`, `pnpm verify`,
+`pnpm test:integration`, `pnpm test:e2e`, `pnpm db:generate|db:migrate|db:seed`.
+Before reporting work as done, run `pnpm verify`, `pnpm test:integration` and
+`pnpm test:e2e`.
+
+## 9. Gotchas (learned the hard way)
+
+- **Never put `NODE_ENV` in `.env`**: Vite copies it into `process.env` and would
+  bundle React's development build. The web `vite.config.ts` files refuse to build
+  with a non-production `NODE_ENV`.
+- Built packages (`money`, `permissions`, `contracts`) are consumed by the API from
+  `dist/`: run `pnpm build:packages` after changing them (`pnpm typecheck` does it).
+  Vite and Vitest read their `src/` through the `source` export condition.
+- NestJS needs decorator metadata: API code must keep value imports for injected
+  classes (the type-import lint rule is disabled under `apps/api`), and Vitest uses
+  SWC for API tests.
+- Every API route needs `@Public`, `@Authenticated`, `@RequirePermission` or
+  `@RequirePlatformRole`; otherwise the API refuses to boot.
+- Use logical Tailwind utilities (`ms-/me-/ps-/pe-/start-/end-`); ESLint rejects
+  physical left/right classes.
+- Fonts must not be inlined as `data:` URIs (CSP `font-src 'self'`).
+- In this cloud sandbox: Node 24 is at `~/.local/node24/bin`, Docker must be started
+  with `dockerd &`, and Playwright needs
+  `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium`.
+
+## 10. Repository status
+
+Milestone **M0 — engineering foundation** implemented (see `docs/PROGRESS.md`).
+Next: milestone M1 (identity, merchants, branches, roles & access).
 See `docs/PROGRESS.md` for the current state and `docs/ROADMAP.md` for next steps.

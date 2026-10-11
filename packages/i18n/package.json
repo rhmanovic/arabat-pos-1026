@@ -1,0 +1,21 @@
+{
+  "name": "@arabat/i18n",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@arabat/contracts": "workspace:*",
+    "i18next": "^26.4.3",
+    "react-i18next": "^17.0.16",
+    "@arabat/money": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^19.3.0"
+  }
+}

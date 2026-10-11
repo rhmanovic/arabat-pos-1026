@@ -74,7 +74,7 @@ time; minor/patch updates are routine, major upgrades get an ADR.
 | i18n | **i18next + react-i18next**, ICU plurals; `Intl` for numbers/dates | 26.x / 17.x | Arabic/English, namespaces per app. |
 | Unit/integration tests | **Vitest** | 5.x | Fast, TS-native, same runner for API and web. |
 | API tests | Vitest + Fastify `inject` via Nest testing module | — | No network, real guards. |
-| DB tests | Real PostgreSQL (**Testcontainers** `postgres:18`, fallback local cluster) | testcontainers 12.x | RLS and transactions must be tested on the real engine. |
+| DB tests | Real PostgreSQL 18: dedicated `arabat_test` database (Compose locally, service container in CI) — ADR-0019 | — | RLS and transactions must be tested on the real engine. |
 | Component tests | Testing Library + MSW | — | |
 | E2E | **Playwright** | 1.64 | Cross-browser, touch emulation for POS. |
 | Lint/format | ESLint 10 + typescript-eslint 8.x, Prettier 3 | — | |
@@ -95,15 +95,18 @@ apps/
   pos-web/                React SPA, basename /pos
   platform-web/           React SPA, basename /platform
 packages/
-  contracts/              Zod request/response schemas, error codes, enums (API ⇄ web)
-  permissions/            Permission catalog (keys, scope, interface) + evaluation helpers
-  money/                  Money value object: bigint minor units, currencies, rounding
-  pricing/                Pure pricing functions (line totals, discounts, tax) — used by API (authoritative) and POS (preview)
-  ui/                     Design system (shadcn-style components, RTL-aware, tokens)
-  i18n/                   i18next setup, shared "common" translations, formatters
-  api-client/             Typed fetch client built on `contracts`
-  config/                 Shared tsconfig / eslint / vitest presets
+  contracts/              Zod request/response schemas, error codes, enums (API ⇄ web)      [M0]
+  permissions/            Permission catalog (keys, scope) + can() evaluation              [M0]
+  money/                  Money value object: bigint minor units, currencies, rounding      [M0]
+  api-client/             Typed fetch client built on `contracts`, ApiError/NetworkError   [M0]
+  i18n/                   i18next setup, shared "common" ar/en strings, money formatting   [M0]
+  ui/                     Design tokens (theme.css) + accessible primitives, RTL-aware      [M0]
+  web-core/               Shared React infrastructure: providers, auth state, guards,      [M0]
+                          error/loading states, language switch, API status
+  pricing/                Pure pricing functions shared by API (authoritative) and POS     [M4]
 docs/
+e2e/                      Playwright tests against the built apps (single origin)
+docker/postgres/init/     Role/database bootstrap (used by Compose and CI)
 ```
 
 Rules:
@@ -428,18 +431,19 @@ Full design in `AUTH.md`.
 
 - Requirements: Node.js 24 LTS (`.nvmrc`), Corepack-enabled pnpm, Docker.
 - `docker compose up` → `postgres:18` (port 5432, separate `app_owner` /
-  `app_runtime` roles created by init script) and Mailpit (captures e-mail
-  locally — no real e-mail provider).
+  `app_runtime` roles and `arabat_dev` / `arabat_test` databases created by
+  `docker/postgres/init`). Mailpit (local e-mail capture) is added in M1 when the
+  first e-mail (invitations) exists.
 - `pnpm dev` runs: API (`:3000`), manager-web (`:5173`, base `/manager`),
   pos-web (`:5174`, base `/pos`), platform-web (`:5175`, base `/platform`).
-  Each Vite dev server proxies `/api` to the API.
-  A combined dev proxy on `:8080` serves all three under one origin to mirror
-  production cookie paths.
-- `pnpm db:migrate`, `pnpm db:seed` (demo merchant, branches, roles, users —
-  clearly marked development data).
+  Each Vite dev server proxies `/api` to the API (cookies are host-scoped, so the
+  ports share sessions on `localhost`). For a single-origin run use
+  `pnpm build && SERVE_WEB=true pnpm start` (ADR-0021).
+- `pnpm db:migrate`, `pnpm db:seed` (reference data now; demo merchant, branches,
+  roles and users are added in M1 and never run in production).
+- Startup procedure: `README.md`.
 - `.env.example` documents all variables; real `.env` is git-ignored.
-- Fallback without Docker (e.g. restricted sandbox): local PostgreSQL 16+
-  cluster; schema must not depend on PG18-only features until CI is pinned.
+- CI (`.github/workflows/ci.yml`) runs on PostgreSQL 18 with the same init script.
 
 ---
 
