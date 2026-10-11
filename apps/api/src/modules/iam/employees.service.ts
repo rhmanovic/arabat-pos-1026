@@ -132,16 +132,14 @@ export class EmployeesService {
         invitedBy: actor.membershipId,
         expiresAt: sql`now() + make_interval(days => ${INVITATION_TTL_DAYS})`,
       });
-      await tx
-        .insert(invitationAssignments)
-        .values(
-          input.assignments.map((a) => ({
-            merchantId: actor.merchantId,
-            invitationId: id,
-            roleId: a.roleId,
-            branchId: a.branchId,
-          })),
-        );
+      await tx.insert(invitationAssignments).values(
+        input.assignments.map((a) => ({
+          merchantId: actor.merchantId,
+          invitationId: id,
+          roleId: a.roleId,
+          branchId: a.branchId,
+        })),
+      );
       await this.record(tx, actor, 'employee.invited', 'invitation', id, ip, {
         email: input.email,
         assignments: input.assignments,
@@ -283,17 +281,15 @@ export class EmployeesService {
       await tx.delete(roleAssignments).where(eq(roleAssignments.membershipId, membershipId));
       const unique = dedupe(assignments);
       if (unique.length) {
-        await tx
-          .insert(roleAssignments)
-          .values(
-            unique.map((a) => ({
-              id: newId(),
-              merchantId: actor.merchantId,
-              membershipId,
-              roleId: a.roleId,
-              branchId: a.branchId,
-            })),
-          );
+        await tx.insert(roleAssignments).values(
+          unique.map((a) => ({
+            id: newId(),
+            merchantId: actor.merchantId,
+            membershipId,
+            roleId: a.roleId,
+            branchId: a.branchId,
+          })),
+        );
       }
       await this.record(tx, actor, 'employee.roles_changed', 'membership', membershipId, ip, {
         before: member.assignments,

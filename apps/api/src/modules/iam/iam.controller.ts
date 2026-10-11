@@ -58,8 +58,10 @@ export class IamController {
 
   @RequirePermission('manager', 'employees.read')
   @Get('roles')
-  async listRoles(@CurrentMerchantActor() actor: MerchantActor): Promise<{ roles: Role[] }> {
-    return { roles: await this.roles.list(actor) };
+  async listRoles(
+    @CurrentMerchantActor() actor: MerchantActor,
+  ): Promise<{ roles: Role[]; grantable: string[] }> {
+    return { roles: await this.roles.list(actor), grantable: this.roles.grantable(actor) };
   }
 
   @RequirePermission('manager', 'roles.manage')

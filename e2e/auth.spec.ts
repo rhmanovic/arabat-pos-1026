@@ -28,7 +28,8 @@ test('a company owner registers, lands in /manager, signs out and signs in again
   await expect(page.getByTestId('merchant-name')).toHaveText('E2E Trading');
   await expect(page.getByTestId('user-name')).toHaveText('E2E Owner');
 
-  await page.getByRole('button', { name: 'Sign out' }).click();
+  await page.getByTestId('user-menu').click();
+  await page.getByRole('menuitem', { name: 'Sign out' }).click();
   await expect(page).toHaveURL(/\/manager\/login$/);
   // The server session is gone, not just the UI state.
   expect((await page.request.get('/api/v1/auth/manager/me')).status()).toBe(401);

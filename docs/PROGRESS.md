@@ -3,7 +3,7 @@
 Only record what has actually been done and verified. Mocked or partial work
 must be labeled as such.
 
-## Current state (2026-10-11, after Prompt 5 — branches, employees, permissions)
+## Current state (2026-10-11, after Prompt 6 — manager dashboard)
 
 | Area | Status | Notes |
 |---|---|---|
@@ -11,10 +11,11 @@ must be labeled as such.
 | Monorepo & tooling | Done | pnpm 12 workspaces, TS 6 strict, ESLint 10, Prettier, Node 24 |
 | Backend foundation | Done | NestJS 12 + Fastify 5, config validation, problem+json errors, pino logs, request ids, Zod validation pipe, health endpoints, helmet/CSP |
 | Authentication & sessions | Done | Owner registration, sign-in (manager/POS/platform+TOTP), merchant/branch selection, interface & merchant switching, logout, password recovery, rate limits, CSRF origin check |
-| Organization & RBAC | Done (API) | Branch CRUD/activation/settings, invitations, employee profile/status/assignments, roles CRUD, 40-key permission catalog, 5 default roles, anti-escalation, POS branch switch. Management screens: Prompt 6 |
+| Organization & RBAC | Done (API) | Branch CRUD/activation/settings, invitations, employee profile/status/assignments, roles CRUD, 40-key permission catalog, 5 default roles, anti-escalation, POS branch switch. Management screens done (Prompt 6) |
 | Database foundation | Done | PostgreSQL 18 (Compose), Drizzle, migrations, owner/runtime roles, RLS helper, seeds |
 | Frontend foundation | Done | 3 separate Vite apps + shared packages; ManagerLayout / POSLayout / PlatformLayout; ar/en + RTL/LTR; auth state & protected routes; API client |
-| Automated tests | Passing | 88 unit/web, 52 integration, 19 E2E (local) |
+| Manager app | Done for implemented modules | Layout (role-aware sidebar, top bar with merchant/branch context, user menu), dashboard (real counts + onboarding), company profile, branches, employees, invitations, role assignments, roles & permission matrix |
+| Automated tests | Passing | 90 unit/web, 52 integration, 22 E2E (local) |
 | CI | Written, not yet run | `.github/workflows/ci.yml` |
 | Business modules | Not started | Begin in M1 |
 | Deployment | Not planned | Requires owner approval |
@@ -126,5 +127,23 @@ revoking sessions, branch deactivation, cross-merchant isolation incl. raw RLS),
 invited cashier sets password and works only in the POS.
 Note: management screens for these APIs are delivered with Prompt 6.
 
+### 2026-10-11 — Prompt 6: Manager dashboard
+Implemented: Radix-based primitives (dialogs, menus, tabs, toasts, tables),
+direction provider, `useNotify`; ManagerLayout rewrite (role-aware sections, disabled
+"not available yet" modules, branch context selector, merchant switcher, user menu
+with language/POS switch/sign-out, phone drawer); dashboard with only real figures
+(branches, employees, invitations, roles) and onboarding checklist; company settings;
+branch list/create/edit/settings/activation; employee list with search/status/branch
+filters, invitation tab (resend/revoke), invite dialog with role×branch assignments;
+employee detail (profile, roles, status with confirmation, password-reset e-mail);
+roles list and permission-matrix editor that locks permissions the editor lacks.
+Verified: web tests (role-aware nav, disabled modules, route guard), E2E: owner edits
+profile, creates branch, creates custom role, invites cashier via dialog, cashier
+accepts and works only in POS at that branch (management API 401), owner adds role
+and deactivates; company manager cannot grant POS roles; phone layout without
+horizontal overflow. Visual check in Arabic RTL desktop and English tablet.
+Found and fixed: screen-reader-only table labels caused horizontal page overflow on
+phones (table wrapper now `relative`).
+
 ## Next step
-Prompt 6 — manager dashboard.
+Prompt 7 — product catalog.

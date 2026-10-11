@@ -106,7 +106,49 @@ describe('manager app', () => {
     });
     const nav = await screen.findByRole('navigation', { name: 'Manager navigation' });
     expect(within(nav).getByRole('link', { name: 'Dashboard' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Welcome, Test User' })).toBeInTheDocument();
+    // Navigation is role-aware: no employee or branch administration without the permission.
+    expect(within(nav).queryByRole('link', { name: 'Employees' })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole('link', { name: 'Branches' })).not.toBeInTheDocument();
+  });
+
+  it('shows administration links for permitted users and unfinished modules as unavailable', async () => {
+    const permissions = [
+      'manager.access',
+      'employees.read',
+      'branches.read',
+      'merchant.settings.read',
+      'catalog.read',
+    ];
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', permissions),
+      routes: {
+        'GET /manager/branches': () => ({ status: 200, body: { branches: [] } }),
+        'GET /manager/employees': () => ({ status: 200, body: { employees: [], invitations: [] } }),
+        'GET /manager/roles': () => ({ status: 200, body: { roles: [], grantable: [] } }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, fetch });
+    const nav = await screen.findByRole('navigation', { name: 'Manager navigation' });
+    for (const name of ['Employees', 'Roles & permissions', 'Branches', 'Settings']) {
+      expect(within(nav).getByRole('link', { name })).toBeInTheDocument();
+    }
+    // Products is not built yet: visible but not a link.
+    expect(within(nav).queryByRole('link', { name: /Products/ })).not.toBeInTheDocument();
+    expect(within(nav).getByText('Products').closest('[aria-disabled="true"]')).not.toBeNull();
+  });
+
+  it('denies a management page without its permission even when typed in the address bar', async () => {
+    renderApp({
+      routes,
+      appInterface: 'manager',
+      i18n,
+      path: '/employees',
+      fetch: fakeApiFetch({ session: makeSession('manager', ['manager.access']) }),
+    });
+    expect(
+      await screen.findByText('You do not have permission to view this page.'),
+    ).toBeInTheDocument();
   });
 
   it('switches the layout to RTL for Arabic', async () => {

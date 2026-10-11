@@ -206,7 +206,7 @@ export function MerchantPicker({
   return (
     <div className="flex flex-col gap-4">
       <FormError error={pick.error} />
-      {!merchant || merchants.length > 1 ? (
+      {appInterface === 'manager' || !merchant || merchants.length > 1 ? (
         <OptionList
           title={t('auth.chooseMerchant')}
           size={size}

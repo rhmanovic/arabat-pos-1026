@@ -188,7 +188,7 @@ ADR; supersede it.
   database-backed session store.
 
 ## ADR-0023 — Frontend primitives without Radix for now
-- **Date:** 2026-10-11 · **Status:** Accepted (refines ADR-0009)
+- **Date:** 2026-10-11 · **Status:** Superseded by ADR-0035
 - **Decision:** M0 primitives (Button, Input, Field, Card, Alert, Badge, Segmented,
   Spinner, EmptyState) are plain accessible components with
   `class-variance-authority` + `tailwind-merge`. Radix primitives are added when the
@@ -264,3 +264,22 @@ ADR; supersede it.
 - **Decision:** 40 keys grouped by module (AUTH.md §3.4); employee and branch
   administration are branch-scoped so branch managers manage their own staff;
   role definition and branch creation stay merchant-wide.
+
+## ADR-0035 — Radix primitives for complex widgets
+- **Date:** 2026-10-11 · **Status:** Accepted (Prompt 6)
+- **Decision:** `packages/ui` wraps Radix (`radix-ui`) for Dialog/ConfirmDialog, menus,
+  tabs and toasts; native `<select>`/checkbox for speed and touch. A Radix
+  `Direction.Provider` follows the active language so menus and tabs mirror in RTL.
+
+## ADR-0036 — Unfinished modules are visible but disabled
+- **Date:** 2026-10-11 · **Status:** Accepted (Prompt 6 requirement)
+- **Decision:** The navigation lists future modules with a "Not available yet" badge and
+  no link, so nobody mistakes a placeholder for a finished feature. A module becomes a
+  link (`available: true` in `app/navigation.ts`) only when it works end to end.
+
+## ADR-0037 — Branch context in the manager app
+- **Date:** 2026-10-11 · **Status:** Accepted
+- **Decision:** The top bar offers the branches the API returns for the user (already
+  scope-filtered) plus "All branches" when allowed. The choice filters views on the
+  client and is persisted per browser; it never widens access — every query is still
+  filtered server-side.

@@ -24,15 +24,13 @@ export const roleTemplatesSeed: Seed = {
           .where(and(eq(roles.merchantId, merchantId), eq(roles.templateKey, templateKey)));
         if (existing) continue;
         const roleId = newId();
-        await tx
-          .insert(roles)
-          .values({
-            id: roleId,
-            merchantId,
-            templateKey,
-            nameEn: template.nameEn,
-            nameAr: template.nameAr,
-          });
+        await tx.insert(roles).values({
+          id: roleId,
+          merchantId,
+          templateKey,
+          nameEn: template.nameEn,
+          nameAr: template.nameAr,
+        });
         await tx
           .insert(rolePermissions)
           .values(

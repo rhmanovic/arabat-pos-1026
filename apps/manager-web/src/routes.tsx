@@ -2,11 +2,18 @@ import {
   NotFound,
   RedirectIfAuthenticated,
   RequireAuth,
+  RequirePermission,
   RouteErrorBoundary,
 } from '@arabat/web-core';
+import type { ReactNode } from 'react';
 import type { RouteObject } from 'react-router';
 import { ManagerLayout } from './layouts/ManagerLayout.js';
-import { DashboardPage } from './pages/DashboardPage.js';
+import { BranchesPage } from './features/branches/BranchesPage.js';
+import { CompanySettingsPage } from './features/company/CompanySettingsPage.js';
+import { DashboardPage } from './features/dashboard/DashboardPage.js';
+import { EmployeeDetailPage } from './features/employees/EmployeeDetailPage.js';
+import { EmployeesPage } from './features/employees/EmployeesPage.js';
+import { RolesPage } from './features/roles/RolesPage.js';
 import {
   ForgotPasswordPage,
   LoginPage,
@@ -52,7 +59,17 @@ export const routes: RouteObject[] = [
     ),
     children: [
       { index: true, element: <DashboardPage /> },
+      { path: 'branches', element: guard('branches.read', <BranchesPage />) },
+      { path: 'employees', element: guard('employees.read', <EmployeesPage />) },
+      { path: 'employees/:membershipId', element: guard('employees.read', <EmployeeDetailPage />) },
+      { path: 'roles', element: guard('employees.read', <RolesPage />) },
+      { path: 'settings', element: guard('merchant.settings.read', <CompanySettingsPage />) },
       { path: '*', element: <NotFound /> },
     ],
   },
 ];
+
+/** UX guard only: the API enforces the same permission on every request. */
+function guard(permission: string, page: ReactNode) {
+  return <RequirePermission permission={permission}>{page}</RequirePermission>;
+}

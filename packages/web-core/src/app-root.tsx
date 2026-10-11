@@ -3,7 +3,8 @@ import type { AppInterface } from '@arabat/contracts';
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import type { i18n as I18nInstance } from 'i18next';
 import { StrictMode, type ReactNode, useState } from 'react';
-import { I18nextProvider } from 'react-i18next';
+import { Direction, ToastProvider } from '@arabat/ui';
+import { I18nextProvider, useTranslation } from 'react-i18next';
 import { ApiProvider, createQueryClient } from './api-context.js';
 import { AuthProvider } from './auth.js';
 
@@ -25,10 +26,20 @@ export function AppRoot({ appInterface, i18n, children, api, queryClient }: AppR
       <I18nextProvider i18n={i18n}>
         <QueryClientProvider client={cache}>
           <ApiProvider client={client}>
-            <AuthProvider appInterface={appInterface}>{children}</AuthProvider>
+            <DirectionRoot>
+              <ToastProvider>
+                <AuthProvider appInterface={appInterface}>{children}</AuthProvider>
+              </ToastProvider>
+            </DirectionRoot>
           </ApiProvider>
         </QueryClientProvider>
       </I18nextProvider>
     </StrictMode>
   );
+}
+
+/** Gives Radix components (menus, dialogs, tabs) the current text direction. */
+function DirectionRoot({ children }: { children: ReactNode }) {
+  const { i18n } = useTranslation();
+  return <Direction.Provider dir={i18n.dir(i18n.language)}>{children}</Direction.Provider>;
 }

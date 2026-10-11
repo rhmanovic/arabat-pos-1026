@@ -48,15 +48,13 @@ export class RolesService {
         .insert(roles)
         .values({ id, merchantId: actor.merchantId, nameEn: input.nameEn, nameAr: input.nameAr });
       if (permissions.length) {
-        await tx
-          .insert(rolePermissions)
-          .values(
-            permissions.map((permissionKey) => ({
-              merchantId: actor.merchantId,
-              roleId: id,
-              permissionKey,
-            })),
-          );
+        await tx.insert(rolePermissions).values(
+          permissions.map((permissionKey) => ({
+            merchantId: actor.merchantId,
+            roleId: id,
+            permissionKey,
+          })),
+        );
       }
       await this.record(tx, actor, 'role.created', id, ip, { permissions });
       return this.loadOne(tx, actor, id);
@@ -88,15 +86,13 @@ export class RolesService {
       if (!row) throw versionConflict();
       await tx.delete(rolePermissions).where(eq(rolePermissions.roleId, roleId));
       if (permissions.length) {
-        await tx
-          .insert(rolePermissions)
-          .values(
-            permissions.map((permissionKey) => ({
-              merchantId: actor.merchantId,
-              roleId,
-              permissionKey,
-            })),
-          );
+        await tx.insert(rolePermissions).values(
+          permissions.map((permissionKey) => ({
+            merchantId: actor.merchantId,
+            roleId,
+            permissionKey,
+          })),
+        );
       }
       const added = permissions.filter((p) => !current.permissions.includes(p));
       const removed = current.permissions.filter((p) => !permissions.includes(p));
@@ -126,6 +122,10 @@ export class RolesService {
         name: current.nameEn ?? current.nameAr,
       });
     });
+  }
+
+  grantable(actor: MerchantActor): string[] {
+    return [...this.held(actor)];
   }
 
   private held(actor: MerchantActor): Set<string> {

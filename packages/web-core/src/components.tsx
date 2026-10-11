@@ -1,6 +1,6 @@
 import { ApiError, NetworkError } from '@arabat/api-client';
 import { SUPPORTED_LANGUAGES } from '@arabat/contracts';
-import { Alert, Button, Segmented, Spinner, StatusDot, cn } from '@arabat/ui';
+import { Alert, Button, Segmented, Spinner, StatusDot, cn, useToast } from '@arabat/ui';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { isRouteErrorResponse, useRouteError } from 'react-router';
@@ -124,4 +124,14 @@ export function ApiStatus({ className }: { className?: string }) {
       {label}
     </span>
   );
+}
+
+/** Toast helpers for mutations: success message, or the localized API error. */
+export function useNotify() {
+  const toast = useToast();
+  const message = useErrorMessage();
+  return {
+    ok: (title: string) => toast.success(title),
+    fail: (error: unknown) => toast.error(message(error)),
+  };
 }

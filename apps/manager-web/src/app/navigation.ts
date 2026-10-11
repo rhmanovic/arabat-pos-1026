@@ -1,0 +1,85 @@
+export interface NavItem {
+  key: string;
+  to: string;
+  /** Shown only when the user holds one of these permissions (UX only; the API enforces). */
+  anyOf: string[];
+  /** False for modules not built yet: shown disabled, never as a working page. */
+  available: boolean;
+  section: 'main' | 'operations' | 'people' | 'organization';
+}
+
+export const NAV: readonly NavItem[] = [
+  { key: 'dashboard', to: '/', anyOf: ['manager.access'], available: true, section: 'main' },
+  {
+    key: 'products',
+    to: '/products',
+    anyOf: ['catalog.read', 'catalog.manage'],
+    available: false,
+    section: 'operations',
+  },
+  {
+    key: 'inventory',
+    to: '/inventory',
+    anyOf: ['inventory.read'],
+    available: false,
+    section: 'operations',
+  },
+  { key: 'sales', to: '/sales', anyOf: ['sales.read'], available: false, section: 'operations' },
+  {
+    key: 'payments',
+    to: '/payments',
+    anyOf: ['payments.settings', 'shifts.view_all'],
+    available: false,
+    section: 'operations',
+  },
+  {
+    key: 'purchasing',
+    to: '/purchasing',
+    anyOf: ['purchasing.read'],
+    available: false,
+    section: 'operations',
+  },
+  {
+    key: 'suppliers',
+    to: '/suppliers',
+    anyOf: ['purchasing.read'],
+    available: false,
+    section: 'operations',
+  },
+  {
+    key: 'reports',
+    to: '/reports',
+    anyOf: ['reports.sales', 'reports.financial', 'reports.inventory'],
+    available: false,
+    section: 'operations',
+  },
+  {
+    key: 'customers',
+    to: '/customers',
+    anyOf: ['customers.read'],
+    available: false,
+    section: 'people',
+  },
+  {
+    key: 'employees',
+    to: '/employees',
+    anyOf: ['employees.read'],
+    available: true,
+    section: 'people',
+  },
+  { key: 'roles', to: '/roles', anyOf: ['employees.read'], available: true, section: 'people' },
+  {
+    key: 'branches',
+    to: '/branches',
+    anyOf: ['branches.read'],
+    available: true,
+    section: 'organization',
+  },
+  {
+    key: 'settings',
+    to: '/settings',
+    anyOf: ['merchant.settings.read'],
+    available: true,
+    section: 'organization',
+  },
+];

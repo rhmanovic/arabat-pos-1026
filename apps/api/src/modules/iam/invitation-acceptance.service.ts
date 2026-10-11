@@ -158,17 +158,15 @@ export class InvitationAcceptanceService {
       );
       const valid = grants.filter((g) => g.branchId === null || active.has(g.branchId));
       if (valid.length) {
-        await tx
-          .insert(roleAssignments)
-          .values(
-            valid.map((g) => ({
-              id: newId(),
-              merchantId: invitation.merchantId,
-              membershipId,
-              roleId: g.roleId,
-              branchId: g.branchId,
-            })),
-          );
+        await tx.insert(roleAssignments).values(
+          valid.map((g) => ({
+            id: newId(),
+            merchantId: invitation.merchantId,
+            membershipId,
+            roleId: g.roleId,
+            branchId: g.branchId,
+          })),
+        );
       }
       await this.audit.recordIn(tx, {
         merchantId: invitation.merchantId,

@@ -48,12 +48,10 @@ const branchFields = {
 const nameRequired = (v: { nameEn?: string | null; nameAr?: string | null }) =>
   Boolean(v.nameAr || v.nameEn);
 
-export const createBranchSchema = z
-  .object(branchFields)
-  .refine(nameRequired, {
-    error: 'A branch name in Arabic or English is required.',
-    path: ['nameAr'],
-  });
+export const createBranchSchema = z.object(branchFields).refine(nameRequired, {
+  error: 'A branch name in Arabic or English is required.',
+  path: ['nameAr'],
+});
 export type CreateBranch = z.input<typeof createBranchSchema>;
 
 export const updateBranchSchema = z
@@ -88,7 +86,11 @@ export const roleSchema = z.object({
   editable: z.boolean(),
 });
 export type Role = z.infer<typeof roleSchema>;
-export const roleListSchema = z.object({ roles: z.array(roleSchema) });
+export const roleListSchema = z.object({
+  roles: z.array(roleSchema),
+  /** Permission keys the current user may put into roles (held merchant-wide). */
+  grantable: z.array(z.string()),
+});
 
 const roleFields = {
   nameEn: text(80),

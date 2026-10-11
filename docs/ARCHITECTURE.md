@@ -118,6 +118,13 @@ Rules:
 
 ### 3.1 Frontend app structure (same in all three apps)
 
+Manager app as implemented (Prompt 6): `src/app` (branch context, navigation config),
+`src/layouts/ManagerLayout.tsx`, `src/features/<module>/…Page.tsx`, `src/routes.tsx`.
+Shared building blocks: `@arabat/ui` (Button, Field, Input, Select, Checkbox, Textarea,
+Dialog, ConfirmDialog, Menu, Tabs, DataTable, PageHeader, Section, StatCard, Toast)
+and `@arabat/web-core` (AppRoot, auth state, guards, auth forms, `useNotify`).
+
+
 ```
 src/
   app/          router.tsx, providers (QueryClient, i18n, theme, auth), layout shell

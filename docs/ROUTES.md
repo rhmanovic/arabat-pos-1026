@@ -12,6 +12,17 @@ Legend: 🔓 public · 🔑 permission required · 🧩 feature-gated · ⏳ lat
 
 ## 1. `/manager` — manager-web
 
+Implemented screens (Prompt 6): `/` dashboard, `/settings` company profile,
+`/branches`, `/employees`, `/employees/:membershipId`, `/roles`, plus
+`/login`, `/register`, `/forgot-password`, `/reset-password`, `/accept-invite`.
+Modules not built yet (products, inventory, sales, payments, purchasing, suppliers,
+reports, customers) appear in the sidebar **disabled with "Not available yet"**,
+never as working pages. Sidebar items are hidden without the required permission;
+every page is additionally wrapped in `RequirePermission` and every API call is
+enforced server-side.
+
+Planned table (status per milestone):
+
 | Route | Screen | Permission | Milestone |
 |---|---|---|---|
 | `/manager/login` | Sign in | 🔓 | M1 |
