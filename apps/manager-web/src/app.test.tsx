@@ -1,7 +1,8 @@
 import { flattenKeys } from '@arabat/i18n';
-import { fakeApiFetch, makeSession, renderApp } from '@arabat/web-core/testing';
+import { fakeApiFetch, makeSession, problem, renderApp } from '@arabat/web-core/testing';
 import { screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { i18n, resources } from './i18n/index.js';
 import { routes } from './routes.js';
 
@@ -16,8 +17,84 @@ describe('manager app', () => {
       await screen.findByRole('heading', { name: 'Sign in to management' }),
     ).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/login');
-    expect(screen.getByRole('button', { name: 'Sign in' })).toBeDisabled();
     expect(await screen.findByText('Server connected')).toBeInTheDocument();
+  });
+
+  it('shows a non-revealing error for wrong credentials', async () => {
+    const fetch = fakeApiFetch({
+      routes: { 'POST /auth/login': () => problem(401, 'INVALID_CREDENTIALS') },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/login', fetch });
+    await userEvent.type(await screen.findByLabelText('Email'), 'a@b.co');
+    await userEvent.type(screen.getByLabelText('Password'), 'whatever-123');
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(await screen.findByText('The e-mail or password is incorrect.')).toBeInTheDocument();
+    expect(fetch.calls.find((c) => c.path === '/auth/login')?.body).toEqual({
+      interface: 'manager',
+      email: 'a@b.co',
+      password: 'whatever-123',
+    });
+  });
+
+  it('sends a cashier who signs in here to the POS', async () => {
+    const fetch = fakeApiFetch({
+      routes: {
+        'POST /auth/login': () =>
+          problem(403, 'INTERFACE_NOT_PERMITTED', { availableInterfaces: ['pos'] }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/login', fetch });
+    await userEvent.type(await screen.findByLabelText('Email'), 'cashier@b.co');
+    await userEvent.type(screen.getByLabelText('Password'), 'whatever-123');
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(await screen.findByRole('link', { name: 'Open Point of Sale' })).toHaveAttribute(
+      'href',
+      '/pos/',
+    );
+  });
+
+  it('lets a user pick a company when they belong to several', async () => {
+    const merchants = [
+      { id: '00000000-0000-7000-8000-0000000000a1', nameEn: 'Alpha', nameAr: null, branches: [] },
+      { id: '00000000-0000-7000-8000-0000000000b2', nameEn: 'Beta', nameAr: null, branches: [] },
+    ];
+    let selected: unknown;
+    const fetch = fakeApiFetch({
+      routes: {
+        'POST /auth/login': () => ({
+          status: 200,
+          body: { status: 'select_merchant', ticket: 't'.repeat(43), merchants },
+        }),
+        'POST /auth/login/select': (body) => {
+          selected = body;
+          return {
+            status: 200,
+            body: { status: 'authenticated', interface: 'manager', redirectTo: '/manager/' },
+          };
+        },
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/login', fetch });
+    await userEvent.type(await screen.findByLabelText('Email'), 'multi@b.co');
+    await userEvent.type(screen.getByLabelText('Password'), 'whatever-123');
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Beta' }));
+    await vi.waitFor(() =>
+      expect(selected).toEqual({ ticket: 't'.repeat(43), merchantId: merchants[1]!.id }),
+    );
+  });
+
+  it('validates the registration form before calling the API', async () => {
+    const fetch = fakeApiFetch();
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/register', fetch });
+    await userEvent.type(await screen.findByLabelText('Company name'), 'Gulf Co');
+    await userEvent.type(screen.getByLabelText('Full name'), 'Owner Name');
+    await userEvent.type(screen.getByLabelText('Email'), 'owner@b.co');
+    await userEvent.type(screen.getByLabelText('Password'), 'short');
+    await userEvent.type(screen.getByLabelText('Confirm password'), 'different');
+    await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
+    expect(await screen.findByText('Passwords do not match.')).toBeInTheDocument();
+    expect(fetch.calls.some((c) => c.path === '/auth/register')).toBe(false);
   });
 
   it('renders the manager layout with its own navigation for a manager session', async () => {

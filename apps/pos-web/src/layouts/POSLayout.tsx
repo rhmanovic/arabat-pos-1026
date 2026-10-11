@@ -1,5 +1,12 @@
 import { Button } from '@arabat/ui';
-import { ApiStatus, LanguageSwitcher, useAuth } from '@arabat/web-core';
+import {
+  ApiStatus,
+  LanguageSwitcher,
+  localizedName,
+  useAuth,
+  useLogout,
+  useSwitchInterface,
+} from '@arabat/web-core';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Outlet } from 'react-router';
@@ -21,7 +28,9 @@ export function POSLayout() {
   const { t, i18n } = useTranslation();
   const { state } = useAuth();
   const now = useClock();
-  const branchId = state.status === 'authenticated' ? state.session.boundBranchId : null;
+  const logout = useLogout('pos');
+  const toManager = useSwitchInterface('pos');
+  const session = state.status === 'authenticated' ? state.session : null;
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-surface-muted select-none">
@@ -30,9 +39,13 @@ export function POSLayout() {
         className="flex h-14 shrink-0 items-center gap-3 bg-console px-3 text-console-fg sm:px-4"
       >
         <span className="text-base font-semibold">{t('title')}</span>
-        <span className="hidden text-sm text-console-fg/70 sm:inline">
-          {t('branch')}: {branchId ? branchId.slice(0, 8) : t('noBranch')}
+        <span className="hidden text-sm text-console-fg/70 sm:inline" data-testid="pos-context">
+          {session?.merchant ? localizedName(session.merchant, i18n.language) : ''} · {t('branch')}:{' '}
+          {session?.branch ? localizedName(session.branch, i18n.language) : t('noBranch')}
         </span>
+        {session ? (
+          <span className="hidden text-sm md:inline">{session.actor.fullName}</span>
+        ) : null}
         <div className="flex-1" />
         <ApiStatus className="hidden text-console-fg/80 md:inline-flex" />
         <time className="text-sm tabular-nums" dateTime={now.toISOString()}>
@@ -43,8 +56,23 @@ export function POSLayout() {
           })}
         </time>
         <LanguageSwitcher />
-        <Button variant="secondary" size="sm" disabled title={t('lock')}>
-          {t('lock')}
+        {session?.availableInterfaces.includes('manager') ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={toManager.isPending}
+            onClick={() => toManager.mutate({ target: 'manager' })}
+          >
+            {t('common:interfaces.manager')}
+          </Button>
+        ) : null}
+        <Button
+          variant="secondary"
+          size="sm"
+          loading={logout.isPending}
+          onClick={() => logout.mutate()}
+        >
+          {t('common:actions.signOut')}
         </Button>
       </header>
       <main className="min-h-0 flex-1">

@@ -41,11 +41,6 @@ test.describe('three separate applications', () => {
     await expect(status).toHaveText('الخادم متصل');
   });
 
-  test('sign-in stays disabled until accounts exist (no fake login)', async ({ page }) => {
-    await page.goto('/manager/login');
-    await expect(page.getByRole('button', { name: 'تسجيل الدخول' })).toBeDisabled();
-  });
-
   test('Arabic is RTL and switching to English flips to LTR and persists', async ({ page }) => {
     await page.goto('/manager/login');
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');

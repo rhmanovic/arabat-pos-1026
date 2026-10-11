@@ -1,5 +1,13 @@
 import { Badge, Button, cn } from '@arabat/ui';
-import { ApiStatus, LanguageSwitcher } from '@arabat/web-core';
+import {
+  ApiStatus,
+  BranchList,
+  LanguageSwitcher,
+  localizedName,
+  useAuth,
+  useLogout,
+  useSwitchInterface,
+} from '@arabat/web-core';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet } from 'react-router';
@@ -25,8 +33,14 @@ const NAV: readonly NavItem[] = [
 
 /** Desktop-first management shell: sidebar on the start side, top bar, content area. */
 export function ManagerLayout() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const { state } = useAuth();
+  const logout = useLogout('manager');
+  const switchToPos = useSwitchInterface('manager');
+  const session = state.status === 'authenticated' ? state.session : null;
+  const branchChoice =
+    switchToPos.data?.status === 'select_branch' ? switchToPos.data.branches : null;
 
   return (
     <div className="min-h-dvh bg-canvas lg:grid lg:grid-cols-[16rem_1fr]">
@@ -107,10 +121,56 @@ export function ManagerLayout() {
               <path d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </Button>
-          <div className="flex-1" />
-          <ApiStatus className="hidden sm:inline-flex" />
+          <div className="min-w-0 flex-1">
+            {session?.merchant ? (
+              <p className="truncate text-sm font-semibold" data-testid="merchant-name">
+                {localizedName(session.merchant, i18n.language)}
+              </p>
+            ) : null}
+          </div>
+          <ApiStatus className="hidden xl:inline-flex" />
+          {session?.availableInterfaces.includes('pos') ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={switchToPos.isPending}
+              onClick={() => switchToPos.mutate({ target: 'pos' })}
+            >
+              {t('common:auth.switchTo', { app: t('common:interfaces.pos') })}
+            </Button>
+          ) : null}
           <LanguageSwitcher />
+          {session ? (
+            <span className="hidden text-sm text-fg-muted md:inline" data-testid="user-name">
+              {session.actor.fullName}
+            </span>
+          ) : null}
+          <Button
+            variant="ghost"
+            size="sm"
+            loading={logout.isPending}
+            onClick={() => logout.mutate()}
+          >
+            {t('common:actions.signOut')}
+          </Button>
         </header>
+        {branchChoice ? (
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="fixed inset-0 z-50 grid place-items-center bg-fg/40 p-4"
+          >
+            <div className="w-full max-w-sm rounded-lg bg-surface p-5 shadow-lg">
+              <BranchList
+                branches={branchChoice}
+                onSelect={(branchId) => switchToPos.mutate({ target: 'pos', branchId })}
+              />
+              <Button variant="ghost" block className="mt-3" onClick={() => switchToPos.reset()}>
+                {t('common:actions.back')}
+              </Button>
+            </div>
+          </div>
+        ) : null}
         <main className="flex-1 p-4 sm:p-6 lg:p-8">
           <Outlet />
         </main>

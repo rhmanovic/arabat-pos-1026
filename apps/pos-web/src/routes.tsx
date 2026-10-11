@@ -6,7 +6,7 @@ import {
 } from '@arabat/web-core';
 import type { RouteObject } from 'react-router';
 import { POSLayout } from './layouts/POSLayout.js';
-import { LoginPage } from './pages/LoginPage.js';
+import { ForgotPasswordPage, LoginPage, ResetPasswordPage } from './pages/LoginPage.js';
 import { RegisterPage } from './pages/RegisterPage.js';
 
 /** Route tree of /pos (relative to the /pos basename). See docs/ROUTES.md. */
@@ -20,6 +20,12 @@ export const routes: RouteObject[] = [
       </RedirectIfAuthenticated>
     ),
   },
+  {
+    path: '/forgot-password',
+    errorElement: <RouteErrorBoundary />,
+    element: <ForgotPasswordPage />,
+  },
+  { path: '/reset-password', errorElement: <RouteErrorBoundary />, element: <ResetPasswordPage /> },
   {
     path: '/',
     errorElement: <RouteErrorBoundary />,

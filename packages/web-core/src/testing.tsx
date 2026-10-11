@@ -7,12 +7,44 @@ import { AppRoot } from './app-root.js';
 import { createQueryClient } from './api-context.js';
 
 /** Builds a fetch stub answering health and `me` like the real API would. */
-export function fakeApiFetch(options: { session?: MeResponse | null; healthy?: boolean } = {}) {
-  const { session = null, healthy = true } = options;
-  return async (input: RequestInfo | URL): Promise<Response> => {
+export type FakeRoute = (body: unknown) => { status: number; body: unknown };
+
+export function problem(status: number, code: string, extra: Record<string, unknown> = {}) {
+  return {
+    status,
+    body: { type: `urn:arabat:error:${code.toLowerCase()}`, title: code, status, code, ...extra },
+  };
+}
+
+/**
+ * Builds a fetch stub answering health and `me` like the real API would. `routes` maps
+ * "METHOD /path" (relative to /api/v1) to handlers for other endpoints.
+ */
+export function fakeApiFetch(
+  options: {
+    session?: MeResponse | null;
+    healthy?: boolean;
+    routes?: Record<string, FakeRoute>;
+  } = {},
+) {
+  const { session = null, healthy = true, routes = {} } = options;
+  const calls: { method: string; path: string; body: unknown }[] = [];
+  const fetchFn = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = String(input);
-    const json = (status: number, body: unknown, type = 'application/json') =>
-      new Response(JSON.stringify(body), { status, headers: { 'content-type': type } });
+    const method = init?.method ?? 'GET';
+    const path = url.replace(/^.*\/api\/v1/, '').split('?')[0]!;
+    const body: unknown = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+    calls.push({ method, path, body });
+    const json = (status: number, payload: unknown, type = 'application/json') =>
+      new Response(status === 204 ? null : JSON.stringify(payload), {
+        status,
+        headers: { 'content-type': status >= 400 ? 'application/problem+json' : type },
+      });
+    const handler = routes[`${method} ${path}`];
+    if (handler) {
+      const result = handler(body);
+      return json(result.status, result.body);
+    }
     if (url.endsWith('/health/ready')) {
       return healthy
         ? json(200, {
@@ -43,16 +75,46 @@ export function fakeApiFetch(options: { session?: MeResponse | null; healthy?: b
       'application/problem+json',
     );
   };
+  return Object.assign(fetchFn, { calls });
 }
 
-export function makeSession(appInterface: AppInterface, permissions: string[] = []): MeResponse {
+export function makeSession(
+  appInterface: AppInterface,
+  permissions: string[] = [],
+  overrides: Partial<MeResponse> = {},
+): MeResponse {
+  const merchant = appInterface !== 'platform';
   return {
     interface: appInterface,
-    realm: appInterface === 'platform' ? 'platform' : 'merchant',
-    actorId: '00000000-0000-7000-8000-000000000001',
-    merchantId: appInterface === 'platform' ? null : '00000000-0000-7000-8000-000000000002',
-    boundBranchId: appInterface === 'pos' ? '00000000-0000-7000-8000-000000000003' : null,
+    realm: merchant ? 'merchant' : 'platform',
+    actor: {
+      id: '00000000-0000-7000-8000-000000000001',
+      email: 'user@test.arabat',
+      fullName: 'Test User',
+      preferredLanguage: null,
+    },
+    merchant: merchant
+      ? {
+          id: '00000000-0000-7000-8000-000000000002',
+          nameEn: 'Test Co',
+          nameAr: 'شركة اختبار',
+          status: 'active',
+        }
+      : null,
+    branch:
+      appInterface === 'pos'
+        ? {
+            id: '00000000-0000-7000-8000-000000000003',
+            nameEn: 'Main branch',
+            nameAr: 'الفرع الرئيسي',
+          }
+        : null,
+    isOwner: false,
     permissions,
+    availableInterfaces: appInterface === 'platform' ? [] : [appInterface],
+    merchantCount: merchant ? 1 : 0,
+    session: { expiresAt: '2030-01-01T00:00:00.000Z', idleExpiresAt: '2030-01-01T00:00:00.000Z' },
+    ...overrides,
   };
 }
 

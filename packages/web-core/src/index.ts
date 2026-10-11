@@ -3,3 +3,4 @@ export * from './app-root.js';
 export * from './auth.js';
 export * from './components.js';
 export * from './guards.js';
+export * from './auth-forms.js';

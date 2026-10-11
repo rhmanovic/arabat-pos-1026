@@ -16,6 +16,12 @@ export const managerEn = {
     title: 'Sign in to management',
     subtitle: 'Manage branches, employees, products and reports.',
   },
+  register: {
+    title: 'Create your company account',
+    subtitle: 'You will be the owner. You can add branches and employees afterwards.',
+    companyName: 'Company name',
+    submit: 'Create account',
+  },
   dashboard: {
     title: 'Dashboard',
     emptyTitle: 'Your business overview will appear here',

@@ -32,6 +32,13 @@ engineering defaults pending owner confirmation.
 - **BR-018** The POS is optimized for speed, barcode scanning and touch devices.
 - **BR-019** All interfaces use the same backend business services; critical
   logic is never duplicated per interface.
+- **BR-040** Merchant owners register themselves (self-service, Prompt 4). Registration
+  creates the company, its main branch ("الفرع الرئيسي") and the owner account.
+- **BR-041** A user may belong to several merchants; every session is bound to exactly
+  one merchant (and, in the POS, one branch) chosen at sign-in.
+- **BR-042** Sign-in and password recovery never reveal whether an e-mail is registered.
+- **BR-043** Password reset links are single-use, expire after 30 minutes and end all
+  sessions of the account.
 
 ## 3. Access rules — Default (engineering)
 
@@ -72,11 +79,11 @@ engineering defaults pending owner confirmation.
 | OQ-003 | Cash rounding: should cash totals be rounded (e.g. to 0.005 KWD)?        | Sales/payments      |
 | OQ-004 | Will tenants operate in currencies other than KWD (multi-currency per tenant or per branch)? | Catalog/sales |
 | OQ-005 | Does the POS need to work offline (network outage) and sync later?      | POS architecture    |
-| OQ-006 | Employee POS login: email + password, or quick PIN switching on a shared terminal? | POS auth slice |
+| OQ-006 | Employee POS login: email + password (implemented default) — add quick PIN switching on shared terminals? | POS |
 | OQ-007 | Is the BR-033 rounding rule (half-up per line) acceptable?              | Sales slice         |
 | OQ-008 | Subscription plans / billing for tenants: in scope, and when?           | Platform slice      |
 | OQ-009 | Receipt requirements (printer types, legal fields, e-receipts)?         | Sales slice         |
-| OQ-010 | Tenant sign-up: self-service, or created only by platform operators? (engineering default: operator-created) | M1 |
+| OQ-010 | ~~Merchant sign-up~~ **Resolved:** self-service owner registration (Prompt 4, BR-040). | — |
 | OQ-011 | Hosting provider, region and data residency (Kuwait / GCC requirements?) — affects cost | Deployment |
 | OQ-012 | Number display: Latin digits (0-9) or Arabic-Indic (٠-٩) by default? (engineering default: Latin, configurable) | M0 UI |
 | OQ-013 | Card payments: manual entry of card amount only, or integrated card terminals (e.g. KNET)? | M4 / later |

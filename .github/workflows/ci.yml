@@ -40,6 +40,9 @@ jobs:
         ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 3s --health-retries 30
+      mailpit:
+        image: axllent/mailpit:v1.31.5
+        ports: ['1025:1025', '8025:8025']
     env:
       PGHOST: localhost
       PGPASSWORD: postgres_ci
@@ -51,6 +54,9 @@ jobs:
       DATABASE_OWNER_URL: postgres://app_owner:app_owner_ci@localhost:5432/arabat_dev
       TEST_DATABASE_URL: postgres://app_runtime:app_runtime_ci@localhost:5432/arabat_test
       TEST_DATABASE_OWNER_URL: postgres://app_owner:app_owner_ci@localhost:5432/arabat_test
+      # CI-only key (protects only throw-away CI data).
+      MFA_ENCRYPTION_KEY: Y2ktb25seS1rZXktZm9yLXRlc3RzLTMyLWJ5dGVzISE=
+      SMTP_URL: smtp://localhost:1025
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

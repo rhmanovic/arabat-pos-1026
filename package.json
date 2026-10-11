@@ -19,7 +19,7 @@
     "test:watch": "vitest --project unit --project web",
     "test:integration": "vitest run --project integration",
     "test:e2e": "playwright test",
-    "db:up": "docker compose up -d --wait postgres",
+    "db:up": "docker compose up -d --wait postgres mailpit",
     "db:down": "docker compose down",
     "db:generate": "pnpm --filter @arabat/api run db:generate",
     "db:migrate": "pnpm --filter @arabat/api run db:migrate",

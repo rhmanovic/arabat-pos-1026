@@ -1,6 +1,6 @@
 # Database
 
-Status: **Conventions and entity design defined. Migration infrastructure implemented (M0); business tables start in M1.**
+Status: **Identity tables implemented (Prompt 4).** Later modules are added per slice.
 The tenant is called **merchant** in the schema (`merchant_id`).
 
 ---
@@ -339,10 +339,33 @@ erDiagram
 |---|---|
 | `apps/api/drizzle/0000_bootstrap.sql` | `GRANT USAGE` on schema to `app_runtime`; default privileges (DML on tables, sequences, functions) for objects created by `app_owner`; function `app_current_merchant_id()` (NULL when unset) for RLS policies |
 | `apps/api/drizzle/0001_currencies.sql` | `currencies` reference table (code, exponent, `name_en`, `name_ar`); `app_runtime` is read-only on it |
+| `apps/api/drizzle/0002_identity.sql` | `merchants`, `branches`, `users`, `memberships`, `roles`, `role_permissions`, `role_assignments`, `sessions`, `auth_tickets`, `password_reset_tokens`, `rate_limit_buckets`, `platform_operators`, `audit_log` (generated) |
+| `apps/api/drizzle/0003_identity_rls.sql` | `app_current_user_id()`; RLS (forced) on merchants, memberships, branches, roles, role_permissions, role_assignments, audit_log; `DELETE` revoked on merchants; `UPDATE/DELETE` revoked on audit_log; lookup indexes |
+
+Identity model notes (implemented):
+- `users` is global (one identity, many memberships); e-mail stored lower-cased
+  (`check email = lower(email)`), unique.
+- `memberships`: `unique (merchant_id, user_id)`, exactly one owner per merchant
+  (partial unique index), an owner membership must be active.
+- `role_assignments.branch_id` NULL = all branches; `UNIQUE NULLS NOT DISTINCT
+  (membership_id, role_id, branch_id)`; composite FKs `(merchant_id, …)` to
+  memberships, roles and branches.
+- `sessions` check constraint: a merchant session always has `merchant_id` and
+  `membership_id`, a POS session always a `branch_id`; platform sessions have neither.
+- Global tables without RLS (`users`, `sessions`, `auth_tickets`,
+  `password_reset_tokens`, `rate_limit_buckets`, `platform_operators`) are only read
+  by the auth module; token columns hold SHA-256 hashes.
+- RLS read exception: with `app.user_id` set, a user sees their own memberships and
+  those merchants (ADR-0029).
+
+Seeds: `100-dev-demo-merchants` (development only) creates "Demo Store" (2 branches)
+and "Second Shop", users owner/manager/cashier/multi `@demo.arabat.test` and the dev
+platform operator, all with password `Demo-Pass-2026`.
 
 Seeds (`apps/api/src/database/seeds`, run as `app_owner` in one transaction,
 idempotent, each seed declares the environments it may run in):
-`001-currencies` (KWD=3, BHD=3, OMR=3, SAR, AED, QAR, USD, EUR = 2).
+`001-currencies` (KWD=3, BHD=3, OMR=3, SAR, AED, QAR, USD, EUR = 2) and the
+development-only `100-dev-demo-merchants`.
 
 Connection management: `DatabaseService` owns one `pg.Pool` (size
 `DATABASE_POOL_MAX`, statement timeout, idle-error handler), exposes

@@ -1,6 +1,8 @@
 # Authentication & Permissions Design
 
-Status: **Designed. Not yet implemented.**
+Status: **Implemented (Prompt 4)** — sessions, sign-in for all three interfaces, owner
+registration, password recovery, operator TOTP, rate limits, CSRF origin check.
+Employee/role management APIs follow in Prompt 5.
 Implements requirements BR-010..BR-015 and ADR-0001, ADR-0006, ADR-0007, ADR-0011.
 
 ---
@@ -24,16 +26,29 @@ One `AuthService` implements credential checks, session issuing, revocation,
 password reset and MFA for all interfaces. Interface-specific endpoints are
 thin wrappers:
 
-| Endpoint | Purpose |
-|---|---|
-| `POST /api/v1/auth/manager/login` | e-mail + password → manager session (merchant selection if >1 membership) |
-| `POST /api/v1/auth/pos/login` | e-mail + password (PIN mode later, OQ-006) → POS session |
-| `POST /api/v1/auth/pos/context` | bind POS session to branch + register |
-| `POST /api/v1/auth/platform/login` + `/mfa` | operator password + TOTP |
-| `POST /api/v1/auth/{iface}/logout` | revoke current session |
-| `GET  /api/v1/auth/{iface}/me` | current actor, merchant, effective permissions, branches |
-| `POST /api/v1/auth/password/forgot` / `reset` | token-based reset (hashed, single-use, short TTL) |
-| `POST /api/v1/auth/invitations/accept` | employee accepts invitation, sets password |
+Implemented endpoints (prefix `/api/v1`):
+
+| Endpoint | Access | Purpose |
+|---|---|---|
+| `POST /auth/register` | public | Owner self-registration: user + merchant + main branch + owner membership + role templates + manager session, one transaction |
+| `POST /auth/login` `{interface: manager\|pos, email, password}` | public | → `authenticated`, or `select_merchant` (ticket + eligible merchants/branches) |
+| `POST /auth/login/select` `{ticket, merchantId, branchId?}` | public (ticket) | Second step; single-use ticket, 5 min, 5 attempts |
+| `POST /auth/platform/login` → `POST /auth/platform/mfa` | public | Operator password → `mfa_required` ticket → TOTP → platform session |
+| `POST /auth/password/forgot` `{email, interface}` | public | Always `202 {status:"accepted"}`; work happens in the background |
+| `POST /auth/password/reset` `{token, password}` | public (token) | Single-use, 30 min; revokes all sessions of the user |
+| `GET /auth/{iface}/me` | session | Actor, merchant, POS branch, effective permissions, `availableInterfaces`, merchant count, expiry |
+| `GET /auth/{manager\|pos}/merchants` | session | Merchants the user may open in this interface |
+| `POST /auth/{manager\|pos}/switch-merchant` | session | New session for another membership (old one revoked) |
+| `POST /auth/{manager\|pos}/switch-interface` `{target, branchId?}` | session | Controlled manager ↔ POS switch; re-checks permissions; may answer `select_branch` |
+| `POST /auth/{iface}/logout` | session | Revokes the session, clears the cookie |
+| `GET /manager/merchant`, `PATCH /manager/merchant` | `merchant.settings.read/update` | Company profile (optimistic `version`) |
+| `GET /manager/branches` | `branches.read` | Branches limited to the user's accessible branches |
+
+Interface routing after sign-in: the login request names the interface. If the user
+has no access to it but to another one, the API answers `403 INTERFACE_NOT_PERMITTED`
+with `availableInterfaces` (only after the password is proven) and the UI links to
+the right application. Permissions always come from the database, never from a
+client-side role label.
 
 ### 2.1 Sessions
 - Opaque random token (256-bit). Only its **SHA-256 hash** is stored in `sessions`.
@@ -45,9 +60,9 @@ thin wrappers:
 
   | Cookie | Path | Flags |
   |---|---|---|
-  | `mgr_sid` | `/api/v1` | HttpOnly, Secure, SameSite=Lax |
-  | `pos_sid` | `/api/v1` | HttpOnly, Secure, SameSite=Lax |
-  | `plat_sid` | `/api/v1` | HttpOnly, Secure, SameSite=Strict |
+  | `mgr_sid` | `/api/v1` | HttpOnly, SameSite=Lax, Secure (`COOKIE_SECURE`, default on in production) |
+  | `pos_sid` | `/api/v1` | HttpOnly, SameSite=Lax, Secure |
+  | `plat_sid` | `/api/v1` | HttpOnly, SameSite=Strict, Secure |
 
   The guard for each namespace reads **only** its own cookie
   (`/api/v1/manager/*` → `mgr_sid`, etc.).
@@ -68,9 +83,37 @@ thin wrappers:
   list check later).
 - Rate limit + exponential backoff per account and per IP on login, MFA and
   reset endpoints; generic error messages (no account enumeration).
-- CSRF: SameSite cookies + double-submit CSRF token on state-changing requests.
-- MFA: TOTP mandatory for platform operators; optional for merchant users
-  (planned; owner may make it mandatory for owners).
+- CSRF: SameSite cookies **plus** an origin check on every state-changing `/api`
+  request (OWASP "verify origin with standard headers"): `Sec-Fetch-Site: cross-site`
+  or an `Origin` that is neither the API host nor in `TRUSTED_ORIGINS` → `403
+  ORIGIN_REJECTED`. (Replaces the double-submit token idea; ADR-0026.)
+- API responses carry `Cache-Control: no-store`.
+- Account enumeration: sign-in and recovery never reveal whether an account exists
+  (same response, dummy Argon2 verify for unknown e-mails, recovery work done after
+  the response). Registration must say "e-mail already registered" (409) — accepted
+  trade-off, rate limited per IP (ADR-0025).
+
+Rate limits (fixed windows in PostgreSQL `rate_limit_buckets`, shared by all
+instances; scaled by `AUTH_RATE_LIMIT_SCALE`; `429 RATE_LIMITED` + `Retry-After`):
+
+| Key | Limit |
+|---|---|
+| sign-in per IP | 30 / 10 min |
+| failed sign-ins per e-mail (account lock; also blocks the correct password) | 10 / 15 min, reset on success or password reset |
+| registration per IP | 10 / hour |
+| recovery per IP / per e-mail | 20 / hour, 5 / hour |
+| reset per IP | 20 / hour |
+| merchant selection per IP | 30 / 10 min |
+| platform sign-in per IP / failures per e-mail | 10 / 15 min, 5 / 15 min |
+| TOTP per IP (+ 5 attempts per ticket) | 20 / 15 min |
+- MFA: TOTP (RFC 6238, ±1 step, replay-protected via `mfa_last_step`) mandatory for
+  platform operators; secrets AES-256-GCM encrypted with `MFA_ENCRYPTION_KEY`.
+  Merchant-user MFA: planned.
+- Session validation on **every request** (`DbSessionResolver`): token hash lookup
+  (interface-specific cookie), not revoked, idle and absolute expiry, user active,
+  password not changed after session creation, membership active, merchant active,
+  interface permission still granted, POS branch still allowed. Failing sessions are
+  revoked on sight. Sliding idle expiry is written at most once per minute.
 
 ---
 
@@ -207,6 +250,13 @@ device:
 ---
 
 ## 8. Platform operators
+
+Operators are created only with the CLI (never through the API):
+`pnpm --filter @arabat/api run platform:create-operator -- --email … --name … --role platform.super_admin`
+prints a one-time password and the TOTP secret/otpauth URI. Development seed:
+`operator@platform.arabat.test` / `Demo-Pass-2026`; current dev code:
+`pnpm --filter @arabat/api run dev:totp`.
+
 - Roles: `platform.super_admin`, `platform.support`, `platform.billing`
   (code-defined, small set).
 - MFA mandatory; short sessions; all actions audited in the platform audit log.

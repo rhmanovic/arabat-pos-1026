@@ -18,6 +18,12 @@ export const managerAr: ManagerResources = {
     title: 'تسجيل الدخول إلى الإدارة',
     subtitle: 'إدارة الفروع والموظفين والمنتجات والتقارير.',
   },
+  register: {
+    title: 'أنشئ حساب شركتك',
+    subtitle: 'ستكون أنت المالك، ويمكنك إضافة الفروع والموظفين لاحقاً.',
+    companyName: 'اسم الشركة',
+    submit: 'إنشاء الحساب',
+  },
   dashboard: {
     title: 'لوحة التحكم',
     emptyTitle: 'ستظهر هنا نظرة عامة على أعمالك',

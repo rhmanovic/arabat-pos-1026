@@ -273,23 +273,6 @@ describe('API kernel', () => {
         ).statusCode,
       ).toBe(403);
     });
-
-    it('returns the session from /me for an authenticated actor', async () => {
-      const res = await inject({
-        method: 'GET',
-        url: '/api/v1/auth/platform/me',
-        headers: { [TEST_ACTOR_HEADER]: operator },
-      });
-      expect(res.statusCode).toBe(200);
-      expect(res.json()).toEqual({
-        interface: 'platform',
-        realm: 'platform',
-        actorId: 'o1',
-        merchantId: null,
-        boundBranchId: null,
-        permissions: ['platform.super_admin'],
-      });
-    });
   });
 });
 

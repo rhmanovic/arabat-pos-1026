@@ -7,7 +7,12 @@ import {
 import type { RouteObject } from 'react-router';
 import { ManagerLayout } from './layouts/ManagerLayout.js';
 import { DashboardPage } from './pages/DashboardPage.js';
-import { LoginPage } from './pages/LoginPage.js';
+import {
+  ForgotPasswordPage,
+  LoginPage,
+  RegisterPage,
+  ResetPasswordPage,
+} from './pages/LoginPage.js';
 
 /** Route tree of /manager (paths are relative to the /manager basename). See docs/ROUTES.md. */
 export const routes: RouteObject[] = [
@@ -20,6 +25,21 @@ export const routes: RouteObject[] = [
       </RedirectIfAuthenticated>
     ),
   },
+  {
+    path: '/register',
+    errorElement: <RouteErrorBoundary />,
+    element: (
+      <RedirectIfAuthenticated>
+        <RegisterPage />
+      </RedirectIfAuthenticated>
+    ),
+  },
+  {
+    path: '/forgot-password',
+    errorElement: <RouteErrorBoundary />,
+    element: <ForgotPasswordPage />,
+  },
+  { path: '/reset-password', errorElement: <RouteErrorBoundary />, element: <ResetPasswordPage /> },
   {
     path: '/',
     errorElement: <RouteErrorBoundary />,

@@ -6,8 +6,11 @@ import { AppModule } from '../app.module.js';
 import { configureApp, createAdapter } from '../bootstrap.js';
 import { type Env, loadEnv } from '../config/env.js';
 import { type Actor, SessionResolver } from '../kernel/access/session-resolver.js';
+import { type MailMessage, Mailer } from '../kernel/mail/mailer.js';
 
 export const TEST_ACTOR_HEADER = 'x-test-actor';
+/** Fixed key for tests only. */
+export const TEST_MFA_KEY = Buffer.alloc(32, 7).toString('base64');
 
 /** Test-only resolver: reads the actor from a header. Never registered in the real app. */
 export class HeaderSessionResolver extends SessionResolver {
@@ -17,12 +20,25 @@ export class HeaderSessionResolver extends SessionResolver {
   }
 }
 
+/** Test double at the e-mail boundary: keeps messages in memory. */
+export class InMemoryMailer extends Mailer {
+  readonly outbox: MailMessage[] = [];
+  send(message: MailMessage): Promise<void> {
+    this.outbox.push(message);
+    return Promise.resolve();
+  }
+  lastTo(to: string): MailMessage | undefined {
+    return [...this.outbox].reverse().find((m) => m.to === to);
+  }
+}
+
 export function testEnv(overrides: Record<string, string> = {}): Env {
   return loadEnv({
     NODE_ENV: 'test',
     LOG_LEVEL: 'silent',
     // Port 1 is never listening: database calls fail fast unless a real URL is given.
     DATABASE_URL: 'postgres://nobody:nothing@127.0.0.1:1/none',
+    MFA_ENCRYPTION_KEY: TEST_MFA_KEY,
     ...overrides,
   });
 }
@@ -32,6 +48,7 @@ export async function createTestApp(
     env?: Env;
     controllers?: Type[];
     sessionResolver?: SessionResolver;
+    mailer?: Mailer;
   } = {},
 ): Promise<NestFastifyApplication> {
   const env = options.env ?? testEnv();
@@ -41,6 +58,7 @@ export async function createTestApp(
   });
   if (options.sessionResolver)
     builder.overrideProvider(SessionResolver).useValue(options.sessionResolver);
+  builder.overrideProvider(Mailer).useValue(options.mailer ?? new InMemoryMailer());
   const moduleRef = await builder.compile();
   const { adapter } = createAdapter(env);
   const app = moduleRef.createNestApplication<NestFastifyApplication>(adapter, { logger: false });

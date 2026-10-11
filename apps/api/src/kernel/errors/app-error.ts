@@ -10,9 +10,20 @@ export class AppError extends Error {
     readonly code: ErrorCode,
     message: string,
     readonly issues?: ValidationIssue[],
+    readonly extra: { retryAfterSec?: number; availableInterfaces?: ('manager' | 'pos')[] } = {},
   ) {
     super(message);
     this.name = 'AppError';
+  }
+
+  static rateLimited(retryAfterSec: number): AppError {
+    return new AppError(429, 'RATE_LIMITED', 'Too many attempts. Try again later.', undefined, {
+      retryAfterSec,
+    });
+  }
+  static invalidCredentials(): AppError {
+    // Same answer for unknown e-mail and wrong password (no account enumeration).
+    return new AppError(401, 'INVALID_CREDENTIALS', 'The e-mail or password is incorrect.');
   }
 
   static validation(issues: ValidationIssue[]): AppError {

@@ -1,12 +1,19 @@
-import { Alert, Button, Card, CardContent, Field, Input } from '@arabat/ui';
-import { ApiStatus, LanguageSwitcher } from '@arabat/web-core';
+import { Card, CardContent } from '@arabat/ui';
+import {
+  ApiStatus,
+  AuthHeading,
+  ForgotPasswordForm,
+  LanguageSwitcher,
+  MerchantLoginForm,
+  ResetPasswordForm,
+} from '@arabat/web-core';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
+import { RegisterForm } from './RegisterForm.js';
 
-/**
- * Manager sign-in. The form is disabled until accounts and sessions exist (milestone M1);
- * it is not wired to a fake login.
- */
-export function LoginPage() {
+/** Two-column auth shell of the management app (brand panel + form card). */
+export function ManagerAuthShell({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   return (
     <div className="grid min-h-dvh lg:grid-cols-2">
@@ -18,41 +25,69 @@ export function LoginPage() {
         </div>
         <p className="text-sm text-primary-fg/70">{t('common:interfaces.manager')}</p>
       </section>
-
       <section className="flex flex-col p-4 sm:p-8">
         <div className="flex items-center justify-between">
           <ApiStatus />
           <LanguageSwitcher />
         </div>
         <div className="flex flex-1 items-center justify-center py-10">
-          <Card className="w-full max-w-sm">
-            <CardContent className="flex flex-col gap-5">
-              <div>
-                <h1 className="text-xl font-semibold">{t('login.title')}</h1>
-                <p className="mt-1 text-sm text-fg-muted lg:hidden">{t('login.subtitle')}</p>
-              </div>
-              <Alert tone="warning" title={t('common:auth.signInUnavailableTitle')}>
-                {t('common:auth.signInUnavailableBody')}
-              </Alert>
-              <form className="flex flex-col gap-4" onSubmit={(e) => e.preventDefault()}>
-                <fieldset disabled className="flex flex-col gap-4">
-                  <Field label={t('common:auth.email')}>
-                    {(props) => <Input {...props} type="email" autoComplete="username" dir="ltr" />}
-                  </Field>
-                  <Field label={t('common:auth.password')}>
-                    {(props) => (
-                      <Input {...props} type="password" autoComplete="current-password" dir="ltr" />
-                    )}
-                  </Field>
-                  <Button type="submit" block>
-                    {t('common:actions.signIn')}
-                  </Button>
-                </fieldset>
-              </form>
-            </CardContent>
+          <Card className="w-full max-w-md">
+            <CardContent className="flex flex-col gap-5">{children}</CardContent>
           </Card>
         </div>
       </section>
     </div>
+  );
+}
+
+export function LoginPage() {
+  const { t } = useTranslation();
+  return (
+    <ManagerAuthShell>
+      <AuthHeading title={t('login.title')} />
+      <MerchantLoginForm appInterface="manager" />
+      <p className="border-t border-border pt-4 text-center text-sm text-fg-muted">
+        {t('common:auth.noAccount')}{' '}
+        <Link to="/register" className="font-medium text-primary hover:underline">
+          {t('common:auth.createAccount')}
+        </Link>
+      </p>
+    </ManagerAuthShell>
+  );
+}
+
+export function RegisterPage() {
+  const { t } = useTranslation();
+  return (
+    <ManagerAuthShell>
+      <AuthHeading title={t('register.title')} subtitle={t('register.subtitle')} />
+      <RegisterForm />
+      <p className="border-t border-border pt-4 text-center text-sm text-fg-muted">
+        {t('common:auth.haveAccount')}{' '}
+        <Link to="/login" className="font-medium text-primary hover:underline">
+          {t('common:actions.signIn')}
+        </Link>
+      </p>
+    </ManagerAuthShell>
+  );
+}
+
+export function ForgotPasswordPage() {
+  const { t } = useTranslation('common');
+  return (
+    <ManagerAuthShell>
+      <AuthHeading title={t('auth.forgotTitle')} />
+      <ForgotPasswordForm appInterface="manager" />
+    </ManagerAuthShell>
+  );
+}
+
+export function ResetPasswordPage() {
+  const { t } = useTranslation('common');
+  return (
+    <ManagerAuthShell>
+      <AuthHeading title={t('auth.resetTitle')} />
+      <ResetPasswordForm />
+    </ManagerAuthShell>
   );
 }

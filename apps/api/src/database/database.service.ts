@@ -60,9 +60,23 @@ export class DatabaseService implements OnModuleDestroy {
    * set_config(..., true)) guarantee the setting cannot leak to other pooled connections.
    */
   async withMerchantTx<T>(merchantId: string, work: (tx: Transaction) => Promise<T>): Promise<T> {
-    const id = uuidSchema.parse(merchantId);
+    return this.withContext({ merchantId }, work);
+  }
+
+  /**
+   * Transaction with an explicit RLS context. `userId` lets a user read their own
+   * memberships (and those merchants) before a merchant context exists (sign-in).
+   */
+  async withContext<T>(
+    context: { merchantId?: string; userId?: string },
+    work: (tx: Transaction) => Promise<T>,
+  ): Promise<T> {
+    const merchantId = context.merchantId ? uuidSchema.parse(context.merchantId) : '';
+    const userId = context.userId ? uuidSchema.parse(context.userId) : '';
     return this.db.transaction(async (tx) => {
-      await tx.execute(sqlSetMerchant(id));
+      await tx.execute(
+        sql`select set_config('app.merchant_id', ${merchantId}, true), set_config('app.user_id', ${userId}, true)`,
+      );
       return work(tx);
     });
   }
@@ -70,8 +84,4 @@ export class DatabaseService implements OnModuleDestroy {
   async onModuleDestroy(): Promise<void> {
     await this.pool.end();
   }
-}
-
-function sqlSetMerchant(merchantId: string) {
-  return sql`select set_config('app.merchant_id', ${merchantId}, true)`;
 }

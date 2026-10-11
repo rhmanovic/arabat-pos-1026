@@ -20,6 +20,16 @@ const TITLES: Partial<Record<ErrorCode, string>> = {
   VALIDATION_FAILED: 'Validation failed',
   MALFORMED_REQUEST: 'Malformed request',
   UNAUTHENTICATED: 'Authentication required',
+  INVALID_CREDENTIALS: 'Invalid credentials',
+  ACCOUNT_DISABLED: 'Account disabled',
+  NO_MERCHANT_ACCESS: 'No merchant access',
+  INTERFACE_NOT_PERMITTED: 'Interface not permitted',
+  TICKET_INVALID: 'Sign-in step expired',
+  MFA_INVALID: 'Invalid verification code',
+  RESET_TOKEN_INVALID: 'Reset link invalid or expired',
+  EMAIL_ALREADY_REGISTERED: 'E-mail already registered',
+  ORIGIN_REJECTED: 'Request origin rejected',
+  VERSION_CONFLICT: 'Version conflict',
   FORBIDDEN: 'Forbidden',
   NOT_FOUND: 'Not found',
   ROUTE_NOT_FOUND: 'Route not found',
@@ -52,6 +62,9 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       request.log.info({ code: problem.code, status: problem.status }, 'Request rejected');
     }
 
+    if (exception instanceof AppError && exception.extra.retryAfterSec !== undefined) {
+      void reply.header('retry-after', String(exception.extra.retryAfterSec));
+    }
     void reply
       .status(problem.status)
       .header('content-type', 'application/problem+json')
@@ -69,6 +82,9 @@ export class ProblemDetailsFilter implements ExceptionFilter {
         code: exception.code,
         detail: exception.message,
         ...(exception.issues ? { issues: exception.issues } : {}),
+        ...(exception.extra.availableInterfaces
+          ? { availableInterfaces: exception.extra.availableInterfaces }
+          : {}),
         ...base,
       };
     }

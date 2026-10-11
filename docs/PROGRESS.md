@@ -3,17 +3,18 @@
 Only record what has actually been done and verified. Mocked or partial work
 must be labeled as such.
 
-## Current state (2026-10-11, after session 3 — milestone M0)
+## Current state (2026-10-11, after Prompt 4 — authentication)
 
 | Area | Status | Notes |
 |---|---|---|
 | Documentation & architecture | Done | `CLAUDE.md`, `README.md`, `docs/*` |
 | Monorepo & tooling | Done | pnpm 12 workspaces, TS 6 strict, ESLint 10, Prettier, Node 24 |
 | Backend foundation | Done | NestJS 12 + Fastify 5, config validation, problem+json errors, pino logs, request ids, Zod validation pipe, health endpoints, helmet/CSP |
-| Access control foundation | Done (deny-all) | Default-deny guard, route auditor (boot fails on undeclared routes), permission evaluation. **No login/sessions yet (M1)** |
+| Authentication & sessions | Done | Owner registration, sign-in (manager/POS/platform+TOTP), merchant/branch selection, interface & merchant switching, logout, password recovery, rate limits, CSRF origin check |
+| Merchant data | Partial | Company profile API, branch list API. Branch/employee/role management: Prompt 5 |
 | Database foundation | Done | PostgreSQL 18 (Compose), Drizzle, migrations, owner/runtime roles, RLS helper, seeds |
 | Frontend foundation | Done | 3 separate Vite apps + shared packages; ManagerLayout / POSLayout / PlatformLayout; ar/en + RTL/LTR; auth state & protected routes; API client |
-| Automated tests | Passing | 79 unit/web, 10 integration, 12 E2E (local) |
+| Automated tests | Passing | 82 unit/web, 36 integration, 18 E2E (local) |
 | CI | Written, not yet run | `.github/workflows/ci.yml` |
 | Business modules | Not started | Begin in M1 |
 | Deployment | Not planned | Requires owner approval |
@@ -95,6 +96,22 @@ Not done / open:
 - Cloud sandbox specifics (not part of the repo): Node 24 installed under
   `~/.local/node24`, Docker daemon started manually.
 
+### 2026-10-11 — Prompt 4: Merchant accounts and authentication
+Implemented: identity schema + RLS (migrations 0002/0003), `DbSessionResolver`,
+registration, login with merchant/branch selection tickets, platform TOTP, logout,
+password recovery (Mailpit), `me`/merchants/switch APIs, company profile and branch
+list APIs, audit events, DB rate limits, origin check, dev seeds and operator CLI.
+UI: manager sign-in/registration/recovery, POS touch sign-in + branch choice, platform
+sign-in + TOTP step, session info, sign-out and manager↔POS switching in layouts.
+
+Verified: `pnpm verify` (82 tests), `pnpm test:integration` (36 tests incl. tenant
+isolation, enumeration, lockout, expiry, revocation, TOTP replay, CSRF),
+`pnpm test:e2e` (18 tests: registration→dashboard→logout→login, recovery through
+Mailpit, cashier routed to POS, owner switch with branch choice, manager denied POS,
+operator TOTP).
+
+Found and fixed: Drizzle CLI/test connections without `casing: 'snake_case'`; logout
+race where guards briefly saw the old session.
+
 ## Next step
-Milestone M1 — identity, merchants, branches, roles & access (see `ROADMAP.md`).
-Needs owner decisions OQ-010 (merchant sign-up) and OQ-006 (POS login style).
+Prompt 5 — branches, employees and permissions.

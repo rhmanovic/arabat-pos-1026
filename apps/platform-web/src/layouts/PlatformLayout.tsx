@@ -1,5 +1,5 @@
-import { Badge, cn } from '@arabat/ui';
-import { ApiStatus, LanguageSwitcher } from '@arabat/web-core';
+import { Badge, Button, cn } from '@arabat/ui';
+import { ApiStatus, LanguageSwitcher, useAuth, useLogout } from '@arabat/web-core';
 import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet } from 'react-router';
 
@@ -14,6 +14,8 @@ const NAV = [
 /** Dense operator console: dark top bar, compact start-side navigation. */
 export function PlatformLayout() {
   const { t } = useTranslation();
+  const { state } = useAuth();
+  const logout = useLogout('platform');
   return (
     <div className="flex min-h-dvh flex-col bg-canvas">
       <header className="flex h-12 items-center gap-3 bg-console px-4 text-console-fg">
@@ -24,6 +26,17 @@ export function PlatformLayout() {
         <div className="flex-1" />
         <ApiStatus className="hidden text-console-fg/80 sm:inline-flex" />
         <LanguageSwitcher />
+        {state.status === 'authenticated' ? (
+          <span className="hidden text-sm md:inline">{state.session.actor.fullName}</span>
+        ) : null}
+        <Button
+          variant="secondary"
+          size="sm"
+          loading={logout.isPending}
+          onClick={() => logout.mutate()}
+        >
+          {t('common:actions.signOut')}
+        </Button>
       </header>
       <div className="flex flex-1 flex-col md:flex-row">
         <nav

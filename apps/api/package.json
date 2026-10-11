@@ -10,7 +10,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file-if-exists=../../.env dist/database/cli/migrate.js",
-    "db:seed": "node --env-file-if-exists=../../.env dist/database/cli/seed.js"
+    "db:seed": "node --env-file-if-exists=../../.env dist/database/cli/seed.js",
+    "platform:create-operator": "node --env-file-if-exists=../../.env dist/database/cli/create-operator.js",
+    "dev:totp": "node dist/database/cli/dev-totp.js"
   },
   "dependencies": {
     "@arabat/contracts": "workspace:*",
@@ -22,16 +24,20 @@
     "@nestjs/common": "^12.1.2",
     "@nestjs/core": "^12.1.2",
     "@nestjs/platform-fastify": "^12.1.2",
+    "@node-rs/argon2": "^2.2.2",
     "drizzle-orm": "^0.45.4",
     "fastify": "^5.12.5",
+    "nodemailer": "~10.0.16",
     "pg": "^8.23.1",
     "pino": "^10.4.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
+    "uuidv7": "^1.2.1",
     "zod": "^4.6.6"
   },
   "devDependencies": {
     "@nestjs/testing": "^12.1.2",
+    "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",
     "concurrently": "^10.0.6",
     "drizzle-kit": "^0.31.11",

@@ -77,7 +77,9 @@ describe('database (PostgreSQL integration)', () => {
   it('is idempotent: migrations and seeds can be applied again', async () => {
     await runMigrations(owner);
     const results = await runSeeds(owner, 'test', SEEDS);
-    expect(results.every((r) => r.status === 'applied')).toBe(true);
+    expect(results.find((r) => r.name === '001-currencies')?.status).toBe('applied');
+    // Development demo data never runs outside development.
+    expect(results.find((r) => r.name === '100-dev-demo-merchants')?.status).toBe('skipped');
     const { rows } = await owner.query(`select exponent from currencies where code = 'KWD'`);
     expect(rows).toEqual([{ exponent: 3 }]);
   });

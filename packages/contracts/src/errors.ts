@@ -14,6 +14,17 @@ export const ERROR_CODES = [
   'RATE_LIMITED',
   'SERVICE_UNAVAILABLE',
   'INTERNAL_ERROR',
+  // Authentication (AUTH.md). Sign-in errors never reveal whether an account exists.
+  'INVALID_CREDENTIALS',
+  'ACCOUNT_DISABLED',
+  'NO_MERCHANT_ACCESS',
+  'INTERFACE_NOT_PERMITTED',
+  'TICKET_INVALID',
+  'MFA_INVALID',
+  'RESET_TOKEN_INVALID',
+  'EMAIL_ALREADY_REGISTERED',
+  'ORIGIN_REJECTED',
+  'VERSION_CONFLICT',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -35,5 +46,7 @@ export const problemDetailsSchema = z.object({
   instance: z.string().optional(),
   requestId: z.string().optional(),
   issues: z.array(validationIssueSchema).optional(),
+  /** Interfaces the user may use instead (with INTERFACE_NOT_PERMITTED). */
+  availableInterfaces: z.array(z.enum(['manager', 'pos'])).optional(),
 });
 export type ProblemDetails = z.infer<typeof problemDetailsSchema>;

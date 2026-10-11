@@ -1,9 +1,16 @@
-import { Alert, Button, Field, Input } from '@arabat/ui';
-import { ApiStatus, LanguageSwitcher } from '@arabat/web-core';
+import {
+  AuthHeading,
+  ForgotPasswordForm,
+  LanguageSwitcher,
+  MerchantLoginForm,
+  ResetPasswordForm,
+  ApiStatus,
+} from '@arabat/web-core';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
-/** Touch-friendly cashier sign-in; disabled until accounts exist (milestone M1). */
-export function LoginPage() {
+/** Touch-first auth shell of the POS: dark full screen with one large card. */
+function PosAuthShell({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   return (
     <div className="flex min-h-dvh flex-col bg-console p-4 text-console-fg sm:p-6">
@@ -12,30 +19,41 @@ export function LoginPage() {
         <LanguageSwitcher />
       </div>
       <div className="flex flex-1 items-center justify-center py-8">
-        <div className="w-full max-w-md rounded-xl bg-surface p-6 text-fg shadow-lg sm:p-8">
-          <h1 className="text-2xl font-bold">{t('login.title')}</h1>
-          <p className="mt-1 text-fg-muted">{t('login.subtitle')}</p>
-          <Alert tone="warning" className="mt-5" title={t('common:auth.signInUnavailableTitle')}>
-            {t('common:auth.signInUnavailableBody')}
-          </Alert>
-          <form className="mt-6" onSubmit={(e) => e.preventDefault()}>
-            <fieldset disabled className="flex flex-col gap-4">
-              <Field label={t('common:auth.email')}>
-                {(props) => <Input {...props} type="email" className="h-touch text-lg" dir="ltr" />}
-              </Field>
-              <Field label={t('common:auth.password')}>
-                {(props) => (
-                  <Input {...props} type="password" className="h-touch text-lg" dir="ltr" />
-                )}
-              </Field>
-              <Button type="submit" size="touch" block>
-                {t('common:actions.signIn')}
-              </Button>
-            </fieldset>
-          </form>
-          <ApiStatus className="mt-6" />
+        <div className="flex w-full max-w-md flex-col gap-5 rounded-xl bg-surface p-6 text-fg shadow-lg sm:p-8">
+          {children}
+          <ApiStatus />
         </div>
       </div>
     </div>
+  );
+}
+
+export function LoginPage() {
+  const { t } = useTranslation();
+  return (
+    <PosAuthShell>
+      <AuthHeading title={t('login.title')} subtitle={t('login.subtitle')} />
+      <MerchantLoginForm appInterface="pos" size="touch" />
+    </PosAuthShell>
+  );
+}
+
+export function ForgotPasswordPage() {
+  const { t } = useTranslation('common');
+  return (
+    <PosAuthShell>
+      <AuthHeading title={t('auth.forgotTitle')} />
+      <ForgotPasswordForm appInterface="pos" size="touch" />
+    </PosAuthShell>
+  );
+}
+
+export function ResetPasswordPage() {
+  const { t } = useTranslation('common');
+  return (
+    <PosAuthShell>
+      <AuthHeading title={t('auth.resetTitle')} />
+      <ResetPasswordForm size="touch" />
+    </PosAuthShell>
   );
 }

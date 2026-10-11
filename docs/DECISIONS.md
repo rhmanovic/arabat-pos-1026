@@ -180,7 +180,7 @@ ADR; supersede it.
   and E2E tests. A CDN/reverse proxy may replace it in production (ADR-0018).
 
 ## ADR-0022 — M0 session resolver denies everything
-- **Date:** 2026-10-11 · **Status:** Accepted (temporary until M1)
+- **Date:** 2026-10-11 · **Status:** Superseded by ADR-0024
 - **Decision:** The `SessionResolver` abstraction is bound to `NoSessionStoreResolver`
   (always "no session"). Combined with the default-deny `AccessGuard` and the boot
   time route auditor, only `@Public` routes (health) are reachable. The login forms
@@ -193,3 +193,49 @@ ADR; supersede it.
   Spinner, EmptyState) are plain accessible components with
   `class-variance-authority` + `tailwind-merge`. Radix primitives are added when the
   first complex widget (dialog, menu, popover) is needed (M1).
+
+---
+
+## ADR-0024 — Database-backed sessions validated on every request
+- **Date:** 2026-10-11 · **Status:** Accepted
+- **Decision:** `DbSessionResolver` replaces the deny-all resolver. Opaque 256-bit tokens
+  (SHA-256 stored), one cookie per interface, server-side revocation, idle + absolute
+  expiry, and a full context re-check on each request (user, membership, merchant,
+  interface permission, POS branch). Multi-step sign-in uses single-use `auth_tickets`.
+
+## ADR-0025 — Self-service owner registration; enumeration trade-off
+- **Date:** 2026-10-11 · **Status:** Accepted (owner requirement, Prompt 4)
+- **Decision:** `POST /auth/register` creates the merchant and owner in one
+  transaction and signs the owner in. It answers 409 for a registered e-mail (cannot
+  be hidden without an e-mail verification flow); rate limited per IP. E-mail
+  verification is not required yet (`users.email_verified_at` is reserved).
+
+## ADR-0026 — CSRF: SameSite cookies + origin verification
+- **Date:** 2026-10-11 · **Status:** Accepted (refines AUTH.md)
+- **Decision:** No CSRF token; state-changing API requests are rejected when
+  `Sec-Fetch-Site` is `cross-site` or `Origin` is foreign (`TRUSTED_ORIGINS` for
+  extra hosts). Combined with SameSite=Lax/Strict cookies and JSON-only bodies.
+
+## ADR-0027 — Authentication rate limits in PostgreSQL
+- **Date:** 2026-10-11 · **Status:** Accepted
+- **Decision:** Fixed-window counters in `rate_limit_buckets` (atomic upsert), so limits
+  hold across API instances without Redis. Per-account failure counters act as account
+  lockout. `AUTH_RATE_LIMIT_SCALE` relaxes limits for E2E runs only.
+
+## ADR-0028 — In-house RFC 6238 TOTP and Argon2id via @node-rs/argon2
+- **Date:** 2026-10-11 · **Status:** Accepted
+- **Decision:** TOTP is ~60 lines on `node:crypto` (tested), avoiding an extra
+  dependency; secrets encrypted with AES-256-GCM. Passwords: Argon2id
+  (m=19456 KiB, t=2, p=1) via prebuilt `@node-rs/argon2` (no install scripts).
+
+## ADR-0029 — RLS user context for pre-merchant reads
+- **Date:** 2026-10-11 · **Status:** Accepted
+- **Decision:** `app.user_id` (`app_current_user_id()`) lets a user read their own
+  `memberships` and those `merchants` before a merchant is chosen. All other merchant
+  tables remain strictly merchant-scoped. `withContext({merchantId, userId})`.
+
+## ADR-0030 — Mailpit and nodemailer for e-mail
+- **Date:** 2026-10-11 · **Status:** Accepted
+- **Decision:** `Mailer` abstraction with SMTP (nodemailer); locally and in CI the SMTP
+  server is Mailpit (no paid provider). Tests use an in-memory mailer. A production
+  e-mail provider needs owner approval (cost).

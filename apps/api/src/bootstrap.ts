@@ -7,6 +7,7 @@ import { pino } from 'pino';
 import { AppModule } from './app.module.js';
 import type { Env } from './config/env.js';
 import { ProblemDetailsFilter } from './kernel/errors/problem.filter.js';
+import { registerOriginCheck } from './kernel/http/origin-check.js';
 import { genRequestId } from './kernel/http/request-id.js';
 import { PinoNestLogger, createLoggerOptions } from './kernel/logging/logger.js';
 import { serveWebApps } from './web/serve-web.js';
@@ -30,7 +31,9 @@ export async function configureApp(app: NestFastifyApplication, env: Env): Promi
   const fastify = app.getHttpAdapter().getInstance();
   fastify.addHook('onSend', async (request, reply) => {
     void reply.header('x-request-id', request.id);
+    if (request.url.startsWith('/api/')) void reply.header('cache-control', 'no-store');
   });
+  registerOriginCheck(fastify, env);
 
   await app.register(fastifyHelmet, {
     contentSecurityPolicy: {

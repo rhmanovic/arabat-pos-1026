@@ -1,8 +1,24 @@
 import {
   type AppInterface,
+  type ForgotPasswordRequest,
+  type LoginRequest,
+  type LoginResult,
   type MeResponse,
+  type MerchantInterface,
+  type PlatformLoginRequest,
+  type PlatformMfaRequest,
   type ReadyResponse,
+  type RegisterRequest,
+  type ResetPasswordRequest,
+  type SelectMerchantRequest,
+  type SwitchInterfaceRequest,
+  type SwitchMerchantRequest,
+  type UpdateMerchantProfile,
+  branchListResponseSchema,
+  loginResultSchema,
   meResponseSchema,
+  merchantListResponseSchema,
+  merchantProfileSchema,
   readyResponseSchema,
 } from '@arabat/contracts';
 import type { z } from 'zod';
@@ -91,6 +107,45 @@ export function createApiClient(options: ApiClientOptions = {}) {
           ...(signal ? { signal } : {}),
         });
       },
+      register: (body: RegisterRequest): Promise<LoginResult> =>
+        request('POST', '/auth/register', { body, schema: loginResultSchema }),
+      login: (body: LoginRequest): Promise<LoginResult> =>
+        request('POST', '/auth/login', { body, schema: loginResultSchema }),
+      selectMerchant: (body: SelectMerchantRequest): Promise<LoginResult> =>
+        request('POST', '/auth/login/select', { body, schema: loginResultSchema }),
+      platformLogin: (body: PlatformLoginRequest): Promise<LoginResult> =>
+        request('POST', '/auth/platform/login', { body, schema: loginResultSchema }),
+      platformMfa: (body: PlatformMfaRequest): Promise<LoginResult> =>
+        request('POST', '/auth/platform/mfa', { body, schema: loginResultSchema }),
+      forgotPassword: (body: ForgotPasswordRequest) =>
+        request('POST', '/auth/password/forgot', { body }),
+      resetPassword: (body: ResetPasswordRequest) =>
+        request('POST', '/auth/password/reset', { body }),
+      logout: (appInterface: AppInterface) =>
+        request('POST', `/auth/${appInterface}/logout`, { body: {} }),
+      merchants: (appInterface: MerchantInterface) =>
+        request('GET', `/auth/${appInterface}/merchants`, { schema: merchantListResponseSchema }),
+      switchMerchant: (
+        appInterface: MerchantInterface,
+        body: SwitchMerchantRequest,
+      ): Promise<LoginResult> =>
+        request('POST', `/auth/${appInterface}/switch-merchant`, {
+          body,
+          schema: loginResultSchema,
+        }),
+      switchInterface: (
+        from: MerchantInterface,
+        body: SwitchInterfaceRequest,
+      ): Promise<LoginResult> =>
+        request('POST', `/auth/${from}/switch-interface`, { body, schema: loginResultSchema }),
+    },
+    merchant: {
+      get: () => request('GET', '/manager/merchant', { schema: merchantProfileSchema }),
+      update: (body: UpdateMerchantProfile) =>
+        request('PATCH', '/manager/merchant', { body, schema: merchantProfileSchema }),
+    },
+    branches: {
+      list: () => request('GET', '/manager/branches', { schema: branchListResponseSchema }),
     },
   };
 }

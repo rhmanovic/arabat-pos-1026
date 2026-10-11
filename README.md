@@ -12,9 +12,12 @@ Three separate applications on one origin:
 | `/api/v1`   | Backend API (NestJS + Fastify)      | http://localhost:3000/api/v1/    |
 
 Start with [CLAUDE.md](CLAUDE.md) and the documents in [docs/](docs/).
-Current status: milestone **M0 (engineering foundation)** — see [docs/PROGRESS.md](docs/PROGRESS.md).
-Sign-in is intentionally disabled until milestone M1 (accounts and sessions); every
-protected page and endpoint is locked by default.
+Current status: see [docs/PROGRESS.md](docs/PROGRESS.md).
+Development accounts (created by `pnpm db:seed`, development only; password
+`Demo-Pass-2026`): `owner@demo.arabat.test`, `manager@demo.arabat.test`,
+`cashier@demo.arabat.test`, `multi@demo.arabat.test` (two companies), platform
+operator `operator@platform.arabat.test` (TOTP code: `pnpm --filter @arabat/api run dev:totp`).
+E-mails (password reset) are captured by Mailpit: http://localhost:8025.
 
 ## Requirements
 

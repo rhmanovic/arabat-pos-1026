@@ -30,6 +30,15 @@ export default defineConfig({
     url: `${baseURL}/api/v1/health/ready`,
     reuseExistingServer: !process.env['CI'],
     timeout: 30_000,
-    env: { PORT: String(PORT), SERVE_WEB: 'true', LOG_LEVEL: 'warn', LOG_PRETTY: 'false' },
+    env: {
+      PORT: String(PORT),
+      SERVE_WEB: 'true',
+      LOG_LEVEL: 'warn',
+      LOG_PRETTY: 'false',
+      // Many sign-ins from one IP during the run; limits themselves are covered by integration tests.
+      AUTH_RATE_LIMIT_SCALE: '50',
+      PUBLIC_MANAGER_URL: `${baseURL}/manager`,
+      PUBLIC_POS_URL: `${baseURL}/pos`,
+    },
   },
 });

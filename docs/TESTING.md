@@ -66,6 +66,13 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after Prompt 4 (2026-10-11, local run)
+- `pnpm verify` ✓ (82 tests), `pnpm test:integration` ✓ (36), `pnpm test:e2e` ✓ (18).
+- Integration fixtures: `apps/api/src/testing/auth-fixtures.ts` (`ApiClient` with a
+  fresh IP per client, `registerOwner`, `DbFixtures.addEmployee/grantRole`);
+  `prepareIntegrationDatabase()` migrates and truncates identity tables.
+- E2E needs Mailpit (`pnpm db:up` starts it) and the development seed.
+
 ### Results at the end of M0 (2026-10-11, local run)
 - `pnpm verify`: lint ✓, format ✓, typecheck ✓ (11 projects), build ✓, 79 tests ✓.
 - `pnpm test:integration`: 10 tests ✓ (PostgreSQL 18.6 via Docker Compose).
