@@ -283,3 +283,33 @@ ADR; supersede it.
   scope-filtered) plus "All branches" when allowed. The choice filters views on the
   client and is persisted per browser; it never widens access — every query is still
   filtered server-side.
+
+## ADR-0038 — File storage abstraction for uploads
+- **Date:** 2026-10-11 · **Status:** Accepted
+- **Decision:** Uploads go through an abstract `FileStorage` (put/get/delete by safe key).
+  Development and tests use `LocalDiskStorage` (`FILE_STORAGE_DIR`, default `var/uploads`).
+  An object-storage adapter (S3-compatible) is added at deployment time — it incurs cost
+  and needs owner approval. Images are served by the API with `nosniff` and a strict CSP,
+  only to users who can read that merchant's catalog.
+
+## ADR-0039 — SKU and barcode uniqueness
+- **Date:** 2026-10-11 · **Status:** Accepted
+- **Decision:** SKU is unique per merchant (case-insensitive) including archived variants,
+  so historical references stay unambiguous. Barcodes are unique per merchant among live
+  variants; archiving a variant frees its barcodes for reuse. Violations return
+  `DUPLICATE_SKU` / `DUPLICATE_BARCODE` (409).
+
+## ADR-0040 — Price permission and cost visibility
+- **Date:** 2026-10-11 · **Status:** Accepted
+- **Decision:** Editing products needs `catalog.manage`; changing prices, costs or adding
+  priced variants additionally needs `catalog.prices.manage`. Costs are omitted from API
+  responses for users without it and ignored in their writes. Every price change is
+  audited with `{from, to}`.
+
+## ADR-0041 — POS catalog snapshot with ETag
+- **Date:** 2026-10-11 · **Status:** Accepted
+- **Decision:** The POS downloads one snapshot of sellable items for its bound branch
+  (`GET /pos/catalog`), versioned by a SHA-256 of its content and served with `ETag`, so
+  terminals refresh cheaply (304) and search/barcode lookup is instant on the client.
+  Prices are always re-read on the server at checkout; the snapshot is never trusted for
+  money.

@@ -65,6 +65,13 @@ engineering defaults pending owner confirmation.
   above limit, price override) require a manager override, which is audited.
 - **BR-027** One open shift per register; sales require an open shift.
 
+- **BR-049** Products are never deleted, only archived; archived products are hidden
+  from the POS and remain in history. Prices have at most 3 decimals (fils).
+- **BR-050** Sales store a snapshot of name, SKU and price at the time of sale, so later
+  price changes never alter past sales (enforced from the checkout slice).
+- **BR-051** A product is sold in all branches unless restricted to selected branches.
+- **BR-052** Services do not track inventory.
+
 ## 4. Money — Confirmed
 
 - **BR-030** Default currency is **KWD** with **3 decimal places** (1 KWD = 1000 fils).

@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import fastifyCookie from '@fastify/cookie';
 import fastifyHelmet from '@fastify/helmet';
+import fastifyMultipart from '@fastify/multipart';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { pino } from 'pino';
@@ -51,6 +52,9 @@ export async function configureApp(app: NestFastifyApplication, env: Env): Promi
     },
   });
   await app.register(fastifyCookie);
+  await app.register(fastifyMultipart, {
+    limits: { fileSize: 2 * 1024 * 1024 + 1, files: 1, fields: 5 },
+  });
 
   app.setGlobalPrefix(API_PREFIX);
   app.useGlobalFilters(new ProblemDetailsFilter());

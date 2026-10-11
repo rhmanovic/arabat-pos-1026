@@ -178,13 +178,14 @@ function TopBar({ onOpenMenu, menuOpen }: { onOpenMenu: () => void; menuOpen: bo
           </p>
         ) : null}
         {activeBranches.length > 0 ? (
-          <label className="hidden items-center gap-2 text-sm text-fg-muted md:flex">
-            <span>{t('top.branchContext')}</span>
+          <div className="hidden items-center gap-2 text-sm text-fg-muted md:flex">
+            <span aria-hidden>{t('top.branchContext')}</span>
             <Select
               className="h-9 w-44"
               value={branchId ?? ''}
               onChange={(e) => setBranchId(e.target.value || null)}
               data-testid="branch-context"
+              aria-label={t('top.branchContext')}
             >
               {activeBranches.length > 1 || session?.isOwner ? (
                 <option value="">{t('top.allBranches')}</option>
@@ -195,7 +196,7 @@ function TopBar({ onOpenMenu, menuOpen }: { onOpenMenu: () => void; menuOpen: bo
                 </option>
               ))}
             </Select>
-          </label>
+          </div>
         ) : null}
       </div>
 

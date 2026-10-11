@@ -9,6 +9,9 @@ import type { ReactNode } from 'react';
 import type { RouteObject } from 'react-router';
 import { ManagerLayout } from './layouts/ManagerLayout.js';
 import { BranchesPage } from './features/branches/BranchesPage.js';
+import { CategoriesPage } from './features/catalog/CategoriesPage.js';
+import { ProductEditorPage } from './features/catalog/ProductEditorPage.js';
+import { ProductsPage } from './features/catalog/ProductsPage.js';
 import { CompanySettingsPage } from './features/company/CompanySettingsPage.js';
 import { DashboardPage } from './features/dashboard/DashboardPage.js';
 import { EmployeeDetailPage } from './features/employees/EmployeeDetailPage.js';
@@ -59,6 +62,10 @@ export const routes: RouteObject[] = [
     ),
     children: [
       { index: true, element: <DashboardPage /> },
+      { path: 'products', element: guard('catalog.read', <ProductsPage />) },
+      { path: 'products/new', element: guard('catalog.manage', <ProductEditorPage />) },
+      { path: 'products/:productId', element: guard('catalog.read', <ProductEditorPage />) },
+      { path: 'categories', element: guard('catalog.read', <CategoriesPage />) },
       { path: 'branches', element: guard('branches.read', <BranchesPage />) },
       { path: 'employees', element: guard('employees.read', <EmployeesPage />) },
       { path: 'employees/:membershipId', element: guard('employees.read', <EmployeeDetailPage />) },

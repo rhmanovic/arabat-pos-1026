@@ -119,6 +119,7 @@ describe('manager app', () => {
       'branches.read',
       'merchant.settings.read',
       'catalog.read',
+      'sales.read',
     ];
     const fetch = fakeApiFetch({
       session: makeSession('manager', permissions),
@@ -130,12 +131,19 @@ describe('manager app', () => {
     });
     renderApp({ routes, appInterface: 'manager', i18n, fetch });
     const nav = await screen.findByRole('navigation', { name: 'Manager navigation' });
-    for (const name of ['Employees', 'Roles & permissions', 'Branches', 'Settings']) {
+    for (const name of [
+      'Employees',
+      'Roles & permissions',
+      'Branches',
+      'Settings',
+      'Products',
+      'Categories',
+    ]) {
       expect(within(nav).getByRole('link', { name })).toBeInTheDocument();
     }
-    // Products is not built yet: visible but not a link.
-    expect(within(nav).queryByRole('link', { name: /Products/ })).not.toBeInTheDocument();
-    expect(within(nav).getByText('Products').closest('[aria-disabled="true"]')).not.toBeNull();
+    // Sales is not built yet: visible but not a link.
+    expect(within(nav).queryByRole('link', { name: /Sales/ })).not.toBeInTheDocument();
+    expect(within(nav).getByText('Sales').closest('[aria-disabled="true"]')).not.toBeNull();
   });
 
   it('denies a management page without its permission even when typed in the address bar', async () => {

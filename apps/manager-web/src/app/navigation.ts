@@ -14,7 +14,14 @@ export const NAV: readonly NavItem[] = [
     key: 'products',
     to: '/products',
     anyOf: ['catalog.read', 'catalog.manage'],
-    available: false,
+    available: true,
+    section: 'operations',
+  },
+  {
+    key: 'categories',
+    to: '/categories',
+    anyOf: ['catalog.read', 'catalog.manage'],
+    available: true,
     section: 'operations',
   },
   {

@@ -46,6 +46,8 @@ export const envSchema = z.object({
   /** Public URLs of the apps, used in e-mail links (password reset). */
   PUBLIC_MANAGER_URL: z.url().default('http://localhost:5173/manager'),
   PUBLIC_POS_URL: z.url().default('http://localhost:5174/pos'),
+  /** Local directory for uploaded files (product images). */
+  FILE_STORAGE_DIR: z.string().default('var/uploads'),
 });
 
 export type Env = z.infer<typeof envSchema>;

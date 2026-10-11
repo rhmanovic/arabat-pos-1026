@@ -3,7 +3,7 @@
 Only record what has actually been done and verified. Mocked or partial work
 must be labeled as such.
 
-## Current state (2026-10-11, after Prompt 6 — manager dashboard)
+## Current state (2026-10-11, after Prompt 7 — product catalog)
 
 | Area | Status | Notes |
 |---|---|---|
@@ -15,7 +15,8 @@ must be labeled as such.
 | Database foundation | Done | PostgreSQL 18 (Compose), Drizzle, migrations, owner/runtime roles, RLS helper, seeds |
 | Frontend foundation | Done | 3 separate Vite apps + shared packages; ManagerLayout / POSLayout / PlatformLayout; ar/en + RTL/LTR; auth state & protected routes; API client |
 | Manager app | Done for implemented modules | Layout (role-aware sidebar, top bar with merchant/branch context, user menu), dashboard (real counts + onboarding), company profile, branches, employees, invitations, role assignments, roles & permission matrix |
-| Automated tests | Passing | 90 unit/web, 52 integration, 22 E2E (local) |
+| Product catalog | Done | Categories, products, variants, SKU/barcodes, prices (fils), costs (permission), branch availability, images, archive; manager screens; POS catalog API |
+| Automated tests | Passing | 90 unit/web, 66 integration, 23 E2E (local) |
 | CI | Written, not yet run | `.github/workflows/ci.yml` |
 | Business modules | Not started | Begin in M1 |
 | Deployment | Not planned | Requires owner approval |
@@ -145,5 +146,19 @@ horizontal overflow. Visual check in Arabic RTL desktop and English tablet.
 Found and fixed: screen-reader-only table labels caused horizontal page overflow on
 phones (table wrapper now `relative`).
 
+### 2026-10-11 — Prompt 7: Product catalog
+Implemented: migrations 0006/0007 (catalog tables, forced RLS, no deletes, trigram
+search indexes); `CatalogService` (categories with cycle check, products with variants,
+SKU/barcodes, exact money parsing, cost hidden without `catalog.prices.manage`, audited
+price changes, branch availability, archive/restore, images via `FileStorage`);
+manager screens (product list with search/filters/sort/pagination, product editor,
+categories); POS catalog snapshot API with ETag.
+Verified: 14 catalog integration tests, catalog E2E, web nav tests.
+Found and fixed: Drizzle bound unqualified columns inside correlated subqueries to the
+inner table (now explicitly qualified); reusing a removed variant's barcode in the same
+save failed (removed variants are archived first).
+Not done yet: the POS sale screen uses this catalog from Prompt 10; inventory columns
+come with Prompt 8.
+
 ## Next step
-Prompt 7 — product catalog.
+Prompt 8 — inventory engine.

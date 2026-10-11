@@ -18,6 +18,14 @@ import {
   acceptInvitationResultSchema,
   invitationPreviewSchema,
   type CreateBranch,
+  type ProductListQuery,
+  type SaveCategory,
+  type SaveProduct,
+  categoryListSchema,
+  categorySchema,
+  posCatalogSchema,
+  productListSchema,
+  productSchema,
   type CreateRole,
   type InviteEmployee,
   type SetAssignments,
@@ -194,6 +202,53 @@ export function createApiClient(options: ApiClientOptions = {}) {
       update: (id: string, body: UpdateRole) =>
         request('PATCH', `/manager/roles/${id}`, { body, schema: roleSchema }),
       remove: (id: string) => request('DELETE', `/manager/roles/${id}`),
+    },
+    catalog: {
+      categories: () => request('GET', '/manager/categories', { schema: categoryListSchema }),
+      createCategory: (body: SaveCategory) =>
+        request('POST', '/manager/categories', { body, schema: categorySchema }),
+      updateCategory: (id: string, body: SaveCategory) =>
+        request('PATCH', `/manager/categories/${id}`, { body, schema: categorySchema }),
+      setCategoryStatus: (id: string, status: 'active' | 'archived') =>
+        request('POST', `/manager/categories/${id}/status`, {
+          body: { status },
+          schema: categorySchema,
+        }),
+      products: (query: ProductListQuery = {}) => {
+        const params = new URLSearchParams();
+        for (const [key, value] of Object.entries(query))
+          if (value !== undefined && value !== '') params.set(key, String(value));
+        return request('GET', `/manager/products?${params.toString()}`, {
+          schema: productListSchema,
+        });
+      },
+      product: (id: string) => request('GET', `/manager/products/${id}`, { schema: productSchema }),
+      createProduct: (body: SaveProduct) =>
+        request('POST', '/manager/products', { body, schema: productSchema }),
+      updateProduct: (id: string, body: SaveProduct) =>
+        request('PATCH', `/manager/products/${id}`, { body, schema: productSchema }),
+      setProductStatus: (id: string, status: 'active' | 'archived') =>
+        request('POST', `/manager/products/${id}/status`, {
+          body: { status },
+          schema: productSchema,
+        }),
+      deleteImage: (id: string, imageId: string) =>
+        request('DELETE', `/manager/products/${id}/images/${imageId}`, { schema: productSchema }),
+      /** Multipart upload; returns the updated product. */
+      async uploadImage(id: string, file: Blob) {
+        const form = new FormData();
+        form.append('file', file);
+        const response = await doFetch(`${baseUrl}/manager/products/${id}/images`, {
+          method: 'POST',
+          body: form,
+          credentials: 'same-origin',
+        }).catch((error: unknown) => {
+          throw new NetworkError(error);
+        });
+        if (!response.ok) throw await toApiError(response);
+        return productSchema.parse(await response.json());
+      },
+      posCatalog: () => request('GET', '/pos/catalog', { schema: posCatalogSchema }),
     },
     employees: {
       list: () => request('GET', '/manager/employees', { schema: employeeListSchema }),

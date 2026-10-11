@@ -118,6 +118,22 @@ modal available on any POS route.
 | `POST /auth/invitations/preview`, `POST /auth/invitations/accept` | public (token) |
 | `POST /auth/pos/switch-branch` | POS session |
 
+### Catalog API (Prompt 7)
+
+| Method & path | Permission |
+|---|---|
+| `GET /manager/categories` | `catalog.read` |
+| `POST /manager/categories`, `PATCH /manager/categories/:id`, `POST …/:id/status` | `catalog.manage` |
+| `GET /manager/products?q=&categoryId=&status=&branchId=&sort=&page=` , `GET /manager/products/:id` | `catalog.read` |
+| `POST /manager/products`, `PATCH /manager/products/:id`, `POST …/:id/status` | `catalog.manage` (+ `catalog.prices.manage` to set prices/costs or add variants) |
+| `POST /manager/products/:id/images` (multipart), `DELETE …/images/:imageId` | `catalog.manage` |
+| `GET /manager/products/:id/images/:imageId` | `catalog.read` |
+| `GET /pos/catalog` (ETag / 304) , `GET /pos/catalog/images/:productId/:imageId` | `pos.access` at the bound branch |
+
+Manager screens: `/manager/products` (search, filters, sort, pagination),
+`/manager/products/new`, `/manager/products/:id` (editor with variants, barcodes,
+branch availability, images, archive), `/manager/categories`.
+
 ## 5. API namespaces (backend)
 
 | Prefix | Consumers | Notes |

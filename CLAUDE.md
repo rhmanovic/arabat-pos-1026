@@ -157,6 +157,14 @@ Before reporting work as done, run `pnpm verify`, `pnpm test:integration` and
 - Use logical Tailwind utilities (`ms-/me-/ps-/pe-/start-/end-`); ESLint rejects
   physical left/right classes.
 - Fonts must not be inlined as `data:` URIs (CSP `font-src 'self'`).
+- Drizzle renders bare column names inside correlated `sql` subqueries; qualify outer
+  columns explicitly (`sql.raw('"products"."id"')`) or the subquery binds to itself.
+- `app_owner` bypasses RLS: seeds, migrations and test fixtures must filter by
+  `merchant_id` themselves.
+- Prettier reformats long literals; scripted text edits must assert that the target
+  string exists before replacing.
+- Uploaded files go through `FileStorage` (`apps/api/src/kernel/storage`); never write
+  to disk directly. Local storage lives in `var/` (git-ignored).
 - In this cloud sandbox: Node 24 is at `~/.local/node24/bin`, Docker must be started
   with `dockerd &`, and Playwright needs
   `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium`.

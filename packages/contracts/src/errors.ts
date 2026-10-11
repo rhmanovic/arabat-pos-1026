@@ -31,6 +31,10 @@ export const ERROR_CODES = [
   'BRANCH_REQUIRED',
   'DUPLICATE_CODE',
   'ALREADY_MEMBER',
+  'DUPLICATE_SKU',
+  'DUPLICATE_BARCODE',
+  'INVALID_PRICE',
+  'UNSUPPORTED_MEDIA',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

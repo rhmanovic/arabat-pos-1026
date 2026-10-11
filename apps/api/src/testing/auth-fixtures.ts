@@ -183,3 +183,78 @@ export class DbFixtures {
     );
   }
 }
+
+type Cookies = Record<string, string>;
+
+/** Owner + main branch + a second branch + template role ids (shared by module tests). */
+export async function createCompany(
+  app: NestFastifyApplication,
+  db: DbFixtures,
+  mailer: { outbox: { to: string; text: string }[] },
+) {
+  const client = new ApiClient(app);
+  const o = await registerOwner(client);
+  const main = await db.mainBranch(o.merchantId);
+  const second = (
+    await client.request('POST', '/manager/branches', {
+      cookies: o.cookies,
+      body: { code: 'B2', nameEn: 'Second', nameAr: 'الثاني' },
+    })
+  ).json().id as string;
+  const list = (await client.request('GET', '/manager/roles', { cookies: o.cookies })).json()
+    .roles as { id: string; templateKey: string }[];
+  const role = (key: string) => list.find((r) => r.templateKey === key)!.id;
+  const roles = {
+    company_manager: role('company_manager'),
+    branch_manager: role('branch_manager'),
+    supervisor: role('supervisor'),
+    cashier: role('cashier'),
+  };
+
+  /** Invites + accepts; returns a signed-in session cookie for the interface. */
+  async function hire(
+    assignments: { roleId: string; branchId: string | null }[],
+    iface: 'manager' | 'pos',
+    by: Cookies = o.cookies,
+  ) {
+    const email = uniqueEmail('emp');
+    const res = await client.request('POST', '/manager/employees/invitations', {
+      cookies: by,
+      body: { email, fullName: 'Employee', assignments },
+    });
+    if (res.statusCode !== 201) throw new Error(`invite failed ${res.statusCode} ${res.body}`);
+    const mail = [...mailer.outbox].reverse().find((m) => m.to === email)!;
+    const token = /token=([\w-]+)/.exec(mail.text)![1]!;
+    await client.request('POST', '/auth/invitations/accept', {
+      body: { token, password: PASSWORD },
+    });
+    const login = await client.request('POST', '/auth/login', {
+      body: { interface: iface, email, password: PASSWORD },
+    });
+    let result = login.json();
+    let final = login;
+    if (result.status === 'select_merchant') {
+      final = await client.request('POST', '/auth/login/select', {
+        body: {
+          ticket: result.ticket,
+          merchantId: o.merchantId,
+          branchId: result.merchants[0].branches[0]?.id,
+        },
+      });
+      result = final.json();
+    }
+    if (result.status !== 'authenticated') throw new Error(`login failed ${final.body}`);
+    return { email, cookies: sessionCookie(final, iface) };
+  }
+
+  /** The owner's POS session at a branch. */
+  async function ownerPos(branchId: string) {
+    const res = await client.request('POST', '/auth/manager/switch-interface', {
+      cookies: o.cookies,
+      body: { target: 'pos', branchId },
+    });
+    return sessionCookie(res, 'pos');
+  }
+
+  return { client, ...o, main, second, roles, hire, ownerPos };
+}

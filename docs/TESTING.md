@@ -66,6 +66,16 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after Prompt 7 (2026-10-11, local run)
+- `pnpm verify` ✓ (90 unit/web tests), `pnpm test:integration` ✓ (66), `pnpm test:e2e` ✓ (23).
+- `catalog.int.test.ts` (14): exact KWD prices (no rounding), variants lifecycle,
+  SKU/barcode uniqueness per merchant, optimistic locking and archive-not-delete,
+  search/filter/sort/pagination, category cycles, POS catalog branch filtering,
+  cross-merchant branch rejection, cashier/branch-manager limits, price permission and
+  cost hiding, image upload/type sniffing/merchant isolation, tenant isolation.
+- `e2e/catalog.spec.ts`: manager creates categories and products with variants, prices,
+  branch availability and images through the UI.
+
 ### Results after Prompt 4 (2026-10-11, local run)
 - `pnpm verify` ✓ (82 tests), `pnpm test:integration` ✓ (36), `pnpm test:e2e` ✓ (18).
 - Integration fixtures: `apps/api/src/testing/auth-fixtures.ts` (`ApiClient` with a

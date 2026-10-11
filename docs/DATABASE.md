@@ -345,6 +345,24 @@ erDiagram
 | `apps/api/drizzle/0004_employees.sql` | `invitations`, `invitation_assignments`; branch settings (`phone`, `address`, `receipt_header`, `receipt_footer`); employee profile on memberships (`job_title`, `phone`, `employee_code`) |
 | `apps/api/drizzle/0005_employees_rls.sql` | `app_current_invite_hash()`; RLS on invitations (merchant context or matching invite token hash) and invitation_assignments; data migration of renamed permission keys and `manager` → `company_manager` |
 
+| `apps/api/drizzle/0006_catalog.sql` | `categories` (self-referencing tree), `products`, `product_variants` (`price_minor`/`cost_minor` bigint, currency), `product_barcodes`, `product_branch_availability`, `product_images` |
+| `apps/api/drizzle/0007_catalog_rls.sql` | Forced RLS on all catalog tables; `DELETE` revoked on products and variants (archive only); `pg_trgm` + trigram indexes on names and SKU |
+
+Catalog model notes (implemented, Prompt 7):
+- Every product has at least one variant; a simple product has exactly one (the
+  default). Prices and costs live on variants as integer fils (`bigint`), with a
+  `currency` column (KWD).
+- SKU: unique per merchant, case-insensitive (`unique (merchant_id, lower(sku))`),
+  including archived variants, so an SKU is never silently reused.
+- Barcode: primary key `(merchant_id, barcode)` — unique across all active variants of
+  the merchant. Archiving a variant releases its barcodes.
+- Products and variants are archived, never deleted (sales will reference them).
+- `available_in_all_branches = false` restricts a product to the rows in
+  `product_branch_availability`.
+- Images: metadata row in `product_images`; bytes in `FileStorage` (local disk in
+  development, key `merchants/<id>/products/<id>/<imageId>`); max 2 MB, 8 per product,
+  type detected from magic bytes (JPEG/PNG/WebP).
+
 Migration role: `app_owner` has **BYPASSRLS** (ADR-0031) so data migrations and
 cross-merchant seeds work; owner-role scripts and test fixtures must therefore filter
 by `merchant_id` explicitly. The API's `app_runtime` role never bypasses RLS.
