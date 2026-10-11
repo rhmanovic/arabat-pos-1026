@@ -88,3 +88,86 @@ describe('branch helpers', () => {
     expect(branchesWithPermission(cashierAtA, 'pos.access', ['A', 'B'])).toEqual(['A']);
   });
 });
+
+import { canAnywhere, canGrant, canManageMember, permissionBranchScope } from './index.js';
+import { ROLE_TEMPLATES } from './templates.js';
+import { PERMISSIONS } from './catalog.js';
+
+describe('anti-escalation', () => {
+  const branchManagerAtA: MerchantActorAccess = {
+    ...base,
+    assignments: [{ branchId: 'A', permissions: [...ROLE_TEMPLATES.branch_manager.permissions] }],
+  };
+
+  it('lets a branch manager grant cashier rights at their own branch only', () => {
+    expect(canGrant(branchManagerAtA, ROLE_TEMPLATES.cashier.permissions, 'A')).toEqual({
+      ok: false,
+      missing: expect.arrayContaining(['pos.access']),
+    });
+    const withPos = {
+      ...base,
+      assignments: [
+        {
+          branchId: 'A',
+          permissions: [
+            ...ROLE_TEMPLATES.branch_manager.permissions,
+            ...ROLE_TEMPLATES.cashier.permissions,
+          ],
+        },
+      ],
+    };
+    expect(canGrant(withPos, ROLE_TEMPLATES.cashier.permissions, 'A')).toEqual({ ok: true });
+    expect(canGrant(withPos, ROLE_TEMPLATES.cashier.permissions, 'B').ok).toBe(false);
+    expect(canGrant(withPos, ROLE_TEMPLATES.cashier.permissions, null).ok).toBe(false);
+  });
+
+  it('never lets anyone grant permissions they do not hold', () => {
+    const result = canGrant(branchManagerAtA, ['roles.manage'], 'A');
+    expect(result).toEqual({ ok: false, missing: ['roles.manage'] });
+    expect(canGrant(branchManagerAtA, ['not.a.permission'], 'A').ok).toBe(false);
+  });
+
+  it('owners may grant everything', () => {
+    expect(canGrant({ ...base, isOwner: true }, Object.keys(PERMISSIONS), null)).toEqual({
+      ok: true,
+    });
+  });
+
+  it('protects the owner, oneself and more privileged members', () => {
+    const owner = { ...base, isOwner: true };
+    const companyManager = {
+      ...base,
+      assignments: [
+        { branchId: null, permissions: [...ROLE_TEMPLATES.company_manager.permissions] },
+      ],
+    };
+    expect(canManageMember(companyManager, owner, false)).toBe(false);
+    expect(canManageMember(owner, companyManager, false)).toBe(true);
+    expect(canManageMember(owner, owner, true)).toBe(false);
+    expect(canManageMember(branchManagerAtA, companyManager, false)).toBe(false);
+    const cashierAtB = { ...base, assignments: [{ branchId: 'B', permissions: ['pos.access'] }] };
+    expect(canManageMember(branchManagerAtA, cashierAtB, false)).toBe(false);
+  });
+
+  it('computes where a permission is held', () => {
+    expect(canAnywhere(branchManagerAtA, 'employees.manage')).toBe(true);
+    expect(canAnywhere(branchManagerAtA, 'roles.manage')).toBe(false);
+    expect(permissionBranchScope(branchManagerAtA, 'inventory.adjust')).toEqual({
+      all: false,
+      branchIds: ['A'],
+    });
+    expect(permissionBranchScope({ ...base, isOwner: true }, 'inventory.adjust')).toEqual({
+      all: true,
+    });
+  });
+
+  it('keeps every template permission in the catalog and managers away from the POS', () => {
+    for (const template of Object.values(ROLE_TEMPLATES)) {
+      for (const key of template.permissions)
+        expect(Object.hasOwn(PERMISSIONS, key), key).toBe(true);
+    }
+    expect(ROLE_TEMPLATES.company_manager.permissions).not.toContain('pos.access');
+    expect(ROLE_TEMPLATES.branch_manager.permissions).not.toContain('pos.access');
+    expect(ROLE_TEMPLATES.cashier.permissions).not.toContain('manager.access');
+  });
+});

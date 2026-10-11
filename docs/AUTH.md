@@ -159,42 +159,48 @@ can(actor, permission, branchId?):
 - POS login: after authentication, the user must pick a branch where they hold
   `pos.access`; otherwise login is refused with `POS_ACCESS_DENIED`.
 
-### 3.4 Permission catalog (initial — grows per milestone)
+### 3.4 Permission catalog (implemented, `packages/permissions/src/catalog.ts`)
 
-| Area | Keys (examples) | Scope |
+| Group | Keys | Scope |
 |---|---|---|
 | Access | `manager.access`, `pos.access` | branch |
-| Merchant | `merchant.settings.read`, `merchant.settings.update` | merchant |
-| Branches | `branches.read`, `branches.create`, `branches.update` | merchant |
-| Users | `users.read`, `users.invite`, `users.update`, `users.deactivate` | merchant |
-| Roles | `roles.read`, `roles.manage`, `roles.assign` | merchant |
-| Catalog | `catalog.read`, `catalog.manage`, `catalog.prices.manage` | merchant |
-| Inventory | `inventory.read`, `inventory.adjust`, `inventory.transfer`, `inventory.count` | branch |
-| Registers | `registers.manage`, `shifts.open`, `shifts.close`, `shifts.view_all`, `cash.move` | branch |
-| Sales | `sales.create`, `sales.read`, `sales.void`, `sales.discount`, `sales.discount.override_limit`, `sales.price_override` | branch |
-| Orders | `orders.create`, `orders.manage` | branch |
-| Refunds | `refunds.create`, `refunds.without_receipt` | branch |
-| Payments | `payment_methods.manage` | merchant |
-| Customers | `customers.read`, `customers.manage` | merchant |
-| Purchasing | `suppliers.manage`, `purchase_orders.manage`, `goods.receive` | branch |
-| Reports | `reports.sales`, `reports.inventory`, `reports.financial` | branch |
-| Audit | `audit.read` | merchant |
-| Subscription | `subscription.read` | merchant |
+| Sales | `sales.create`, `sales.read`, `sales.discount`, `sales.discount.override_limit`, `sales.price_override`, `sales.void` | branch |
+| Refunds | `refunds.create`, `refunds.approve` | branch |
+| Registers | `registers.manage`, `shifts.operate`, `shifts.view_all`, `cash.move` | branch |
+| Catalog | `catalog.read` (branch), `catalog.manage`, `catalog.prices.manage` (merchant) | mixed |
+| Inventory | `inventory.read`, `inventory.adjust`, `inventory.transfer`, `inventory.transfer.approve` | branch |
+| Purchasing | `purchasing.read`, `purchasing.manage`, `purchasing.approve`, `purchasing.receive` | branch |
+| Customers | `customers.read`, `customers.create`, `customers.manage` | branch |
+| Reports | `reports.sales`, `reports.financial`, `reports.inventory` | branch |
+| Payments | `payments.settings` | merchant |
+| Employees | `employees.read`, `employees.manage` (branch); `roles.manage` (merchant) | mixed |
+| Branches | `branches.read`, `branches.update` (branch); `branches.manage` (merchant) | mixed |
+| Company | `merchant.settings.read`, `merchant.settings.update`, `audit.read` | merchant |
 
-### 3.5 System role templates (seeded per merchant, editable copies except Owner)
-| Template | Interface access | Typical permissions |
+### 3.5 Default roles (templates, editable by holders of `roles.manage`)
+| Template | Typical assignment | Highlights |
 |---|---|---|
-| Owner (implicit, not a role row) | both | everything |
-| Manager | `manager.access` (+ `pos.access` **only if ticked**) | branch operations, reports, staff at branch |
-| Cashier | `pos.access` | `sales.create`, `orders.create`, `shifts.open/close`, `customers.read` |
-| Inventory Clerk | `manager.access` | `inventory.*`, `goods.receive`, `catalog.read` |
-| Accountant | `manager.access` | `reports.*`, `sales.read`, `audit.read` |
+| Owner | implicit (membership flag) | everything, cannot be demoted/deactivated |
+| `company_manager` — مدير الشركة | all branches | full management, **no POS** |
+| `branch_manager` — مدير الفرع | one branch | branch operations, staff of that branch, **no POS** |
+| `supervisor` — مشرف | one branch | POS + overrides, voids, refund approval, cash moves |
+| `cashier` — كاشير | one branch | POS selling, limited discounts, refunds, cash moves |
 
-Rules: a user cannot grant permissions they do not hold themselves
-(no privilege escalation); only owner or `roles.manage` holders edit roles;
-the last owner cannot be removed; all role/assignment changes are audited.
+New merchants get all templates at registration; the `002-role-templates` seed adds
+missing templates to existing merchants without touching customized roles.
 
----
+### 3.6 Anti-escalation (enforced in services, unit + integration tested)
+- **Granting** a role at branch B (or all branches): the actor must hold
+  `employees.manage` there **and every permission of the role there** (`canGrant`).
+- **Managing** an employee (profile, status, roles): never the owner, never oneself,
+  and only if every existing grant of the target is within the actor's authority
+  (`canManageMember`).
+- **Editing roles**: requires `roles.manage`; a role may contain only permissions the
+  editor holds merchant-wide, and a role holding more than the editor cannot be edited
+  or deleted. Unknown keys are rejected. Roles in use cannot be deleted.
+- A merchant-scoped permission inside a role assigned at a branch grants nothing.
+- Grants at a deactivated branch grant nothing.
+- Violations answer `403 PRIVILEGE_ESCALATION` and are never partially applied.
 
 ## 4. Request pipeline (NestJS guards, in order)
 
@@ -207,6 +213,12 @@ the last owner cannot be removed; all role/assignment changes are audited.
 | 5 | `FeatureGuard` — `@RequireFeature()` vs subscription | 403 `FEATURE_NOT_IN_PLAN` |
 | 6 | `PermissionGuard` — `@RequirePermission(key)`; **routes without a declaration fail closed** (`@Public()` is the explicit opt-out) | 403 |
 | 7 | `BranchGuard` — target branch (path/body or POS session binding) ∈ accessible branches for that permission | 403 |
+
+Branch handling in `PermissionGuard`: with a branch in the request (POS session
+binding, `:branchId`, `?branchId`) the permission must hold **at that branch**;
+otherwise the guard only checks that it is held **somewhere** (`canAnywhere`) and the
+service performs the exact per-branch checks (`assertCan`) and filters queries to the
+actor's branches (`permissionBranchScope`).
 
 Then the service runs inside `withMerchantTx(ctx, fn)` which executes
 `SET LOCAL app.merchant_id = <id>` (and `app.actor_id`) so PostgreSQL RLS
@@ -226,15 +238,20 @@ the boot if any route lacks a permission/public declaration.
 
 ---
 
-## 6. Employee lifecycle
-1. Authorized manager (`users.invite`) creates an invitation: e-mail, roles,
-   branches. Token hashed, expires (72 h), single use. In local dev the e-mail
-   goes to Mailpit; no paid e-mail provider without approval.
-2. Employee accepts → sets password → membership `active`.
-3. Alternatively (OQ-006) a manager creates a POS-only staff account directly.
-4. Deactivation → membership `inactive`, sessions revoked, history retained.
-
----
+## 6. Employee lifecycle (implemented, Prompt 5)
+1. An authorized manager invites (`POST /manager/employees/invitations`): e-mail, name,
+   profile fields and role assignments (each checked by `canGrant`). Employees can
+   never join a merchant by themselves.
+2. A single-use link (token hash stored, 7 days) is e-mailed (Mailpit locally); the
+   manager never sees a token or password. Resend issues a new token; revoke cancels.
+3. The person opens `/manager/accept-invite` or `/pos/accept-invite`: a new user
+   chooses a password (policy enforced); an existing user confirms with their current
+   password. Acceptance is atomic: membership + assignments (only roles/branches that
+   still exist and are active) + audit.
+4. Managers edit merchant-specific profile fields (job title, phone, employee code),
+   (de)activate (sessions revoked immediately), replace role assignments, and trigger
+   a password-reset e-mail. The global identity (name, e-mail, password) belongs to
+   the user.
 
 ## 7. Manager override on POS
 For an action the cashier is not permitted to perform (e.g. void, refund,

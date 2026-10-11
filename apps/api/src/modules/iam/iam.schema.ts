@@ -11,10 +11,13 @@ import {
   unique,
   uniqueIndex,
   uuid,
+  customType,
 } from 'drizzle-orm/pg-core';
 import { createdAt, id, merchantId, updatedAt } from '../../database/schema/columns.js';
 import { branches } from '../branches/branches.schema.js';
 import { merchants } from '../merchants/merchants.schema.js';
+
+const customBytea = customType<{ data: Buffer }>({ dataType: () => 'bytea' });
 
 /**
  * Global merchant-user identity (not merchant-owned). Email is stored lower-cased.
@@ -57,6 +60,10 @@ export const memberships = pgTable(
       .references(() => users.id),
     isOwner: boolean().notNull().default(false),
     status: text().notNull().default('active'),
+    /** Merchant-specific employee profile (the global user identity is not edited by managers). */
+    jobTitle: text(),
+    phone: text(),
+    employeeCode: text(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -125,6 +132,67 @@ export const roleAssignments = pgTable(
     foreignKey({
       columns: [t.merchantId, t.membershipId],
       foreignColumns: [memberships.merchantId, memberships.id],
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.merchantId, t.roleId],
+      foreignColumns: [roles.merchantId, roles.id],
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.merchantId, t.branchId],
+      foreignColumns: [branches.merchantId, branches.id],
+    }),
+  ],
+);
+
+/**
+ * Employee invitations (Prompt 5). Employees never self-register into a merchant: an
+ * authorized manager invites them; the e-mailed single-use link lets them set their own
+ * password (new user) or confirm with their password (existing user).
+ */
+export const invitations = pgTable(
+  'invitations',
+  {
+    id: id(),
+    merchantId: merchantId().references(() => merchants.id),
+    email: text().notNull(),
+    fullName: text().notNull(),
+    jobTitle: text(),
+    phone: text(),
+    employeeCode: text(),
+    tokenHash: customBytea().notNull().unique(),
+    status: text().notNull().default('pending'),
+    invitedBy: uuid().notNull(),
+    expiresAt: timestamp({ withTimezone: true }).notNull(),
+    acceptedAt: timestamp({ withTimezone: true }),
+    acceptedMembershipId: uuid(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    unique('invitations_merchant_id_id_key').on(t.merchantId, t.id),
+    uniqueIndex('invitations_one_pending_per_email')
+      .on(t.merchantId, t.email)
+      .where(sql`${t.status} = 'pending'`),
+    check('invitations_email_lowercase', sql`${t.email} = lower(${t.email})`),
+    check('invitations_status_valid', sql`${t.status} in ('pending', 'accepted', 'revoked')`),
+  ],
+);
+
+export const invitationAssignments = pgTable(
+  'invitation_assignments',
+  {
+    merchantId: merchantId(),
+    invitationId: uuid().notNull(),
+    roleId: uuid().notNull(),
+    branchId: uuid(),
+  },
+  (t) => [
+    unique('invitation_assignments_unique')
+      .on(t.invitationId, t.roleId, t.branchId)
+      .nullsNotDistinct(),
+    foreignKey({
+      columns: [t.merchantId, t.invitationId],
+      foreignColumns: [invitations.merchantId, invitations.id],
     }).onDelete('cascade'),
     foreignKey({
       columns: [t.merchantId, t.roleId],

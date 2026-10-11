@@ -85,14 +85,31 @@ describe('owner registration', () => {
 
     const merchantId = me.merchant.id;
     const rows = await db.inMerchant(merchantId, async (c) => ({
-      merchant: (await c.query('select legal_name, default_currency, status from merchants')).rows,
-      branches: (await c.query('select code, is_main from branches')).rows,
-      memberships: (await c.query('select is_owner, status from memberships')).rows,
-      roles: (await c.query('select template_key from roles order by template_key')).rows.map(
-        (r) => r.template_key,
-      ),
-      audit: (await c.query(`select action from audit_log where action = 'merchant.registered'`))
-        .rowCount,
+      merchant: (
+        await c.query('select legal_name, default_currency, status from merchants where id = $1', [
+          merchantId,
+        ])
+      ).rows,
+      branches: (
+        await c.query('select code, is_main from branches where merchant_id = $1', [merchantId])
+      ).rows,
+      memberships: (
+        await c.query('select is_owner, status from memberships where merchant_id = $1', [
+          merchantId,
+        ])
+      ).rows,
+      roles: (
+        await c.query(
+          'select template_key from roles where merchant_id = $1 order by template_key',
+          [merchantId],
+        )
+      ).rows.map((r) => r.template_key),
+      audit: (
+        await c.query(
+          `select action from audit_log where action = 'merchant.registered' and merchant_id = $1`,
+          [merchantId],
+        )
+      ).rowCount,
     }));
     expect(rows).toEqual({
       merchant: [
@@ -100,7 +117,7 @@ describe('owner registration', () => {
       ],
       branches: [{ code: 'MAIN', is_main: true }],
       memberships: [{ is_owner: true, status: 'active' }],
-      roles: ['cashier', 'manager'],
+      roles: ['branch_manager', 'cashier', 'company_manager', 'supervisor'],
       audit: 1,
     });
   });
@@ -211,7 +228,9 @@ describe('sign-in', () => {
       branch: { id: branchId },
       availableInterfaces: ['pos'],
     });
-    expect(me.permissions).toEqual(['pos.access']);
+    expect(me.permissions).toContain('pos.access');
+    expect(me.permissions).not.toContain('manager.access');
+    expect(me.permissions).not.toContain('employees.manage');
   });
 
   it('does not let a manager use the POS until POS access is granted explicitly (BR-014)', async () => {
@@ -219,7 +238,7 @@ describe('sign-in', () => {
     const { merchantId } = await registerOwner(client);
     const branchId = await db.mainBranch(merchantId);
     const manager = await db.addEmployee(merchantId, {
-      role: 'manager',
+      role: 'company_manager',
       branchId: null,
       passwordHash,
     });
@@ -239,8 +258,12 @@ describe('sign-in', () => {
     const client = api();
     const a = await registerOwner(client, { nameAr: 'أ' });
     const b = await registerOwner(client, { nameAr: 'ب' });
-    const shared = await db.addEmployee(a.merchantId, { role: 'manager', passwordHash });
-    await db.addEmployee(b.merchantId, { role: 'manager', userId: shared.userId, passwordHash });
+    const shared = await db.addEmployee(a.merchantId, { role: 'company_manager', passwordHash });
+    await db.addEmployee(b.merchantId, {
+      role: 'company_manager',
+      userId: shared.userId,
+      passwordHash,
+    });
 
     const first = (await login(client, 'manager', shared.email)).json();
     expect(first.status).toBe('select_merchant');
@@ -372,7 +395,7 @@ describe('sessions', () => {
   it('ends sessions immediately when the membership is deactivated or the merchant suspended', async () => {
     const client = api();
     const { merchantId } = await registerOwner(client);
-    const manager = await db.addEmployee(merchantId, { role: 'manager', passwordHash });
+    const manager = await db.addEmployee(merchantId, { role: 'company_manager', passwordHash });
     const cookies = sessionCookie(await login(client, 'manager', manager.email), 'manager');
     expect((await client.request('GET', '/auth/manager/me', { cookies })).statusCode).toBe(200);
     await db.inMerchant(merchantId, (c) =>
@@ -382,7 +405,7 @@ describe('sessions', () => {
 
     const other = await registerOwner(client);
     await db.inMerchant(other.merchantId, (c) =>
-      c.query(`update merchants set status = 'suspended'`),
+      c.query(`update merchants set status = 'suspended' where id = $1`, [other.merchantId]),
     );
     expect(
       (await client.request('GET', '/auth/manager/me', { cookies: other.cookies })).statusCode,
@@ -403,7 +426,7 @@ describe('sessions', () => {
     ).json();
     expect(posMe.branch.id).toBe(await db.mainBranch(merchantId));
 
-    const manager = await db.addEmployee(merchantId, { role: 'manager', passwordHash });
+    const manager = await db.addEmployee(merchantId, { role: 'company_manager', passwordHash });
     const managerCookies = sessionCookie(await login(client, 'manager', manager.email), 'manager');
     const refused = await client.request('POST', '/auth/manager/switch-interface', {
       cookies: managerCookies,
@@ -425,7 +448,7 @@ describe('sessions', () => {
       ).statusCode,
     ).toBe(403);
 
-    await db.addEmployee(b.merchantId, { role: 'manager', userId: a.userId, passwordHash });
+    await db.addEmployee(b.merchantId, { role: 'company_manager', userId: a.userId, passwordHash });
     const switched = await client.request('POST', '/auth/manager/switch-merchant', {
       cookies: a.cookies,
       body: { merchantId: b.merchantId },

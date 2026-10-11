@@ -28,7 +28,7 @@ export class ApiClient {
   constructor(private readonly app: NestFastifyApplication) {}
 
   async request(
-    method: 'GET' | 'POST' | 'PATCH',
+    method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
     url: string,
     opts: {
       body?: unknown;
@@ -74,7 +74,10 @@ export async function registerOwner(
   return { email, cookies, merchantId: me.merchant.id as string, userId: me.actor.id as string };
 }
 
-/** Owner-role helpers that write fixtures directly (setup only; never used by the app). */
+/**
+ * Owner-role helpers that write fixtures directly (setup only; never used by the app).
+ * app_owner has BYPASSRLS, so every query here filters by merchant explicitly.
+ */
 export class DbFixtures {
   constructor(private readonly owner: pg.Pool) {}
 
@@ -97,7 +100,9 @@ export class DbFixtures {
   async mainBranch(merchantId: string): Promise<string> {
     return this.inMerchant(
       merchantId,
-      async (c) => (await c.query(`select id from branches where is_main`)).rows[0].id,
+      async (c) =>
+        (await c.query(`select id from branches where is_main and merchant_id = $1`, [merchantId]))
+          .rows[0].id,
     );
   }
 
@@ -162,8 +167,12 @@ export class DbFixtures {
     role: RoleTemplateKey,
     branchId: string | null,
   ) {
-    const roleId = (await c.query(`select id from roles where template_key = $1`, [role])).rows[0]
-      ?.id;
+    const roleId = (
+      await c.query(`select id from roles where template_key = $1 and merchant_id = $2`, [
+        role,
+        merchantId,
+      ])
+    ).rows[0]?.id;
     if (!roleId)
       throw new Error(
         `Role template ${role} missing; expected ${Object.keys(ROLE_TEMPLATES).join(', ')}`,

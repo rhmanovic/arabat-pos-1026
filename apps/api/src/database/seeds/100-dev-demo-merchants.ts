@@ -37,7 +37,7 @@ const MERCHANTS = [
       {
         email: DEV_ACCOUNTS.manager,
         owner: false,
-        grants: [{ role: 'manager', branch: 'all' }] as Grant[],
+        grants: [{ role: 'company_manager', branch: 'all' }] as Grant[],
       },
       {
         email: DEV_ACCOUNTS.cashier,
@@ -47,7 +47,7 @@ const MERCHANTS = [
       {
         email: DEV_ACCOUNTS.multi,
         owner: false,
-        grants: [{ role: 'manager', branch: 'all' }] as Grant[],
+        grants: [{ role: 'company_manager', branch: 'all' }] as Grant[],
       },
     ],
   },

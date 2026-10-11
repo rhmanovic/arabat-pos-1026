@@ -3,33 +3,135 @@ import type { PermissionKey } from './catalog.js';
 export interface RoleTemplate {
   nameEn: string;
   nameAr: string;
+  /** Typical assignment: merchant-wide or per branch (a hint for the UI, not a rule). */
+  typicalScope: 'merchant' | 'branch';
   permissions: readonly PermissionKey[];
 }
 
+const POS_BASICS: PermissionKey[] = [
+  'pos.access',
+  'sales.create',
+  'shifts.operate',
+  'catalog.read',
+  'customers.read',
+];
+
 /**
- * System role templates seeded for every new merchant (AUTH.md §3.5). The owner is not a
- * role: ownership implies every permission. Merchants may edit these roles later (M1 roles UI).
- * Manager does NOT include `pos.access` and Cashier does NOT include `manager.access`
- * (BR-013, BR-014): POS access for a manager must be granted explicitly.
+ * Default role templates seeded for every merchant (AUTH.md §3.5). They are ordinary,
+ * editable roles; the owner is not a role (ownership implies every permission).
+ * Company and branch managers do NOT get `pos.access` by default (BR-014).
  */
 export const ROLE_TEMPLATES = {
-  manager: {
-    nameEn: 'Manager',
-    nameAr: 'مدير',
+  company_manager: {
+    nameEn: 'Company Manager',
+    nameAr: 'مدير الشركة',
+    typicalScope: 'merchant',
     permissions: [
       'manager.access',
-      'merchant.settings.read',
+      'sales.read',
+      'refunds.approve',
+      'registers.manage',
+      'shifts.view_all',
+      'catalog.read',
+      'catalog.manage',
+      'catalog.prices.manage',
+      'inventory.read',
+      'inventory.adjust',
+      'inventory.transfer',
+      'inventory.transfer.approve',
+      'purchasing.read',
+      'purchasing.manage',
+      'purchasing.approve',
+      'purchasing.receive',
+      'customers.read',
+      'customers.create',
+      'customers.manage',
+      'reports.sales',
+      'reports.financial',
+      'reports.inventory',
+      'payments.settings',
+      'employees.read',
+      'employees.manage',
+      'roles.manage',
       'branches.read',
-      'users.read',
-      'roles.read',
+      'branches.update',
+      'branches.manage',
+      'merchant.settings.read',
+      'merchant.settings.update',
       'audit.read',
+    ],
+  },
+  branch_manager: {
+    nameEn: 'Branch Manager',
+    nameAr: 'مدير الفرع',
+    typicalScope: 'branch',
+    permissions: [
+      'manager.access',
+      'sales.read',
+      'refunds.approve',
+      'registers.manage',
+      'shifts.view_all',
+      'catalog.read',
+      'inventory.read',
+      'inventory.adjust',
+      'inventory.transfer',
+      'purchasing.read',
+      'purchasing.manage',
+      'purchasing.receive',
+      'customers.read',
+      'customers.create',
+      'customers.manage',
+      'reports.sales',
+      'reports.inventory',
+      'employees.read',
+      'employees.manage',
+      'branches.read',
+      'branches.update',
+    ],
+  },
+  supervisor: {
+    nameEn: 'Supervisor',
+    nameAr: 'مشرف',
+    typicalScope: 'branch',
+    permissions: [
+      ...POS_BASICS,
+      'sales.read',
+      'sales.discount',
+      'sales.discount.override_limit',
+      'sales.price_override',
+      'sales.void',
+      'refunds.create',
+      'refunds.approve',
+      'shifts.view_all',
+      'cash.move',
+      'customers.create',
+      'customers.manage',
+      'inventory.read',
     ],
   },
   cashier: {
     nameEn: 'Cashier',
     nameAr: 'كاشير',
-    permissions: ['pos.access'],
+    typicalScope: 'branch',
+    permissions: [
+      ...POS_BASICS,
+      'sales.discount',
+      'refunds.create',
+      'cash.move',
+      'customers.create',
+    ],
   },
 } as const satisfies Record<string, RoleTemplate>;
 
 export type RoleTemplateKey = keyof typeof ROLE_TEMPLATES;
+
+/** Renamed permission keys (data migration 0005 rewrites stored role permissions). */
+export const RENAMED_PERMISSIONS: Record<string, PermissionKey | null> = {
+  'users.read': 'employees.read',
+  'users.invite': 'employees.manage',
+  'users.update': 'employees.manage',
+  'users.deactivate': 'employees.manage',
+  'roles.read': 'employees.read',
+  'roles.assign': 'employees.manage',
+  'branches.create': 'branches.manage',
+};

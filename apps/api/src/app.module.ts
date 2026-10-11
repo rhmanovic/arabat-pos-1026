@@ -8,6 +8,7 @@ import { AuditModule } from './modules/audit/audit.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { BranchesModule } from './modules/branches/branches.module.js';
 import { HealthModule } from './modules/health/health.module.js';
+import { IamModule } from './modules/iam/iam.module.js';
 import { MerchantsModule } from './modules/merchants/merchants.module.js';
 
 /** Root module of the modular monolith. Domain modules are registered here per milestone. */
@@ -26,6 +27,7 @@ export class AppModule {
         HealthModule,
         MerchantsModule,
         BranchesModule,
+        IamModule,
       ],
     };
   }

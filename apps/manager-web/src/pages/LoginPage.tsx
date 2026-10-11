@@ -1,5 +1,6 @@
 import { Card, CardContent } from '@arabat/ui';
 import {
+  AcceptInvitationForm,
   ApiStatus,
   AuthHeading,
   ForgotPasswordForm,
@@ -88,6 +89,16 @@ export function ResetPasswordPage() {
     <ManagerAuthShell>
       <AuthHeading title={t('auth.resetTitle')} />
       <ResetPasswordForm />
+    </ManagerAuthShell>
+  );
+}
+
+export function AcceptInvitePage() {
+  const { t } = useTranslation('common');
+  return (
+    <ManagerAuthShell>
+      <AuthHeading title={t('invite.title')} />
+      <AcceptInvitationForm />
     </ManagerAuthShell>
   );
 }

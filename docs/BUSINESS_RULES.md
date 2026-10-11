@@ -37,6 +37,16 @@ engineering defaults pending owner confirmation.
 - **BR-041** A user may belong to several merchants; every session is bound to exactly
   one merchant (and, in the POS, one branch) chosen at sign-in.
 - **BR-042** Sign-in and password recovery never reveal whether an e-mail is registered.
+- **BR-044** Employees join a merchant only through an invitation from an authorized
+  manager; they set their own password. Managers never see or set passwords.
+- **BR-045** Nobody can grant permissions beyond their own authority, manage the owner,
+  manage themselves, or manage a more privileged employee.
+- **BR-046** Branch-scoped administration: a branch manager sees and manages only the
+  employees and settings of their assigned branches.
+- **BR-047** The main branch cannot be deactivated; deactivating a branch removes all
+  access granted at it (including open POS sessions there).
+- **BR-048** Default roles: Owner, Company Manager, Branch Manager, Supervisor, Cashier.
+  Roles are editable and merchants can create their own.
 - **BR-043** Password reset links are single-use, expire after 30 minutes and end all
   sessions of the account.
 

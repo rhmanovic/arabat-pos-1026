@@ -167,3 +167,5 @@ export const meResponseSchema = z.object({
   session: z.object({ expiresAt: z.string(), idleExpiresAt: z.string() }),
 });
 export type MeResponse = z.infer<typeof meResponseSchema>;
+
+export const switchBranchRequestSchema = z.object({ branchId: z.uuid() });

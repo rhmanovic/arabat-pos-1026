@@ -239,3 +239,28 @@ ADR; supersede it.
 - **Decision:** `Mailer` abstraction with SMTP (nodemailer); locally and in CI the SMTP
   server is Mailpit (no paid provider). Tests use an in-memory mailer. A production
   e-mail provider needs owner approval (cost).
+
+## ADR-0031 — Migration role bypasses RLS
+- **Date:** 2026-10-11 · **Status:** Accepted
+- **Decision:** `app_owner` (migrations, seeds, CLI) has `BYPASSRLS` so data migrations
+  and template sync can touch every merchant. It is never used by the API; the
+  runtime role stays without bypass. Owner-role code filters by `merchant_id`
+  explicitly. Existing local databases: `ALTER ROLE app_owner BYPASSRLS` once.
+
+## ADR-0032 — Invitation-only employee onboarding
+- **Date:** 2026-10-11 · **Status:** Accepted (Prompt 5)
+- **Decision:** Invitations with hashed single-use tokens and stored role grants;
+  acceptance creates the membership atomically. RLS lets the token holder read only
+  their invitation (`app.invite_hash`). No temporary passwords exist.
+
+## ADR-0033 — Coarse route gate + exact checks in services
+- **Date:** 2026-10-11 · **Status:** Accepted
+- **Decision:** Guards check a permission at the request's branch or "anywhere"; services
+  enforce per-object branch checks and anti-escalation (`assertCan`, `canGrant`,
+  `canManageMember`) and filter lists by `permissionBranchScope`.
+
+## ADR-0034 — Granular permission catalog with branch-scoped administration
+- **Date:** 2026-10-11 · **Status:** Accepted (supersedes the initial catalog)
+- **Decision:** 40 keys grouped by module (AUTH.md §3.4); employee and branch
+  administration are branch-scoped so branch managers manage their own staff;
+  role definition and branch creation stay merchant-wide.

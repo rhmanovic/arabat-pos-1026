@@ -12,6 +12,7 @@ import {
   LoginPage,
   RegisterPage,
   ResetPasswordPage,
+  AcceptInvitePage,
 } from './pages/LoginPage.js';
 
 /** Route tree of /manager (paths are relative to the /manager basename). See docs/ROUTES.md. */
@@ -40,6 +41,7 @@ export const routes: RouteObject[] = [
     element: <ForgotPasswordPage />,
   },
   { path: '/reset-password', errorElement: <RouteErrorBoundary />, element: <ResetPasswordPage /> },
+  { path: '/accept-invite', errorElement: <RouteErrorBoundary />, element: <AcceptInvitePage /> },
   {
     path: '/',
     errorElement: <RouteErrorBoundary />,

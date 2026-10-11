@@ -52,18 +52,21 @@ export class AccessRepository {
       .innerJoin(rolePermissions, eq(rolePermissions.roleId, roleAssignments.roleId))
       .where(eq(roleAssignments.membershipId, membershipId));
 
-    const byBranch = new Map<string | null, string[]>();
-    for (const grant of grants) {
-      const list = byBranch.get(grant.branchId) ?? [];
-      list.push(grant.permission);
-      byBranch.set(grant.branchId, list);
-    }
-
     const activeBranches = await tx
       .select({ id: branches.id, nameEn: branches.nameEn, nameAr: branches.nameAr })
       .from(branches)
       .where(and(eq(branches.merchantId, row.merchantId), eq(branches.status, 'active')))
       .orderBy(desc(branches.isMain), asc(branches.code));
+    const activeIds = new Set(activeBranches.map((b) => b.id));
+
+    const byBranch = new Map<string | null, string[]>();
+    for (const grant of grants) {
+      // Grants at a deactivated branch confer nothing.
+      if (grant.branchId !== null && !activeIds.has(grant.branchId)) continue;
+      const list = byBranch.get(grant.branchId) ?? [];
+      list.push(grant.permission);
+      byBranch.set(grant.branchId, list);
+    }
 
     return {
       membershipId: row.membershipId,

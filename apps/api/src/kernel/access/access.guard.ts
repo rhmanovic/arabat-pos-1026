@@ -1,4 +1,4 @@
-import { can } from '@arabat/permissions';
+import { can, canAnywhere } from '@arabat/permissions';
 import { type CanActivate, type ExecutionContext, Injectable, Logger } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { FastifyRequest } from 'fastify';
@@ -56,8 +56,14 @@ export class AccessGuard implements CanActivate {
         return true;
       case 'permission': {
         if (actor.realm !== 'merchant') throw AppError.forbidden();
+        // With a branch in the request (POS binding, :branchId, ?branchId) the permission must
+        // hold at that branch. Otherwise this is a coarse gate ("held somewhere"); services
+        // then check every affected branch and filter queries (AUTH.md §4).
         const branchId = actor.boundBranchId ?? branchFromRequest(request);
-        if (!can(actor.access, rule.permission, branchId)) throw AppError.forbidden();
+        const allowed = branchId
+          ? can(actor.access, rule.permission, branchId)
+          : canAnywhere(actor.access, rule.permission);
+        if (!allowed) throw AppError.forbidden();
         return true;
       }
     }

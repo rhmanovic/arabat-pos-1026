@@ -3,7 +3,7 @@
 Only record what has actually been done and verified. Mocked or partial work
 must be labeled as such.
 
-## Current state (2026-10-11, after Prompt 4 — authentication)
+## Current state (2026-10-11, after Prompt 5 — branches, employees, permissions)
 
 | Area | Status | Notes |
 |---|---|---|
@@ -11,10 +11,10 @@ must be labeled as such.
 | Monorepo & tooling | Done | pnpm 12 workspaces, TS 6 strict, ESLint 10, Prettier, Node 24 |
 | Backend foundation | Done | NestJS 12 + Fastify 5, config validation, problem+json errors, pino logs, request ids, Zod validation pipe, health endpoints, helmet/CSP |
 | Authentication & sessions | Done | Owner registration, sign-in (manager/POS/platform+TOTP), merchant/branch selection, interface & merchant switching, logout, password recovery, rate limits, CSRF origin check |
-| Merchant data | Partial | Company profile API, branch list API. Branch/employee/role management: Prompt 5 |
+| Organization & RBAC | Done (API) | Branch CRUD/activation/settings, invitations, employee profile/status/assignments, roles CRUD, 40-key permission catalog, 5 default roles, anti-escalation, POS branch switch. Management screens: Prompt 6 |
 | Database foundation | Done | PostgreSQL 18 (Compose), Drizzle, migrations, owner/runtime roles, RLS helper, seeds |
 | Frontend foundation | Done | 3 separate Vite apps + shared packages; ManagerLayout / POSLayout / PlatformLayout; ar/en + RTL/LTR; auth state & protected routes; API client |
-| Automated tests | Passing | 82 unit/web, 36 integration, 18 E2E (local) |
+| Automated tests | Passing | 88 unit/web, 52 integration, 19 E2E (local) |
 | CI | Written, not yet run | `.github/workflows/ci.yml` |
 | Business modules | Not started | Begin in M1 |
 | Deployment | Not planned | Requires owner approval |
@@ -113,5 +113,18 @@ operator TOTP).
 Found and fixed: Drizzle CLI/test connections without `casing: 'snake_case'`; logout
 race where guards briefly saw the old session.
 
+### 2026-10-11 — Prompt 5: Branches, employees and permissions
+Implemented: migrations 0004/0005 (invitations, branch settings, employee profile, RLS,
+permission-key data migration), granular catalog + templates (company manager, branch
+manager, supervisor, cashier), `canGrant`/`canManageMember`/`canAnywhere`, branches,
+roles, employees and invitation services/APIs, invitation acceptance pages (manager &
+POS), POS branch switching, role-template sync seed.
+Verified: unit (anti-escalation rules), 16 new integration tests (invitation flow,
+existing-account confirmation, expiry/revocation, branch-manager limits, owner
+protection, no self-promotion, role editing limits, version conflicts, deactivation
+revoking sessions, branch deactivation, cross-merchant isolation incl. raw RLS), E2E
+invited cashier sets password and works only in the POS.
+Note: management screens for these APIs are delivered with Prompt 6.
+
 ## Next step
-Prompt 5 — branches, employees and permissions.
+Prompt 6 — manager dashboard.

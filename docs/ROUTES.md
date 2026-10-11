@@ -94,7 +94,20 @@ modal available on any POS route.
 
 ---
 
-## 4. API namespaces (backend)
+## 4. Implemented management API (Prompt 5)
+
+| Method & path | Permission |
+|---|---|
+| `GET/POST /manager/branches`, `GET/PATCH /manager/branches/:id`, `POST /manager/branches/:id/status` | `branches.read` / `branches.manage` / `branches.update` |
+| `GET /manager/permissions`, `GET /manager/roles` | `employees.read` |
+| `POST /manager/roles`, `PATCH/DELETE /manager/roles/:id` | `roles.manage` |
+| `GET /manager/employees`, `GET /manager/employees/:membershipId` | `employees.read` |
+| `POST /manager/employees/invitations`, `…/:id/resend`, `…/:id/revoke` | `employees.manage` |
+| `PATCH /manager/employees/:id`, `POST …/:id/status`, `PUT …/:id/assignments`, `POST …/:id/password-reset` | `employees.manage` |
+| `POST /auth/invitations/preview`, `POST /auth/invitations/accept` | public (token) |
+| `POST /auth/pos/switch-branch` | POS session |
+
+## 5. API namespaces (backend)
 
 | Prefix | Consumers | Notes |
 |---|---|---|

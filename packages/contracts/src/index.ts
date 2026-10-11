@@ -3,3 +3,4 @@ export * from './errors.js';
 export * from './health.js';
 export * from './interfaces.js';
 export * from './merchants.js';
+export * from './organization.js';

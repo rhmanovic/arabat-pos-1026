@@ -10,7 +10,7 @@ import {
 } from '@arabat/contracts';
 import { Alert, Button, Field, Input, cn } from '@arabat/ui';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ReactNode, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
@@ -474,4 +474,118 @@ export function useSwitchInterface(from: MerchantInterface) {
       if (result.status === 'authenticated') window.location.assign(result.redirectTo);
     },
   });
+}
+
+/** Employee onboarding from an invitation link (?token=...): choose or confirm the password. */
+export function AcceptInvitationForm({ size = 'default' }: { size?: Size }) {
+  const { t, i18n } = useTranslation('common');
+  const api = useApi();
+  const [params] = useSearchParams();
+  const token = params.get('token') ?? '';
+  const preview = useQuery({
+    queryKey: ['invitation', token],
+    queryFn: () => api.auth.previewInvitation(token),
+    enabled: token.length >= 20,
+    retry: false,
+  });
+  const existing = preview.data?.existingAccount ?? false;
+  const schema = existing
+    ? z.object({ password: z.string().min(1), confirm: z.string() })
+    : z
+        .object({ password: newPasswordSchema, confirm: z.string() })
+        .refine((v) => v.password === v.confirm, { path: ['confirm'], error: 'mismatch' });
+  const form = useForm({
+    resolver: zodResolver(schema),
+    defaultValues: { password: '', confirm: '' },
+  });
+  const accept = useMutation({
+    mutationFn: (password: string) =>
+      api.auth.acceptInvitation({
+        token,
+        password,
+        preferredLanguage: i18n.language === 'en' ? 'en' : 'ar',
+      }),
+  });
+  const message = useErrorMessage();
+
+  if (token.length < 20) return <Alert tone="danger" title={t('invite.invalid')} />;
+  if (preview.isPending) return <p className="text-sm text-fg-muted">{t('status.loading')}</p>;
+  if (preview.isError) return <Alert tone="danger" title={message(preview.error)} />;
+  if (accept.isSuccess) {
+    const apps = accept.data.availableInterfaces;
+    return (
+      <div className="flex flex-col gap-4">
+        <Alert tone="success" title={t('invite.done')} />
+        {apps.map((app) => (
+          <a
+            key={app}
+            href={`${APP_PATHS[app]}login`}
+            className="text-center font-medium text-primary underline"
+          >
+            {t('auth.openApp', { app: t(`interfaces.${app}`) })}
+          </a>
+        ))}
+      </div>
+    );
+  }
+  const company = localizedName(preview.data.merchant, i18n.language);
+  const inputClass = size === 'touch' ? 'h-touch text-lg' : undefined;
+  return (
+    <form
+      className="flex flex-col gap-4"
+      noValidate
+      onSubmit={form.handleSubmit((v) => accept.mutate(v.password))}
+    >
+      <p className="text-sm text-fg-muted">
+        {t('invite.intro', { name: preview.data.fullName, company })}{' '}
+        <span dir="ltr">{preview.data.email}</span>
+      </p>
+      {existing ? <Alert tone="info" title={t('invite.existing')} /> : null}
+      {accept.error ? <FormError error={accept.error} /> : null}
+      <Field
+        label={existing ? t('auth.password') : t('auth.newPassword')}
+        hint={existing ? undefined : t('auth.passwordHint')}
+        error={
+          form.formState.errors.password &&
+          (existing ? t('errors.VALIDATION_FAILED') : t('auth.passwordHint'))
+        }
+      >
+        {(p) => (
+          <Input
+            {...p}
+            {...form.register('password')}
+            type="password"
+            autoComplete={existing ? 'current-password' : 'new-password'}
+            dir="ltr"
+            className={inputClass}
+          />
+        )}
+      </Field>
+      {existing ? null : (
+        <Field
+          label={t('auth.confirmPassword')}
+          error={form.formState.errors.confirm && t('auth.passwordsDiffer')}
+        >
+          {(p) => (
+            <Input
+              {...p}
+              {...form.register('confirm')}
+              type="password"
+              autoComplete="new-password"
+              dir="ltr"
+              className={inputClass}
+            />
+          )}
+        </Field>
+      )}
+      <Button
+        type="submit"
+        size={size === 'touch' ? 'touch' : 'md'}
+        block
+        loading={accept.isPending}
+      >
+        {t('invite.submit')}
+      </Button>
+    </form>
+  );
 }

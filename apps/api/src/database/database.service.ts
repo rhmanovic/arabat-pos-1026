@@ -68,14 +68,16 @@ export class DatabaseService implements OnModuleDestroy {
    * memberships (and those merchants) before a merchant context exists (sign-in).
    */
   async withContext<T>(
-    context: { merchantId?: string; userId?: string },
+    context: { merchantId?: string; userId?: string; inviteHash?: Buffer },
     work: (tx: Transaction) => Promise<T>,
   ): Promise<T> {
     const merchantId = context.merchantId ? uuidSchema.parse(context.merchantId) : '';
     const userId = context.userId ? uuidSchema.parse(context.userId) : '';
+    const inviteHash = context.inviteHash ? context.inviteHash.toString('hex') : '';
     return this.db.transaction(async (tx) => {
       await tx.execute(
-        sql`select set_config('app.merchant_id', ${merchantId}, true), set_config('app.user_id', ${userId}, true)`,
+        sql`select set_config('app.merchant_id', ${merchantId}, true), set_config('app.user_id', ${userId}, true),
+                   set_config('app.invite_hash', ${inviteHash}, true)`,
       );
       return work(tx);
     });

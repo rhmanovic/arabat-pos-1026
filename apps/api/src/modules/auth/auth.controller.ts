@@ -10,6 +10,7 @@ import {
   resetPasswordRequestSchema,
   selectMerchantRequestSchema,
   switchInterfaceRequestSchema,
+  switchBranchRequestSchema,
   switchMerchantRequestSchema,
 } from '@arabat/contracts';
 import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
@@ -226,6 +227,21 @@ export class AuthController {
     return this.issue(
       reply,
       await this.context.switchInterface(actor, body.target, body.branchId, clientInfo(request)),
+    );
+  }
+
+  @Authenticated('pos')
+  @Post('pos/switch-branch')
+  @HttpCode(200)
+  async posSwitchBranch(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Body(new ZodPipe(switchBranchRequestSchema)) body: z.output<typeof switchBranchRequestSchema>,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<LoginResult> {
+    return this.issue(
+      reply,
+      await this.context.switchBranch(actor, body.branchId, clientInfo(request)),
     );
   }
 

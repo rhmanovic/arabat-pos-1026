@@ -13,6 +13,11 @@ export const branches = pgTable(
     nameEn: text(),
     nameAr: text(),
     isMain: boolean().notNull().default(false),
+    phone: text(),
+    address: text(),
+    /** Printed at the top / bottom of receipts issued at this branch. */
+    receiptHeader: text(),
+    receiptFooter: text(),
     timezone: text().notNull().default('Asia/Kuwait'),
     status: text().notNull().default('active'),
     version: integer().notNull().default(1),

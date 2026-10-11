@@ -29,6 +29,20 @@
       "when": 1791758072008,
       "tag": "0003_identity_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791759626866,
+      "tag": "0004_employees",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791759643850,
+      "tag": "0005_employees_rls",
+      "breakpoints": true
     }
   ]
 }

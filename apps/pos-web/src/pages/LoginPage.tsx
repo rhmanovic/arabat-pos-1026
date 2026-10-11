@@ -1,4 +1,5 @@
 import {
+  AcceptInvitationForm,
   AuthHeading,
   ForgotPasswordForm,
   LanguageSwitcher,
@@ -54,6 +55,16 @@ export function ResetPasswordPage() {
     <PosAuthShell>
       <AuthHeading title={t('auth.resetTitle')} />
       <ResetPasswordForm size="touch" />
+    </PosAuthShell>
+  );
+}
+
+export function AcceptInvitePage() {
+  const { t } = useTranslation('common');
+  return (
+    <PosAuthShell>
+      <AuthHeading title={t('invite.title')} />
+      <AcceptInvitationForm size="touch" />
     </PosAuthShell>
   );
 }

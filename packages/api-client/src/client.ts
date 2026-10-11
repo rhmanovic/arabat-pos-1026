@@ -14,7 +14,24 @@ import {
   type SwitchInterfaceRequest,
   type SwitchMerchantRequest,
   type UpdateMerchantProfile,
-  branchListResponseSchema,
+  type AcceptInvitation,
+  acceptInvitationResultSchema,
+  invitationPreviewSchema,
+  type CreateBranch,
+  type CreateRole,
+  type InviteEmployee,
+  type SetAssignments,
+  type UpdateBranch,
+  type UpdateEmployee,
+  type UpdateRole,
+  branchDetailListSchema,
+  branchDetailSchema,
+  employeeListSchema,
+  employeeSchema,
+  invitationSchema,
+  permissionCatalogSchema,
+  roleListSchema,
+  roleSchema,
   loginResultSchema,
   meResponseSchema,
   merchantListResponseSchema,
@@ -138,6 +155,18 @@ export function createApiClient(options: ApiClientOptions = {}) {
         body: SwitchInterfaceRequest,
       ): Promise<LoginResult> =>
         request('POST', `/auth/${from}/switch-interface`, { body, schema: loginResultSchema }),
+      switchBranch: (branchId: string): Promise<LoginResult> =>
+        request('POST', '/auth/pos/switch-branch', {
+          body: { branchId },
+          schema: loginResultSchema,
+        }),
+      previewInvitation: (token: string) =>
+        request('POST', '/auth/invitations/preview', {
+          body: { token },
+          schema: invitationPreviewSchema,
+        }),
+      acceptInvitation: (body: AcceptInvitation) =>
+        request('POST', '/auth/invitations/accept', { body, schema: acceptInvitationResultSchema }),
     },
     merchant: {
       get: () => request('GET', '/manager/merchant', { schema: merchantProfileSchema }),
@@ -145,7 +174,50 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('PATCH', '/manager/merchant', { body, schema: merchantProfileSchema }),
     },
     branches: {
-      list: () => request('GET', '/manager/branches', { schema: branchListResponseSchema }),
+      list: () => request('GET', '/manager/branches', { schema: branchDetailListSchema }),
+      get: (id: string) =>
+        request('GET', `/manager/branches/${id}`, { schema: branchDetailSchema }),
+      create: (body: CreateBranch) =>
+        request('POST', '/manager/branches', { body, schema: branchDetailSchema }),
+      update: (id: string, body: UpdateBranch) =>
+        request('PATCH', `/manager/branches/${id}`, { body, schema: branchDetailSchema }),
+      setStatus: (id: string, status: 'active' | 'inactive') =>
+        request('POST', `/manager/branches/${id}/status`, {
+          body: { status },
+          schema: branchDetailSchema,
+        }),
+    },
+    roles: {
+      catalog: () => request('GET', '/manager/permissions', { schema: permissionCatalogSchema }),
+      list: () => request('GET', '/manager/roles', { schema: roleListSchema }),
+      create: (body: CreateRole) => request('POST', '/manager/roles', { body, schema: roleSchema }),
+      update: (id: string, body: UpdateRole) =>
+        request('PATCH', `/manager/roles/${id}`, { body, schema: roleSchema }),
+      remove: (id: string) => request('DELETE', `/manager/roles/${id}`),
+    },
+    employees: {
+      list: () => request('GET', '/manager/employees', { schema: employeeListSchema }),
+      get: (id: string) => request('GET', `/manager/employees/${id}`, { schema: employeeSchema }),
+      invite: (body: InviteEmployee) =>
+        request('POST', '/manager/employees/invitations', { body, schema: invitationSchema }),
+      resendInvitation: (id: string) =>
+        request('POST', `/manager/employees/invitations/${id}/resend`, {
+          body: {},
+          schema: invitationSchema,
+        }),
+      revokeInvitation: (id: string) =>
+        request('POST', `/manager/employees/invitations/${id}/revoke`, { body: {} }),
+      update: (id: string, body: UpdateEmployee) =>
+        request('PATCH', `/manager/employees/${id}`, { body, schema: employeeSchema }),
+      setStatus: (id: string, status: 'active' | 'inactive') =>
+        request('POST', `/manager/employees/${id}/status`, {
+          body: { status },
+          schema: employeeSchema,
+        }),
+      setAssignments: (id: string, body: SetAssignments) =>
+        request('PUT', `/manager/employees/${id}/assignments`, { body, schema: employeeSchema }),
+      sendPasswordReset: (id: string) =>
+        request('POST', `/manager/employees/${id}/password-reset`, { body: {} }),
     },
   };
 }

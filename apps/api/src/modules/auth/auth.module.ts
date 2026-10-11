@@ -29,6 +29,13 @@ import { TicketService } from './ticket.service.js';
     SessionContextService,
     { provide: SessionResolver, useClass: DbSessionResolver },
   ],
-  exports: [SessionResolver, AccessRepository, PasswordService],
+  exports: [
+    SessionResolver,
+    AccessRepository,
+    PasswordService,
+    PasswordResetService,
+    RateLimiterService,
+    SessionService,
+  ],
 })
 export class AuthModule {}

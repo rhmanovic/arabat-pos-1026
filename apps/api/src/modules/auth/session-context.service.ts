@@ -113,6 +113,28 @@ export class SessionContextService {
     );
   }
 
+  /** POS: move the session to another branch where the user holds `pos.access`. */
+  async switchBranch(
+    actor: MerchantActor,
+    branchId: string,
+    client: ClientInfo,
+  ): Promise<LoginOutcome> {
+    const membership = await this.currentMembership(actor);
+    if (!eligibleBranches(membership, 'pos').some((b) => b.id === branchId)) {
+      throw AppError.forbidden('You do not have POS access at this branch.');
+    }
+    const outcome = await this.openIn(
+      actor.userId,
+      membership,
+      'pos',
+      branchId,
+      client,
+      'auth.branch.switched',
+    );
+    await this.sessions.revoke(actor.sessionId, 'branch_switched');
+    return outcome;
+  }
+
   /** Moves the current interface to another merchant the user belongs to. */
   async switchMerchant(
     actor: MerchantActor,

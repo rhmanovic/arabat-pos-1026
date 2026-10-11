@@ -342,6 +342,13 @@ erDiagram
 | `apps/api/drizzle/0002_identity.sql` | `merchants`, `branches`, `users`, `memberships`, `roles`, `role_permissions`, `role_assignments`, `sessions`, `auth_tickets`, `password_reset_tokens`, `rate_limit_buckets`, `platform_operators`, `audit_log` (generated) |
 | `apps/api/drizzle/0003_identity_rls.sql` | `app_current_user_id()`; RLS (forced) on merchants, memberships, branches, roles, role_permissions, role_assignments, audit_log; `DELETE` revoked on merchants; `UPDATE/DELETE` revoked on audit_log; lookup indexes |
 
+| `apps/api/drizzle/0004_employees.sql` | `invitations`, `invitation_assignments`; branch settings (`phone`, `address`, `receipt_header`, `receipt_footer`); employee profile on memberships (`job_title`, `phone`, `employee_code`) |
+| `apps/api/drizzle/0005_employees_rls.sql` | `app_current_invite_hash()`; RLS on invitations (merchant context or matching invite token hash) and invitation_assignments; data migration of renamed permission keys and `manager` → `company_manager` |
+
+Migration role: `app_owner` has **BYPASSRLS** (ADR-0031) so data migrations and
+cross-merchant seeds work; owner-role scripts and test fixtures must therefore filter
+by `merchant_id` explicitly. The API's `app_runtime` role never bypasses RLS.
+
 Identity model notes (implemented):
 - `users` is global (one identity, many memberships); e-mail stored lower-cased
   (`check email = lower(email)`), unique.
