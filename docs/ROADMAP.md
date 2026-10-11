@@ -1,43 +1,157 @@
-# Roadmap
+# Roadmap & Milestone Acceptance Criteria
 
-Delivery is organized as **functional vertical slices**: each slice includes DB
-migration, backend, frontend, tests and documentation, and is only marked done
-when its tests pass. Order may change based on owner priorities.
+Delivery is organized as **functional vertical slices** (DB → API → UI → tests →
+docs). A milestone is done only when **all** its acceptance criteria are met
+and verified by automated tests that were actually run. Order may change with
+owner priorities. Open questions that block a milestone are listed with it.
 
-## Phase 0 — Foundation
-- [x] 0.1 Project instructions and documentation structure
-- [ ] 0.2 Monorepo scaffold (pnpm workspaces, TypeScript strict, ESLint/Prettier)
-- [ ] 0.3 API skeleton (NestJS + Fastify), health endpoint, config, error format
-- [ ] 0.4 PostgreSQL connection, migration tooling, `app_runtime` role, RLS helper
-- [ ] 0.5 Three SPA shells (`/manager`, `/pos`, `/platform`) with distinct layouts
-- [ ] 0.6 `packages/money` with full unit tests (KWD 3 decimals)
-- [ ] 0.7 Test infrastructure (Vitest, DB tests, Playwright) and CI workflow
+Global "Definition of Done" for every slice:
+- Migrations with RLS policies for every new merchant table.
+- Every endpoint declares a permission (or `@Public`) — boot check passes.
+- Unit + integration tests green; isolation and authorization tests for new
+  endpoints; E2E for the main happy path.
+- UI works in Arabic (RTL) and English (LTR).
+- Lint, typecheck, build green. Docs updated (`PROGRESS.md`, `DATABASE.md`, …).
 
-## Phase 1 — Identity, tenancy and access
-- [ ] 1.1 Tenants and owner account (creation path per OQ-010)
-- [ ] 1.2 Centralized login/logout/session for manager and POS
-- [ ] 1.3 Branches CRUD (manager)
-- [ ] 1.4 Roles & permissions management (manager)
-- [ ] 1.5 Employee invitation / creation, branch assignment
-- [ ] 1.6 POS login with branch selection; access denied without `pos.access`
-- [ ] 1.7 Platform operator login and tenant list/suspend
-- [ ] 1.8 Audit log for security events
-- [ ] 1.9 Tenant-isolation and authorization test suite
+---
 
-## Phase 2 — Catalog
-- [ ] Categories, products, variants, barcodes/SKU, branch prices
+## Phase 1 — Documentation foundation ✅
+- [x] Project instructions and documentation structure (Prompt 1)
+- [x] System architecture design (Prompt 2)
 
-## Phase 3 — Inventory
-- [ ] Stock ledger, opening stock, adjustments, branch transfers, low-stock
+## M0 — Engineering foundation
+Scope: monorepo, API skeleton, DB tooling, three SPA shells, money package, CI.
 
-## Phase 4 — Sales (POS core)
-- [ ] Cart, discounts, cash/card tenders (no live gateway), receipts
-- [ ] Voids and refunds with permissions; shift/cash drawer sessions
+Acceptance criteria:
+1. `pnpm install && pnpm build` succeeds from a clean clone on Node 24.
+2. `docker compose up` starts PostgreSQL 18 and Mailpit; `pnpm db:migrate`
+   applies migrations using `app_owner`; API connects as `app_runtime`.
+3. `GET /api/v1/health` returns 200 with DB status.
+4. `/manager`, `/pos`, `/platform` load as **three separate bundles**, each with
+   its own layout; switching AR/EN flips `dir` correctly.
+5. `packages/money` passes tests for KWD 3-decimal add/subtract/multiply,
+   half-up rounding, allocation without lost fils, string (de)serialization,
+   amounts > 2^53 minor units.
+6. A route without a permission declaration makes the API boot fail (test).
+7. `withMerchantTx` sets `app.merchant_id`; an RLS test proves rows of
+   another merchant are invisible with a raw query.
+8. CI workflow runs lint, typecheck, unit, integration (PostgreSQL), build.
 
-## Phase 5 — Reporting
-- [ ] Sales by day/branch/employee/product, inventory valuation
+## M1 — Identity, merchants, branches, roles & access
+Blocked by: OQ-010 (merchant sign-up path), OQ-006 (POS login style; e-mail +
+password used until decided).
+
+Acceptance criteria:
+1. Platform operator (MFA) can create a merchant with its owner; owner receives
+   an invitation (Mailpit locally).
+2. Owner logs into `/manager`, creates branches, roles (from templates) and
+   invites employees with branch-scoped role assignments.
+3. A Cashier-only employee: can log into `/pos` at assigned branch; **is refused
+   at `/manager`** (UI and every `/api/v1/manager/*` endpoint → 403).
+4. A Manager without `pos.access` is refused at `/pos`; after the owner grants
+   `pos.access` at branch A, they can use POS at A only.
+5. A user with assignments at branch A cannot read or act on branch B data.
+6. Merchant sessions get 401/403 on all `/api/v1/platform/*`; operator sessions
+   get 401/403 on merchant endpoints.
+7. Deactivating an employee revokes their sessions immediately.
+8. Owner cannot be removed/demoted; a user cannot grant permissions they lack.
+9. Suspending a merchant blocks all its users.
+10. Audit log records logins, failed logins, role & assignment changes,
+    invitations, deactivations.
+11. Tenant isolation suite covers every M1 table and endpoint.
+
+## M2 — Catalog
+Acceptance criteria:
+1. Manager CRUD for categories, products (with ≥1 variant), barcodes, branch
+   prices, tax rates; bilingual names.
+2. SKU and barcode unique per merchant; conflicts return clear errors.
+3. POS endpoint returns the branch catalog snapshot; barcode lookup in the POS
+   UI resolves locally in < 50 ms for 10k items (measured in test).
+4. Optimistic locking prevents lost updates (409 test).
+5. Prices are entered/displayed with exactly 3 decimals for KWD.
+
+## M3 — Inventory
+Acceptance criteria:
+1. Opening stock, adjustments (with reason), and branch transfers create
+   append-only `stock_movements`; `stock_levels` always equals the ledger sum
+   (property test).
+2. Concurrent adjustments on the same item do not lose updates.
+3. Permissions `inventory.adjust` / `inventory.transfer` enforced per branch.
+4. Low-stock view per branch.
+
+## M4 — POS selling: registers, shifts, sales, payments
+Blocked by: OQ-002 (tax), OQ-003 (cash rounding), OQ-007 (rounding rule),
+OQ-009 (receipt content).
+
+Acceptance criteria:
+1. Manager creates registers per branch; cashier opens a shift with an opening
+   float; one open shift per register.
+2. Cashier scans/selects items, applies permitted discounts, takes cash (with
+   change) and manual card tenders, split payments.
+3. Completing a sale writes sale, lines (snapshots), payments, stock movements
+   and cash movement in **one transaction**; any failure rolls back everything
+   (test with injected failure).
+4. Retried submission with the same `Idempotency-Key` returns the same sale,
+   never a duplicate.
+5. Server totals equal POS preview totals for a randomized test corpus;
+   server value is authoritative.
+6. Gap-free receipt numbers per branch under concurrency.
+7. Discount above limit / price override requires permission or manager
+   override token; audited.
+8. Shift close: counted cash vs expected, variance recorded; X/Z summary.
+9. Bilingual printable receipt (browser print); no live payment gateway.
+10. Hold/recall cart via orders module.
+
+## M5 — Refunds, voids, customers
+Acceptance criteria:
+1. Refund against a sale's lines; refundable quantity/amount never exceeded
+   (BR-035), including concurrent refunds.
+2. Optional restock creates stock movements; refund tenders recorded in the
+   current shift.
+3. Void allowed only within the open shift and with `sales.void` or override.
+4. Customers CRUD; attach customer to sale; customer purchase history.
+
+## M6 — Purchasing
+Acceptance criteria:
+1. Suppliers, purchase orders, partial goods receipts that increase stock and
+   record unit cost.
+2. Receiving permissions enforced per branch; audit trail.
+
+## M7 — Reporting
+Acceptance criteria:
+1. Sales by day / branch / cashier / product / payment method; shift reports;
+   inventory on hand and valuation.
+2. Report totals reconcile exactly (to the fils) with underlying sales and
+   refunds (reconciliation tests).
+3. Results limited to accessible branches.
+4. CSV export.
+
+## M8 — Platform administration & subscriptions
+Blocked by: OQ-008 (billing).
+
+Acceptance criteria:
+1. Plans with features/limits; assign plan to merchant; feature gates enforced
+   by the backend (`FEATURE_NOT_IN_PLAN`).
+2. Merchant list, detail, suspend/reactivate; platform audit log.
+3. Platform metrics (merchants, active branches, sales volume) without exposing
+   merchant line-level data.
+4. No live billing/payment collection without approval.
+
+## M9 — Restaurant operations (feature-gated)
+Acceptance criteria:
+1. Dining areas/tables, open tabs as orders, modifiers, split bill.
+2. Kitchen tickets per order (screen view; printer later).
+3. Closing a table produces a normal sale via `SalesService` (no duplicated
+   sale logic).
+
+## M10 — E-commerce (feature-gated)
+Blocked by: online payment provider approval.
+
+Acceptance criteria:
+1. Channel listings from catalog; online orders enter the orders module.
+2. Stock reservation/decrement consistent with POS stock.
+3. Fulfilment status visible in manager; conversion to sale on payment.
 
 ## Later / to be decided
-- Offline POS (OQ-005), customers & loyalty, purchasing & suppliers, tax/VAT
-  (OQ-002), subscriptions & billing (OQ-008), integrations, deployment
-  (requires owner approval).
+Offline POS (OQ-005), loyalty, PIN quick switch (OQ-006), card terminal / KNET
+integration (OQ-013), deployment (OQ-011), multi-currency (OQ-004).

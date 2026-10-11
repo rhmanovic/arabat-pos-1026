@@ -57,13 +57,14 @@ approval from the product owner and a new entry in `docs/DECISIONS.md`.
    permission + branch assignment), not implicitly by being a manager.
 8. **Platform operators are a separate identity realm** from merchant users.
    A merchant account can never reach `/platform` APIs.
-9. **Tenant isolation is enforced on the backend** (application layer + database
+9. **Arabic (RTL) and English (LTR)** in all interfaces.
+10. **Tenant isolation is enforced on the backend** (application layer + database
    Row-Level Security). Never trust a tenant id sent by the client.
-10. **Money:** default currency **KWD with 3 decimal places**. **Never** use
+11. **Money:** default currency **KWD with 3 decimal places**. **Never** use
     floating-point arithmetic for monetary values. See `docs/BUSINESS_RULES.md`.
-11. **Safe database transactions** for every multi-step write (sales, payments,
+12. **Safe database transactions** for every multi-step write (sales, payments,
     stock movements, refunds).
-12. **Never deploy, activate live payments, or incur paid costs** without the
+13. **Never deploy, activate live payments, or incur paid costs** without the
     owner's explicit approval.
 
 ## 4. Engineering standards
@@ -98,18 +99,28 @@ approval from the product owner and a new entry in `docs/DECISIONS.md`.
 
 | File                     | Purpose                                                     |
 |--------------------------|-------------------------------------------------------------|
-| `docs/ARCHITECTURE.md`   | System structure, interfaces, modules, auth, tenancy        |
+| `docs/ARCHITECTURE.md`   | Stack, app boundaries, modules & dependencies, routing, API, i18n, deployment |
+| `docs/AUTH.md`           | Authentication, sessions, permissions, branch scoping, overrides |
+| `docs/ROUTES.md`         | Frontend routes per app and API namespaces                  |
 | `docs/DATABASE.md`       | Database conventions, schema catalogue, migrations          |
 | `docs/BUSINESS_RULES.md` | Confirmed business rules and open business questions        |
 | `docs/DECISIONS.md`      | Architecture Decision Records (ADR log)                     |
-| `docs/ROADMAP.md`        | Planned phases and vertical slices                          |
+| `docs/ROADMAP.md`        | Milestones and their acceptance criteria                    |
 | `docs/PROGRESS.md`       | What is actually done, verified, and pending                |
 | `docs/TESTING.md`        | Testing strategy, commands, and coverage expectations       |
 
 Rule: if a requirement or decision is confirmed in conversation, it must be
 written into the appropriate document in the same session.
 
-## 7. Repository status
+## 7. Key terms
 
-Documentation foundation only. No application code has been scaffolded yet.
+- **Merchant** = tenant (company). Schema column `merchant_id`.
+- **Membership** = a user's link to a merchant; **role assignment** = role at a
+  branch (or all branches). See `docs/AUTH.md`.
+- **Order** = mutable intent document; **Sale** = immutable financial document.
+
+## 8. Repository status
+
+Documentation and architecture design only. No application code has been
+scaffolded yet (next: milestone M0).
 See `docs/PROGRESS.md` for the current state and `docs/ROADMAP.md` for next steps.

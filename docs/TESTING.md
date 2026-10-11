@@ -1,6 +1,7 @@
 # Testing
 
 Status: **Strategy defined. No test suites exist yet** (no application code).
+Milestone-level acceptance criteria are in `ROADMAP.md`.
 
 ## 1. Principles
 - Every slice ships with automated tests that were **actually run**; results are
@@ -14,11 +15,11 @@ Status: **Strategy defined. No test suites exist yet** (no application code).
 
 | Layer        | Tool                        | Scope                                                  |
 |--------------|-----------------------------|--------------------------------------------------------|
-| Unit         | Vitest                      | Pure logic: money, rounding, permission evaluation     |
-| Integration  | Vitest + real PostgreSQL    | Repositories, transactions, RLS, migrations            |
+| Unit         | Vitest 5                    | Pure logic: money, rounding, permission evaluation     |
+| Integration  | Vitest + Testcontainers `postgres:18` (fallback: local PG 16+) | Repositories, transactions, RLS, migrations            |
 | API          | Vitest + Fastify inject     | Endpoints incl. authn/authz/tenant/branch guards       |
-| Component    | Vitest + Testing Library    | Critical UI components                                 |
-| End-to-end   | Playwright (Chromium)       | Key flows per interface: manager, POS, platform        |
+| Component    | Vitest + Testing Library + MSW | Critical UI components                                 |
+| End-to-end   | Playwright 1.64 (Chromium; touch emulation for POS) | Key flows per interface: manager, POS, platform; AR (RTL) + EN |
 
 ## 3. Mandatory test categories
 1. **Money:** KWD 3-decimal arithmetic, rounding (BR-033), allocation of
@@ -34,8 +35,15 @@ Status: **Strategy defined. No test suites exist yet** (no application code).
 4. **Transactions:** partial failures roll back completely (sale + payment +
    stock movement).
 5. **Idempotency:** repeated POS submissions do not duplicate sales.
+6. **Pricing parity:** POS preview (`packages/pricing`) equals server totals
+   over a randomized corpus.
+7. **Ledger consistency:** `stock_levels` equals the sum of `stock_movements`.
+8. **Fail-closed boot:** the API refuses to start if a route lacks a
+   permission/public declaration.
+9. **i18n:** no missing translation keys in `ar` or `en`; no physical
+   left/right CSS classes (lint).
 
-## 4. Commands *(defined at scaffold — Phase 0.7)*
+## 4. Commands *(defined at scaffold — milestone M0)*
 ```
 pnpm test          # all unit + integration tests
 pnpm test:e2e      # Playwright

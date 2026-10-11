@@ -21,7 +21,7 @@ ADR; supersede it.
   `packages/api-client`. Hiding UI is never the security boundary.
 
 ## ADR-0002 — Technology stack
-- **Date:** 2026-10-11 · **Status:** Accepted
+- **Date:** 2026-10-11 · **Status:** Superseded by ADR-0009 (versions verified)
 - **Decision:** Node.js (Active LTS), TypeScript strict, pnpm workspaces,
   NestJS with Fastify adapter, Drizzle ORM + SQL migrations, PostgreSQL,
   React + Vite, React Router, TanStack Query, Tailwind + Radix-based components,
@@ -38,7 +38,7 @@ ADR; supersede it.
   boundaries. Revisit only with measured need.
 
 ## ADR-0004 — Tenant isolation: shared schema + application scoping + RLS
-- **Date:** 2026-10-11 · **Status:** Accepted
+- **Date:** 2026-10-11 · **Status:** Accepted (column renamed `merchant_id` by ADR-0015)
 - **Decision:** All tenant data in shared tables with `tenant_id`. The tenant id
   is taken from the authenticated session only. Every query is scoped in the
   application, and PostgreSQL RLS (forced) is enabled on every tenant table as
@@ -70,3 +70,84 @@ ADR; supersede it.
 - **Date:** 2026-10-11 · **Status:** Accepted
 - **Decision:** Sales, payments, refunds, stock movements and audit entries are
   insert-only; corrections are compensating records.
+
+---
+
+## ADR-0009 — Verified stack versions (supersedes ADR-0002)
+- **Date:** 2026-10-11 · **Status:** Accepted
+- **Context:** Versions verified against the npm registry, nodejs.org release
+  index and postgresql.org on 2026-10-11.
+- **Decision:** Node.js 24 LTS; pnpm 12; TypeScript 6.0; NestJS 12 + Fastify 5;
+  Zod 4; Drizzle ORM 0.45 + drizzle-kit 0.31 + `pg`; PostgreSQL 18; React 19.3;
+  Vite 8; React Router 8 (data mode); TanStack Query 5 / Table 9; Zustand 5;
+  React Hook Form 7; Tailwind CSS 4 + shadcn/ui pattern on Radix; i18next 26 +
+  react-i18next 17; Vitest 5; Playwright 1.64; Testcontainers 12; ESLint 10 +
+  typescript-eslint 8; Prettier 3; Argon2id; pino. Full table in
+  `ARCHITECTURE.md` §2.
+- **Not chosen now:** Node 26 (not yet LTS), TypeScript 7 (see ADR-0010),
+  Drizzle 1.0 (release candidate), PostgreSQL 19 (beta).
+
+## ADR-0010 — Stay on TypeScript 6.0 for now
+- **Date:** 2026-10-11 · **Status:** Accepted
+- **Context:** TypeScript 7.0 (native compiler) is released, but
+  typescript-eslint 8.x declares `typescript <6.1`, and NestJS depends on
+  decorator metadata emit.
+- **Decision:** Use TypeScript 6.0.x. Re-evaluate when lint tooling and NestJS
+  officially support 7.x.
+
+## ADR-0011 — Branch-scoped role assignments
+- **Date:** 2026-10-11 · **Status:** Accepted
+- **Decision:** Roles are per merchant; a membership receives roles through
+  `role_assignments (membership, role, branch_id | NULL)`. NULL = all branches.
+  Permissions carry a scope (`merchant` or `branch`); merchant-scoped
+  permissions require a merchant-wide assignment. Interface access
+  (`manager.access`, `pos.access`) is branch-scoped and independent.
+- **Rationale:** Supports "manager at branch A, cashier at branch B" without a
+  second model, and keeps branch restriction in one place. Details: `AUTH.md`.
+
+## ADR-0012 — REST API with shared Zod contracts
+- **Date:** 2026-10-11 · **Status:** Accepted
+- **Decision:** REST/JSON under `/api/v1/{manager|pos|platform|auth}`; Zod
+  schemas in `packages/contracts` used by API and frontends; OpenAPI generated;
+  RFC 9457 errors; money as decimal strings; idempotency keys on POS writes.
+- **Rejected:** GraphQL (complex authorization per field, caching), tRPC
+  (couples clients to server internals, unsuitable for future public APIs).
+
+## ADR-0013 — Thin interface controllers over shared domain services
+- **Date:** 2026-10-11 · **Status:** Accepted
+- **Decision:** Each domain module exposes application services; manager, POS
+  and platform controllers are thin adapters. Critical pure logic (money,
+  pricing) lives in shared packages so the POS preview and the authoritative
+  server calculation use the same code.
+
+## ADR-0014 — Arabic/English with RTL/LTR from the first UI
+- **Date:** 2026-10-11 · **Status:** Accepted (owner requirement in Prompt 2)
+- **Decision:** i18next in all apps; `dir` on `<html>`; only logical CSS
+  properties (lint-enforced); bilingual `name_en`/`name_ar` columns for
+  receipt-visible master data; merchant default language + user preference.
+  Default language and digit style remain open (OQ-001, OQ-012).
+
+## ADR-0015 — "Merchant" as the tenant term in code and schema
+- **Date:** 2026-10-11 · **Status:** Accepted
+- **Decision:** The tenant entity is `merchants`; the isolation column is
+  `merchant_id`; RLS setting `app.merchant_id`. "Tenant" remains the generic
+  architectural term in prose.
+
+## ADR-0016 — Orders and sales are separate concepts
+- **Date:** 2026-10-11 · **Status:** Accepted
+- **Decision:** Orders are mutable intent/fulfilment documents (held carts,
+  tables, online orders) with no financial effect; sales are immutable financial
+  documents created atomically with payments and stock movements. Refunds and
+  voids are separate compensating documents.
+
+## ADR-0017 — Local environment: Docker Compose; jobs in PostgreSQL
+- **Date:** 2026-10-11 · **Status:** Accepted
+- **Decision:** Docker Compose with `postgres:18` and Mailpit for local
+  development; integration tests via Testcontainers (fallback: local cluster).
+  Background jobs, when needed, use pg-boss — no Redis/broker initially.
+
+## ADR-0018 — Deployment shape (design only)
+- **Date:** 2026-10-11 · **Status:** Proposed — provider/region need owner approval (OQ-011)
+- **Decision:** One container image (API + worker entrypoints), static SPAs on
+  CDN/proxy, managed PostgreSQL 18 with PITR, object storage, GitHub Actions CI.
+  No deployment until approved.
