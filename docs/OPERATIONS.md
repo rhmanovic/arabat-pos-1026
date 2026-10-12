@@ -103,3 +103,31 @@ Hosting provider and region / data residency (OQ-011); domain and TLS; transacti
 e-mail provider; production secrets store; backup storage location; payment gateway
 choice, merchant contracts and credentials, sandbox certification (OQ-021); subscription
 pricing and billing provider (OQ-022); legal receipt fields and tax (OQ-002, OQ-009).
+
+## 8. Staging on Railway (approved by the owner, 2026-10-12)
+
+Files: `Dockerfile` (builds the API and the four apps; base image overridable with
+`--build-arg NODE_IMAGE=…`), `railway.json` (Dockerfile build, health check
+`/api/v1/health/ready`), `apps/api/src/database/cli/hosted-start.ts` (start command). With
+one superuser URL from the platform, the start command creates/updates `app_owner` and
+`app_runtime`, applies migrations and reference seeds as `app_owner`, then starts the API as
+`app_runtime` (RLS enforced). Verified locally against a fresh database in production mode
+(the Docker image itself is built by Railway; this sandbox cannot pull base images).
+
+Services: **Postgres** (Railway template) + **web** (this repository, branch to deploy).
+Variables of the web service:
+
+| Variable | Value |
+|---|---|
+| `DATABASE_ADMIN_URL` | `${{Postgres.DATABASE_URL}}` |
+| `APP_OWNER_PASSWORD`, `APP_RUNTIME_PASSWORD` | two different random strings, ≥ 32 characters |
+| `MFA_ENCRYPTION_SECRET` | random string ≥ 40 characters (keep a copy: losing it locks operators out) |
+| `TRUST_PROXY` | `1` (Railway's edge proxy) |
+| `PUBLIC_MANAGER_URL` / `PUBLIC_POS_URL` / `PUBLIC_STORE_URL` | `https://${{RAILWAY_PUBLIC_DOMAIN}}/manager` / `/pos` / `/store` |
+| `PAYMENT_MOCK_ENABLED`, `PAYMENT_MOCK_SECRET` | `true` and a random string (staging only: sandbox payments) |
+| `SMTP_URL`, `MAIL_FROM` | optional; without them password reset and invitation e-mails are not delivered |
+
+Generate a public domain under the web service's Networking settings. Optional: a volume
+mounted at `/app/var` keeps uploaded product images across deploys. First platform operator:
+open a shell on the web service (`railway ssh`) and run
+`node apps/api/dist/database/cli/create-operator.js --email … --name … --role platform.super_admin`.

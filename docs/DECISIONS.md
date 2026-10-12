@@ -740,3 +740,12 @@ ADR; supersede it.
   runtime role may only update their sign-in progress columns, and the platform summary
   functions refuse to run without an operator context. Production refuses development
   secrets.
+
+## ADR-0087 — Staging environment on Railway
+- **Date:** 2026-10-12 · **Status:** Accepted (owner approved hosting and its cost)
+- **Decision:** A staging/pilot environment runs on Railway: one container (Dockerfile) serving
+  the API and the four apps, and Railway Postgres. The owner creates the account and links
+  the GitHub repository; secrets are set as Railway variables (never in the repository).
+  The start command keeps the two-role database model (OPERATIONS.md §8).
+- **Consequences:** Servers are outside the GCC; the production region decision (OQ-011)
+  stays open. Payments use the sandbox gateway only; e-mail needs an SMTP provider.

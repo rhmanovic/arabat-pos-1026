@@ -47,4 +47,15 @@ describe('loadEnv', () => {
       loadEnv({ ...prod, MFA_ENCRYPTION_KEY: key, PAYMENT_MOCK_ENABLED: 'true' }),
     ).toThrow(/PAYMENT_MOCK_SECRET/);
   });
+
+  it('derives the MFA key from a long random secret (hosting platforms)', () => {
+    const env = loadEnv({
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      MFA_ENCRYPTION_SECRET: 'x'.repeat(40),
+    });
+    expect(Buffer.from(env.MFA_ENCRYPTION_KEY, 'base64')).toHaveLength(32);
+    expect(() =>
+      loadEnv({ DATABASE_URL: 'postgres://u:p@localhost:5432/db', MFA_ENCRYPTION_SECRET: 'short' }),
+    ).toThrow(/MFA_ENCRYPTION_KEY/);
+  });
 });

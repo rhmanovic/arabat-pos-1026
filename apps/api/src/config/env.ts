@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 
 const DEV_MOCK_SECRET_DEFAULT = 'dev-only-mock-gateway-secret';
@@ -105,6 +106,14 @@ export class InvalidEnvironmentError extends Error {
 }
 
 export function loadEnv(source: Record<string, string | undefined> = process.env): Env {
+  // Hosting platforms generate random strings, not base64 keys: a long random
+  // MFA_ENCRYPTION_SECRET is turned into the 32-byte key (SHA-256) when no key is given.
+  const secret = source['MFA_ENCRYPTION_SECRET'];
+  if (!source['MFA_ENCRYPTION_KEY'] && secret && secret.length >= 32)
+    source = {
+      ...source,
+      MFA_ENCRYPTION_KEY: createHash('sha256').update(secret).digest('base64'),
+    };
   const result = envSchema.safeParse(source);
   if (!result.success) {
     throw new InvalidEnvironmentError(
