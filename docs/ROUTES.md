@@ -27,7 +27,7 @@ the permission.
 | `/suppliers`, `/purchasing`, `/purchasing/new`, `/purchasing/:orderId` | Suppliers, purchase orders, receiving | `purchasing.read` / `purchasing.manage` |
 | `/sales`, `/sales/:saleId` | Sales (POS + online, channel filter), detail and receipt | `sales.read` |
 | `/refunds` | Returns history, approvals, unusual activity | `sales.read` |
-| `/reports` | Reports (tabs per report permission) | any `reports.*` |
+| `/reports` | Reports (tabs per report permission: sales, payments & cash incl. cash by type, expenses, shifts, inventory, purchasing) | any `reports.*` |
 | `/customers`, `/customers/:customerId` | Customers, history, notes | `customers.read` |
 | `/restaurant` | Restaurant setup (module, floor, stations, modifiers, menu) | `restaurant.manage` |
 | `/online` | Online store: orders, settings, products online | `online.orders` / `online.manage` |
@@ -148,6 +148,7 @@ per-branch breakdown, settings dialog), `/manager/inventory/adjustments`,
 | `GET/POST /manager/cash/disbursements`, `POST /manager/cash/disbursements/:id/reverse`, `GET /manager/cash/suppliers`, `GET /manager/cash/suppliers/:id/orders`, `GET/POST /manager/cash/branch-transfers`, `POST …/:id/receive`, `POST …/:id/cancel` | `cash.custody` (branch-scoped; ADR-0091) |
 | `GET /manager/cash/bank-accounts`, `POST /manager/cash/deposits` | `cash.deposit` at the treasury's branch |
 | `GET /manager/suppliers/:id/payments` | `purchasing.read` (branch-scoped) |
+| `GET /manager/reports/expenses?from=&to=&branchId=&employeeId=` | `reports.financial` (branch-scoped; ADR-0092) |
 | `GET /pos/cash/suppliers` / `GET /pos/cash/bank-accounts` | POS `cash.move` / `cash.deposit` |
 | `GET /pos/payment-methods` | POS `sales.create` (active POS methods, no fees) |
 | `GET /pos/registers`, `GET /pos/shifts/current`, `POST /pos/shifts`, `POST /pos/shifts/current/close` | POS `shifts.operate` at the bound branch + register access |

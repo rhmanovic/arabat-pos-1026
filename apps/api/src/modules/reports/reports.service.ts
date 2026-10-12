@@ -1,4 +1,5 @@
 import type {
+  ExpensesReport,
   InventoryReport,
   PaymentsReport,
   PurchasingReport,
@@ -579,6 +580,38 @@ export class ReportsService {
       const cashSales = sum(cashIn.map((x) => x.collected));
       const cashRefunds = sum(cashIn.map((x) => x.refunded));
 
+      // Cash custody by type (ADR-0090/0091): the ledger of the registers and treasuries in
+      // scope. Transfers are told apart by the kinds of their two accounts.
+      const [custody] = await this.rows(
+        tx,
+        sql`select
+              coalesce(sum(e.amount_minor) filter (where e.entry_type = 'payment'), 0)::text as sales,
+              coalesce(-sum(e.amount_minor) filter (where e.entry_type = 'refund'), 0)::text as refunds,
+              coalesce(-sum(e.amount_minor) filter (where e.account_id = t.from_account_id
+                and fa.kind = 'register' and ta.kind = 'treasury'), 0)::text as drops,
+              coalesce(-sum(e.amount_minor) filter (where e.account_id = t.from_account_id
+                and fa.kind = 'treasury' and ta.kind = 'register'), 0)::text as top_ups,
+              coalesce(-sum(e.amount_minor) filter (where e.account_id = t.from_account_id
+                and ta.kind = 'bank'), 0)::text as deposits,
+              coalesce(-sum(e.amount_minor) filter (where e.entry_type = 'expense'), 0)::text as expenses,
+              coalesce(-sum(e.amount_minor) filter (where e.entry_type = 'supplier_payment'), 0)::text as supplier,
+              coalesce(sum(e.amount_minor) filter (where e.source_type = 'cash_movement'), 0)::text as corrections,
+              coalesce(sum(e.amount_minor) filter (where e.source_type in
+                ('shift_close', 'shift_open', 'register_count', 'treasury_count')), 0)::text as counts,
+              coalesce(sum(e.amount_minor) filter (where e.source_type in
+                ('register_initial_count', 'treasury_opening_count')), 0)::text as openings,
+              coalesce(sum(e.amount_minor) filter (where t.origin = 'branch_transfer'), 0)::text as branch
+            from financial_account_entries e
+            join financial_accounts a on a.id = e.account_id
+            left join cash_transfers t on e.source_type = 'cash_transfer' and t.id = e.source_id
+            left join financial_accounts fa on fa.id = t.from_account_id
+            left join financial_accounts ta on ta.id = t.to_account_id
+            where a.kind in ('register', 'treasury')
+              and ${this.within(c, sql.raw('e.created_at'))}
+              and ${this.branches(c, sql.raw('a.branch_id'))}
+              and ${c.userId ? sql`e.created_by_user_id = ${c.userId}` : sql`true`}`,
+      );
+
       const refundAllocations = (
         await this.rows(
           tx,
@@ -638,6 +671,19 @@ export class ReportsService {
             cashSales - cashRefunds + big(moves!['cash_in']) - big(moves!['cash_out']),
           ),
         },
+        custody: {
+          cashSales: money(big(custody!['sales'])),
+          cashRefunds: money(big(custody!['refunds'])),
+          drops: money(big(custody!['drops'])),
+          topUps: money(big(custody!['top_ups'])),
+          deposits: money(big(custody!['deposits'])),
+          expenses: money(big(custody!['expenses'])),
+          supplierPayments: money(big(custody!['supplier'])),
+          corrections: money(big(custody!['corrections'])),
+          countDifferences: money(big(custody!['counts'])),
+          openingCounts: money(big(custody!['openings'])),
+          branchTransfers: money(big(custody!['branch'])),
+        },
         refundAllocations,
         byDay: eachDay(c.from, c.to).map((date) => ({
           date,
@@ -678,6 +724,7 @@ export class ReportsService {
       );
       const shifts = rows.map((r) => {
         const discrepancy = big(r['discrepancy']);
+        const uncounted = r['close_type'] === 'forced_uncounted';
         return {
           id: r['id'] as string,
           branchId: r['branch_id'] as string,
@@ -695,7 +742,9 @@ export class ReportsService {
           expectedCash: money(big(r['expected'])),
           countedCash: money(big(r['counted'])),
           discrepancy: money(discrepancy),
-          outcome: outcomeOf(discrepancy, big(r['tolerance']))!,
+          outcome: uncounted
+            ? ('uncounted' as const)
+            : outcomeOf(discrepancy, big(r['tolerance']))!,
           minor: { expected: big(r['expected']), counted: big(r['counted']), discrepancy },
         };
       });
@@ -712,6 +761,8 @@ export class ReportsService {
         }
       >();
       for (const s of shifts) {
+        // An uncounted forced close has no expected or counted figure (ADR-0090).
+        if (s.outcome === 'uncounted') continue;
         const g = registers.get(s.registerId) ?? {
           registerId: s.registerId,
           registerCode: s.registerCode,
@@ -743,13 +794,132 @@ export class ReportsService {
         })),
         totals: {
           shiftCount: shifts.length,
-          balanced: shifts.length - over.length - short.length,
+          balanced: shifts.filter((s) => s.outcome === 'balanced').length,
           over: over.length,
           short: short.length,
           totalOver: money(over.reduce((s, x) => s + x.minor.discrepancy, 0n)),
           totalShort: money(short.reduce((s, x) => s + x.minor.discrepancy, 0n)),
           netDiscrepancy: money(shifts.reduce((s, x) => s + x.minor.discrepancy, 0n)),
         },
+      };
+    });
+  }
+
+  // ------------------------------------------------------------ expenses (ADR-0091)
+  /** Expenses by category and supplier payments by supplier, reversals netted (BR-087). */
+  async expenses(actor: MerchantActor, query: Query): Promise<ExpensesReport> {
+    return this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const c = await this.context(tx, actor, 'reports.financial', query);
+      const where = (
+        from: string,
+        to: string,
+      ) => sql`${this.within(c, sql.raw('d.created_at'), from, to)}
+        and ${this.branches(c, sql.raw('d.branch_id'))}
+        and ${c.userId ? sql`d.created_by_user_id = ${c.userId}` : sql`true`}`;
+      const net = sql`coalesce(sum(case when d.reverses_id is null then d.amount_minor
+                                        else -d.amount_minor end), 0)::text`;
+      const count = sql`(count(*) filter (where d.reverses_id is null)
+                        - count(*) filter (where d.reverses_id is not null))::int`;
+      const [totals] = await this.rows(
+        tx,
+        sql`select coalesce(sum(case when d.reverses_id is null then d.amount_minor else -d.amount_minor end)
+                filter (where d.kind = 'expense'), 0)::text as expenses,
+              coalesce(sum(case when d.reverses_id is null then d.amount_minor else -d.amount_minor end)
+                filter (where d.kind = 'supplier_payment'), 0)::text as supplier
+            from cash_disbursements d where ${where(c.from, c.to)}`,
+      );
+      const [prev] = await this.rows(
+        tx,
+        sql`select ${net} as net from cash_disbursements d
+            where d.kind = 'expense' and ${where(c.prevFrom, c.prevTo)}`,
+      );
+      const byCategory = await this.rows(
+        tx,
+        sql`select d.category, ${count} as n, ${net} as net from cash_disbursements d
+            where d.kind = 'expense' and ${where(c.from, c.to)}
+            group by d.category order by sum(case when d.reverses_id is null then d.amount_minor
+                                               else -d.amount_minor end) desc`,
+      );
+      const byBranch = await this.rows(
+        tx,
+        sql`select d.branch_id, max(b.name_en) as name_en, max(b.name_ar) as name_ar,
+              coalesce(sum(case when d.reverses_id is null then d.amount_minor else -d.amount_minor end)
+                filter (where d.kind = 'expense'), 0)::text as expenses,
+              coalesce(sum(case when d.reverses_id is null then d.amount_minor else -d.amount_minor end)
+                filter (where d.kind = 'supplier_payment'), 0)::text as supplier
+            from cash_disbursements d join branches b on b.id = d.branch_id
+            where ${where(c.from, c.to)} group by d.branch_id order by 1`,
+      );
+      const bySupplier = await this.rows(
+        tx,
+        sql`select d.supplier_id, max(s.name_en) as name_en, max(s.name_ar) as name_ar,
+              ${count} as n, ${net} as net
+            from cash_disbursements d join suppliers s on s.id = d.supplier_id
+            where d.kind = 'supplier_payment' and ${where(c.from, c.to)}
+            group by d.supplier_id order by sum(case when d.reverses_id is null then d.amount_minor
+                                                 else -d.amount_minor end) desc`,
+      );
+      const bySource = await this.rows(
+        tx,
+        sql`select a.kind as source, ${count} as n, ${net} as net
+            from cash_disbursements d join financial_accounts a on a.id = d.source_account_id
+            where ${where(c.from, c.to)} group by a.kind order by a.kind`,
+      );
+      const days = new Map(
+        (
+          await this.rows(
+            tx,
+            sql`select ${this.day(c, sql.raw('d.created_at'))} as d,
+                  coalesce(sum(case when d.reverses_id is null then d.amount_minor else -d.amount_minor end)
+                    filter (where d.kind = 'expense'), 0)::text as expenses,
+                  coalesce(sum(case when d.reverses_id is null then d.amount_minor else -d.amount_minor end)
+                    filter (where d.kind = 'supplier_payment'), 0)::text as supplier
+                from cash_disbursements d where ${where(c.from, c.to)} group by 1`,
+          )
+        ).map((r) => [r['d'] as string, r]),
+      );
+      const expenses = big(totals!['expenses']);
+      const supplier = big(totals!['supplier']);
+      return {
+        period: this.period(c),
+        totals: {
+          expenses: money(expenses),
+          supplierPayments: money(supplier),
+          total: money(expenses + supplier),
+          previousExpenses: money(big(prev!['net'])),
+        },
+        byCategory: byCategory.map((r) => ({
+          category: r['category'] as string,
+          count: int(r['n']),
+          net: money(big(r['net'])),
+        })),
+        byBranch: byBranch.map((r) => ({
+          branchId: r['branch_id'] as string,
+          nameEn: (r['name_en'] as string | null) ?? null,
+          nameAr: (r['name_ar'] as string | null) ?? null,
+          expenses: money(big(r['expenses'])),
+          supplierPayments: money(big(r['supplier'])),
+        })),
+        bySupplier: bySupplier.map((r) => ({
+          supplierId: r['supplier_id'] as string,
+          nameEn: (r['name_en'] as string | null) ?? null,
+          nameAr: (r['name_ar'] as string | null) ?? null,
+          count: int(r['n']),
+          net: money(big(r['net'])),
+        })),
+        bySource: bySource.map((r) => ({
+          source: r['source'] as 'register' | 'treasury',
+          count: int(r['n']),
+          net: money(big(r['net'])),
+        })),
+        byDay: eachDay(c.from, c.to).map((date) => {
+          const r = days.get(date);
+          return {
+            date,
+            expenses: money(big(r?.['expenses'])),
+            supplierPayments: money(big(r?.['supplier'])),
+          };
+        }),
       };
     });
   }

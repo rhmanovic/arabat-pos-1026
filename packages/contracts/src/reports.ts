@@ -191,6 +191,31 @@ export const paymentsReportSchema = z.object({
     /** cashSales − cashRefunds + cashIn − cashOut. */
     netCash: moneySchema,
   }),
+  /**
+   * Cash custody by type (ADR-0090/0091), from the cash ledger of registers and treasuries in
+   * scope. Transfers between them are never sales, revenue or expenses.
+   */
+  custody: z.object({
+    cashSales: moneySchema,
+    cashRefunds: moneySchema,
+    /** Register → treasury. */
+    drops: moneySchema,
+    /** Treasury → register. */
+    topUps: moneySchema,
+    /** Register or treasury → bank. */
+    deposits: moneySchema,
+    /** Net of reversals. */
+    expenses: moneySchema,
+    supplierPayments: moneySchema,
+    /** Corrections and other manual cash in/out (signed). */
+    corrections: moneySchema,
+    /** Count differences: shift close and opening, register and treasury counts (signed). */
+    countDifferences: moneySchema,
+    /** First physical counts (opening balances), never a difference. */
+    openingCounts: moneySchema,
+    /** Sent to (−) and received from (+) other branches, with receiving differences. */
+    branchTransfers: moneySchema,
+  }),
   refundAllocations: z.array(
     z.object({
       kind: z.string(),
@@ -223,7 +248,8 @@ export const shiftsReportSchema = z.object({
       expectedCash: moneySchema,
       countedCash: moneySchema,
       discrepancy: moneySchema,
-      outcome: z.enum(['balanced', 'over', 'short']),
+      /** `uncounted`: force-closed without a count (ADR-0090), no difference booked. */
+      outcome: z.enum(['balanced', 'over', 'short', 'uncounted']),
     }),
   ),
   registers: z.array(
@@ -357,3 +383,32 @@ export const purchasingReportSchema = z.object({
   ),
 });
 export type PurchasingReport = z.infer<typeof purchasingReportSchema>;
+
+// ---------------------------------------------------------------- expenses (ADR-0091)
+const outflowTotals = { count: z.number().int(), net: moneySchema };
+export const expensesReportSchema = z.object({
+  period: reportPeriodSchema,
+  totals: z.object({
+    expenses: moneySchema,
+    supplierPayments: moneySchema,
+    /** Expenses + supplier payments. */
+    total: moneySchema,
+    previousExpenses: moneySchema,
+  }),
+  byCategory: z.array(z.object({ category: z.string(), ...outflowTotals })),
+  byBranch: z.array(
+    z.object({
+      branchId: z.string(),
+      ...named,
+      expenses: moneySchema,
+      supplierPayments: moneySchema,
+    }),
+  ),
+  bySupplier: z.array(z.object({ supplierId: z.string(), ...named, ...outflowTotals })),
+  /** Paid from drawers vs treasuries. */
+  bySource: z.array(z.object({ source: z.enum(['register', 'treasury']), ...outflowTotals })),
+  byDay: z.array(
+    z.object({ date: z.string(), expenses: moneySchema, supplierPayments: moneySchema }),
+  ),
+});
+export type ExpensesReport = z.infer<typeof expensesReportSchema>;

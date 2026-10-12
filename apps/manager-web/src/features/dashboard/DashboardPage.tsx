@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { useBranchContext, useSession } from '../../app/context.js';
+import { formatAmount } from '../catalog/ProductsPage.js';
 
 /** Overview built only from data that exists (no invented sales or revenue). */
 export function DashboardPage() {
@@ -20,6 +21,12 @@ export function DashboardPage() {
     queryKey: ['manager', 'roles'],
     queryFn: () => api.roles.list(),
     enabled: can('employees.read'),
+  });
+  // Cash on hand (ADR-0090/0091): treasuries + drawers + in transit, for the selected branch.
+  const cash = useQuery({
+    queryKey: ['manager', 'cash', 'overview', branchId],
+    queryFn: () => api.cash.overview(branchId),
+    enabled: can('cash.custody'),
   });
   const profile = useQuery({
     queryKey: ['manager', 'merchant'],
@@ -67,6 +74,35 @@ export function DashboardPage() {
         title={t('dashboard.welcome', { name: session.actor.fullName })}
         description={t('dashboard.subtitle', { company })}
       />
+
+      {cash.data ? (
+        <Link
+          to="/cash"
+          data-testid="dashboard-cash"
+          className="rounded-lg border border-border bg-surface p-5 hover:bg-surface-muted"
+        >
+          <span className="block text-sm text-fg-muted">{t('dashboard.totalCash')}</span>
+          <span dir="ltr" className="block text-3xl font-semibold tabular-nums">
+            {formatAmount(cash.data.total, i18n.language)}
+          </span>
+          <span className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-fg-muted">
+            <span>
+              {t('dashboard.inTreasuries')}{' '}
+              <span dir="ltr">{formatAmount(cash.data.treasuriesTotal, i18n.language)}</span>
+            </span>
+            <span>
+              {t('dashboard.inRegisters')}{' '}
+              <span dir="ltr">{formatAmount(cash.data.registersTotal, i18n.language)}</span>
+            </span>
+            {cash.data.inTransitTotal.amount !== '0.000' ? (
+              <span>
+                {t('dashboard.inTransit')}{' '}
+                <span dir="ltr">{formatAmount(cash.data.inTransitTotal, i18n.language)}</span>
+              </span>
+            ) : null}
+          </span>
+        </Link>
+      ) : null}
 
       <div className="grid grid-cols-3 gap-2 sm:gap-4">
         {can('branches.read') ? (

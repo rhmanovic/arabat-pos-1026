@@ -104,4 +104,16 @@ test('expenses, a bank deposit, a branch transfer and a supplier paid from the d
     .click();
   await expect(page.getByTestId('supplier-total-paid')).toContainText('KWD 5.000');
   await expect(page.getByRole('dialog')).toContainText('INV-55');
+
+  // Reports: expenses by category and supplier, cash by type, and the dashboard total.
+  await page.keyboard.press('Escape');
+  await page.goto('/manager/reports');
+  await page.getByRole('button', { name: 'Expenses', exact: true }).click();
+  await expect(page.getByTestId('kpi-expenses')).toContainText('KWD 4.000');
+  await expect(page.getByTestId('kpi-supplier-payments')).toContainText('KWD 5.000');
+  await page.getByRole('button', { name: 'Payments & cash' }).click();
+  await expect(page.getByRole('row', { name: /Bank deposits/ })).toContainText('KWD 50.000');
+  await page.goto('/manager/');
+  // 36 + 9.500 in the treasuries, 15 in the open drawer.
+  await expect(page.getByTestId('dashboard-cash')).toContainText('KWD 60.500');
 });

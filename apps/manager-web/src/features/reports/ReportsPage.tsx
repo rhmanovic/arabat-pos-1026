@@ -8,7 +8,13 @@ import { useBranchContext, useBranchName, useSession } from '../../app/context.j
 import { formatAmount } from '../catalog/ProductsPage.js';
 import { CashTabs } from '../cash/shared.js';
 import { displayQty } from '../inventory/shared.js';
-import { InventoryTab, PaymentsTab, PurchasingTab, ShiftsTab } from './OtherReports.js';
+import {
+  ExpensesTab,
+  InventoryTab,
+  PaymentsTab,
+  PurchasingTab,
+  ShiftsTab,
+} from './OtherReports.js';
 import {
   Amount,
   BarChart,
@@ -21,7 +27,7 @@ import {
   useReport,
 } from './shared.js';
 
-type Tab = 'sales' | 'payments' | 'shifts' | 'inventory' | 'purchasing';
+type Tab = 'sales' | 'payments' | 'expenses' | 'shifts' | 'inventory' | 'purchasing';
 type Preset = 'today' | 'yesterday' | 'last7' | 'last30' | 'thisMonth' | 'lastMonth' | 'custom';
 
 /** Today's date in the merchant's zone (YYYY-MM-DD). */
@@ -62,6 +68,7 @@ export function ReportsPage() {
     [
       { key: 'sales', label: t('reports.tabSales'), perm: 'reports.sales' },
       { key: 'payments', label: t('reports.tabPayments'), perm: 'reports.financial' },
+      { key: 'expenses', label: t('reports.tabExpenses'), perm: 'reports.financial' },
       { key: 'shifts', label: t('reports.tabShifts'), perm: 'reports.financial' },
       { key: 'inventory', label: t('reports.tabInventory'), perm: 'reports.inventory' },
       { key: 'purchasing', label: t('reports.tabPurchasing'), perm: 'reports.inventory' },
@@ -182,6 +189,7 @@ export function ReportsPage() {
       ) : null}
       {tab === 'sales' ? <SalesTab {...props} onEmployees={setEmployees} /> : null}
       {tab === 'payments' ? <PaymentsTab {...props} /> : null}
+      {tab === 'expenses' ? <ExpensesTab {...props} /> : null}
       {tab === 'shifts' ? <ShiftsTab {...props} /> : null}
       {tab === 'inventory' ? <InventoryTab {...props} /> : null}
       {tab === 'purchasing' ? <PurchasingTab {...props} /> : null}

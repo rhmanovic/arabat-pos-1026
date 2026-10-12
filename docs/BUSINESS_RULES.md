@@ -307,6 +307,16 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
   cash out (the same entries as the drawer's expected cash).
 - **BR-126** *Cash difference* of a shift = counted − expected at closing; balanced when
   within the register's tolerance, otherwise over or short.
+  A shift force-closed without a count is "not counted": neither balanced nor a difference.
+  The discrepancy report also shows, by close type, the differences found between shifts
+  (at opening, by register; first counts excluded) and those found after an uncounted close
+  (attributed to that shift and its cashier) (ADR-0092).
+- **BR-126a** *Cash by type* = changes of the registers' and treasuries' cash ledger in the
+  period: cash sales and refunds, drops, top-ups, bank deposits, expenses and supplier payments
+  (net of reversals), corrections, count differences, opening counts, transfers between branches.
+  *Expenses report* = cash expenses by category, branch, source and day, and supplier payments
+  by supplier, each reversal subtracted on its own date (`reports.financial`). The dashboard
+  shows total cash on hand (treasuries + drawers + in transit) to `cash.custody` holders.
 - **BR-127** *Gross profit* — see ADR-0070; never shown when costs are missing or to users
   without `reports.financial`.
 - **BR-128** *Inventory value* = current quantity × weighted-average cost per item and

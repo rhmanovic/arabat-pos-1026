@@ -182,3 +182,23 @@ describe('cash custody payouts', () => {
     });
   });
 });
+
+describe('dashboard cash card', () => {
+  it('shows the company’s cash on hand to cash custodians only', async () => {
+    const overview = {
+      branches: [],
+      treasuriesTotal: money('30.000'),
+      registersTotal: money('12.500'),
+      inTransitTotal: money('5.000'),
+      total: money('47.500'),
+    };
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'cash.custody']),
+      routes: { 'GET /manager/cash/overview': () => ({ status: 200, body: overview }) },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/', fetch });
+    const card = await screen.findByTestId('dashboard-cash');
+    expect(card).toHaveTextContent('KWD 47.500');
+    expect(card).toHaveTextContent('In transit: KWD 5.000');
+  });
+});

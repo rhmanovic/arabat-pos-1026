@@ -59,6 +59,34 @@ export function PaymentsTab({ query, onPeriod }: TabProps) {
         <Kpi label={t('reports.cashOut')} value={<Amount value={r.cash.cashOut} />} />
         <Kpi label={t('reports.netCash')} value={<Amount value={r.cash.netCash} />} />
       </div>
+      <ReportTable
+        title={t('reports.cashByType')}
+        filename={`cash-by-type-${query.from}-${query.to}`}
+        rows={(
+          [
+            'cashSales',
+            'cashRefunds',
+            'drops',
+            'topUps',
+            'deposits',
+            'expenses',
+            'supplierPayments',
+            'corrections',
+            'countDifferences',
+            'openingCounts',
+            'branchTransfers',
+          ] as const
+        ).map((key) => ({ key, value: r.custody[key] }))}
+        rowKey={(x) => x.key}
+        columns={[
+          {
+            key: 'type',
+            header: t('reports.cashType'),
+            value: (x) => t(`reports.custody_${x.key}`),
+          },
+          { key: 'amount', header: t('reports.amount'), money: true, value: (x) => x.value.amount },
+        ]}
+      />
       <BarChart
         title={t('reports.collectionsTrend')}
         primaryLabel={t('reports.collected')}
@@ -121,7 +149,7 @@ export function PaymentsTab({ query, onPeriod }: TabProps) {
           },
         ]}
       />
-      <Definitions keys={['collected', 'fees', 'paidBack', 'cash', 'period']} />
+      <Definitions keys={['collected', 'fees', 'paidBack', 'cash', 'custody', 'period']} />
     </div>
   );
 }
@@ -133,7 +161,12 @@ export function ShiftsTab({ query, onPeriod }: TabProps) {
   const report = useReport('shifts', query, (q) => api.reports.shifts(q), onPeriod);
   const r = report.data;
   if (!r) return <ReportState isPending={report.isPending} error={report.error} />;
-  const tone = { balanced: 'success', over: 'warning', short: 'danger' } as const;
+  const tone = {
+    balanced: 'success',
+    over: 'warning',
+    short: 'danger',
+    uncounted: 'neutral',
+  } as const;
   return (
     <div className="grid gap-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -617,6 +650,117 @@ export function PurchasingTab({ query, onPeriod }: TabProps) {
           },
         ]}
       />
+    </div>
+  );
+}
+
+/** Expenses by category and supplier payments by supplier, reversals netted (ADR-0091). */
+export function ExpensesTab({ query, onPeriod }: TabProps) {
+  const { t, i18n } = useTranslation();
+  const api = useApi();
+  const report = useReport('expenses', query, (q) => api.reports.expenses(q), onPeriod);
+  const r = report.data;
+  if (!r) return <ReportState isPending={report.isPending} error={report.error} />;
+  return (
+    <div className="grid gap-6">
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Kpi
+          testId="kpi-expenses"
+          label={t('reports.expensesTotal')}
+          value={<Amount value={r.totals.expenses} />}
+          current={minorOf(r.totals.expenses)}
+          previous={minorOf(r.totals.previousExpenses)}
+        />
+        <Kpi
+          testId="kpi-supplier-payments"
+          label={t('reports.supplierPayments')}
+          value={<Amount value={r.totals.supplierPayments} />}
+        />
+        <Kpi label={t('reports.cashPaidOut')} value={<Amount value={r.totals.total} />} />
+      </div>
+      <BarChart
+        title={t('reports.expensesTrend')}
+        primaryLabel={t('reports.expensesTotal')}
+        secondaryLabel={t('reports.supplierPayments')}
+        format={fmtMoney(i18n.language)}
+        points={r.byDay.map((d) => ({
+          key: d.date,
+          label: d.date.slice(5),
+          value: minorOf(d.expenses),
+          secondary: minorOf(d.supplierPayments),
+        }))}
+      />
+      <ReportTable
+        title={t('reports.expensesByCategory')}
+        filename={`expenses-by-category-${query.from}-${query.to}`}
+        rows={r.byCategory}
+        rowKey={(x) => x.category}
+        columns={[
+          {
+            key: 'category',
+            header: t('reports.category'),
+            value: (x) => t(`cashCustody.category_${x.category}`),
+          },
+          { key: 'count', header: t('reports.records'), value: (x) => String(x.count) },
+          { key: 'net', header: t('reports.amount'), money: true, value: (x) => x.net.amount },
+        ]}
+      />
+      <ReportTable
+        title={t('reports.paymentsBySupplier')}
+        filename={`supplier-payments-${query.from}-${query.to}`}
+        rows={r.bySupplier}
+        rowKey={(x) => x.supplierId}
+        columns={[
+          {
+            key: 'supplier',
+            header: t('reports.supplier'),
+            value: (x) => localizedName(x, i18n.language),
+          },
+          { key: 'count', header: t('reports.records'), value: (x) => String(x.count) },
+          { key: 'net', header: t('reports.amount'), money: true, value: (x) => x.net.amount },
+        ]}
+      />
+      <ReportTable
+        title={t('reports.outflowsByBranch')}
+        filename={`outflows-by-branch-${query.from}-${query.to}`}
+        rows={r.byBranch}
+        rowKey={(x) => x.branchId}
+        columns={[
+          {
+            key: 'branch',
+            header: t('reports.branch'),
+            value: (x) => localizedName(x, i18n.language),
+          },
+          {
+            key: 'expenses',
+            header: t('reports.expensesTotal'),
+            money: true,
+            value: (x) => x.expenses.amount,
+          },
+          {
+            key: 'supplier',
+            header: t('reports.supplierPayments'),
+            money: true,
+            value: (x) => x.supplierPayments.amount,
+          },
+        ]}
+      />
+      <ReportTable
+        title={t('reports.outflowsBySource')}
+        filename={`outflows-by-source-${query.from}-${query.to}`}
+        rows={r.bySource}
+        rowKey={(x) => x.source}
+        columns={[
+          {
+            key: 'source',
+            header: t('reports.paidFrom'),
+            value: (x) => t(`reports.source_${x.source}`),
+          },
+          { key: 'count', header: t('reports.records'), value: (x) => String(x.count) },
+          { key: 'net', header: t('reports.amount'), money: true, value: (x) => x.net.amount },
+        ]}
+      />
+      <Definitions keys={['expenses', 'period']} />
     </div>
   );
 }

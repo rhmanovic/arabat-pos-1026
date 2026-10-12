@@ -1,4 +1,5 @@
 import {
+  type ExpensesReport,
   type InventoryReport,
   type PaymentsReport,
   type PurchasingReport,
@@ -35,6 +36,15 @@ export class ReportsController {
     @Query(pipe) q: Q,
   ): Promise<PaymentsReport> {
     return this.reports.payments(actor, q);
+  }
+
+  @RequirePermission('manager', 'reports.financial')
+  @Get('expenses')
+  expenses(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Query(pipe) q: Q,
+  ): Promise<ExpensesReport> {
+    return this.reports.expenses(actor, q);
   }
 
   @RequirePermission('manager', 'reports.financial')

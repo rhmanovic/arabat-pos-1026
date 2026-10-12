@@ -164,7 +164,7 @@ Acceptance criteria:
 - **Phase B ✅ (2026-10-12):** cash disbursements (expenses by category, supplier payments linked to a supplier,
   reversals), `cash.deposit` and bank deposits, branch-to-branch transfers via in-transit with
   receipt confirmation, supplier payments on the supplier page.
-- **Phase C:** cash report categories, expenses and supplier payments reports, discrepancy report
+- **Phase C ✅ (2026-10-12):** cash report categories, expenses and supplier payments reports, discrepancy report
   sections (close type, after an uncounted forced close, between shifts), dashboard total-cash card.
 
 ## Later / to be decided

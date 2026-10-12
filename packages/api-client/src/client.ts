@@ -147,6 +147,7 @@ import {
   purchasingReportSchema,
   salesReportSchema,
   shiftsReportSchema,
+  expensesReportSchema,
   type AddOrderItems,
   type CreateRestaurantOrder,
   type PayOrder,
@@ -886,6 +887,10 @@ export function createApiClient(options: ApiClientOptions = {}) {
       shifts: (query: ReportQuery) =>
         request('GET', `/manager/reports/shifts?${toParams(query)}`, {
           schema: shiftsReportSchema,
+        }),
+      expenses: (query: ReportQuery) =>
+        request('GET', `/manager/reports/expenses?${toParams(query)}`, {
+          schema: expensesReportSchema,
         }),
       inventory: (query: ReportQuery) =>
         request('GET', `/manager/reports/inventory?${toParams(query)}`, {

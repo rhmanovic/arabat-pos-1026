@@ -827,3 +827,18 @@ ADR; supersede it.
     treasury → bank, and treasury ↔ in-transit (branch transfers only).
 - **Consequences:** Company cash = treasuries + drawers + in transit. Supplier payments are listed
   on the supplier (purchasing.read). Reports by category and the dashboard card follow in phase C.
+
+## ADR-0092 — Cash custody phase C: cash reports
+- **Date:** 2026-10-12 · **Status:** Accepted (owner approved the phased plan)
+- **Decision:** Reports read the cash ledger, never a second copy:
+  - the payments report gains `custody` (cash by type) from `financial_account_entries` of
+    register and treasury accounts, telling transfers apart by the kinds of their two accounts;
+  - a new `GET /manager/reports/expenses` (`reports.financial`) groups `cash_disbursements`
+    with reversals netted;
+  - the discrepancy report gains close-type totals, between-shifts differences
+    (`shifts.opening_discrepancy_minor`) and differences found after an uncounted forced close
+    (next opening or a `register_count` entry pointing at the shift);
+  - shift reports mark uncounted closes as `uncounted`;
+  - the dashboard reuses the cash overview for a total-cash card.
+- **Consequences:** Sales, collections and revenue keep reading payments and refunds, so
+  transfers and custody moves can never enter them.

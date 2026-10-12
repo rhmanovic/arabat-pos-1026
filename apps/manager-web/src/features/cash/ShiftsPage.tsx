@@ -235,8 +235,82 @@ function Report({ from, to }: { from: string | undefined; to: string | undefined
           value={<Amount value={r.totals.totalOver} />}
           hint={`${r.totals.over} ${t('cash.outcome_over')}`}
         />
-        <StatCard label={t('cash.net')} value={<Amount value={r.totals.net} />} />
+        <StatCard
+          label={t('cash.net')}
+          value={<Amount value={r.totals.net} />}
+          hint={
+            r.totals.uncounted ? t('cash.uncountedHint', { count: r.totals.uncounted }) : undefined
+          }
+        />
       </div>
+      <Section title={t('cash.byCloseType')}>
+        <DataTable
+          caption={t('cash.byCloseType')}
+          rows={r.byCloseType}
+          rowKey={(x) => x.closeType}
+          columns={[
+            {
+              key: 'type',
+              header: t('cash.closeTypeColumn'),
+              cell: (x) => t(`cash.closeType_${x.closeType}`),
+            },
+            { key: 'shifts', header: t('cash.totalShifts'), cell: (x) => x.shifts },
+            {
+              key: 'net',
+              header: t('cash.net'),
+              cell: (x) =>
+                x.closeType === 'forced_uncounted' ? t('cash.noCount') : <Amount value={x.net} />,
+            },
+          ]}
+        />
+      </Section>
+      <Section title={t('cash.afterUncounted')}>
+        <p className="mb-2 text-sm text-fg-muted">{t('cash.afterUncountedHint')}</p>
+        <DataTable
+          caption={t('cash.afterUncounted')}
+          rows={r.afterUncounted}
+          rowKey={(x) => `${x.shiftId}-${x.foundAt}`}
+          empty={t('cash.noneFound')}
+          columns={[
+            { key: 'employee', header: t('cash.employee'), cell: (x) => x.employeeName },
+            {
+              key: 'register',
+              header: t('cash.register'),
+              cell: (x) => localizedName(x, i18n.language),
+            },
+            {
+              key: 'found',
+              header: t('cash.foundAt'),
+              hideBelow: 'sm',
+              cell: (x) =>
+                new Date(x.foundAt).toLocaleString(i18n.language, { numberingSystem: 'latn' }),
+            },
+            {
+              key: 'difference',
+              header: t('cash.discrepancy'),
+              cell: (x) => <Amount value={x.difference} />,
+            },
+          ]}
+        />
+      </Section>
+      <Section title={t('cash.betweenShifts')}>
+        <p className="mb-2 text-sm text-fg-muted">{t('cash.betweenShiftsHint')}</p>
+        <DataTable
+          caption={t('cash.betweenShifts')}
+          rows={r.betweenShifts}
+          rowKey={(x) => x.registerId}
+          empty={t('cash.noneFound')}
+          columns={[
+            {
+              key: 'register',
+              header: t('cash.register'),
+              cell: (x) => `${localizedName(x, i18n.language)} · ${branchName(x.branchId) ?? ''}`,
+            },
+            { key: 'openings', header: t('cash.openings'), cell: (x) => x.openings },
+            { key: 'net', header: t('cash.net'), cell: (x) => <Amount value={x.net} /> },
+          ]}
+        />
+      </Section>
       <Section title={t('cash.byEmployee')}>
         <DataTable
           caption={t('cash.byEmployee')}

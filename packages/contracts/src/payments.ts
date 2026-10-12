@@ -268,7 +268,46 @@ const discrepancyTotals = {
   net: moneySchema,
 };
 export const discrepancyReportSchema = z.object({
-  totals: z.object(discrepancyTotals),
+  totals: z.object({
+    ...discrepancyTotals,
+    /** Force-closed without a count: no difference was booked (ADR-0090). */
+    uncounted: z.number().int(),
+  }),
+  /** Close differences by how the shift was closed. */
+  byCloseType: z.array(
+    z.object({
+      closeType: z.enum(['normal', 'forced', 'forced_uncounted']),
+      shifts: z.number().int(),
+      net: moneySchema,
+    }),
+  ),
+  /**
+   * Differences found at the next count after a shift was force-closed without a count; they
+   * belong to that shift and its cashier, not to whoever counted.
+   */
+  afterUncounted: z.array(
+    z.object({
+      shiftId: z.string(),
+      employeeName: z.string(),
+      registerId: z.string(),
+      nameEn: z.string().nullable(),
+      nameAr: z.string().nullable(),
+      closedAt: z.string(),
+      foundAt: z.string(),
+      difference: moneySchema,
+    }),
+  ),
+  /** Differences found when a shift opened (between shifts), by register. First counts excluded. */
+  betweenShifts: z.array(
+    z.object({
+      registerId: z.string(),
+      branchId: z.string(),
+      nameEn: z.string().nullable(),
+      nameAr: z.string().nullable(),
+      openings: z.number().int(),
+      net: moneySchema,
+    }),
+  ),
   byEmployee: z.array(
     z.object({ membershipId: z.string(), employeeName: z.string(), ...discrepancyTotals }),
   ),

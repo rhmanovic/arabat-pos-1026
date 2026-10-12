@@ -899,6 +899,7 @@ export class ShiftsService {
         conditions.push(sql`s.closed_at < ((${query.to}::date + 1)::timestamp at time zone ${tz})`);
       const where = sql.join(conditions, sql` and `);
       const out = sql`abs(s.discrepancy_minor) > coalesce(s.discrepancy_tolerance_minor, 0)`;
+      // Uncounted forced closes booked no difference (ADR-0090): counted apart, never "balanced".
       const aggregates = sql`count(*)::int as shifts,
         count(*) filter (where not ${out})::int as balanced,
         count(*) filter (where ${out} and s.discrepancy_minor > 0)::int as over,
@@ -915,8 +916,69 @@ export class ShiftsService {
         totalShort: money(BigInt(r['total_short'] as string)),
         net: money(BigInt(r['net'] as string)),
       });
-      const [totals] = (await tx.execute(sql`select ${aggregates} from shifts s where ${where}`))
-        .rows as Record<string, unknown>[];
+      const [totals] = (
+        await tx.execute(sql`select ${aggregates},
+          count(*) filter (where s.close_type = 'forced_uncounted')::int as uncounted
+          from shifts s where ${where}`)
+      ).rows as Record<string, unknown>[];
+      const byCloseType = (
+        await tx.execute(sql`select s.close_type, count(*)::int as n,
+            coalesce(sum(s.discrepancy_minor), 0)::text as net
+          from shifts s where ${where} group by s.close_type order by s.close_type`)
+      ).rows as Record<string, unknown>[];
+      // Openings: period by opening time, same branch scope; the first count is no difference.
+      const openConditions: SQL[] = [scope ?? sql`true`];
+      if (query.from)
+        openConditions.push(
+          sql`s.opened_at >= (${query.from}::date)::timestamp at time zone ${tz}`,
+        );
+      if (query.to)
+        openConditions.push(
+          sql`s.opened_at < ((${query.to}::date + 1)::timestamp at time zone ${tz})`,
+        );
+      const openWhere = sql.join(openConditions, sql` and `);
+      const betweenShifts = (
+        await tx.execute(sql`select r.id, r.branch_id, r.name_en, r.name_ar, count(*)::int as n,
+            coalesce(sum(s.opening_discrepancy_minor), 0)::text as net
+          from shifts s join registers r on r.id = s.register_id
+          where ${openWhere} and not s.opening_is_initial and s.opening_follows_shift_id is null
+            and s.opening_discrepancy_minor is not null and s.opening_discrepancy_minor <> 0
+          group by r.id, r.branch_id, r.name_en, r.name_ar
+          order by sum(abs(s.opening_discrepancy_minor)) desc`)
+      ).rows as Record<string, unknown>[];
+      // Found later for an uncounted forced close: at the next opening, or a manager's count.
+      const foundWhere = (column: SQL) => {
+        const c: SQL[] = [];
+        if (query.from)
+          c.push(sql`${column} >= (${query.from}::date)::timestamp at time zone ${tz}`);
+        if (query.to)
+          c.push(sql`${column} < ((${query.to}::date + 1)::timestamp at time zone ${tz})`);
+        return c.length ? sql.join(c, sql` and `) : sql`true`;
+      };
+      const afterUncounted = (
+        await tx.execute(sql`
+          select f.id, u.full_name, r.id as register_id, r.name_en, r.name_ar, f.closed_at,
+                 x.found_at, x.difference::text as difference
+          from (
+            select n.opening_follows_shift_id as shift_id, n.opened_at as found_at,
+                   n.opening_discrepancy_minor as difference
+              from shifts n
+             where n.opening_follows_shift_id is not null and n.opening_discrepancy_minor <> 0
+               and ${foundWhere(sql`n.opened_at`)}
+            union all
+            select e.source_id, e.created_at, e.amount_minor
+              from financial_account_entries e
+             where e.source_type = 'register_count' and ${foundWhere(sql`e.created_at`)}
+               and exists (select 1 from shifts z where z.id = e.source_id
+                             and z.close_type = 'forced_uncounted')
+          ) x
+          join shifts f on f.id = x.shift_id
+          join shifts s on s.id = f.id
+          join users u on u.id = f.user_id
+          join registers r on r.id = f.register_id
+          where ${scope ?? sql`true`}
+          order by x.found_at desc`)
+      ).rows as Record<string, unknown>[];
       const byEmployee = (
         await tx.execute(sql`select s.membership_id, u.full_name, ${aggregates}
           from shifts s join users u on u.id = s.user_id where ${where}
@@ -928,7 +990,31 @@ export class ShiftsService {
           group by r.id, r.branch_id, r.name_en, r.name_ar order by sum(abs(s.discrepancy_minor)) desc`)
       ).rows as Record<string, unknown>[];
       return {
-        totals: totalsOf(totals!),
+        totals: { ...totalsOf(totals!), uncounted: totals!['uncounted'] as number },
+        byCloseType: byCloseType.map((r) => ({
+          closeType: ((r['close_type'] as string | null) ?? 'normal') as
+            'normal' | 'forced' | 'forced_uncounted',
+          shifts: r['n'] as number,
+          net: money(BigInt(r['net'] as string)),
+        })),
+        afterUncounted: afterUncounted.map((r) => ({
+          shiftId: r['id'] as string,
+          employeeName: r['full_name'] as string,
+          registerId: r['register_id'] as string,
+          nameEn: (r['name_en'] as string | null) ?? null,
+          nameAr: (r['name_ar'] as string | null) ?? null,
+          closedAt: new Date(r['closed_at'] as string).toISOString(),
+          foundAt: new Date(r['found_at'] as string).toISOString(),
+          difference: money(BigInt(r['difference'] as string)),
+        })),
+        betweenShifts: betweenShifts.map((r) => ({
+          registerId: r['id'] as string,
+          branchId: r['branch_id'] as string,
+          nameEn: (r['name_en'] as string | null) ?? null,
+          nameAr: (r['name_ar'] as string | null) ?? null,
+          openings: r['n'] as number,
+          net: money(BigInt(r['net'] as string)),
+        })),
         byEmployee: byEmployee.map((r) => ({
           membershipId: r['membership_id'] as string,
           employeeName: r['full_name'] as string,
