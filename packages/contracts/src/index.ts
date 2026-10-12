@@ -5,3 +5,4 @@ export * from './health.js';
 export * from './interfaces.js';
 export * from './merchants.js';
 export * from './organization.js';
+export * from './inventory.js';

@@ -19,6 +19,18 @@ import {
   invitationPreviewSchema,
   type CreateBranch,
   type ProductListQuery,
+  type AdjustmentListQuery,
+  type CreateAdjustment,
+  type MovementQuery,
+  type StockLevelQuery,
+  adjustmentListSchema,
+  adjustmentSchema,
+  inventorySettingsSchema,
+  inventorySummarySchema,
+  movementListSchema,
+  posAvailabilitySchema,
+  stockLevelListSchema,
+  variantStockSchema,
   type SaveCategory,
   type SaveProduct,
   categoryListSchema,
@@ -250,6 +262,42 @@ export function createApiClient(options: ApiClientOptions = {}) {
       },
       posCatalog: () => request('GET', '/pos/catalog', { schema: posCatalogSchema }),
     },
+    inventory: {
+      levels: (query: StockLevelQuery = {}) =>
+        request('GET', `/manager/inventory/levels?${toParams(query)}`, {
+          schema: stockLevelListSchema,
+        }),
+      summary: (branchId?: string | null) =>
+        request('GET', `/manager/inventory/summary?${toParams({ branchId })}`, {
+          schema: inventorySummarySchema,
+        }),
+      variant: (variantId: string) =>
+        request('GET', `/manager/inventory/variants/${variantId}`, { schema: variantStockSchema }),
+      setThreshold: (body: { branchId: string; variantId: string; threshold: string | null }) =>
+        request('PUT', '/manager/inventory/thresholds', { body }),
+      movements: (query: MovementQuery = {}) =>
+        request('GET', `/manager/inventory/movements?${toParams(query)}`, {
+          schema: movementListSchema,
+        }),
+      adjustments: (query: AdjustmentListQuery = {}) =>
+        request('GET', `/manager/inventory/adjustments?${toParams(query)}`, {
+          schema: adjustmentListSchema,
+        }),
+      adjustment: (id: string) =>
+        request('GET', `/manager/inventory/adjustments/${id}`, { schema: adjustmentSchema }),
+      createAdjustment: (body: CreateAdjustment) =>
+        request('POST', '/manager/inventory/adjustments', { body, schema: adjustmentSchema }),
+      settings: () =>
+        request('GET', '/manager/inventory/settings', { schema: inventorySettingsSchema }),
+      updateSettings: (body: { allowNegativeStock: boolean; version: number }) =>
+        request('PUT', '/manager/inventory/settings', { body, schema: inventorySettingsSchema }),
+      posAvailability: (variantIds?: string[]) =>
+        request(
+          'GET',
+          `/pos/inventory/availability?${toParams({ variantIds: variantIds?.join(',') })}`,
+          { schema: posAvailabilitySchema },
+        ),
+    },
     employees: {
       list: () => request('GET', '/manager/employees', { schema: employeeListSchema }),
       get: (id: string) => request('GET', `/manager/employees/${id}`, { schema: employeeSchema }),
@@ -275,4 +323,11 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('POST', `/manager/employees/${id}/password-reset`, { body: {} }),
     },
   };
+}
+
+function toParams(query: object): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query))
+    if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
+  return params.toString();
 }

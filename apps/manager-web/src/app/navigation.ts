@@ -28,7 +28,7 @@ export const NAV: readonly NavItem[] = [
     key: 'inventory',
     to: '/inventory',
     anyOf: ['inventory.read'],
-    available: false,
+    available: true,
     section: 'operations',
   },
   { key: 'sales', to: '/sales', anyOf: ['sales.read'], available: false, section: 'operations' },

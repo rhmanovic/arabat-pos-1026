@@ -105,6 +105,15 @@ export const commonEn = {
     DUPLICATE_BARCODE: 'Another product already uses this barcode.',
     INVALID_PRICE: 'Invalid amount: use up to 3 decimal places.',
     UNSUPPORTED_MEDIA: 'Only JPEG, PNG and WebP images are accepted.',
+    INSUFFICIENT_STOCK: 'Not enough stock for one or more items.',
+    NOT_STOCK_TRACKED:
+      'Some items cannot be adjusted: stock is not tracked or the item is archived.',
+    OPENING_STOCK_EXISTS:
+      'Opening stock is already set for this item. Use an adjustment or a count.',
+    INVALID_QUANTITY: 'Invalid quantity: use a positive number with up to 3 decimal places.',
+    IDEMPOTENCY_CONFLICT:
+      'This request was already submitted with different content. Reload and try again.',
+    BRANCH_INACTIVE: 'This branch is inactive.',
     PAYLOAD_TOO_LARGE: 'The file is too large.',
     NETWORK: 'Cannot reach the server. Check your connection.',
     UNKNOWN: 'An unexpected error occurred.',

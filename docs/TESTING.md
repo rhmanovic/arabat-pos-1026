@@ -66,6 +66,27 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after Prompt 8 (2026-10-11, local run)
+- `pnpm verify` ✓ (97 unit/web tests), `pnpm test:integration` ✓ (78), `pnpm test:e2e` ✓ (24).
+- `quantity.test.ts`: exact parsing/formatting, value rounding, weighted average edge cases.
+- `inventory.int.test.ts` (12): opening/increase/decrease/count with exact fractional
+  quantities and weighted average; validation (4 decimals, zero, negative, wrong reason,
+  duplicates, services); no-oversell all-or-nothing and the explicit negative-stock
+  setting; idempotent retries (3 concurrent identical requests → one document);
+  **concurrency** (16 concurrent decreases on 10 units → exactly 10 succeed, balance 0;
+  concurrent multi-line increases in opposite order → no deadlock, no lost update);
+  per-branch balances and aggregation; thresholds/summary/valuation rounding; branch
+  scoping, cost hiding, cashier availability; cross-merchant isolation; ledger engine
+  (skips services, rolls back with the caller's transaction, `deny` override);
+  append-only enforcement by the database. The ledger invariant
+  `on_hand = Σ movements` is asserted after each scenario.
+- The concurrency test was verified to fail when the row lock is removed (16 of 16
+  decreases succeeded → oversell), so it really guards the lock.
+- `inventory.test.tsx` (web): stock list without costs for read-only users, value for
+  cost-entitled users, adjustment validation and exact payload with idempotency key.
+- `e2e/inventory.spec.ts`: opening stock with cost, decrease, refused oversell, value
+  3.750, low-stock alert, count posting −0.5, movement history.
+
 ### Results after Prompt 7 (2026-10-11, local run)
 - `pnpm verify` ✓ (90 unit/web tests), `pnpm test:integration` ✓ (66), `pnpm test:e2e` ✓ (23).
 - `catalog.int.test.ts` (14): exact KWD prices (no rounding), variants lifecycle,

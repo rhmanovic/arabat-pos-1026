@@ -313,3 +313,36 @@ ADR; supersede it.
   terminals refresh cheaply (304) and search/barcode lookup is instant on the client.
   Prices are always re-read on the server at checkout; the snapshot is never trusted for
   money.
+
+## ADR-0042 — Inventory ledger with locked balances
+- **Date:** 2026-10-11 · **Status:** Accepted
+- **Decision:** Stock is an append-only ledger (`stock_movements`) plus a balance row per
+  branch and variant (`stock_levels`). One reusable engine (`StockLedgerService.apply`)
+  is the only code that changes balances; it runs inside the caller's transaction, locks
+  the affected balances with `SELECT … FOR UPDATE` in variant-id order, validates the
+  whole document before writing (all-or-nothing) and writes one ledger row per change.
+  Sales, refunds, transfers and purchase receipts call it with their own source document.
+- **Why:** row locks give exact, serial behaviour per item without serializable
+  transactions; the ledger makes every balance explainable and auditable.
+
+## ADR-0043 — Costing: moving weighted average
+- **Date:** 2026-10-11 · **Status:** Accepted (engineering default, see OQ-014)
+- **Decision:** Each branch balance keeps a moving weighted-average unit cost.
+  Incoming stock with a cost: `avg = (on_hand × avg + qty × cost) / (on_hand + qty)`,
+  rounded half-up to the fils; if the balance is ≤ 0 or has no cost yet, the incoming
+  cost replaces it. Incoming stock without a cost uses the current average, then the
+  product cost. Outgoing stock leaves at the current average (recorded on the movement),
+  the average is unchanged. Valuation = Σ positive balances × average, rounded half-up
+  per balance; balances without a known cost are reported as "unvalued".
+
+## ADR-0044 — Negative stock policy
+- **Date:** 2026-10-11 · **Status:** Accepted (BR-062)
+- **Decision:** By default no movement may take a balance below zero
+  (`INSUFFICIENT_STOCK`, 409, listing each short line). A merchant may explicitly allow
+  negative stock (`inventory_settings`); callers can still force `deny` (e.g. transfers).
+
+## ADR-0045 — Exact decimal quantities
+- **Date:** 2026-10-11 · **Status:** Accepted
+- **Decision:** Quantities have 3 decimals, `numeric(14,3)` in PostgreSQL and bigint
+  thousandths in code; inputs with more decimals are rejected, never rounded.
+

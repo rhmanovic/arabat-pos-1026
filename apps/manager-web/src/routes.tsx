@@ -16,6 +16,10 @@ import { CompanySettingsPage } from './features/company/CompanySettingsPage.js';
 import { DashboardPage } from './features/dashboard/DashboardPage.js';
 import { EmployeeDetailPage } from './features/employees/EmployeeDetailPage.js';
 import { EmployeesPage } from './features/employees/EmployeesPage.js';
+import { AdjustmentEditorPage } from './features/inventory/AdjustmentEditorPage.js';
+import { AdjustmentDetailPage, AdjustmentsPage } from './features/inventory/AdjustmentsPage.js';
+import { InventoryPage } from './features/inventory/InventoryPage.js';
+import { MovementsPage } from './features/inventory/MovementsPage.js';
 import { RolesPage } from './features/roles/RolesPage.js';
 import {
   ForgotPasswordPage,
@@ -66,6 +70,17 @@ export const routes: RouteObject[] = [
       { path: 'products/new', element: guard('catalog.manage', <ProductEditorPage />) },
       { path: 'products/:productId', element: guard('catalog.read', <ProductEditorPage />) },
       { path: 'categories', element: guard('catalog.read', <CategoriesPage />) },
+      { path: 'inventory', element: guard('inventory.read', <InventoryPage />) },
+      { path: 'inventory/adjustments', element: guard('inventory.read', <AdjustmentsPage />) },
+      {
+        path: 'inventory/adjustments/new',
+        element: guard('inventory.adjust', <AdjustmentEditorPage />),
+      },
+      {
+        path: 'inventory/adjustments/:adjustmentId',
+        element: guard('inventory.read', <AdjustmentDetailPage />),
+      },
+      { path: 'inventory/movements', element: guard('inventory.read', <MovementsPage />) },
       { path: 'branches', element: guard('branches.read', <BranchesPage />) },
       { path: 'employees', element: guard('employees.read', <EmployeesPage />) },
       { path: 'employees/:membershipId', element: guard('employees.read', <EmployeeDetailPage />) },

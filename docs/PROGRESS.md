@@ -3,7 +3,7 @@
 Only record what has actually been done and verified. Mocked or partial work
 must be labeled as such.
 
-## Current state (2026-10-11, after Prompt 7 — product catalog)
+## Current state (2026-10-11, after Prompt 8 — inventory engine)
 
 | Area | Status | Notes |
 |---|---|---|
@@ -16,7 +16,8 @@ must be labeled as such.
 | Frontend foundation | Done | 3 separate Vite apps + shared packages; ManagerLayout / POSLayout / PlatformLayout; ar/en + RTL/LTR; auth state & protected routes; API client |
 | Manager app | Done for implemented modules | Layout (role-aware sidebar, top bar with merchant/branch context, user menu), dashboard (real counts + onboarding), company profile, branches, employees, invitations, role assignments, roles & permission matrix |
 | Product catalog | Done | Categories, products, variants, SKU/barcodes, prices (fils), costs (permission), branch availability, images, archive; manager screens; POS catalog API |
-| Automated tests | Passing | 90 unit/web, 66 integration, 23 E2E (local) |
+| Inventory | Done | Per-branch balances, append-only ledger, opening/increase/decrease/count documents with reasons, idempotency, row-locked concurrency, no-oversell policy, thresholds, weighted-average valuation, history, manager screens, POS availability API, reusable engine for sales/refunds/transfers |
+| Automated tests | Passing | 97 unit/web, 78 integration, 24 E2E (local) |
 | CI | Written, not yet run | `.github/workflows/ci.yml` |
 | Business modules | Not started | Begin in M1 |
 | Deployment | Not planned | Requires owner approval |
@@ -160,5 +161,21 @@ save failed (removed variants are archived first).
 Not done yet: the POS sale screen uses this catalog from Prompt 10; inventory columns
 come with Prompt 8.
 
+### 2026-10-11 — Prompt 8: Inventory engine
+Implemented: exact quantity helpers in `@arabat/money`; migrations 0008/0009 (settings,
+levels, adjustments, lines, ledger; forced RLS; append-only grants);
+`StockLedgerService` (the single balance-changing engine, row locks in fixed order,
+all-or-nothing validation, weighted-average cost, negative-stock policy, opening-stock
+guard); `InventoryService` (documents with reasons and idempotency keys, levels with
+search/filters/sort/aggregation, summary and valuation, per-variant branch breakdown,
+thresholds, history with merchant-time-zone date filters, settings, POS availability);
+manager screens (stock list, adjustment editor, adjustment list/detail, movement
+history, threshold and settings dialogs) in Arabic/English.
+Verified: see TESTING.md (unit, 12 integration incl. concurrency, web, E2E); Arabic RTL
+desktop screenshots checked; phone width has no horizontal overflow.
+Not done yet (by design, later prompts): sales deduct stock in Prompt 10, refunds
+restock in 11, transfers and purchase receipts in 12 — all through the same engine.
+Open question for the owner: OQ-014 (weighted average vs FIFO).
+
 ## Next step
-Prompt 8 — inventory engine.
+Prompt 9 — payment methods, registers and shifts.

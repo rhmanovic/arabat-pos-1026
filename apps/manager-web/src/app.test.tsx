@@ -120,6 +120,7 @@ describe('manager app', () => {
       'merchant.settings.read',
       'catalog.read',
       'sales.read',
+      'inventory.read',
     ];
     const fetch = fakeApiFetch({
       session: makeSession('manager', permissions),
@@ -138,6 +139,7 @@ describe('manager app', () => {
       'Settings',
       'Products',
       'Categories',
+      'Inventory',
     ]) {
       expect(within(nav).getByRole('link', { name })).toBeInTheDocument();
     }

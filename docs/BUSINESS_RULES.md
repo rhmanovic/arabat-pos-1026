@@ -72,6 +72,22 @@ engineering defaults pending owner confirmation.
 - **BR-051** A product is sold in all branches unless restricted to selected branches.
 - **BR-052** Services do not track inventory.
 
+- **BR-060** Stock is kept per branch and per product variant. Only stock-tracked goods
+  have balances; services never do.
+- **BR-061** Inventory valuation uses the moving weighted-average cost (ADR-0043).
+- **BR-062** No overselling by default: a sale or decrease that would take stock below
+  zero is refused. The owner may explicitly allow negative stock in inventory settings.
+- **BR-063** Manual adjustments always have a type and a reason (opening, increase:
+  found / customer return / received / correction / other; decrease: damaged / expired /
+  lost / theft / internal use / correction / other; count). "Other" requires a note.
+  Opening stock only for items without stock history at that branch.
+- **BR-064** Stock history is permanent: adjustments cannot be edited or deleted;
+  mistakes are corrected with a new adjustment.
+- **BR-065** A low-stock alert threshold can be set per item and branch; the item is
+  "low" when its balance is at or below the threshold, "out" at zero, "negative" below.
+- **BR-066** Costs and stock values are visible only to users with price-management or
+  inventory-report rights; cashiers see quantities only.
+
 ## 4. Money — Confirmed
 
 - **BR-030** Default currency is **KWD** with **3 decimal places** (1 KWD = 1000 fils).
@@ -103,4 +119,5 @@ engineering defaults pending owner confirmation.
 | OQ-010 | ~~Merchant sign-up~~ **Resolved:** self-service owner registration (Prompt 4, BR-040). | — |
 | OQ-011 | Hosting provider, region and data residency (Kuwait / GCC requirements?) — affects cost | Deployment |
 | OQ-012 | Number display: Latin digits (0-9) or Arabic-Indic (٠-٩) by default? (engineering default: Latin, configurable) | M0 UI |
+| OQ-014 | Costing method: weighted average (implemented default) or FIFO required for accounting? | Reports / accounting |
 | OQ-013 | Card payments: manual entry of card amount only, or integrated card terminals (e.g. KNET)? | M4 / later |

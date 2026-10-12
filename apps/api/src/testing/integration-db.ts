@@ -6,6 +6,11 @@ import { integrationDatabaseUrls } from './integration-env.js';
 
 const IDENTITY_TABLES = [
   'audit_log',
+  'stock_movements',
+  'stock_adjustment_lines',
+  'stock_adjustments',
+  'stock_levels',
+  'inventory_settings',
   'product_images',
   'product_branch_availability',
   'product_barcodes',

@@ -134,6 +134,28 @@ Manager screens: `/manager/products` (search, filters, sort, pagination),
 `/manager/products/new`, `/manager/products/:id` (editor with variants, barcodes,
 branch availability, images, archive), `/manager/categories`.
 
+### Inventory API (Prompt 8)
+
+| Method & path | Permission |
+|---|---|
+| `GET /manager/inventory/levels?branchId=&q=&categoryId=&stock=all\|low\|out\|in_stock&sort=&page=` | `inventory.read` (branch, or all readable branches aggregated) |
+| `GET /manager/inventory/summary?branchId=` | `inventory.read` |
+| `GET /manager/inventory/variants/:variantId` | `inventory.read` (per readable branch) |
+| `PUT /manager/inventory/thresholds` | `inventory.adjust` at the branch |
+| `GET /manager/inventory/movements?branchId=&variantId=&type=&from=&to=&page=` | `inventory.read` |
+| `GET /manager/inventory/adjustments`, `GET /manager/inventory/adjustments/:id` | `inventory.read` |
+| `POST /manager/inventory/adjustments` | `inventory.adjust` at the branch (+ `catalog.prices.manage` to enter unit costs) |
+| `GET /manager/inventory/settings` / `PUT …/settings` | `inventory.read` / `merchant.settings.update` |
+| `GET /pos/inventory/availability?variantIds=` | POS `catalog.read` at the bound branch (no costs) |
+
+Costs and values appear only with `catalog.prices.manage` or `reports.inventory` for every
+branch in the result.
+
+Manager screens: `/manager/inventory` (stock list, summary cards, threshold dialog,
+per-branch breakdown, settings dialog), `/manager/inventory/adjustments`,
+`/manager/inventory/adjustments/new`, `/manager/inventory/adjustments/:id`,
+`/manager/inventory/movements`.
+
 ## 5. API namespaces (backend)
 
 | Prefix | Consumers | Notes |

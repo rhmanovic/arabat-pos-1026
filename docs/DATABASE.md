@@ -348,6 +348,26 @@ erDiagram
 | `apps/api/drizzle/0006_catalog.sql` | `categories` (self-referencing tree), `products`, `product_variants` (`price_minor`/`cost_minor` bigint, currency), `product_barcodes`, `product_branch_availability`, `product_images` |
 | `apps/api/drizzle/0007_catalog_rls.sql` | Forced RLS on all catalog tables; `DELETE` revoked on products and variants (archive only); `pg_trgm` + trigram indexes on names and SKU |
 
+| `apps/api/drizzle/0008_inventory.sql` | `inventory_settings`, `stock_levels`, `stock_adjustments`, `stock_adjustment_lines`, `stock_movements` (generated) |
+| `apps/api/drizzle/0009_inventory_rls.sql` | Forced RLS on all inventory tables; `UPDATE/DELETE` revoked on the ledger and adjustment documents; `DELETE` revoked on `stock_levels` |
+
+Inventory model notes (implemented, Prompt 8):
+- Quantities are `numeric(14,3)` (exact thousandths, e.g. kg); the API exchanges them as
+  decimal strings and the code computes with bigint milli-units (`@arabat/money` quantity
+  helpers). Never floats.
+- `stock_movements` is the append-only ledger: signed `quantity`, `balance_after`,
+  `unit_cost_minor`, `value_minor`, `avg_cost_after_minor`, `movement_type`
+  (opening, adjustment, count, sale, sale_void, refund, transfer_out, transfer_in,
+  purchase_receipt), `source_type`/`source_id` of the originating document and the user.
+- `stock_levels` (PK merchant, branch, variant) holds the current balance, the moving
+  weighted-average cost and the optional low-stock threshold. It only changes together
+  with a ledger row, under `SELECT … FOR UPDATE` taken in variant-id order (no lost
+  updates, no deadlocks). Invariant (tested): `on_hand = sum(movements.quantity)`.
+- `stock_adjustments` + `_lines` are manual documents (opening, increase, decrease,
+  count) with reason, note, author and an optional idempotency key
+  (`unique (merchant_id, idempotency_key)` + request hash).
+- `inventory_settings.allow_negative_stock` (default false) is the oversell policy.
+
 Catalog model notes (implemented, Prompt 7):
 - Every product has at least one variant; a simple product has exactly one (the
   default). Prices and costs live on variants as integer fils (`bigint`), with a
