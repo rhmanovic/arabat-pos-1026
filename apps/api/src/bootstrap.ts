@@ -68,6 +68,8 @@ export async function createApp(env: Env): Promise<NestFastifyApplication> {
   const { adapter, logger } = createAdapter(env);
   const app = await NestFactory.create<NestFastifyApplication>(AppModule.forRoot(env), adapter, {
     logger: new PinoNestLogger(logger.child({ context: 'nest' })),
+    // Payment webhooks verify signatures over the exact bytes received.
+    rawBody: true,
   });
   await configureApp(app, env);
   return app;

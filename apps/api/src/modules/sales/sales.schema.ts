@@ -147,14 +147,15 @@ export const sales = pgTable(
   {
     id: id(),
     merchantId: merchantId(),
-    orderId: uuid().notNull(),
+    /** pos | online (Prompt 16). Online sales have no order, register, shift or cashier. */
+    channel: text().notNull().default('pos'),
+    orderId: uuid(),
+    onlineOrderId: uuid(),
     branchId: uuid().notNull(),
-    registerId: uuid().notNull(),
-    shiftId: uuid().notNull(),
-    membershipId: uuid().notNull(),
-    userId: uuid()
-      .notNull()
-      .references(() => users.id),
+    registerId: uuid(),
+    shiftId: uuid(),
+    membershipId: uuid(),
+    userId: uuid().references(() => users.id),
     receiptNumber: text().notNull(),
     /** Null for walk-in sales; fixed when the sale is completed. */
     customerId: uuid(),
@@ -194,6 +195,13 @@ export const sales = pgTable(
     index('sales_shift_idx').on(t.merchantId, t.shiftId),
     index('sales_customer_idx').on(t.merchantId, t.customerId, t.createdAt),
     index('sales_restaurant_order_idx').on(t.merchantId, t.restaurantOrderId),
+    unique('sales_online_order_key').on(t.merchantId, t.onlineOrderId),
+    check(
+      'sales_channel_valid',
+      sql`(${t.channel} = 'pos' and ${t.orderId} is not null and ${t.registerId} is not null and ${t.shiftId} is not null
+           and ${t.membershipId} is not null and ${t.userId} is not null and ${t.onlineOrderId} is null)
+          or (${t.channel} = 'online' and ${t.onlineOrderId} is not null and ${t.shiftId} is null)`,
+    ),
     check(
       'sales_service_type_valid',
       sql`${t.serviceType} is null or ${t.serviceType} in ('dine_in', 'takeaway', 'pickup')`,

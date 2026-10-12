@@ -4,15 +4,17 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { AppInterface } from '@arabat/contracts';
 
-const APPS: Record<AppInterface, string> = {
+/** The storefront (`/store`) is a public app, not an authenticated interface (ADR-0076). */
+const APPS: Record<AppInterface | 'store', string> = {
   manager: 'manager-web',
   pos: 'pos-web',
   platform: 'platform-web',
+  store: 'store-web',
 };
 
 /**
- * Serves the three built SPAs from one origin (production-like local run and E2E tests):
- * `/manager/*`, `/pos/*`, `/platform/*`, each with its own index.html fallback.
+ * Serves the built SPAs from one origin (production-like local run and E2E tests):
+ * `/manager/*`, `/pos/*`, `/platform/*`, `/store/*`, each with its own index.html fallback.
  * In production a CDN/reverse proxy may serve these files instead (ARCHITECTURE.md §12).
  */
 export async function serveWebApps(fastify: FastifyInstance): Promise<void> {

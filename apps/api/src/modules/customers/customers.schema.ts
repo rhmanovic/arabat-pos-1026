@@ -35,9 +35,8 @@ export const customers = pgTable(
     address: text(),
     preferredLanguage: text(),
     status: text().notNull().default('active'),
-    createdByUserId: uuid()
-      .notNull()
-      .references(() => users.id),
+    /** Null for customers created by the online store checkout (Prompt 16). */
+    createdByUserId: uuid().references(() => users.id),
     createdBranchId: uuid(),
     version: integer().notNull().default(1),
     createdAt: createdAt(),

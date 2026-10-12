@@ -318,7 +318,7 @@ export class RefundsService {
     const settings = await this.sales.getSettingsInTx(tx, actor.merchantId);
     const [cashier] = (
       await tx.execute(
-        sql`select u.full_name from sales s join users u on u.id = s.user_id where s.id = ${saleId}`,
+        sql`select coalesce(u.full_name, '') as full_name from sales s left join users u on u.id = s.user_id where s.id = ${saleId}`,
       )
     ).rows as { full_name: string }[];
     const [own] = (

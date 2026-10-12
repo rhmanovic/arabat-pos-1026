@@ -48,7 +48,7 @@ export default defineConfig({
         },
       },
       {
-        // Browser-like tests for the three apps and the shared web packages.
+        // Browser-like tests for the web apps and the shared web packages.
         plugins: [react()],
         resolve: { conditions: ['source', ...defaultClientConditions] },
         test: {
@@ -56,7 +56,7 @@ export default defineConfig({
           environment: 'jsdom',
           setupFiles: ['./vitest.web-setup.ts'],
           include: [
-            'apps/{manager,pos,platform}-web/src/**/*.test.{ts,tsx}',
+            'apps/{manager,pos,platform,store}-web/src/**/*.test.{ts,tsx}',
             'packages/{ui,web-core,i18n,api-client}/src/**/*.test.{ts,tsx}',
           ],
         },

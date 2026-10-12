@@ -37,7 +37,15 @@ export interface MovementContext {
   negative?: 'policy' | 'deny';
   /** Opening stock: refused when the item already has movements at the branch. */
   requireNoHistory?: boolean;
+  /**
+   * Online order whose own reservation this movement consumes (ADR-0079). Sales and
+   * transfers out never take stock reserved for *other* unpaid online orders.
+   */
+  reservationOrderId?: string | null;
 }
+
+/** Movements that must leave stock reserved for online orders alone. */
+const RESPECTS_RESERVATIONS: readonly MovementType[] = ['sale', 'transfer_out'];
 
 export interface AppliedLine {
   variantId: string;
@@ -152,6 +160,10 @@ export class StockLedgerService {
       (ctx.negative ?? 'policy') === 'policy'
         ? await this.allowNegativeStock(tx, ctx.merchantId)
         : false;
+    const reserved =
+      RESPECTS_RESERVATIONS.includes(ctx.movementType) && !allowNegative
+        ? await this.reservedQuantities(tx, ctx.branchId, tracked, ctx.reservationOrderId ?? null)
+        : new Map<string, bigint>();
 
     // Compute everything first so a shortage on any line rejects the whole document.
     const planned: (AppliedLine & { avgAfter: bigint | null })[] = [];
@@ -176,11 +188,12 @@ export class StockLedgerService {
       const previous = level.onHand;
       const delta = line.mode === 'set' ? line.quantityMilli - previous : line.quantityMilli;
       const balance = previous + delta;
-      if (delta < 0n && balance < 0n && !allowNegative) {
+      const held = reserved.get(line.variantId) ?? 0n;
+      if (delta < 0n && balance < held && !allowNegative) {
         shortages.push({
           index,
           variantId: line.variantId,
-          available: previous,
+          available: previous - held,
           requested: -delta,
         });
       }
@@ -257,6 +270,103 @@ export class StockLedgerService {
         .where(and(eq(stockLevels.branchId, ctx.branchId), eq(stockLevels.variantId, variantId)));
     }
     return planned.map(({ avgAfter: _avgAfter, ...rest }) => rest);
+  }
+
+  /** Active, unexpired reservations per variant at a branch (milli-units). */
+  async reservedQuantities(
+    tx: Transaction,
+    branchId: string,
+    variantIds: readonly string[],
+    excludeOrderId: string | null,
+  ): Promise<Map<string, bigint>> {
+    const result = new Map<string, bigint>();
+    if (variantIds.length === 0) return result;
+    const rows = (
+      await tx.execute(sql`
+        select variant_id, (sum(quantity) * 1000)::bigint::text as qty from stock_reservations
+        where branch_id = ${branchId} and status = 'active' and expires_at > now()
+          and variant_id in (${sql.join(
+            variantIds.map((v) => sql`${v}`),
+            sql`, `,
+          )})
+          ${excludeOrderId ? sql`and online_order_id <> ${excludeOrderId}` : sql``}
+        group by variant_id`)
+    ).rows as { variant_id: string; qty: string }[];
+    for (const r of rows) result.set(r.variant_id, BigInt(r.qty));
+    return result;
+  }
+
+  /**
+   * Holds stock for an unpaid online order until `expiresAt` (ADR-0079), under the same
+   * row locks as every stock change, so a reservation and a POS sale can never both take
+   * the last unit. Untracked items need no reservation.
+   */
+  async reserve(
+    tx: Transaction,
+    ctx: { merchantId: string; branchId: string; onlineOrderId: string; expiresAt: Date },
+    lines: readonly { variantId: string; quantityMilli: bigint }[],
+  ): Promise<void> {
+    if (lines.length === 0) return;
+    const variantIds = [...new Set(lines.map((l) => l.variantId))].sort();
+    const variants = await tx
+      .select({ id: productVariants.id, trackInventory: products.trackInventory })
+      .from(productVariants)
+      .innerJoin(products, eq(products.id, productVariants.productId))
+      .where(inArray(productVariants.id, variantIds));
+    const tracked = variants
+      .filter((v) => v.trackInventory)
+      .map((v) => v.id)
+      .sort();
+    if (tracked.length === 0) return;
+    await tx
+      .insert(stockLevels)
+      .values(
+        tracked.map((variantId) => ({
+          merchantId: ctx.merchantId,
+          branchId: ctx.branchId,
+          variantId,
+        })),
+      )
+      .onConflictDoNothing();
+    const locked = await tx
+      .select({ variantId: stockLevels.variantId, onHand: stockLevels.onHand })
+      .from(stockLevels)
+      .where(and(eq(stockLevels.branchId, ctx.branchId), inArray(stockLevels.variantId, tracked)))
+      .orderBy(stockLevels.variantId)
+      .for('update');
+    const allowNegative = await this.allowNegativeStock(tx, ctx.merchantId);
+    const held = await this.reservedQuantities(tx, ctx.branchId, tracked, null);
+    const wanted = new Map<string, bigint>();
+    for (const l of lines)
+      if (tracked.includes(l.variantId))
+        wanted.set(l.variantId, (wanted.get(l.variantId) ?? 0n) + l.quantityMilli);
+    const shortages = locked.flatMap((l) => {
+      const available = parseQuantity(l.onHand) - (held.get(l.variantId) ?? 0n);
+      const want = wanted.get(l.variantId) ?? 0n;
+      return want > available && !allowNegative
+        ? [{ variantId: l.variantId, available, requested: want }]
+        : [];
+    });
+    if (shortages.length)
+      throw new AppError(
+        409,
+        'INSUFFICIENT_STOCK',
+        'Not enough stock for one or more items.',
+        shortages.map((s) => ({
+          path: `lines.${lines.findIndex((l) => l.variantId === s.variantId)}`,
+          code: 'insufficient_stock',
+          message: `available=${formatQuantity(s.available < 0n ? 0n : s.available)} requested=${formatQuantity(s.requested)}`,
+        })),
+      );
+    await tx.execute(sql`
+      insert into stock_reservations (id, merchant_id, branch_id, variant_id, online_order_id, quantity, expires_at)
+      values ${sql.join(
+        [...wanted].map(
+          ([variantId, qty]) =>
+            sql`(${newId()}, ${ctx.merchantId}, ${ctx.branchId}, ${variantId}, ${ctx.onlineOrderId}, ${formatQuantity(qty)}, ${ctx.expiresAt.toISOString()})`,
+        ),
+        sql`, `,
+      )}`);
   }
 
   /** Current balances (milli-units) at a branch; variants without a balance row are 0. */

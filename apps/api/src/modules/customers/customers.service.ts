@@ -1,11 +1,12 @@
-import type {
-  Customer,
-  CustomerNote,
-  CustomerStats,
-  PosCustomer,
-  createCustomerSchema,
-  customerListQuerySchema,
-  saveCustomerSchema,
+import {
+  type Customer,
+  type CustomerNote,
+  type CustomerStats,
+  type PosCustomer,
+  type createCustomerSchema,
+  type customerListQuerySchema,
+  normalizePhone,
+  type saveCustomerSchema,
 } from '@arabat/contracts';
 import { Money } from '@arabat/money';
 import { canAnywhere, can, permissionBranchScope } from '@arabat/permissions';
@@ -40,6 +41,25 @@ const DUPLICATE_PHONE = () =>
       message: 'Another customer already has this phone number.',
     },
   ]);
+
+/**
+ * Finds the customer with this phone (canonical form) or creates a basic profile; used by
+ * the online store checkout (Prompt 16), where there is no staff member creating it.
+ */
+export async function ensureCustomerByPhone(
+  tx: Transaction,
+  merchantId: string,
+  input: { fullName: string; phone: string; email: string | null },
+): Promise<string | null> {
+  const phone = normalizePhone(input.phone);
+  if (!phone) return null;
+  const [found] = (await tx.execute(sql`select id from customers where phone = ${phone}`)).rows as { id: string }[];
+  if (found) return found.id;
+  const id = newId();
+  const code = await nextDocumentNumber(tx, merchantId, 'customer', 'C');
+  await tx.insert(customers).values({ id, merchantId, code, fullName: input.fullName, phone, email: input.email });
+  return id;
+}
 
 /** Exact average (half-up to the fils) of non-negative totals. */
 function average(total: bigint, count: number): bigint {
@@ -129,12 +149,12 @@ export class CustomersService {
     const refundScope = this.branchScope(actor, sql.raw('"rf"."branch_id"'));
     const rows = (
       await tx.execute(sql`
-        select c.*, u.full_name as created_by,
+        select c.*, coalesce(u.full_name, 'Online store') as created_by,
                coalesce(s.n, 0) as sales_count, coalesce(s.total, 0)::text as sales_total,
                s.first_at, s.last_at,
                coalesce(r.n, 0) as refunds_count, coalesce(r.total, 0)::text as refunded_total
         from customers c
-        join users u on u.id = c.created_by_user_id
+        left join users u on u.id = c.created_by_user_id
         left join (select x.customer_id, count(*)::int as n, sum(x.total_minor) as total,
                           min(x.created_at) as first_at, max(x.created_at) as last_at
                    from sales x where x.customer_id is not null and ${salesScope}

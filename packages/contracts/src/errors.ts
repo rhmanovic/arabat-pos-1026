@@ -73,6 +73,10 @@ export const ERROR_CODES = [
   'TABLE_OCCUPIED',
   'ITEM_ALREADY_PAID',
   'MODIFIER_INVALID',
+  'STORE_CLOSED',
+  'GATEWAY_NOT_CONFIGURED',
+  'PAYMENT_SIGNATURE_INVALID',
+  'MINIMUM_ORDER',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

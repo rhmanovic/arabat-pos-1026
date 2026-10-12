@@ -79,6 +79,7 @@ const salesReport = {
   byProduct: [],
   byCategory: [],
   byServiceType: [],
+  byChannel: [],
   profit: null,
 };
 

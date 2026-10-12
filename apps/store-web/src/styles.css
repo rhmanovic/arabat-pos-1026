@@ -1,0 +1,6 @@
+@import 'tailwindcss';
+@import '@arabat/ui/theme.css';
+
+/* Scan shared packages for class names used by their components. */
+@source '../../../packages/ui/src';
+@source '../../../packages/web-core/src';

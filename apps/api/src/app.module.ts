@@ -14,6 +14,7 @@ import { RefundsModule } from './modules/refunds/refunds.module.js';
 import { CustomersModule } from './modules/customers/customers.module.js';
 import { ReportsModule } from './modules/reports/reports.module.js';
 import { RestaurantModule } from './modules/restaurant/restaurant.module.js';
+import { EcommerceModule } from './modules/ecommerce/ecommerce.module.js';
 import { PurchasingModule } from './modules/purchasing/purchasing.module.js';
 import { TransfersModule } from './modules/transfers/transfers.module.js';
 import { AuditModule } from './modules/audit/audit.module.js';
@@ -52,6 +53,7 @@ export class AppModule {
         CustomersModule,
         ReportsModule,
         RestaurantModule,
+        EcommerceModule,
       ],
     };
   }

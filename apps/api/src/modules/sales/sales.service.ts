@@ -631,6 +631,221 @@ export class SalesService {
     return { totalMinor: priced.totalMinor, receiptNumber };
   }
 
+  /**
+   * Online store sale (Prompt 16): the paid online order becomes an immutable sale with
+   * the same stock consumption, receipt numbering, fee calculation and balance entries as a
+   * POS sale, but without register, shift or cashier (`channel = 'online'`). Prices are the
+   * ones the customer saw at checkout. Consumes the order's own stock reservation.
+   */
+  async completeOnlineSaleInTx(
+    tx: Transaction,
+    merchantId: string,
+    args: {
+      saleId: string;
+      branchId: string;
+      onlineOrderId: string;
+      orderNumber: string;
+      customerId: string | null;
+      lines: {
+        variantId: string;
+        productId: string;
+        quantityMilli: bigint;
+        unitPriceMinor: bigint;
+        nameEn: string | null;
+        nameAr: string | null;
+        variantNameEn: string | null;
+        variantNameAr: string | null;
+        sku: string | null;
+      }[];
+      payment: { methodId: string; amountMinor: bigint; providerReference: string };
+    },
+  ): Promise<{ receiptNumber: string; totalMinor: bigint }> {
+    const { saleId, branchId, lines } = args;
+    const consumption = await stockConsumption(
+      tx,
+      lines.map((l) => ({
+        variantId: l.variantId,
+        quantityMilli: l.quantityMilli,
+        modifierIds: [],
+      })),
+    );
+    const applied = await this.ledger.apply(
+      tx,
+      {
+        merchantId,
+        branchId,
+        movementType: 'sale',
+        sourceType: 'sale',
+        sourceId: saleId,
+        userId: null,
+        reservationOrderId: args.onlineOrderId,
+      },
+      consumption.map((c) => ({
+        variantId: c.variantId,
+        mode: 'delta' as const,
+        quantityMilli: -c.quantityMilli,
+      })),
+    );
+    const catalogCosts = new Map(
+      (
+        (
+          await tx.execute(
+            sql`select id, cost_minor::text as cost from product_variants where id in (${sql.join(
+              lines.map((l) => sql`${l.variantId}`),
+              sql`, `,
+            )})`,
+          )
+        ).rows as { id: string; cost: string | null }[]
+      ).map((r) => [r.id, r.cost === null ? null : BigInt(r.cost)]),
+    );
+    const costs = consumptionCosts(
+      lines.length,
+      consumption,
+      applied,
+      (i) => catalogCosts.get(lines[i]!.variantId) ?? null,
+    );
+    const priced = priceCart(
+      lines.map((l) => ({
+        unitPriceMinor: l.unitPriceMinor,
+        quantityMilli: l.quantityMilli,
+        discount: null,
+      })),
+      null,
+    );
+    if (priced.totalMinor !== args.payment.amountMinor)
+      throw new AppError(
+        409,
+        'PAYMENT_TOTAL_MISMATCH',
+        'The payment does not match the order total.',
+      );
+    const [method] = (
+      await tx.execute(sql`select * from payment_methods where id = ${args.payment.methodId}`)
+    ).rows as Record<string, unknown>[];
+    if (!method) throw AppError.notFound('Payment method not found.');
+    const feeMinor = processingFee(priced.totalMinor, {
+      type: method['fee_type'] as FeeType,
+      fixedMinor: BigInt(method['fee_fixed_minor'] as string),
+      percent: method['fee_percent'] as string,
+    });
+    const receiptNumber = await this.nextReceiptNumber(tx, merchantId, branchId);
+    let costMinor: bigint | null = 0n;
+    const lineRows = lines.map((l, i) => {
+      const lineCost = costs.total[i]!;
+      if (lineCost === null) costMinor = null;
+      else if (costMinor !== null) costMinor += lineCost;
+      const unitCost =
+        costs.own[i] ??
+        (lineCost === null
+          ? null
+          : (2n * lineCost * 1000n + l.quantityMilli) / (2n * l.quantityMilli));
+      const p = priced.lines[i]!;
+      return {
+        merchantId,
+        saleId,
+        position: i,
+        variantId: l.variantId,
+        productId: l.productId,
+        nameEn: l.nameEn,
+        nameAr: l.nameAr,
+        variantNameEn: l.variantNameEn,
+        variantNameAr: l.variantNameAr,
+        sku: l.sku,
+        quantity: formatQuantity(l.quantityMilli),
+        listUnitPriceMinor: l.unitPriceMinor,
+        unitPriceMinor: l.unitPriceMinor,
+        priceOverridden: false,
+        grossMinor: p.grossMinor,
+        discountType: null,
+        discountValue: null,
+        lineDiscountMinor: 0n,
+        orderDiscountMinor: 0n,
+        netMinor: p.netMinor,
+        trackInventory: costs.tracked[i]!,
+        unitCostMinor: unitCost,
+      };
+    });
+    await tx.insert(sales).values({
+      id: saleId,
+      merchantId,
+      channel: 'online',
+      onlineOrderId: args.onlineOrderId,
+      branchId,
+      receiptNumber,
+      customerId: args.customerId,
+      subtotalMinor: priced.subtotalMinor,
+      lineDiscountsMinor: 0n,
+      orderDiscountMinor: 0n,
+      totalMinor: priced.totalMinor,
+      paidMinor: priced.totalMinor,
+      changeMinor: 0n,
+      feesMinor: feeMinor,
+      costMinor,
+    });
+    await tx.insert(saleLines).values(lineRows);
+    const paymentId = newId();
+    const accountId = (method['financial_account_id'] as string | null) ?? null;
+    await tx.insert(payments).values({
+      id: paymentId,
+      merchantId,
+      saleId,
+      branchId,
+      shiftId: null,
+      paymentMethodId: args.payment.methodId,
+      methodKind: method['kind'] as string,
+      methodNameEn: (method['name_en'] as string | null) ?? null,
+      methodNameAr: (method['name_ar'] as string | null) ?? null,
+      amountMinor: priced.totalMinor,
+      feeMinor,
+      status: 'succeeded',
+      verification: 'gateway',
+      reference: args.payment.providerReference,
+      financialAccountId: accountId,
+    });
+    if (accountId)
+      await tx.insert(financialAccountEntries).values([
+        {
+          id: newId(),
+          merchantId,
+          accountId,
+          amountMinor: priced.totalMinor,
+          entryType: 'payment',
+          sourceType: 'payment',
+          sourceId: paymentId,
+          description: receiptNumber,
+          createdByUserId: null,
+        },
+        ...(feeMinor > 0n
+          ? [
+              {
+                id: newId(),
+                merchantId,
+                accountId,
+                amountMinor: -feeMinor,
+                entryType: 'fee',
+                sourceType: 'payment',
+                sourceId: paymentId,
+                description: receiptNumber,
+                createdByUserId: null,
+              },
+            ]
+          : []),
+      ]);
+    await this.audit.recordIn(tx, {
+      merchantId,
+      actorType: 'system',
+      action: 'sale.completed_online',
+      targetType: 'sale',
+      targetId: saleId,
+      details: {
+        receiptNumber,
+        onlineOrder: args.orderNumber,
+        total: Money.ofMinor(priced.totalMinor, CURRENCY).toDecimalString(),
+        providerReference: args.payment.providerReference,
+      },
+    });
+    return { receiptNumber, totalMinor: priced.totalMinor };
+  }
+
   async replay(actor: MerchantActor, key: string, requestHash: string): Promise<Sale | null> {
     const [order] = await this.database.withMerchantTx(actor.merchantId, (tx) =>
       tx
@@ -1009,7 +1224,7 @@ export class SalesService {
                      (select coalesce(sum(r.total_minor), 0) from refunds r
                       where r.sale_id = s.id and r.status = 'completed')::text as refunded,
                      c.code as customer_code, c.full_name as customer_name
-              from sales s join users u on u.id = s.user_id left join customers c on c.id = s.customer_id
+              from sales s left join users u on u.id = s.user_id left join customers c on c.id = s.customer_id
               where s.id = ${id}`,
         )
       ).rows as Record<string, unknown>[];
@@ -1035,12 +1250,13 @@ export class SalesService {
       const manager = view === 'manager';
       return {
         id,
-        orderId: s['order_id'] as string,
+        orderId: (s['order_id'] as string | null) ?? null,
         receiptNumber: s['receipt_number'] as string,
         branchId: s['branch_id'] as string,
-        registerId: s['register_id'] as string,
-        shiftId: s['shift_id'] as string,
-        cashierName: s['full_name'] as string,
+        registerId: (s['register_id'] as string | null) ?? null,
+        shiftId: (s['shift_id'] as string | null) ?? null,
+        cashierName: (s['full_name'] as string | null) ?? '',
+        channel: s['channel'] as 'pos' | 'online',
         createdAt: iso(s['created_at']),
         subtotal: money(s['subtotal_minor'] as string),
         lineDiscounts: money(s['line_discounts_minor'] as string),
@@ -1109,7 +1325,7 @@ export class SalesService {
           select m.display_name_en, m.display_name_ar, b.name_en as b_en, b.name_ar as b_ar, b.phone, b.address,
                  b.receipt_header, b.receipt_footer, r.code, r.name_en as r_en, r.name_ar as r_ar
           from sales s join merchants m on m.id = s.merchant_id join branches b on b.id = s.branch_id
-          join registers r on r.id = s.register_id where s.id = ${id}`)
+          left join registers r on r.id = s.register_id where s.id = ${id}`)
       ).rows as Record<string, string | null>[];
       return {
         sale: {
@@ -1131,7 +1347,7 @@ export class SalesService {
           receiptFooter: info!['receipt_footer'] ?? null,
         },
         register: {
-          code: info!['code']!,
+          code: info!['code'] ?? 'ONLINE',
           nameEn: info!['r_en'] ?? null,
           nameAr: info!['r_ar'] ?? null,
         },
@@ -1184,6 +1400,7 @@ export class SalesService {
       const conditions: SQL[] = [scope ?? sql`true`];
       if (query.shiftId) conditions.push(sql`s.shift_id = ${query.shiftId}`);
       if (query.customerId) conditions.push(sql`s.customer_id = ${query.customerId}`);
+      if (query.channel) conditions.push(sql`s.channel = ${query.channel}`);
       if (query.serviceType)
         conditions.push(
           query.serviceType === 'retail'
@@ -1239,13 +1456,13 @@ export class SalesService {
     const rows = (
       await tx.execute(sql`
         select s.id, s.receipt_number, s.branch_id, s.created_at, s.total_minor::text as total, u.full_name,
-               s.service_type,
+               s.service_type, s.channel,
                (select coalesce(sum(l.quantity), 0)::text from sale_lines l where l.sale_id = s.id) as items,
                (select coalesce(array_agg(distinct p.method_kind), '{}') from payments p where p.sale_id = s.id) as kinds,
                (select coalesce(sum(r.total_minor), 0) from refunds r
                 where r.sale_id = s.id and r.status = 'completed')::text as refunded,
                c.full_name as customer_name
-        from sales s join users u on u.id = s.user_id left join customers c on c.id = s.customer_id
+        from sales s left join users u on u.id = s.user_id left join customers c on c.id = s.customer_id
         where ${where}
         order by s.created_at desc, s.id desc limit ${limit} offset ${offset}`)
     ).rows as Record<string, unknown>[];
@@ -1253,7 +1470,7 @@ export class SalesService {
       id: r['id'] as string,
       receiptNumber: r['receipt_number'] as string,
       branchId: r['branch_id'] as string,
-      cashierName: r['full_name'] as string,
+      cashierName: (r['full_name'] as string | null) ?? '',
       createdAt: iso(r['created_at']),
       total: money(r['total'] as string),
       itemCount: formatQuantity(parseQuantity(r['items'] as string)),
@@ -1261,6 +1478,7 @@ export class SalesService {
       refunded: money(r['refunded'] as string),
       customerName: (r['customer_name'] as string | null) ?? null,
       serviceType: (r['service_type'] as SaleSummary['serviceType']) ?? null,
+      channel: r['channel'] as SaleSummary['channel'],
     }));
   }
 }

@@ -13,3 +13,4 @@ export * from './purchasing.js';
 export * from './customers.js';
 export * from './reports.js';
 export * from './restaurant.js';
+export * from './ecommerce.js';

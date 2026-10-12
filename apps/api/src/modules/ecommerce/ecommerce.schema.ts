@@ -1,0 +1,280 @@
+import { sql } from 'drizzle-orm';
+import {
+  bigint,
+  boolean,
+  char,
+  check,
+  foreignKey,
+  index,
+  integer,
+  jsonb,
+  numeric,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  unique,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
+import { createdAt, id, merchantId, updatedAt } from '../../database/schema/columns.js';
+import { branches } from '../branches/branches.schema.js';
+import { productVariants, products } from '../catalog/catalog.schema.js';
+import { merchants } from '../merchants/merchants.schema.js';
+
+const quantity = () => numeric({ precision: 14, scale: 3 });
+const minor = () => bigint({ mode: 'bigint' });
+
+/** One online store per merchant (Prompt 16). Public pages resolve it by `slug`. */
+export const onlineStores = pgTable(
+  'online_stores',
+  {
+    merchantId: uuid()
+      .primaryKey()
+      .references(() => merchants.id),
+    slug: text().notNull(),
+    /** draft (never public) → published ↔ paused (closed for orders, still visible). */
+    status: text().notNull().default('draft'),
+    nameEn: text(),
+    nameAr: text(),
+    taglineEn: text(),
+    taglineAr: text(),
+    announcementEn: text(),
+    announcementAr: text(),
+    /** Brand colour as #rrggbb. */
+    primaryColor: text().notNull().default('#1e3a8a'),
+    contactPhone: text(),
+    contactEmail: text(),
+    /** Stock, prices and fulfilment come from this branch. */
+    fulfillmentBranchId: uuid(),
+    pickupEnabled: boolean().notNull().default(true),
+    deliveryEnabled: boolean().notNull().default(false),
+    deliveryFeeMinor: minor()
+      .notNull()
+      .default(sql`0`),
+    minimumOrderMinor: minor()
+      .notNull()
+      .default(sql`0`),
+    /** Minutes an unpaid order keeps its stock reserved. */
+    reservationMinutes: integer().notNull().default(30),
+    version: integer().notNull().default(1),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex('online_stores_slug_key').on(sql`lower(${t.slug})`),
+    foreignKey({
+      columns: [t.merchantId, t.fulfillmentBranchId],
+      foreignColumns: [branches.merchantId, branches.id],
+    }),
+    check('online_stores_status_valid', sql`${t.status} in ('draft', 'published', 'paused')`),
+    check('online_stores_slug_valid', sql`${t.slug} ~ '^[a-z0-9][a-z0-9-]{1,40}$'`),
+    check('online_stores_color_valid', sql`${t.primaryColor} ~ '^#[0-9a-fA-F]{6}$'`),
+    check(
+      'online_stores_money_valid',
+      sql`${t.deliveryFeeMinor} >= 0 and ${t.minimumOrderMinor} >= 0`,
+    ),
+    check('online_stores_reservation_valid', sql`${t.reservationMinutes} between 5 and 1440`),
+  ],
+);
+
+/** Products shown in the online store (presence = listed). */
+export const onlineListings = pgTable(
+  'online_listings',
+  {
+    merchantId: merchantId(),
+    productId: uuid()
+      .notNull()
+      .references(() => products.id),
+    position: integer().notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.merchantId, t.productId] })],
+);
+
+/**
+ * Online order: customer intent until paid; the sale created on payment is the financial
+ * document (ADR-0077). Status: pending_payment → paid → preparing → ready |
+ * out_for_delivery → completed; or expired / payment_failed / cancelled; needs_attention
+ * when a late payment can no longer be fulfilled.
+ */
+export const onlineOrders = pgTable(
+  'online_orders',
+  {
+    id: id(),
+    merchantId: merchantId(),
+    number: text().notNull(),
+    branchId: uuid().notNull(),
+    status: text().notNull().default('pending_payment'),
+    fulfillment: text().notNull(),
+    customerName: text().notNull(),
+    customerPhone: text().notNull(),
+    customerEmail: text(),
+    deliveryAddress: text(),
+    note: text(),
+    customerId: uuid(),
+    currency: char({ length: 3 }).notNull().default('KWD'),
+    subtotalMinor: minor().notNull(),
+    deliveryFeeMinor: minor().notNull(),
+    totalMinor: minor().notNull(),
+    paymentMethodId: uuid().notNull(),
+    /** Unguessable token for the customer's tracking page. */
+    trackingToken: text().notNull(),
+    idempotencyKey: uuid().notNull(),
+    requestHash: text().notNull(),
+    reservedUntil: timestamp({ withTimezone: true }).notNull(),
+    saleId: uuid(),
+    paidAt: timestamp({ withTimezone: true }),
+    completedAt: timestamp({ withTimezone: true }),
+    cancelledAt: timestamp({ withTimezone: true }),
+    statusNote: text(),
+    /** Status changes for the customer's timeline: [{ status, at }]. */
+    history: jsonb().notNull().default([]),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    version: integer().notNull().default(1),
+  },
+  (t) => [
+    unique('online_orders_merchant_id_id_key').on(t.merchantId, t.id),
+    unique('online_orders_number_key').on(t.merchantId, t.number),
+    unique('online_orders_idempotency_key').on(t.merchantId, t.idempotencyKey),
+    uniqueIndex('online_orders_tracking_key').on(t.trackingToken),
+    foreignKey({
+      columns: [t.merchantId, t.branchId],
+      foreignColumns: [branches.merchantId, branches.id],
+    }),
+    check(
+      'online_orders_status_valid',
+      sql`${t.status} in ('pending_payment', 'paid', 'preparing', 'ready', 'out_for_delivery', 'completed',
+                          'expired', 'payment_failed', 'cancelled', 'needs_attention')`,
+    ),
+    check('online_orders_fulfillment_valid', sql`${t.fulfillment} in ('pickup', 'delivery')`),
+    check(
+      'online_orders_delivery_address',
+      sql`${t.fulfillment} <> 'delivery' or ${t.deliveryAddress} is not null`,
+    ),
+    check(
+      'online_orders_totals',
+      sql`${t.totalMinor} = ${t.subtotalMinor} + ${t.deliveryFeeMinor} and ${t.totalMinor} > 0`,
+    ),
+    index('online_orders_status_idx').on(t.merchantId, t.status, t.createdAt),
+  ],
+);
+
+export const onlineOrderLines = pgTable(
+  'online_order_lines',
+  {
+    merchantId: merchantId(),
+    orderId: uuid().notNull(),
+    position: integer().notNull(),
+    variantId: uuid()
+      .notNull()
+      .references(() => productVariants.id),
+    productId: uuid().notNull(),
+    nameEn: text(),
+    nameAr: text(),
+    variantNameEn: text(),
+    variantNameAr: text(),
+    sku: text(),
+    quantity: quantity().notNull(),
+    /** Price shown at checkout; the sale uses it even if the catalog price changes later. */
+    unitPriceMinor: minor().notNull(),
+    lineTotalMinor: minor().notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orderId, t.position] }),
+    foreignKey({
+      columns: [t.merchantId, t.orderId],
+      foreignColumns: [onlineOrders.merchantId, onlineOrders.id],
+    }),
+    check('online_order_lines_positive', sql`${t.quantity} > 0 and ${t.unitPriceMinor} >= 0`),
+  ],
+);
+
+/**
+ * Stock held for an unpaid online order (ADR-0079). Counts against availability for POS
+ * and online sales while `status = 'active' and expires_at > now()`.
+ */
+export const stockReservations = pgTable(
+  'stock_reservations',
+  {
+    id: id(),
+    merchantId: merchantId(),
+    branchId: uuid().notNull(),
+    variantId: uuid().notNull(),
+    onlineOrderId: uuid().notNull(),
+    quantity: quantity().notNull(),
+    status: text().notNull().default('active'),
+    expiresAt: timestamp({ withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+    releasedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.merchantId, t.onlineOrderId],
+      foreignColumns: [onlineOrders.merchantId, onlineOrders.id],
+    }),
+    check('stock_reservations_quantity_positive', sql`${t.quantity} > 0`),
+    check(
+      'stock_reservations_status_valid',
+      sql`${t.status} in ('active', 'consumed', 'released')`,
+    ),
+    index('stock_reservations_active_idx')
+      .on(t.merchantId, t.branchId, t.variantId)
+      .where(sql`${t.status} = 'active'`),
+  ],
+);
+
+/**
+ * One payment attempt at a gateway (mutable state machine). A succeeded attempt is copied
+ * into the append-only `payments` table of the sale. Status: initiated → succeeded |
+ * failed | cancelled | expired.
+ */
+export const onlinePayments = pgTable(
+  'online_payments',
+  {
+    id: id(),
+    merchantId: merchantId(),
+    onlineOrderId: uuid().notNull(),
+    provider: text().notNull(),
+    providerReference: text(),
+    amountMinor: minor().notNull(),
+    currency: char({ length: 3 }).notNull().default('KWD'),
+    status: text().notNull().default('initiated'),
+    redirectUrl: text(),
+    failureReason: text(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    completedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [
+    unique('online_payments_merchant_id_id_key').on(t.merchantId, t.id),
+    uniqueIndex('online_payments_provider_ref_key').on(t.provider, t.providerReference),
+    foreignKey({
+      columns: [t.merchantId, t.onlineOrderId],
+      foreignColumns: [onlineOrders.merchantId, onlineOrders.id],
+    }),
+    check(
+      'online_payments_status_valid',
+      sql`${t.status} in ('initiated', 'succeeded', 'failed', 'cancelled', 'expired')`,
+    ),
+    check('online_payments_amount_positive', sql`${t.amountMinor} > 0`),
+  ],
+);
+
+/** Every gateway notification received, once per provider event id (idempotency + audit). */
+export const paymentEvents = pgTable(
+  'payment_events',
+  {
+    id: id(),
+    merchantId: merchantId(),
+    provider: text().notNull(),
+    eventId: text().notNull(),
+    onlinePaymentId: uuid().notNull(),
+    status: text().notNull(),
+    amountMinor: minor(),
+    payload: jsonb().notNull(),
+    outcome: text().notNull(),
+    receivedAt: createdAt(),
+  },
+  (t) => [uniqueIndex('payment_events_provider_event_key').on(t.provider, t.eventId)],
+);

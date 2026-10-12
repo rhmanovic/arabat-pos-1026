@@ -18,6 +18,7 @@ export type PermissionGroup =
   | 'purchasing'
   | 'customers'
   | 'restaurant'
+  | 'online'
   | 'reports'
   | 'payments'
   | 'employees'
@@ -171,6 +172,18 @@ export const PERMISSIONS = {
     scope: 'branch',
     group: 'restaurant',
     description: 'Use the kitchen display',
+  },
+
+  // Online store (Prompt 16)
+  'online.manage': {
+    scope: 'merchant',
+    group: 'online',
+    description: 'Configure the online store, listings and online payment methods',
+  },
+  'online.orders': {
+    scope: 'branch',
+    group: 'online',
+    description: 'View and fulfil online orders',
   },
 
   // Reports

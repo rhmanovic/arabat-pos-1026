@@ -130,6 +130,14 @@ export const salesReportSchema = z.object({
       refunds: moneySchema,
     }),
   ),
+  /** POS vs. online store (Prompt 16). */
+  byChannel: z.array(
+    z.object({
+      channel: z.enum(['pos', 'online']),
+      saleCount: z.number().int(),
+      netSales: moneySchema,
+    }),
+  ),
   /** Retail sales vs. restaurant service types (Prompt 15). */
   byServiceType: z.array(
     z.object({

@@ -176,6 +176,20 @@
       "when": 1791791082807,
       "tag": "0024_restaurant_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791793427091,
+      "tag": "0025_ecommerce",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791793428846,
+      "tag": "0026_ecommerce_rls",
+      "breakpoints": true
     }
   ]
 }

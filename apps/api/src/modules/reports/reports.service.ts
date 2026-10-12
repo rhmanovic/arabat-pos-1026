@@ -316,7 +316,7 @@ export class ReportsService {
         sql`select s.membership_id, max(u.full_name) as name, count(*)::int as n,
                    sum(s.line_discounts_minor + s.order_discount_minor)::text as disc,
                    sum(s.total_minor)::text as net
-            from sales s join users u on u.id = s.user_id where ${saleWhere} group by 1`,
+            from sales s join users u on u.id = s.user_id where ${saleWhere} and s.channel = 'pos' group by 1`,
       );
       const empRefunds = await this.rows(
         tx,
@@ -421,6 +421,17 @@ export class ReportsService {
         netSales: money(big(r['net'])),
       }));
 
+      const byChannel = (
+        await this.rows(
+          tx,
+          sql`select s.channel, count(*)::int as n, sum(s.total_minor)::text as net
+              from sales s where ${saleWhere} group by 1 order by 1 desc`,
+        )
+      ).map((x) => ({
+        channel: x['channel'] as 'pos' | 'online',
+        saleCount: int(x['n']),
+        netSales: money(big(x['net'])),
+      }));
       const byServiceType = (
         await this.rows(
           tx,
@@ -488,6 +499,7 @@ export class ReportsService {
         byProduct,
         byCategory,
         byServiceType,
+        byChannel,
         profit,
       };
     });

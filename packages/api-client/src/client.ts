@@ -141,6 +141,19 @@ import {
   posMenuSchema,
   restaurantOrderSchema,
   restaurantSettingsSchema,
+  type OnlineOrderListQuery,
+  type SaveOnlineStore,
+  type StoreCheckout,
+  listingListSchema,
+  mockPaymentSchema,
+  onlineOrderListSchema,
+  onlineOrderSchema,
+  onlineStoreSchema,
+  publicOrderSchema,
+  storeCheckoutResultSchema,
+  storeProductListSchema,
+  storeProductSchema,
+  storefrontSchema,
 } from '@arabat/contracts';
 import { z } from 'zod';
 import { ApiError, ContractError, NetworkError, toApiError } from './errors.js';
@@ -525,6 +538,60 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('POST', `/manager/purchase-orders/${id}/receipts`, {
           body,
           schema: purchaseOrderSchema,
+        }),
+    },
+    online: {
+      store: () => request('GET', '/manager/online/store', { schema: onlineStoreSchema }),
+      saveStore: (body: SaveOnlineStore) =>
+        request('PUT', '/manager/online/store', { body, schema: onlineStoreSchema }),
+      listings: () => request('GET', '/manager/online/listings', { schema: listingListSchema }),
+      setListings: (body: { productIds: string[]; listed: boolean }) =>
+        request('PUT', '/manager/online/listings', { body, schema: listingListSchema }),
+      orders: (query: OnlineOrderListQuery = {}) =>
+        request('GET', `/manager/online/orders?${toParams(query)}`, {
+          schema: onlineOrderListSchema,
+        }),
+      order: (id: string) =>
+        request('GET', `/manager/online/orders/${id}`, { schema: onlineOrderSchema }),
+      act: (
+        id: string,
+        body: {
+          action: 'preparing' | 'ready' | 'out_for_delivery' | 'completed' | 'cancel';
+          note?: string | null;
+          version: number;
+        },
+      ) =>
+        request('POST', `/manager/online/orders/${id}/action`, { body, schema: onlineOrderSchema }),
+    },
+    /** Public storefront (no session). */
+    store: {
+      info: (slug: string) =>
+        request('GET', `/store/${encodeURIComponent(slug)}`, { schema: storefrontSchema }),
+      products: (slug: string) =>
+        request('GET', `/store/${encodeURIComponent(slug)}/products`, {
+          schema: storeProductListSchema,
+        }),
+      product: (slug: string, productId: string) =>
+        request('GET', `/store/${encodeURIComponent(slug)}/products/${productId}`, {
+          schema: storeProductSchema,
+        }),
+      checkout: (slug: string, body: StoreCheckout) =>
+        request('POST', `/store/${encodeURIComponent(slug)}/checkout`, {
+          body,
+          schema: storeCheckoutResultSchema,
+        }),
+      order: (slug: string, token: string) =>
+        request('GET', `/store/${encodeURIComponent(slug)}/orders/${token}`, {
+          schema: publicOrderSchema,
+        }),
+      mockPayment: (reference: string) =>
+        request('GET', `/payments/mock/${encodeURIComponent(reference)}`, {
+          schema: mockPaymentSchema,
+        }),
+      mockComplete: (reference: string, outcome: 'succeeded' | 'failed' | 'cancelled') =>
+        request('POST', `/payments/mock/${encodeURIComponent(reference)}`, {
+          body: { outcome },
+          schema: mockPaymentSchema,
         }),
     },
     restaurant: {

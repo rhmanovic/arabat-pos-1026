@@ -61,7 +61,10 @@ export async function createTestApp(
   builder.overrideProvider(Mailer).useValue(options.mailer ?? new InMemoryMailer());
   const moduleRef = await builder.compile();
   const { adapter } = createAdapter(env);
-  const app = moduleRef.createNestApplication<NestFastifyApplication>(adapter, { logger: false });
+  const app = moduleRef.createNestApplication<NestFastifyApplication>(adapter, {
+    logger: false,
+    rawBody: true,
+  });
   await configureApp(app, env);
   await app.init();
   await app.getHttpAdapter().getInstance().ready();

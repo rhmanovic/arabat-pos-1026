@@ -46,11 +46,25 @@ export const envSchema = z.object({
   /** Public URLs of the apps, used in e-mail links (password reset). */
   PUBLIC_MANAGER_URL: z.url().default('http://localhost:5173/manager'),
   PUBLIC_POS_URL: z.url().default('http://localhost:5174/pos'),
+  /** Public URL of the storefront app (payment return links). */
+  PUBLIC_STORE_URL: z.url().default('http://localhost:5176/store'),
+  /**
+   * The mock payment gateway (test payments, no money moves). Off by default in
+   * production; real gateways (Tap, UPayments, Hesabe, Bookeey) are never live without
+   * approval and tested credentials (ADR-0078).
+   */
+  PAYMENT_MOCK_ENABLED: booleanString.optional(),
+  /** Secret signing mock gateway webhooks (HMAC-SHA256). */
+  PAYMENT_MOCK_SECRET: z.string().min(16).default('dev-only-mock-gateway-secret'),
   /** Local directory for uploaded files (product images). */
   FILE_STORAGE_DIR: z.string().default('var/uploads'),
 });
 
 export type Env = z.infer<typeof envSchema>;
+
+export function mockPaymentsEnabled(env: Env): boolean {
+  return env.PAYMENT_MOCK_ENABLED ?? env.NODE_ENV !== 'production';
+}
 
 export function cookieSecure(env: Env): boolean {
   return env.COOKIE_SECURE ?? env.NODE_ENV === 'production';
