@@ -249,6 +249,14 @@ describe('pos app', () => {
     for (let i = 0; i < 3; i++) await userEvent.type(search, '6281000000017{Enter}');
     expect(screen.getAllByTestId('cart-line')).toHaveLength(1);
     expect(screen.getByTestId('cart-total')).toHaveTextContent('KWD 0.999');
+    expect(await screen.findByTestId('tile-stock')).toHaveTextContent('In stock: 5');
+    // The −/+ buttons step the line by one unit.
+    await userEvent.click(screen.getByRole('button', { name: 'Increase quantity' }));
+    expect(screen.getByTestId('line-qty')).toHaveTextContent('4');
+    expect(screen.getByTestId('cart-total')).toHaveTextContent('KWD 1.332');
+    await userEvent.click(screen.getByRole('button', { name: 'Decrease quantity' }));
+    expect(screen.getByTestId('line-qty')).toHaveTextContent('3');
+    expect(screen.getByTestId('cart-total')).toHaveTextContent('KWD 0.999');
     // Cashiers without the permission get no discount button.
     expect(screen.getByRole('button', { name: 'Discount on sale' })).toBeDisabled();
     await userEvent.type(search, 'nothing{Enter}');

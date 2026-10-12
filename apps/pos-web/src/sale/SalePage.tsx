@@ -1,6 +1,6 @@
 import type { PosCatalogItem } from '@arabat/contracts';
 import { formatMoney } from '@arabat/i18n';
-import { Money } from '@arabat/money';
+import { Money, parseQuantity } from '@arabat/money';
 import { Badge, Button, Spinner, cn } from '@arabat/ui';
 import { ErrorState, localizedName, useApi, useAuth } from '@arabat/web-core';
 import { useQuery } from '@tanstack/react-query';
@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { ShiftStrip } from '../pages/ShiftPages.js';
 import { useRestaurantEnabled } from '../restaurant/RestaurantPages.js';
-import { type CartLine, priceLines, useCart } from './cart.js';
+import { type CartLine, formatQty, priceLines, useCart } from './cart.js';
 import { CustomerBar } from './customer.js';
 import {
   HeldSalesDialog,
@@ -239,12 +239,17 @@ export function SalePage() {
                   <button
                     type="button"
                     onClick={() => cart.add(item.variantId)}
-                    className="flex h-28 w-full flex-col justify-between rounded-lg border border-border p-3 text-start hover:border-primary active:bg-primary-soft"
+                    className="flex min-h-28 w-full flex-col justify-between gap-1 rounded-lg border border-border p-3 text-start hover:border-primary active:bg-primary-soft"
                     data-testid="product-tile"
                   >
                     <span className="line-clamp-2 font-medium">
                       {itemLabel(item, i18n.language)}
                     </span>
+                    {item.trackInventory && s ? (
+                      <span className="text-xs text-fg-muted" data-testid="tile-stock">
+                        {t('sale.inStock', { qty: formatQty(parseQuantity(s.onHand)) })}
+                      </span>
+                    ) : null}
                     <span className="flex items-center justify-between gap-2">
                       <span className="font-semibold tabular-nums" dir="ltr">
                         {fmt(item.price)}
@@ -284,12 +289,12 @@ export function SalePage() {
                 const priced = pricing?.ok ? pricing.cart.lines[index] : null;
                 const bad = pricing && !pricing.ok && pricing.line === index;
                 return (
-                  <li key={l.key}>
+                  <li key={l.key} className="py-2">
                     <button
                       type="button"
                       onClick={() => setEditing(l)}
                       className={cn(
-                        'flex w-full items-start justify-between gap-2 py-2 text-start',
+                        'flex w-full items-start justify-between gap-2 text-start',
                         bad && 'text-danger',
                       )}
                       data-testid="cart-line"
@@ -310,6 +315,7 @@ export function SalePage() {
                         {priced ? fmt(priced.netMinor) : '—'}
                       </span>
                     </button>
+                    <QuantityStepper line={l} />
                   </li>
                 );
               })}
@@ -405,6 +411,49 @@ export function SalePage() {
         />
       ) : null}
       {receiptId ? <ReceiptDialog saleId={receiptId} onClose={() => setReceiptId(null)} /> : null}
+    </div>
+  );
+}
+
+/** −/+ buttons that change a cart line by one unit; going below one unit removes the line. */
+function QuantityStepper({ line }: { line: CartLine }) {
+  const { t } = useTranslation();
+  const cart = useCart();
+  let milli: bigint | null;
+  try {
+    milli = parseQuantity(line.quantity);
+  } catch {
+    milli = null;
+  }
+  const step = (delta: bigint) => {
+    if (milli === null) return;
+    const next = milli + delta;
+    if (next <= 0n) cart.remove(line.key);
+    else cart.update(line.key, { quantity: formatQty(next) });
+  };
+  return (
+    <div className="mt-1 flex items-center gap-2" dir="ltr">
+      <button
+        type="button"
+        aria-label={t('sale.decrease')}
+        disabled={milli === null}
+        onClick={() => step(-1000n)}
+        className="flex h-9 w-9 items-center justify-center rounded-md border border-border text-lg font-semibold hover:border-primary disabled:opacity-50"
+      >
+        −
+      </button>
+      <span className="min-w-8 text-center font-semibold tabular-nums" data-testid="line-qty">
+        {line.quantity}
+      </span>
+      <button
+        type="button"
+        aria-label={t('sale.increase')}
+        disabled={milli === null}
+        onClick={() => step(1000n)}
+        className="flex h-9 w-9 items-center justify-center rounded-md border border-border text-lg font-semibold hover:border-primary disabled:opacity-50"
+      >
+        +
+      </button>
     </div>
   );
 }

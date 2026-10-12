@@ -320,6 +320,12 @@ health check ok; `/manager`, `/pos`, `/platform` load against the live API. Fixe
 targeted port 3000 while Railway injects `PORT=8080`. First platform operator created on
 staging by the hosted-start bootstrap. Not yet done: SMTP, uploads volume. Payments are sandbox only.
 
+### 2026-10-12 — POS: stock on tiles and quantity stepper
+Owner request. Product tiles of tracked items show the branch on-hand quantity from the POS
+availability API; each cart line has −/+ buttons (one unit per tap; below one unit removes
+the line). Display only: the server still enforces the stock policy at checkout. Verified:
+`pnpm verify`, `pnpm test:integration`, `pnpm test:e2e`.
+
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025
 before any production launch.
