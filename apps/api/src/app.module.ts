@@ -11,6 +11,8 @@ import { PaymentsModule } from './modules/payments/payments.module.js';
 import { RegistersModule } from './modules/registers/registers.module.js';
 import { SalesModule } from './modules/sales/sales.module.js';
 import { RefundsModule } from './modules/refunds/refunds.module.js';
+import { PurchasingModule } from './modules/purchasing/purchasing.module.js';
+import { TransfersModule } from './modules/transfers/transfers.module.js';
 import { AuditModule } from './modules/audit/audit.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { BranchesModule } from './modules/branches/branches.module.js';
@@ -42,6 +44,8 @@ export class AppModule {
         RegistersModule,
         SalesModule,
         RefundsModule,
+        PurchasingModule,
+        TransfersModule,
       ],
     };
   }

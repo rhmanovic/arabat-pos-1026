@@ -318,7 +318,7 @@ erDiagram
 ### 6.4 Later modules (entities only; designed in detail when scheduled)
 | Module | Entities |
 |---|---|
-| purchasing | `suppliers`, `purchase_orders`, `purchase_order_lines`, `goods_receipts`, `goods_receipt_lines` |
+| purchasing | implemented (Prompt 12) — see §8 |
 | restaurant | `dining_areas`, `dining_tables`, `modifier_groups`, `modifiers`, `order_line_modifiers`, `kitchen_tickets` |
 | ecommerce | `online_stores`, `channel_listings` (+ `orders.channel = 'online'`) |
 | reporting | `daily_sales_summary` (branch, date, totals) and SQL views |
@@ -361,6 +361,21 @@ erDiagram
 | `apps/api/drizzle/0015_refunds.sql` | `refunds`, `refund_lines`, `refund_payments`; refund policy columns on `sales_settings`; `payments.refund_id` + nullable method for exchange credit (generated) |
 | `apps/api/drizzle/0016_refunds_rls.sql` | Forced RLS; no deletes; refund lines immutable; triggers: final refund states immutable, only pending refund payments may settle |
 | `apps/api/drizzle/0017_refund_zero_total.sql` | Allow zero-value refunds (returning free items to stock) |
+
+| `apps/api/drizzle/0018_purchasing_transfers.sql` | `document_sequences`, `suppliers`, `purchase_orders`, `purchase_order_lines`, `purchase_receipts`, `purchase_receipt_lines`, `stock_transfers`, `stock_transfer_lines` (generated) |
+| `apps/api/drizzle/0019_purchasing_transfers_rls.sql` | Forced RLS; no deletes; receipts append-only; triggers: order lines editable only while draft, final order/transfer states immutable, transfer line quantities set once |
+
+Purchasing and transfer model (implemented, Prompt 12):
+- `suppliers`: names ar/en, unique `lower(code)` per merchant, contact, tax number,
+  payment terms, active/inactive (never deleted).
+- `purchase_orders` (`PO-…`): supplier, receiving branch, status, expected date, creator,
+  approver, close reason, version. Lines: variant, quantity, `unit_cost_minor`,
+  `received_quantity`.
+- `purchase_receipts` (`GR-…`): order, receiver, supplier reference, idempotency key;
+  lines: order line position and quantity. Stock movements reference the receipt.
+- `stock_transfers` (`TR-…`): source, destination, status, requester/approver/dispatcher/
+  receiver with timestamps, discrepancy note. Lines: requested, dispatched and received
+  quantities and the dispatch `unit_cost_minor`.
 
 Refund model (implemented, Prompt 11):
 - `refunds`: linked to the original sale (never changed); `kind` refund | void | exchange;

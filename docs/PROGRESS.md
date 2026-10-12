@@ -3,7 +3,7 @@
 Only record what has actually been done and verified. Mocked or partial work
 must be labeled as such.
 
-## Current state (2026-10-12, after Prompt 11 — returns, refunds and exchanges)
+## Current state (2026-10-12, after Prompt 12 — suppliers, purchasing and transfers)
 
 | Area | Status | Notes |
 |---|---|---|
@@ -20,7 +20,8 @@ must be labeled as such.
 | Payments, registers, shifts | Done | Per-merchant payment methods with exact fees, internal balances (entries ledger), gateway placeholder (not live), registers with access control, shifts with cash in/out, expected vs counted cash, discrepancy, force close, manager monitoring and report, POS shift screens |
 | POS & checkout | Done | Sale screen (search/scan, categories, cart, discounts, price override by permission, split payments, change, receipt + print, hold/resume, recent sales), atomic idempotent checkout, receipt numbers, manager sales history |
 | Returns & refunds | Done | Full/partial/quantity returns, exchanges, voids, reasons, eligibility (window, limit), supervisor/manager approval, conditional restock, per-tender pay-back, gateway-safe states, history, unusual-activity report, refund receipts |
-| Automated tests | Passing | 113 unit/web, 110 integration, 27 E2E (local) |
+| Purchasing & transfers | Done | Suppliers, purchase orders with approval and separation of duties, partial/full idempotent receiving into stock at cost, close/cancel rules, branch transfers (request, approve, dispatch/in transit, receive with discrepancy), manager screens |
+| Automated tests | Passing | 115 unit/web, 118 integration, 28 E2E (local) |
 | CI | Written, not yet run | `.github/workflows/ci.yml` |
 | Business modules | Not started | Begin in M1 |
 | Deployment | Not planned | Requires owner approval |
@@ -216,5 +217,15 @@ Verified: see TESTING.md.
 Not done yet / open: OQ-016 (fee reversal), OQ-017 (no-receipt / cross-branch returns);
 gateway refund confirmation arrives with Prompt 16.
 
+### 2026-10-12 — Prompt 12: Suppliers, purchasing and transfers
+Implemented: migrations 0018–0019; document numbering; purchasing module (suppliers,
+purchase orders, approval, receipts via the stock ledger with order lock and idempotency);
+transfers module (request, approve, dispatch out, receive in at dispatch cost, discrepancy
+write-off); manager screens for suppliers, purchase orders and transfers.
+Verified: see TESTING.md.
+Not done yet / open: supplier invoices, payments and balances (accounts payable) and
+purchase returns to suppliers are not implemented (OQ-018); landed costs are not
+allocated; transfer discrepancies are not reported separately yet (Prompt 14).
+
 ## Next step
-Prompt 12 — suppliers, purchasing and stock transfers.
+Prompt 13 — customer management.

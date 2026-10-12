@@ -17,6 +17,13 @@ import { RegistersPage } from './features/cash/RegistersPage.js';
 import { ShiftDetailPage, ShiftsPage } from './features/cash/ShiftsPage.js';
 import { SaleDetailPage, SalesPage } from './features/sales/SalesPage.js';
 import { RefundsPage } from './features/refunds/RefundsPage.js';
+import { PurchaseOrderPage, PurchaseOrdersPage } from './features/purchasing/PurchaseOrdersPage.js';
+import { SuppliersPage } from './features/purchasing/SuppliersPage.js';
+import {
+  NewTransferPage,
+  TransferDetailPage,
+  TransfersPage,
+} from './features/transfers/TransfersPage.js';
 import { CompanySettingsPage } from './features/company/CompanySettingsPage.js';
 import { DashboardPage } from './features/dashboard/DashboardPage.js';
 import { EmployeeDetailPage } from './features/employees/EmployeeDetailPage.js';
@@ -89,6 +96,13 @@ export const routes: RouteObject[] = [
       { path: 'sales', element: guard('sales.read', <SalesPage />) },
       { path: 'sales/:saleId', element: guard('sales.read', <SaleDetailPage />) },
       { path: 'refunds', element: guard('sales.read', <RefundsPage />) },
+      { path: 'suppliers', element: guard('purchasing.read', <SuppliersPage />) },
+      { path: 'purchasing', element: guard('purchasing.read', <PurchaseOrdersPage />) },
+      { path: 'purchasing/new', element: guard('purchasing.manage', <PurchaseOrderPage />) },
+      { path: 'purchasing/:orderId', element: guard('purchasing.read', <PurchaseOrderPage />) },
+      { path: 'transfers', element: guard('inventory.read', <TransfersPage />) },
+      { path: 'transfers/new', element: guard('inventory.transfer', <NewTransferPage />) },
+      { path: 'transfers/:transferId', element: guard('inventory.read', <TransferDetailPage />) },
       { path: 'payments', element: guard('payments.settings', <PaymentsPage />) },
       { path: 'registers', element: guard('registers.manage', <RegistersPage />) },
       { path: 'shifts', element: guard('shifts.view_all', <ShiftsPage />) },

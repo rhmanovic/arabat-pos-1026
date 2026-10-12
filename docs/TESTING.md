@@ -66,6 +66,22 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after Prompt 12 (2026-10-12, local run)
+- `pnpm verify` ✓ (115 unit/web), `pnpm test:integration` ✓ (118), `pnpm test:e2e` ✓ (28).
+- `purchasing.int.test.ts` (8): suppliers (unique code, inactive refused on new orders,
+  history); full PO lifecycle with exact stock and weighted average cost across two
+  deliveries; **retried and concurrent deliveries** (same key → one receipt; two
+  different deliveries racing for the remainder → never over the order) — verified to
+  fail without the order row lock; cancel/close rules; branch permissions and
+  self-approval; transfer lifecycle with in-transit stock, dispatch cost carried to the
+  destination and a written-off shortage; dispatch never exceeds the source even with a
+  permissive negative-stock policy; branch-level transfer permissions.
+- Web: receiving part of an approved order (typed quantity, reference, idempotency key);
+  receive disabled when nothing is entered.
+- `e2e/purchasing.spec.ts`: supplier → order → submit → approve → deliveries of 4 and 6
+  → stock 10; transfer of 4 → in transit (6 / 0) → 3.5 received with a required note →
+  6 / 3.5 with 0.5 missing.
+
 ### Results after Prompt 11 (2026-10-12, local run)
 - `pnpm verify` ✓ (113 unit/web), `pnpm test:integration` ✓ (110), `pnpm test:e2e` ✓ (27).
 - `refunds.int.test.ts` (11): partial then full refunds summing exactly (3 × 0.333);

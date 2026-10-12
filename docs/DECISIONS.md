@@ -458,3 +458,35 @@ ADR; supersede it.
   linked to the refund); any difference is paid normally or refunded to the original
   tenders. Exchanges that would need approval are refused at the till.
 
+## ADR-0061 — Document numbers per merchant
+- **Date:** 2026-10-12 · **Status:** Accepted
+- **Decision:** Purchase orders, goods receipts and transfers get gap-free numbers per
+  merchant and kind (`PO-000001`, `GR-000001`, `TR-000001`) from `document_sequences`,
+  incremented with `INSERT … ON CONFLICT DO UPDATE … RETURNING` inside the document's
+  transaction (a rollback releases the number).
+
+## ADR-0062 — Purchase order workflow and separation of duties
+- **Date:** 2026-10-12 · **Status:** Accepted (BR-100, BR-101)
+- **Decision:** draft → submitted → approved → partially_received → received, plus
+  cancelled (before any receipt) and closed (rest no longer expected, reason required).
+  Only drafts are editable (DB trigger). The creator cannot approve their own order unless
+  they are the owner. Final states are immutable (DB trigger).
+
+## ADR-0063 — Goods receipts post through the stock ledger
+- **Date:** 2026-10-12 · **Status:** Accepted (BR-102)
+- **Decision:** A receipt is its own append-only document (idempotency key unique per
+  merchant). The order row is locked `FOR UPDATE` while remaining quantities are checked,
+  so retries and concurrent receipts never exceed the order. Stock is increased with
+  `StockLedgerService.apply` (`purchase_receipt`) at the line's unit cost, which updates
+  the weighted average cost.
+
+## ADR-0064 — Transfers leave at dispatch, arrive at receipt
+- **Date:** 2026-10-12 · **Status:** Accepted (BR-103, BR-104)
+- **Decision:** requested → approved → in_transit → received (or cancelled before
+  dispatch). Dispatch writes `transfer_out` at the source with negative stock always
+  denied (whatever the merchant policy) and records the unit cost; receipt writes
+  `transfer_in` at the destination at that same cost. Stock in transit belongs to
+  neither branch. A short receipt needs a note; the missing quantity is written off
+  (it never returns to the source automatically). Request at either branch, approve at
+  the source (`inventory.transfer.approve`), dispatch at the source, receive at the
+  destination (`inventory.transfer` at each).

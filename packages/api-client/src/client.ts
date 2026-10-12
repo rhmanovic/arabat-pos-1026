@@ -19,6 +19,19 @@ import {
   invitationPreviewSchema,
   type CreateBranch,
   type ProductListQuery,
+  type CreateTransfer,
+  type PurchaseOrderListQuery,
+  type ReceivePurchase,
+  type SavePurchaseOrder,
+  type SaveSupplier,
+  type TransferListQuery,
+  type TransferQuantities,
+  purchaseOrderListSchema,
+  purchaseOrderSchema,
+  supplierListSchema,
+  supplierSchema,
+  transferListSchema,
+  transferSchema,
   type CreateRefund,
   type Exchange,
   type RefundListQuery,
@@ -451,6 +464,53 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('GET', `/manager/refunds/activity?${toParams(query)}`, {
           schema: refundActivitySchema,
         }),
+    },
+    purchasing: {
+      suppliers: () => request('GET', '/manager/suppliers', { schema: supplierListSchema }),
+      createSupplier: (body: SaveSupplier) =>
+        request('POST', '/manager/suppliers', { body, schema: supplierSchema }),
+      updateSupplier: (id: string, body: SaveSupplier) =>
+        request('PATCH', `/manager/suppliers/${id}`, { body, schema: supplierSchema }),
+      orders: (query: PurchaseOrderListQuery = {}) =>
+        request('GET', `/manager/purchase-orders?${toParams(query)}`, {
+          schema: purchaseOrderListSchema,
+        }),
+      order: (id: string) =>
+        request('GET', `/manager/purchase-orders/${id}`, { schema: purchaseOrderSchema }),
+      createOrder: (body: SavePurchaseOrder) =>
+        request('POST', '/manager/purchase-orders', { body, schema: purchaseOrderSchema }),
+      updateOrder: (id: string, body: SavePurchaseOrder) =>
+        request('PATCH', `/manager/purchase-orders/${id}`, { body, schema: purchaseOrderSchema }),
+      orderAction: (
+        id: string,
+        action: 'submit' | 'approve' | 'cancel' | 'close',
+        body: { version: number; reason?: string | null },
+      ) =>
+        request('POST', `/manager/purchase-orders/${id}/${action}`, {
+          body,
+          schema: purchaseOrderSchema,
+        }),
+      receive: (id: string, body: ReceivePurchase) =>
+        request('POST', `/manager/purchase-orders/${id}/receipts`, {
+          body,
+          schema: purchaseOrderSchema,
+        }),
+    },
+    transfers: {
+      list: (query: TransferListQuery = {}) =>
+        request('GET', `/manager/transfers?${toParams(query)}`, { schema: transferListSchema }),
+      get: (id: string) => request('GET', `/manager/transfers/${id}`, { schema: transferSchema }),
+      create: (body: CreateTransfer) =>
+        request('POST', '/manager/transfers', { body, schema: transferSchema }),
+      action: (id: string, action: 'approve' | 'cancel', version: number) =>
+        request('POST', `/manager/transfers/${id}/${action}`, {
+          body: { version },
+          schema: transferSchema,
+        }),
+      dispatch: (id: string, body: TransferQuantities) =>
+        request('POST', `/manager/transfers/${id}/dispatch`, { body, schema: transferSchema }),
+      receive: (id: string, body: TransferQuantities) =>
+        request('POST', `/manager/transfers/${id}/receive`, { body, schema: transferSchema }),
     },
     employees: {
       list: () => request('GET', '/manager/employees', { schema: employeeListSchema }),

@@ -64,6 +64,9 @@ export const ERROR_CODES = [
   'NOT_VOIDABLE',
   'SELF_APPROVAL',
   'APPROVAL_REQUIRED',
+  'INVALID_STATE',
+  'RECEIVE_EXCEEDS_ORDER',
+  'SUPPLIER_INACTIVE',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

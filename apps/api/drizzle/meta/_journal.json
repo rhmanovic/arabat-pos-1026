@@ -127,6 +127,20 @@
       "when": 1791785415688,
       "tag": "0017_refund_zero_total",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791786843118,
+      "tag": "0018_purchasing_transfers",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791786844771,
+      "tag": "0019_purchasing_transfers_rls",
+      "breakpoints": true
     }
   ]
 }

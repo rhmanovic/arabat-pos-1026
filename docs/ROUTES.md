@@ -39,15 +39,15 @@ Planned table (status per milestone):
 | `/manager/catalog/taxes` | Tax rates | `catalog.manage` | M2 |
 | `/manager/inventory` | Stock on hand per branch | `inventory.read` | M3 |
 | `/manager/inventory/adjustments`, `/new` | Adjustments | `inventory.adjust` | M3 |
-| `/manager/inventory/transfers`, `/:id` | Branch transfers | `inventory.transfer` | M3 |
+| `/manager/transfers`, `/new`, `/:id` | Branch transfers | `inventory.transfer` or `inventory.transfer.approve` | M3 ✓ |
 | `/manager/registers` | Registers per branch | `registers.manage` | M4 |
 | `/manager/shifts`, `/manager/shifts/:id` | Shift history, X/Z reports | `shifts.view_all` | M4 |
 | `/manager/sales`, `/manager/sales/:id` | Sales history & receipt | `sales.read` | M4 |
 | `/manager/orders`, `/manager/orders/:id` | Orders (held/online/table) | `orders.manage` | M4 |
 | `/manager/refunds`, `/manager/refunds/:id` | Refunds | `sales.read` | M5 |
 | `/manager/customers`, `/manager/customers/:id` | Customers | `customers.read` | M5 |
-| `/manager/purchasing/suppliers` | Suppliers | `suppliers.manage` | M6 |
-| `/manager/purchasing/orders`, `/:id` | Purchase orders | `purchase_orders.manage` | M6 |
+| `/manager/suppliers` | Suppliers | `purchasing.read` | M6 ✓ |
+| `/manager/purchasing`, `/new`, `/:id` | Purchase orders, receiving | `purchasing.read` | M6 ✓ |
 | `/manager/purchasing/receipts/:id` | Goods receipt | `goods.receive` | M6 |
 | `/manager/reports/sales`, `/inventory`, `/shifts`, `/payments` | Reports | `reports.*` | M7 |
 | `/manager/restaurant/tables`, `/modifiers` | 🧩 Restaurant setup | `catalog.manage` | M9 |
@@ -209,6 +209,29 @@ items and difference / cancel sale, printable refund receipt). Manager `/manager
 (history with filters, waiting-for-approval with approve/reject, unusual activity per
 employee); sale detail shows refunded amount; selling policy has return window and
 approval limit.
+
+### Purchasing and transfers API (Prompt 12)
+
+| Method & path | Permission |
+|---|---|
+| `GET /manager/suppliers` | `purchasing.read` |
+| `POST /manager/suppliers`, `PATCH /manager/suppliers/:id` | `purchasing.manage` (merchant-wide) |
+| `GET /manager/purchase-orders`, `GET /manager/purchase-orders/:id` | `purchasing.read` (branch-scoped) |
+| `POST /manager/purchase-orders`, `PATCH /…/:id`, `POST /…/:id/submit`, `POST /…/:id/cancel` | `purchasing.manage` at the order's branch |
+| `POST /manager/purchase-orders/:id/approve`, `POST /…/:id/close` | `purchasing.approve` at the branch (not the creator unless owner) |
+| `POST /manager/purchase-orders/:id/receipts` | `purchasing.receive` at the branch (idempotent) |
+| `GET /manager/transfers`, `GET /manager/transfers/:id` | `inventory.read` at source or destination |
+| `POST /manager/transfers` | `inventory.transfer` at source or destination |
+| `POST /manager/transfers/:id/approve` | `inventory.transfer.approve` at the source |
+| `POST /manager/transfers/:id/cancel` | requester or approver, before dispatch |
+| `POST /manager/transfers/:id/dispatch` | `inventory.transfer` at the source |
+| `POST /manager/transfers/:id/receive` | `inventory.transfer` at the destination |
+
+Screens: `/manager/suppliers` (list with order count and received value, create/edit,
+history link), `/manager/purchasing` (filters by status/supplier, editor for drafts with
+item search and exact totals, submit/approve/cancel/close, delivery dialog with
+remaining quantities, delivery history), `/manager/transfers` (request with available
+stock, approve, dispatch and receive dialogs, discrepancy note, missing quantity per line).
 
 ## 5. API namespaces (backend)
 
