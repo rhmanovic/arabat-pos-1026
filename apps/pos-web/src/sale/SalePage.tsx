@@ -68,6 +68,8 @@ export function SalePage() {
   const [editing, setEditing] = useState<CartLine | null>(null);
   /** The cart line whose quick actions (−/+, edit, remove) are shown. */
   const [selected, setSelected] = useState<string | null>(null);
+  /** Phones show the catalog full screen; the cart opens over it from the bottom bar. */
+  const [cartOpen, setCartOpen] = useState(false);
   const [dialog, setDialog] = useState<'pay' | 'discount' | 'suspend' | 'held' | 'recent' | null>(
     null,
   );
@@ -159,7 +161,7 @@ export function SalePage() {
           </>
         }
       />
-      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-3 md:grid-cols-[1fr_24rem] md:grid-rows-1">
+      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] gap-3 md:grid-cols-[1fr_24rem]">
         <section
           aria-labelledby="catalog-title"
           className="flex min-h-0 flex-col gap-3 rounded-lg bg-surface p-3"
@@ -273,11 +275,24 @@ export function SalePage() {
 
         <aside
           aria-labelledby="cart-title"
-          className="flex min-h-0 flex-col rounded-lg bg-surface p-3"
+          className={cn(
+            'min-h-0 flex-col bg-surface p-3 md:static md:z-auto md:flex md:rounded-lg',
+            cartOpen ? 'fixed inset-0 z-30 flex' : 'hidden',
+          )}
         >
-          <h2 id="cart-title" className="mb-2 text-lg font-semibold">
-            {t('sale.cart')}
-          </h2>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h2 id="cart-title" className="text-lg font-semibold">
+              {t('sale.cart')}
+            </h2>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="md:hidden"
+              onClick={() => setCartOpen(false)}
+            >
+              {t('sale.backToProducts')}
+            </Button>
+          </div>
           <CustomerBar />
           {cart.state.lines.length === 0 ? (
             <p className="flex-1 text-fg-muted">{t('sale.empty')}</p>
@@ -397,6 +412,17 @@ export function SalePage() {
           </Button>
         </aside>
       </div>
+      <Button
+        size="lg"
+        className="h-14 shrink-0 justify-between text-lg md:hidden"
+        onClick={() => setCartOpen(true)}
+        data-testid="open-cart"
+      >
+        <span>{t('sale.viewCart', { count: cart.state.lines.length })}</span>
+        <span dir="ltr" className="tabular-nums">
+          {fmt(total ?? 0n)}
+        </span>
+      </Button>
 
       {editing ? (
         <LineDialog
@@ -423,6 +449,7 @@ export function SalePage() {
           onClose={() => setDialog(null)}
           onCompleted={(saleId) => {
             setDialog(null);
+            setCartOpen(false);
             setReceiptId(saleId);
           }}
         />

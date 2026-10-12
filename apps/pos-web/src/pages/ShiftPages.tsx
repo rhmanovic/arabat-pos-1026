@@ -182,12 +182,14 @@ export function ShiftStrip({ extra }: { extra?: ReactNode }) {
   if (!shift) return null;
   return (
     <div
-      className="flex items-center gap-3 rounded-lg bg-surface px-4 py-2 text-sm"
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg bg-surface px-3 py-2 text-sm sm:px-4"
       data-testid="shift-strip"
     >
       <Badge tone="success">{t('shift.current')}</Badge>
-      <span className="font-medium">{localizedName(shift.registerName, i18n.language)}</span>
-      <span className="text-fg-muted">
+      <span className="font-medium whitespace-nowrap">
+        {localizedName(shift.registerName, i18n.language)}
+      </span>
+      <span className="text-fg-muted whitespace-nowrap">
         {t('shift.since', {
           time: new Date(shift.openedAt).toLocaleTimeString(i18n.language, {
             hour: '2-digit',
@@ -196,11 +198,17 @@ export function ShiftStrip({ extra }: { extra?: ReactNode }) {
           }),
         })}
       </span>
-      <div className="flex-1" />
-      {extra}
-      <Link to="/shift" className="rounded-md bg-primary-soft px-3 py-1.5 font-medium text-primary">
-        {t('shift.manage')}
-      </Link>
+      <div className="hidden flex-1 sm:block" />
+      {/* On phones the actions take their own row and scroll sideways instead of overflowing. */}
+      <div className="-mx-1 flex w-full gap-2 overflow-x-auto px-1 sm:mx-0 sm:w-auto sm:overflow-visible sm:px-0 [&>*]:shrink-0 [&>*]:whitespace-nowrap">
+        {extra}
+        <Link
+          to="/shift"
+          className="rounded-md bg-primary-soft px-3 py-1.5 font-medium text-primary"
+        >
+          {t('shift.manage')}
+        </Link>
+      </div>
     </div>
   );
 }

@@ -749,3 +749,14 @@ ADR; supersede it.
   The start command keeps the two-role database model (OPERATIONS.md §8).
 - **Consequences:** Servers are outside the GCC; the production region decision (OQ-011)
   stays open. Payments use the sandbox gateway only; e-mail needs an SMTP provider.
+
+## ADR-0088 — Standing approval for staging deploys; phone layout for the POS
+- **Date:** 2026-10-12 · **Status:** Accepted (owner, in conversation)
+- **Decision:** The owner granted standing approval to publish to the Railway **staging**
+  environment without asking each time, once `pnpm verify` and the relevant tests pass
+  (push to `claude/busy-babbage-yty2bo`; if Railway does not pick the push up, reconnect the
+  same branch to trigger the build). Production launch, live payments and new paid costs still
+  need explicit approval. The POS must work on phones as well as tablets and desktops: below
+  the `md` breakpoint the sale screen shows the catalog full screen with a bottom cart bar that
+  opens the cart full screen; header session actions fold into one menu below `sm`.
+- **Consequences:** Faster feedback loop on staging. A phone e2e project checks the POS sign-in.

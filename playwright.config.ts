@@ -24,6 +24,7 @@ export default defineConfig({
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
     { name: 'tablet-touch', use: { ...devices['Galaxy Tab S4'] }, testMatch: /pos\.spec\.ts/ },
+    { name: 'phone', use: { ...devices['Pixel 7'] }, testMatch: /pos\.spec\.ts/ },
   ],
   webServer: {
     command: 'node --env-file-if-exists=.env --enable-source-maps apps/api/dist/main.js',

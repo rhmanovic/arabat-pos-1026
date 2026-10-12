@@ -66,6 +66,8 @@ approval from the product owner and a new entry in `docs/DECISIONS.md`.
     stock movements, refunds).
 13. **Never deploy, activate live payments, or incur paid costs** without the
     owner's explicit approval.
+    Exception (ADR-0088): the owner gave standing approval to publish to **staging**
+    once tests pass.
 
 ## 4. Engineering standards
 

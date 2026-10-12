@@ -3,6 +3,7 @@ import type { PosResources } from './en.js';
 export const posAr: PosResources = {
   title: 'نقطة البيع',
   toolbarLabel: 'شريط أدوات الكاشير',
+  moreActions: 'القائمة',
   branch: 'الفرع',
   noBranch: 'لم يتم اختيار فرع',
   lock: 'قفل',
@@ -117,6 +118,8 @@ export const posAr: PosResources = {
     outOfStock: 'نفد',
     lowStock: 'منخفض',
     inStock: 'المتوفر: {{qty}}',
+    viewCart: 'السلة ({{count}})',
+    backToProducts: 'المنتجات',
     edit: 'تعديل',
     increase: 'زيادة الكمية',
     decrease: 'إنقاص الكمية',

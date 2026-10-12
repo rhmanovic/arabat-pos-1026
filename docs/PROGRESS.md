@@ -326,6 +326,11 @@ availability API; tapping a cart line reveals −/+ (one unit per tap; below one
 the line), Edit (full line dialog) and Remove; tapping it again hides them. Display only: the server still enforces the stock policy at checkout. Verified:
 `pnpm verify`, `pnpm test:integration`, `pnpm test:e2e`.
 
+### 2026-10-12 — POS on phones (ADR-0088)
+Below `md` the sale screen shows products full screen with a bottom «Cart (n) · total» bar; the
+cart opens full screen with a back button. Shift strip actions scroll on one row; header session
+actions fold into a ☰ menu below `sm`. Desktop/tablet unchanged. Phone e2e project added.
+
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025
 before any production launch.

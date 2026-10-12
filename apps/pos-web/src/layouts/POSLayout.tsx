@@ -1,4 +1,4 @@
-import { Button } from '@arabat/ui';
+import { Button, Menu, MenuItem } from '@arabat/ui';
 import {
   ApiStatus,
   LanguageSwitcher,
@@ -73,9 +73,9 @@ export function POSLayout() {
       <div className="flex h-dvh flex-col overflow-hidden bg-surface-muted select-none print:hidden">
         <header
           aria-label={t('toolbarLabel')}
-          className="flex h-14 shrink-0 items-center gap-3 bg-console px-3 text-console-fg sm:px-4"
+          className="flex h-14 shrink-0 items-center gap-2 bg-console px-3 text-console-fg sm:gap-3 sm:px-4"
         >
-          <span className="text-base font-semibold">{t('title')}</span>
+          <span className="truncate text-base font-semibold whitespace-nowrap">{t('title')}</span>
           <span className="hidden text-sm text-console-fg/70 sm:inline" data-testid="pos-context">
             {session?.merchant ? localizedName(session.merchant, i18n.language) : ''} ·{' '}
             {t('branch')}:{' '}
@@ -86,7 +86,7 @@ export function POSLayout() {
           ) : null}
           <div className="flex-1" />
           <ApiStatus className="hidden text-console-fg/80 md:inline-flex" />
-          <time className="text-sm tabular-nums" dateTime={now.toISOString()}>
+          <time className="hidden text-sm tabular-nums sm:inline" dateTime={now.toISOString()}>
             {now.toLocaleTimeString(i18n.language, {
               hour: '2-digit',
               minute: '2-digit',
@@ -94,27 +94,54 @@ export function POSLayout() {
             })}
           </time>
           <LanguageSwitcher />
-          {session?.availableInterfaces.includes('manager') ? (
+          {/* Phones: the session actions fold into one menu so the strip fits one line. */}
+          <div className="sm:hidden">
+            <Menu
+              trigger={
+                <Button variant="secondary" size="sm" aria-label={t('moreActions')}>
+                  ☰
+                </Button>
+              }
+            >
+              {session?.availableInterfaces.includes('manager') ? (
+                <MenuItem onSelect={() => toManager.mutate({ target: 'manager' })}>
+                  {t('common:interfaces.manager')}
+                </MenuItem>
+              ) : null}
+              <MenuItem onSelect={() => lockNow()}>{t('common:lock.lockNow')}</MenuItem>
+              <MenuItem tone="danger" onSelect={() => logout.mutate()}>
+                {t('common:actions.signOut')}
+              </MenuItem>
+            </Menu>
+          </div>
+          <div className="hidden items-center gap-3 sm:flex">
+            {session?.availableInterfaces.includes('manager') ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={toManager.isPending}
+                onClick={() => toManager.mutate({ target: 'manager' })}
+              >
+                {t('common:interfaces.manager')}
+              </Button>
+            ) : null}
             <Button
               variant="secondary"
               size="sm"
-              loading={toManager.isPending}
-              onClick={() => toManager.mutate({ target: 'manager' })}
+              loading={lock.isPending}
+              onClick={() => lockNow()}
             >
-              {t('common:interfaces.manager')}
+              {t('common:lock.lockNow')}
             </Button>
-          ) : null}
-          <Button variant="secondary" size="sm" loading={lock.isPending} onClick={() => lockNow()}>
-            {t('common:lock.lockNow')}
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            loading={logout.isPending}
-            onClick={() => logout.mutate()}
-          >
-            {t('common:actions.signOut')}
-          </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={logout.isPending}
+              onClick={() => logout.mutate()}
+            >
+              {t('common:actions.signOut')}
+            </Button>
+          </div>
         </header>
         <main className="min-h-0 flex-1">
           <Outlet />

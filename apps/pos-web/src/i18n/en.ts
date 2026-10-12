@@ -1,6 +1,7 @@
 export const posEn = {
   title: 'Point of Sale',
   toolbarLabel: 'Register toolbar',
+  moreActions: 'Menu',
   branch: 'Branch',
   noBranch: 'No branch selected',
   lock: 'Lock',
@@ -115,6 +116,8 @@ export const posEn = {
     outOfStock: 'Out',
     lowStock: 'Low',
     inStock: 'In stock: {{qty}}',
+    viewCart: 'Cart ({{count}})',
+    backToProducts: 'Products',
     edit: 'Edit',
     increase: 'Increase quantity',
     decrease: 'Decrease quantity',
