@@ -14,7 +14,7 @@ import type {
 } from '@arabat/contracts';
 import { parseAmount } from '../payments/payments.service.js';
 import { Injectable } from '@nestjs/common';
-import { asc, eq, sql } from 'drizzle-orm';
+import { type SQL, asc, eq, sql } from 'drizzle-orm';
 import type { z } from 'zod';
 import { DatabaseService, type Transaction } from '../../database/database.service.js';
 import type { PlatformActor } from '../../kernel/access/session-resolver.js';
@@ -60,12 +60,11 @@ export class PlatformService {
   ) {}
 
   // ------------------------------------------------------------ overview & lists
-  async overview(): Promise<PlatformOverview> {
-    const [o] = (await this.database.db.execute(sql`select * from platform_overview()`))
-      .rows as Row[];
-    const counts = await this.planCounts();
+  async overview(actor: PlatformActor): Promise<PlatformOverview> {
+    const [o] = (await this.read(actor, sql`select * from platform_overview()`)) as Row[];
+    const counts = await this.planCounts(actor);
     const allPlans = await this.database.db.select().from(plans).orderBy(asc(plans.sortOrder));
-    const recent = await this.merchants({ q: undefined, page: 1, pageSize: 5 });
+    const recent = await this.merchants(actor, { q: undefined, page: 1, pageSize: 5 });
     return {
       merchants: {
         total: num(o!['merchants_total']),
@@ -96,12 +95,11 @@ export class PlatformService {
     };
   }
 
-  async merchants(query: O<typeof platformMerchantQuerySchema>) {
-    const rows = (
-      await this.database.db.execute(
-        sql`select * from platform_merchants(${query.q ?? null}, ${query.status ?? null}, ${query.pageSize}, ${(query.page - 1) * query.pageSize})`,
-      )
-    ).rows as Row[];
+  async merchants(actor: PlatformActor, query: O<typeof platformMerchantQuerySchema>) {
+    const rows = await this.read(
+      actor,
+      sql`select * from platform_merchants(${query.q ?? null}, ${query.status ?? null}, ${query.pageSize}, ${(query.page - 1) * query.pageSize})`,
+    );
     return {
       merchants: rows.map(toMerchant),
       total: num(rows[0]?.['total_count']),
@@ -110,12 +108,11 @@ export class PlatformService {
     };
   }
 
-  async auditLog(query: O<typeof platformAuditQuerySchema>) {
-    const rows = (
-      await this.database.db.execute(
-        sql`select * from platform_audit(${query.merchantId ?? null}, ${query.action ?? null}, ${query.pageSize}, ${(query.page - 1) * query.pageSize})`,
-      )
-    ).rows as Row[];
+  async auditLog(actor: PlatformActor, query: O<typeof platformAuditQuerySchema>) {
+    const rows = await this.read(
+      actor,
+      sql`select * from platform_audit(${query.merchantId ?? null}, ${query.action ?? null}, ${query.pageSize}, ${(query.page - 1) * query.pageSize})`,
+    );
     return {
       entries: rows.map(toAuditEntry),
       total: num(rows[0]?.['total_count']),
@@ -455,12 +452,12 @@ export class PlatformService {
   }
 
   // ------------------------------------------------------------ plans
-  async plans(): Promise<Plan[]> {
+  async plans(actor: PlatformActor): Promise<Plan[]> {
     const rows = await this.database.db
       .select()
       .from(plans)
       .orderBy(asc(plans.sortOrder), asc(plans.code));
-    const counts = await this.planCounts();
+    const counts = await this.planCounts(actor);
     return rows.map((p) => ({ ...toPlan(p), merchantCount: counts.get(p.id) ?? 0 }));
   }
 
@@ -538,13 +535,21 @@ export class PlatformService {
         ]);
       throw error;
     }
-    return (await this.plans()).find((p) => p.id === planId)!;
+    return (await this.plans(actor)).find((p) => p.id === planId)!;
   }
 
   // ------------------------------------------------------------ helpers
-  private async planCounts(): Promise<Map<string, number>> {
-    const rows = (await this.database.db.execute(sql`select * from platform_plan_counts()`))
-      .rows as Row[];
+  /** Cross-merchant summaries run only inside the operator's context (ADR-0080). */
+  private read(actor: PlatformActor, query: SQL): Promise<Row[]> {
+    return this.database.withPlatformContext(
+      actor.operatorId,
+      null,
+      async (tx) => (await tx.execute(query)).rows as Row[],
+    );
+  }
+
+  private async planCounts(actor: PlatformActor): Promise<Map<string, number>> {
+    const rows = await this.read(actor, sql`select * from platform_plan_counts()`);
     return new Map(rows.map((r) => [r['plan_id'] as string, num(r['merchants'])]));
   }
 

@@ -73,6 +73,8 @@ export class PlatformAuthService {
       .where(eq(platformOperators.id, ticket.operatorId));
     if (operator?.status !== 'active')
       throw new AppError(401, 'TICKET_INVALID', 'Invalid sign-in step.');
+    const failureKey = `mfa:operator:${operator.id}`;
+    await this.limiter.assertNotLimited(failureKey, AUTH_LIMITS.mfaFailuresPerOperator);
 
     const step = verifyTotp(
       this.secrets.decrypt(operator.mfaSecretEnc),
@@ -91,6 +93,7 @@ export class PlatformAuthService {
             )
             .returning({ id: platformOperators.id });
     if (claimed.length === 0) {
+      await this.limiter.hit(failureKey, AUTH_LIMITS.mfaFailuresPerOperator);
       await this.audit.record({
         merchantId: null,
         actorType: 'operator',
@@ -102,6 +105,7 @@ export class PlatformAuthService {
     }
 
     await this.tickets.consume(ticket.id);
+    await this.limiter.reset(failureKey);
     const session = await this.sessions.create(
       { realm: 'platform', interface: 'platform', operatorId: operator.id },
       client,

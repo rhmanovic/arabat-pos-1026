@@ -123,7 +123,8 @@ export class SubscriptionsService {
   async current(
     tx: Transaction,
     merchantId: string,
-    options: { lock?: boolean } = {},
+    /** `update`: limit checks and plan changes; `share`: creations on unlimited plans. */
+    options: { lock?: boolean | 'share' } = {},
   ): Promise<{ subscription: SubscriptionRow; plan: PlanRow }> {
     const read = async () => {
       const query = tx
@@ -131,6 +132,7 @@ export class SubscriptionsService {
         .from(subscriptions)
         .innerJoin(plans, eq(plans.id, subscriptions.planId))
         .where(eq(subscriptions.merchantId, merchantId));
+      if (options.lock === 'share') return (await query.for('share', { of: subscriptions }))[0];
       return (options.lock ? await query.for('update', { of: subscriptions }) : await query)[0];
     };
     const found = await read();
@@ -168,8 +170,10 @@ export class SubscriptionsService {
     limit: PlanLimit,
     adding = 1,
   ): Promise<void> {
-    // Unlimited plans need no lock; limited ones serialise on the subscription row.
-    if ((await this.current(tx, merchantId)).plan[LIMIT_COLUMN[limit]] === null) return;
+    // Unlimited plans take a shared lock (creations run in parallel, but a concurrent plan
+    // change waits for them and then counts them); limited plans serialise on the row.
+    if ((await this.current(tx, merchantId, { lock: 'share' })).plan[LIMIT_COLUMN[limit]] === null)
+      return;
     const { plan } = await this.current(tx, merchantId, { lock: true });
     const max = plan[LIMIT_COLUMN[limit]] as number | null;
     if (max === null) return;

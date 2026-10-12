@@ -366,6 +366,14 @@ describe('online checkout and payments', () => {
       { channel: 'online', saleCount: 1, netSales: { amount: '3.000', currency: 'KWD' } },
     ]);
     expect(report.summary.netSales.amount).toBe('6.750');
+    // The delivery fee is a zero-cost service: profit stays available and exact (audit fix).
+    // Cost: 3 + 2 teas at 0.400 = 2.000; profit 6.750 − 2.000 = 4.750.
+    expect(report.profit).toMatchObject({
+      available: true,
+      missingCostSales: 0,
+      costOfSales: { amount: '2.000' },
+      grossProfit: { amount: '4.750' },
+    });
     const onlineSales = await s.ok('GET', '/manager/sales?channel=online');
     expect(onlineSales.sales).toEqual([
       expect.objectContaining({ channel: 'online', customerName: 'Mariam' }),

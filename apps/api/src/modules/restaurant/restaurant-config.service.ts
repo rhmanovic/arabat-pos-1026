@@ -301,6 +301,8 @@ export class RestaurantConfigService {
           await tx
             .insert(kitchenStations)
             .values({ id: stationId, merchantId: actor.merchantId, ...fields });
+        // Foreign keys ignore RLS: check the categories belong to this merchant (audit fix).
+        await this.assertOwned(tx, 'categories', categoryIds, 'categoryIds');
         if (categoryIds.length)
           await tx.insert(kitchenStationCategories).values(
             [...new Set(categoryIds)].map((categoryId) => ({
@@ -406,6 +408,12 @@ export class RestaurantConfigService {
         .from(modifiers)
         .where(eq(modifiers.groupId, groupId));
       const known = new Set(existing.map((m) => m.id));
+      await this.assertOwned(
+        tx,
+        'product_variants',
+        items.flatMap((m) => (m.componentVariantId ? [m.componentVariantId] : [])),
+        'modifiers.componentVariantId',
+      );
       for (const [position, m] of items.entries()) {
         const values = {
           nameEn: m.nameEn,
@@ -638,5 +646,26 @@ export class RestaurantConfigService {
       ip,
       details,
     });
+  }
+
+  /** Every id must exist in this merchant's rows (RLS-scoped read). */
+  private async assertOwned(
+    tx: Transaction,
+    table: 'categories' | 'product_variants',
+    ids: string[],
+    path: string,
+  ): Promise<void> {
+    const unique = [...new Set(ids)];
+    if (unique.length === 0) return;
+    const rows = (
+      await tx.execute(
+        sql`select id from ${sql.identifier(table)} where id in (${sql.join(
+          unique.map((id) => sql`${id}`),
+          sql`, `,
+        )})`,
+      )
+    ).rows;
+    if (rows.length !== unique.length)
+      throw AppError.validation([{ path, code: 'not_found', message: 'Unknown item.' }]);
   }
 }

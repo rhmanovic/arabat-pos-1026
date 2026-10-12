@@ -12,6 +12,7 @@ import {
   switchInterfaceRequestSchema,
   switchBranchRequestSchema,
   switchMerchantRequestSchema,
+  unlockRequestSchema,
 } from '@arabat/contracts';
 import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
@@ -23,6 +24,7 @@ import { ZodPipe } from '../../kernel/validation/zod.pipe.js';
 import { type LoginOutcome, LoginService } from './login.service.js';
 import { PasswordResetService } from './password-reset.service.js';
 import { PlatformAuthService } from './platform-auth.service.js';
+import { PosLockService } from './pos-lock.service.js';
 import { RegistrationService } from './registration.service.js';
 import { SessionContextService } from './session-context.service.js';
 import { SessionService, clientInfo } from './session.service.js';
@@ -37,6 +39,7 @@ export class AuthController {
     private readonly resets: PasswordResetService,
     private readonly context: SessionContextService,
     private readonly sessions: SessionService,
+    private readonly posLocks: PosLockService,
   ) {}
 
   // ------------------------------------------------------------ public
@@ -243,6 +246,36 @@ export class AuthController {
       reply,
       await this.context.switchBranch(actor, body.branchId, clientInfo(request)),
     );
+  }
+
+  /** Locks this till now (cashier steps away, or inactivity detected by the POS). */
+  @Authenticated('pos')
+  @Post('pos/lock')
+  @HttpCode(204)
+  async posLock(@CurrentMerchantActor() actor: MerchantActor, @Req() request: FastifyRequest) {
+    await this.posLocks.lock(actor.sessionId, actor.merchantId, actor.userId, clientInfo(request));
+  }
+
+  /** Public: a locked session cannot authenticate; the cookie and the password prove it. */
+  @Public()
+  @Post('pos/unlock')
+  @HttpCode(204)
+  async posUnlock(
+    @Body(new ZodPipe(unlockRequestSchema)) body: z.output<typeof unlockRequestSchema>,
+    @Req() request: FastifyRequest,
+  ) {
+    await this.posLocks.unlock(request, body.password, clientInfo(request));
+  }
+
+  @Public()
+  @Post('pos/lock/sign-out')
+  @HttpCode(204)
+  async posLockedSignOut(
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    await this.posLocks.end(request);
+    this.sessions.clearCookie(reply, 'pos');
   }
 
   @Authenticated('pos')

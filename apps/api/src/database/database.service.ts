@@ -52,7 +52,24 @@ export class DatabaseService implements OnModuleDestroy {
   }
 
   withTransaction<T>(work: (tx: Transaction) => Promise<T>): Promise<T> {
-    return this.db.transaction(work);
+    return this.retrying(() => this.db.transaction(work));
+  }
+
+  /**
+   * Re-runs a whole transaction when PostgreSQL aborted it because of a deadlock or a
+   * serialization conflict (audit finding, Prompt 18). The transaction was rolled back, so a
+   * re-run is safe; work functions keep external side effects (e-mail, gateways) outside.
+   */
+  private async retrying<T>(run: () => Promise<T>): Promise<T> {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await run();
+      } catch (error) {
+        if (attempt >= MAX_ATTEMPTS || !isRetryable(error)) throw error;
+        this.logger.warn(`Transaction retried after ${pgCode(error)} (attempt ${attempt})`);
+        await new Promise((resolve) => setTimeout(resolve, 10 + Math.random() * 40 * attempt));
+      }
+    }
   }
 
   /**
@@ -74,13 +91,15 @@ export class DatabaseService implements OnModuleDestroy {
     const merchantId = context.merchantId ? uuidSchema.parse(context.merchantId) : '';
     const userId = context.userId ? uuidSchema.parse(context.userId) : '';
     const inviteHash = context.inviteHash ? context.inviteHash.toString('hex') : '';
-    return this.db.transaction(async (tx) => {
+    return this.retrying(() =>
+      this.db.transaction(async (tx) => {
       await tx.execute(
         sql`select set_config('app.merchant_id', ${merchantId}, true), set_config('app.user_id', ${userId}, true),
                    set_config('app.invite_hash', ${inviteHash}, true)`,
-      );
-      return work(tx);
-    });
+        );
+        return work(tx);
+      }),
+    );
   }
 
   /**
@@ -95,15 +114,31 @@ export class DatabaseService implements OnModuleDestroy {
   ): Promise<T> {
     const operator = uuidSchema.parse(operatorId);
     const merchant = merchantId ? uuidSchema.parse(merchantId) : '';
-    return this.db.transaction(async (tx) => {
-      await tx.execute(
-        sql`select set_config('app.merchant_id', ${merchant}, true), set_config('app.operator_id', ${operator}, true)`,
-      );
-      return work(tx);
-    });
+    return this.retrying(() =>
+      this.db.transaction(async (tx) => {
+        await tx.execute(
+          sql`select set_config('app.merchant_id', ${merchant}, true), set_config('app.operator_id', ${operator}, true)`,
+        );
+        return work(tx);
+      }),
+    );
   }
 
   async onModuleDestroy(): Promise<void> {
     await this.pool.end();
   }
+}
+
+const MAX_ATTEMPTS = 3;
+/** deadlock_detected, serialization_failure */
+const RETRYABLE = new Set(['40P01', '40001']);
+
+function pgCode(error: unknown): string | undefined {
+  const e = error as { code?: string; cause?: { code?: string } };
+  return e?.cause?.code ?? e?.code;
+}
+
+function isRetryable(error: unknown): boolean {
+  const code = pgCode(error);
+  return code !== undefined && RETRYABLE.has(code);
 }

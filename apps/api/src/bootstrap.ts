@@ -22,7 +22,9 @@ export function createAdapter(env: Env) {
     genReqId: genRequestId,
     requestIdHeader: false,
     bodyLimit: 1024 * 1024,
-    trustProxy: true,
+    // Only configured proxies may set the client IP (rate limits, audit).
+    // Fastify accepts a hop count too; the Nest adapter's type omits it.
+    trustProxy: env.TRUST_PROXY as boolean | string[],
   });
   return { adapter, logger };
 }

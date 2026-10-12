@@ -7,6 +7,7 @@ import { LoginService } from './login.service.js';
 import { PasswordResetService } from './password-reset.service.js';
 import { PasswordService } from './password.service.js';
 import { PlatformAuthService } from './platform-auth.service.js';
+import { PosLockService } from './pos-lock.service.js';
 import { RateLimiterService } from './rate-limiter.service.js';
 import { RegistrationService } from './registration.service.js';
 import { SessionContextService } from './session-context.service.js';
@@ -27,6 +28,7 @@ import { TicketService } from './ticket.service.js';
     PasswordResetService,
     PlatformAuthService,
     SessionContextService,
+    PosLockService,
     { provide: SessionResolver, useClass: DbSessionResolver },
   ],
   exports: [

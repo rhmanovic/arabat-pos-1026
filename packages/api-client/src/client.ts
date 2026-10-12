@@ -271,6 +271,11 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('POST', '/auth/password/reset', { body }),
       logout: (appInterface: AppInterface) =>
         request('POST', `/auth/${appInterface}/logout`, { body: {} }),
+      /** POS screen lock (server-enforced until the password is entered again). */
+      posLock: () => request('POST', '/auth/pos/lock', { body: {} }),
+      posUnlock: (password: string) =>
+        request('POST', '/auth/pos/unlock', { body: { password } }),
+      posLockedSignOut: () => request('POST', '/auth/pos/lock/sign-out', { body: {} }),
       merchants: (appInterface: MerchantInterface) =>
         request('GET', `/auth/${appInterface}/merchants`, { schema: merchantListResponseSchema }),
       switchMerchant: (

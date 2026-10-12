@@ -37,6 +37,8 @@ export const sessions = pgTable(
     expiresAt: timestamp({ withTimezone: true }).notNull(),
     revokedAt: timestamp({ withTimezone: true }),
     revokeReason: text(),
+    /** POS screen lock: the session stays but every request needs the password first. */
+    lockedAt: timestamp({ withTimezone: true }),
     ip: text(),
     userAgent: text(),
   },

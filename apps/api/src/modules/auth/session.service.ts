@@ -96,6 +96,21 @@ export class SessionService {
       .where(eq(sessions.id, session.id));
   }
 
+  /** Locks a POS session until its user re-enters the password (BR-047). */
+  async lock(sessionId: string): Promise<void> {
+    await this.database.db
+      .update(sessions)
+      .set({ lockedAt: sql`now()` })
+      .where(and(eq(sessions.id, sessionId), isNull(sessions.lockedAt)));
+  }
+
+  async unlock(sessionId: string): Promise<void> {
+    await this.database.db
+      .update(sessions)
+      .set({ lockedAt: null, lastSeenAt: sql`now()` })
+      .where(eq(sessions.id, sessionId));
+  }
+
   async revoke(sessionId: string, reason: string): Promise<void> {
     await this.database.db
       .update(sessions)

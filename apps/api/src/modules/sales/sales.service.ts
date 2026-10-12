@@ -661,6 +661,8 @@ export class SalesService {
     },
   ): Promise<{ receiptNumber: string; totalMinor: bigint }> {
     const { saleId, branchId, lines } = args;
+    // Same lock order as a POS checkout: receipt sequence before stock (no deadlock).
+    const receiptNumber = await this.nextReceiptNumber(tx, merchantId, branchId);
     const consumption = await stockConsumption(
       tx,
       lines.map((l) => ({
@@ -727,7 +729,6 @@ export class SalesService {
       fixedMinor: BigInt(method['fee_fixed_minor'] as string),
       percent: method['fee_percent'] as string,
     });
-    const receiptNumber = await this.nextReceiptNumber(tx, merchantId, branchId);
     let costMinor: bigint | null = 0n;
     const lineRows = lines.map((l, i) => {
       const lineCost = costs.total[i]!;

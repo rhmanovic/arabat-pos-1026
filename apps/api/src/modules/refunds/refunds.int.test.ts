@@ -641,6 +641,23 @@ describe('voids and exchanges', () => {
       [{ methodId: s.card, amount: '2.000' }],
       '2.000',
     );
+    // The same returned line twice is a validation error, not a server error (audit fix).
+    const duplicated = await s.c.client.request('POST', '/pos/exchanges', {
+      cookies: cashier.cookies,
+      body: {
+        idempotencyKey: newId(),
+        saleId: sale.id,
+        reason: 'wrong_item',
+        returnLines: [
+          { position: 0, quantity: '1' },
+          { position: 0, quantity: '1' },
+        ],
+        lines: [{ variantId: s.cake, quantity: '4' }],
+        payments: [],
+        expectedTotal: '1.332',
+      },
+    });
+    expect(duplicated.statusCode).toBe(400);
     // Return 1 tea (1.000 credit), take 4 cakes (1.332): 0.332 still due in cash.
     const up = await s.c.client.request('POST', '/pos/exchanges', {
       cookies: cashier.cookies,

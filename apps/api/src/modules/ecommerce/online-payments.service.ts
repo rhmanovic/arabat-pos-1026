@@ -139,7 +139,39 @@ export class OnlinePaymentsService implements OnModuleInit, OnModuleDestroy {
       .for('update');
     if (!payment) throw AppError.notFound();
     if (result.status === 'pending') return 'pending';
-    if (payment.status !== 'initiated' && payment.status !== 'expired') return 'already_settled';
+    if (payment.status !== 'initiated' && payment.status !== 'expired') {
+      // Money taken on an attempt we had already closed (order cancelled, or a failure reported
+      // first): never ignore it — record it and flag the order for a refund (audit fix).
+      if (result.status === 'succeeded' && payment.status !== 'succeeded') {
+        await tx
+          .update(onlinePayments)
+          .set({
+            status: 'succeeded',
+            failureReason: `Paid after the attempt was ${payment.status}; refund it at the provider.`,
+            completedAt: sql`now()`,
+            updatedAt: sql`now()`,
+          })
+          .where(eq(onlinePayments.id, paymentId));
+        const [order] = await tx
+          .select()
+          .from(onlineOrders)
+          .where(eq(onlineOrders.id, payment.onlineOrderId))
+          .for('update');
+        if (order && !order.saleId && order.status !== 'needs_attention')
+          await this.setStatus(
+            tx,
+            order.id,
+            'needs_attention',
+            'A payment arrived after the order was closed; refund it at the provider.',
+          );
+        await this.record(tx, merchantId, 'online.payment_after_close', payment.onlineOrderId, {
+          paymentId,
+          previousStatus: payment.status,
+        });
+        return 'needs_attention';
+      }
+      return 'already_settled';
+    }
     if (payment.status === 'expired' && result.status !== 'succeeded') return 'already_settled';
     const [order] = await tx
       .select()
@@ -275,12 +307,17 @@ export class OnlinePaymentsService implements OnModuleInit, OnModuleDestroy {
     return 'paid';
   }
 
-  /** The archived service product used for delivery fees on online sales. */
+  /**
+   * The archived service product used for delivery fees on online sales. Its cost is 0 (a
+   * service, not goods), so it never makes a period's gross profit "unavailable".
+   */
   private async deliveryLine(tx: Transaction, merchantId: string, feeMinor: bigint) {
+    // Serialised per merchant so two first deliveries do not both create the item.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`delivery-item:${merchantId}`}))`);
     const [existing] = (
       await tx.execute(sql`
         select v.id as variant_id, p.id as product_id from product_variants v join products p on p.id = v.product_id
-        where v.sku = 'ONLINE-DELIVERY' limit 1`)
+        where lower(v.sku) = 'online-delivery' limit 1`)
     ).rows as { variant_id: string; product_id: string }[];
     let ids = existing;
     if (!ids) {
@@ -290,8 +327,8 @@ export class OnlinePaymentsService implements OnModuleInit, OnModuleDestroy {
         insert into products (id, merchant_id, name_en, name_ar, type, track_inventory, status)
         values (${productId}, ${merchantId}, 'Delivery fee', 'رسوم التوصيل', 'service', false, 'archived')`);
       await tx.execute(sql`
-        insert into product_variants (id, merchant_id, product_id, sku, price_minor, status)
-        values (${variantId}, ${merchantId}, ${productId}, 'ONLINE-DELIVERY', 0, 'archived')`);
+        insert into product_variants (id, merchant_id, product_id, sku, price_minor, cost_minor, status)
+        values (${variantId}, ${merchantId}, ${productId}, 'ONLINE-DELIVERY', 0, 0, 'archived')`);
       ids = { variant_id: variantId, product_id: productId };
     }
     return [
@@ -356,17 +393,28 @@ export class OnlinePaymentsService implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(`verify failed for ${String(p['id'])}: ${(error as Error).message}`);
       }
       if (result && result.status !== 'pending') {
-        const outcome = await this.database.withMerchantTx(merchantId, (tx) =>
-          this.applyResult(tx, merchantId, p['id'] as string, result),
-        );
-        if (outcome === 'paid') paid += 1;
+        try {
+          const outcome = await this.database.withMerchantTx(merchantId, (tx) =>
+            this.applyResult(tx, merchantId, p['id'] as string, result),
+          );
+          if (outcome === 'paid') paid += 1;
+        } catch (error) {
+          // One failing attempt must not stop the others or the expiry step.
+          this.logger.error(`applying ${String(p['id'])} failed: ${(error as Error).message}`);
+        }
       }
     }
     const expired = await this.database.withMerchantTx(merchantId, async (tx) => {
+      // Lock order: payment attempts before orders, as in applyResult (no deadlock).
+      await tx.execute(sql`
+        select p.id from online_payments p join online_orders o on o.id = p.online_order_id
+        where o.status = 'pending_payment' and o.reserved_until < now()
+          ${orderId ? sql`and o.id = ${orderId}` : sql``}
+        order by p.id for update of p`);
       const due = (
         await tx.execute(sql`
           select id from online_orders where status = 'pending_payment' and reserved_until < now()
-            ${orderId ? sql`and id = ${orderId}` : sql``} for update`)
+            ${orderId ? sql`and id = ${orderId}` : sql``} order by id for update`)
       ).rows as { id: string }[];
       for (const o of due) {
         await tx.execute(sql`
@@ -389,7 +437,14 @@ export class OnlinePaymentsService implements OnModuleInit, OnModuleDestroy {
   async reconcileDue() {
     const rows = (await this.database.db.execute(sql`select online_orders_due_merchants() as m`))
       .rows as { m: string }[];
-    for (const r of rows) await this.reconcile(r.m);
+    for (const r of rows) {
+      try {
+        await this.reconcile(r.m);
+      } catch (error) {
+        // A failing merchant must not stop the others.
+        this.logger.error(`reconcile failed for merchant ${r.m}: ${(error as Error).message}`);
+      }
+    }
   }
 
   private record(

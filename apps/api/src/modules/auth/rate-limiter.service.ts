@@ -23,6 +23,10 @@ export const AUTH_LIMITS = {
   platformLoginPerIp: { limit: 10, windowSeconds: 900 },
   platformFailuresPerEmail: { limit: 5, windowSeconds: 900 },
   mfaPerIp: { limit: 20, windowSeconds: 900 },
+  /** Wrong TOTP codes per operator, whatever the IP or ticket (audit finding, Prompt 18). */
+  mfaFailuresPerOperator: { limit: 5, windowSeconds: 900 },
+  /** Wrong passwords on a locked POS before the session ends. */
+  unlockFailuresPerSession: { limit: 5, windowSeconds: 900 },
 } as const satisfies Record<string, RateLimit>;
 
 /**

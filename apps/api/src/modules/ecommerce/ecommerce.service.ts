@@ -630,6 +630,13 @@ export class EcommerceService {
             .select()
             .from(onlineOrders)
             .where(eq(onlineOrders.idempotencyKey, input.idempotencyKey));
+          // A concurrent duplicate must carry the same request (audit fix).
+          if (o && o.requestHash !== requestHash)
+            throw new AppError(
+              409,
+              'IDEMPOTENCY_CONFLICT',
+              'This checkout key was already used for a different order.',
+            );
           return o?.trackingToken ?? null;
         });
         if (again) return this.track(slug, again);
@@ -861,6 +868,10 @@ export class EcommerceService {
     ip: string,
   ) {
     await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      // Lock order: payment attempts before the order, as the payment handler does.
+      await tx.execute(
+        sql`select id from online_payments where online_order_id = ${id} order by id for update`,
+      );
       const [order] = await tx
         .select()
         .from(onlineOrders)

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router';
 import { useAuth } from './auth.js';
 import { AccessDenied, ErrorState, FullPageLoader } from './components.js';
+import { LockScreen } from './lock-screen.js';
 
 export const LOGIN_PATH = '/login';
 
@@ -21,6 +22,8 @@ export function RequireAuth({ children }: { children?: ReactNode }) {
       return (
         <Navigate to={LOGIN_PATH} replace state={{ from: location.pathname + location.search }} />
       );
+    case 'locked':
+      return <LockScreen />;
     case 'authenticated':
       return <>{children ?? <Outlet />}</>;
   }

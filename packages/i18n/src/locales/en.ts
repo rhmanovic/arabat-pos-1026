@@ -11,6 +11,13 @@ export const commonEn = {
     ar: 'العربية',
     en: 'English',
   },
+  lock: {
+    title: 'POS locked',
+    body: 'Enter your password to continue. Anyone else must sign in with their own account.',
+    unlock: 'Unlock',
+    otherUser: 'Sign in as someone else',
+    lockNow: 'Lock',
+  },
   actions: {
     retry: 'Try again',
     signIn: 'Sign in',
@@ -147,6 +154,7 @@ export const commonEn = {
     PLAN_FEATURE_UNAVAILABLE: 'Your subscription plan does not include this feature.',
     PLAN_CHANGE_BLOCKED: 'The merchant’s current usage does not fit this plan.',
     MERCHANT_SUSPENDED: 'This company account is suspended. Contact the platform support.',
+    SESSION_LOCKED: 'The POS is locked. Enter your password.',
     NETWORK: 'Cannot reach the server. Check your connection.',
     UNKNOWN: 'An unexpected error occurred.',
   },

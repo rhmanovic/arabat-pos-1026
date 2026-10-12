@@ -1,5 +1,5 @@
 import { type ApiClient, ApiError, NetworkError } from '@arabat/api-client';
-import { QueryClient } from '@tanstack/react-query';
+import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
 import { type ReactNode, createContext, useContext } from 'react';
 
 const ApiContext = createContext<ApiClient | null>(null);
@@ -22,10 +22,19 @@ export function shouldRetry(failureCount: number, error: unknown): boolean {
 }
 
 export function createQueryClient(): QueryClient {
-  return new QueryClient({
+  // Any request refused because the POS locked itself re-reads the session, which turns
+  // the auth state to "locked" and shows the lock screen.
+  const onError = (error: unknown) => {
+    if (error instanceof ApiError && error.code === 'SESSION_LOCKED')
+      void client.invalidateQueries({ queryKey: ['auth'] });
+  };
+  const client: QueryClient = new QueryClient({
+    queryCache: new QueryCache({ onError }),
+    mutationCache: new MutationCache({ onError }),
     defaultOptions: {
       queries: { retry: shouldRetry, staleTime: 30_000, refetchOnWindowFocus: false },
       mutations: { retry: false },
     },
   });
+  return client;
 }

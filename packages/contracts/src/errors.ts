@@ -81,6 +81,7 @@ export const ERROR_CODES = [
   'PLAN_FEATURE_UNAVAILABLE',
   'PLAN_CHANGE_BLOCKED',
   'MERCHANT_SUSPENDED',
+  'SESSION_LOCKED',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

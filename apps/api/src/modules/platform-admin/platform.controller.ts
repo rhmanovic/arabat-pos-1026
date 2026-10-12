@@ -46,16 +46,17 @@ export class PlatformController {
 
   @RequirePlatformRole(...ANY)
   @Get('overview')
-  overview(): Promise<PlatformOverview> {
-    return this.platform.overview();
+  overview(@CurrentPlatformActor() actor: PlatformActor): Promise<PlatformOverview> {
+    return this.platform.overview(actor);
   }
 
   @RequirePlatformRole(...ANY)
   @Get('merchants')
   merchants(
+    @CurrentPlatformActor() actor: PlatformActor,
     @Query(new ZodPipe(platformMerchantQuerySchema)) q: O<typeof platformMerchantQuerySchema>,
   ) {
-    return this.platform.merchants(q);
+    return this.platform.merchants(actor, q);
   }
 
   @RequirePlatformRole(...SUPPORT)
@@ -113,8 +114,8 @@ export class PlatformController {
 
   @RequirePlatformRole(...ANY)
   @Get('plans')
-  async plans(): Promise<{ plans: Plan[] }> {
-    return { plans: await this.platform.plans() };
+  async plans(@CurrentPlatformActor() actor: PlatformActor): Promise<{ plans: Plan[] }> {
+    return { plans: await this.platform.plans(actor) };
   }
 
   @RequirePlatformRole(...BILLING)
@@ -140,7 +141,10 @@ export class PlatformController {
 
   @RequirePlatformRole(...SUPPORT)
   @Get('audit')
-  auditLog(@Query(new ZodPipe(platformAuditQuerySchema)) q: O<typeof platformAuditQuerySchema>) {
-    return this.platform.auditLog(q);
+  auditLog(
+    @CurrentPlatformActor() actor: PlatformActor,
+    @Query(new ZodPipe(platformAuditQuerySchema)) q: O<typeof platformAuditQuerySchema>,
+  ) {
+    return this.platform.auditLog(actor, q);
   }
 }

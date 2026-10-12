@@ -1,5 +1,6 @@
 import type { PlatformRole } from '@arabat/permissions';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
+import { sessions } from '../auth/auth.schema.js';
 import type { Transaction } from '../../database/database.service.js';
 import { SecretBox } from '../../kernel/crypto/secret-box.js';
 import { generateTotpSecret, otpauthUri } from '../../kernel/crypto/totp.js';
@@ -46,6 +47,11 @@ export async function upsertOperator(
   let id = existing?.id;
   if (id) {
     await tx.update(platformOperators).set(values).where(eq(platformOperators.id, id));
+    // Re-keying (new password and TOTP secret) ends the operator's sessions (audit fix).
+    await tx
+      .update(sessions)
+      .set({ revokedAt: sql`now()`, revokeReason: 'operator_rekeyed' })
+      .where(and(eq(sessions.operatorId, id), isNull(sessions.revokedAt)));
   } else {
     id = newId();
     await tx.insert(platformOperators).values({ id, ...values });

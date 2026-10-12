@@ -13,6 +13,13 @@ export const commonAr: CommonResources = {
     ar: 'العربية',
     en: 'English',
   },
+  lock: {
+    title: 'نقطة البيع مقفلة',
+    body: 'أدخل كلمة المرور للمتابعة. أي شخص آخر يجب أن يدخل بحسابه الخاص.',
+    unlock: 'فتح القفل',
+    otherUser: 'الدخول بحساب آخر',
+    lockNow: 'قفل',
+  },
   actions: {
     retry: 'إعادة المحاولة',
     signIn: 'تسجيل الدخول',
@@ -144,6 +151,7 @@ export const commonAr: CommonResources = {
     PLAN_FEATURE_UNAVAILABLE: 'خطة اشتراكك لا تشمل هذه الميزة.',
     PLAN_CHANGE_BLOCKED: 'الاستخدام الحالي للتاجر لا يتوافق مع هذه الخطة.',
     MERCHANT_SUSPENDED: 'حساب الشركة موقوف. تواصل مع دعم المنصة.',
+    SESSION_LOCKED: 'نقطة البيع مقفلة. أدخل كلمة المرور.',
     NETWORK: 'تعذّر الاتصال بالخادم. تحقق من الاتصال.',
     UNKNOWN: 'حدث خطأ غير متوقع.',
   },

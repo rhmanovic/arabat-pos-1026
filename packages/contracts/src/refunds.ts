@@ -96,7 +96,11 @@ export const exchangeSchema = z
     /** New sale total the cashier saw. */
     expectedTotal: moneyAmountSchema,
   })
-  .refine((r) => r.reason !== 'other' || Boolean(r.note), { error: 'Add a note.', path: ['note'] });
+  .refine((r) => r.reason !== 'other' || Boolean(r.note), { error: 'Add a note.', path: ['note'] })
+  .refine((r) => new Set(r.returnLines.map((l) => l.position)).size === r.returnLines.length, {
+    error: 'Each item may appear only once.',
+    path: ['returnLines'],
+  });
 export type Exchange = z.input<typeof exchangeSchema>;
 
 export const refundDecisionSchema = z.object({ note });

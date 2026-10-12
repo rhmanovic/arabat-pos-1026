@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+const DEV_MOCK_SECRET_DEFAULT = 'dev-only-mock-gateway-secret';
+
 const booleanString = z
   .enum(['true', 'false', '1', '0'])
   .transform((value) => value === 'true' || value === '1');
@@ -55,12 +57,37 @@ export const envSchema = z.object({
    */
   PAYMENT_MOCK_ENABLED: booleanString.optional(),
   /** Secret signing mock gateway webhooks (HMAC-SHA256). */
-  PAYMENT_MOCK_SECRET: z.string().min(16).default('dev-only-mock-gateway-secret'),
+  PAYMENT_MOCK_SECRET: z.string().min(16).default(DEV_MOCK_SECRET_DEFAULT),
+  /**
+   * Which proxies may set X-Forwarded-For (client IP for rate limits and audit). `false`
+   * (default) ignores the header; behind a load balancer set the hop count (e.g. `1`) or
+   * its addresses/CIDRs (comma separated). Never `true`: clients could fake their IP.
+   */
+  TRUST_PROXY: z
+    .string()
+    .default('false')
+    .transform((v, ctx) => {
+      const value = v.trim();
+      if (value === 'false' || value === '') return false as const;
+      if (/^\d+$/.test(value)) return Number(value);
+      if (value === 'true') {
+        ctx.addIssue({ code: 'custom', message: 'use a hop count or proxy addresses, not true' });
+        return z.NEVER;
+      }
+      return value.split(',').map((s) => s.trim());
+    }),
   /** Local directory for uploaded files (product images). */
   FILE_STORAGE_DIR: z.string().default('var/uploads'),
 });
 
 export type Env = z.infer<typeof envSchema>;
+
+const DEV_MOCK_SECRET = DEV_MOCK_SECRET_DEFAULT;
+/** Keys published in .env.example / CI; refused in production. */
+const DEV_SECRETS = new Set([
+  'VFZOJrTc/gBvE/+ElghyAt/0JVSBdrV8+m1D1ZOdSp4=',
+  'Y2ktb25seS1rZXktZm9yLXRlc3RzLTMyLWJ5dGVzISE=',
+]);
 
 export function mockPaymentsEnabled(env: Env): boolean {
   return env.PAYMENT_MOCK_ENABLED ?? env.NODE_ENV !== 'production';
@@ -84,5 +111,15 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
       result.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`),
     );
   }
-  return result.data;
+  const env = result.data;
+  // Development secrets must never protect production data (audit finding, Prompt 18).
+  if (env.NODE_ENV === 'production') {
+    const issues: string[] = [];
+    if (DEV_SECRETS.has(env.MFA_ENCRYPTION_KEY))
+      issues.push('MFA_ENCRYPTION_KEY: the development key from .env.example cannot be used');
+    if (mockPaymentsEnabled(env) && env.PAYMENT_MOCK_SECRET === DEV_MOCK_SECRET)
+      issues.push('PAYMENT_MOCK_SECRET: set a real secret when mock payments are enabled');
+    if (issues.length > 0) throw new InvalidEnvironmentError(issues);
+  }
+  return env;
 }

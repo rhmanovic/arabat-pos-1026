@@ -4,6 +4,7 @@ import { Injectable } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import type { FastifyRequest } from 'fastify';
 import { DatabaseService } from '../../database/database.service.js';
+import { AppError } from '../../kernel/errors/app-error.js';
 import { type Actor, SessionResolver } from '../../kernel/access/session-resolver.js';
 import { AccessRepository, eligibleBranches } from '../iam/access.repository.js';
 import { users } from '../iam/iam.schema.js';
@@ -30,6 +31,9 @@ export class DbSessionResolver extends SessionResolver {
     if (!token) return null;
     const session = await this.sessions.findLive(token, appInterface);
     if (!session) return null;
+    // A locked POS answers nothing until the password is entered again (POST /auth/pos/unlock).
+    if (session.lockedAt)
+      throw new AppError(401, 'SESSION_LOCKED', 'The POS is locked. Enter your password.');
 
     const actor =
       session.realm === 'platform'

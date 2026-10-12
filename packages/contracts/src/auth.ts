@@ -169,3 +169,7 @@ export const meResponseSchema = z.object({
 export type MeResponse = z.infer<typeof meResponseSchema>;
 
 export const switchBranchRequestSchema = z.object({ branchId: z.uuid() });
+
+/** POS screen lock (AUTH.md §2.1): after this long without input the till locks itself. */
+export const POS_IDLE_LOCK_SECONDS = 300;
+export const unlockRequestSchema = z.object({ password: z.string().min(1).max(200) });

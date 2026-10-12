@@ -1103,7 +1103,7 @@ export class RefundsService {
                    count(*) filter (where r.kind = 'void')::int as voids,
                    coalesce(sum(r.total_minor), 0) as amount,
                    count(*) filter (where 'outside_window' = any(r.approval_reasons))::int as outside
-            from refunds r where r.status = 'completed' and ${rScope} and ${range(sql`r.created_at`)}
+            from refunds r where r.status = 'completed' and ${rScope} and ${range(sql`r.completed_at`)}
             group by r.membership_id)
           select m.id as membership_id, u.full_name, coalesce(s.n, 0) as sales, coalesce(s.amount, 0)::text as sales_amount,
                  coalesce(r.refunds, 0) as refunds, coalesce(r.voids, 0) as voids, coalesce(r.amount, 0)::text as refund_amount,

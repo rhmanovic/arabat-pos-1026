@@ -3,11 +3,14 @@ import {
   ApiStatus,
   LanguageSwitcher,
   localizedName,
+  useApi,
   useAuth,
   useLogout,
   useSwitchInterface,
 } from '@arabat/web-core';
-import { useEffect, useState } from 'react';
+import { POS_IDLE_LOCK_SECONDS } from '@arabat/contracts';
+import { useMutation } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Outlet } from 'react-router';
 import { CartProvider } from '../sale/cart.js';
@@ -22,6 +25,30 @@ function useClock(): Date {
 }
 
 /**
+ * Locks the till after POS_IDLE_LOCK_SECONDS without touch, mouse or keyboard input (not
+ * merely without requests: the screen polls in the background). The server enforces it.
+ */
+function useIdleLock(lock: () => void, enabled: boolean) {
+  const last = useRef(Date.now());
+  useEffect(() => {
+    if (!enabled) return;
+    last.current = Date.now();
+    const seen = () => {
+      last.current = Date.now();
+    };
+    const events = ['pointerdown', 'keydown', 'touchstart', 'wheel'] as const;
+    for (const e of events) window.addEventListener(e, seen, { passive: true });
+    const id = setInterval(() => {
+      if (Date.now() - last.current >= POS_IDLE_LOCK_SECONDS * 1000) lock();
+    }, 10_000);
+    return () => {
+      for (const e of events) window.removeEventListener(e, seen);
+      clearInterval(id);
+    };
+  }, [lock, enabled]);
+}
+
+/**
  * Full-screen, touch-first register shell: one compact top strip, no sidebar, the whole
  * remaining screen belongs to the sale (BR-018). No management navigation exists here.
  */
@@ -32,6 +59,14 @@ export function POSLayout() {
   const logout = useLogout('pos');
   const toManager = useSwitchInterface('pos');
   const session = state.status === 'authenticated' ? state.session : null;
+  const api = useApi();
+  const { refresh } = useAuth();
+  const lock = useMutation({
+    mutationFn: () => api.auth.posLock(),
+    onSettled: () => refresh(),
+  });
+  const lockNow = lock.mutate;
+  useIdleLock(lockNow, session !== null && !lock.isPending);
 
   return (
     <CartProvider>
@@ -69,6 +104,9 @@ export function POSLayout() {
               {t('common:interfaces.manager')}
             </Button>
           ) : null}
+          <Button variant="secondary" size="sm" loading={lock.isPending} onClick={() => lockNow()}>
+            {t('common:lock.lockNow')}
+          </Button>
           <Button
             variant="secondary"
             size="sm"

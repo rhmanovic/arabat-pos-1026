@@ -8,6 +8,8 @@ export type AuthState =
   | { status: 'loading' }
   | { status: 'anonymous' }
   | { status: 'authenticated'; session: MeResponse }
+  /** POS screen lock: the session exists but needs the password again. */
+  | { status: 'locked' }
   | { status: 'error'; error: unknown };
 
 export interface AuthContextValue {
@@ -41,6 +43,7 @@ export function AuthProvider({
       try {
         return await api.auth.me(appInterface, signal);
       } catch (error) {
+        if (error instanceof ApiError && error.code === 'SESSION_LOCKED') return 'locked' as const;
         if (error instanceof ApiError && error.isUnauthenticated) return null;
         throw error;
       }
@@ -52,9 +55,11 @@ export function AuthProvider({
     ? { status: 'loading' }
     : query.isError
       ? { status: 'error', error: query.error }
-      : query.data
-        ? { status: 'authenticated', session: query.data }
-        : { status: 'anonymous' };
+      : query.data === 'locked'
+        ? { status: 'locked' }
+        : query.data
+          ? { status: 'authenticated', session: query.data }
+          : { status: 'anonymous' };
 
   const permissions = state.status === 'authenticated' ? state.session.permissions : null;
   const hasPermission = useCallback(

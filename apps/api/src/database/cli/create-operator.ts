@@ -3,8 +3,7 @@ import { hash } from '@node-rs/argon2';
 import { randomBytes } from 'node:crypto';
 import { parseArgs } from 'node:util';
 import { drizzle } from 'drizzle-orm/node-postgres';
-import pg from 'pg';
-import { loadEnv } from '../../config/env.js';
+import { createOwnerPool } from './owner-pool.js';
 import { upsertOperator } from '../../modules/platform-admin/operators.js';
 
 /**
@@ -25,8 +24,8 @@ if (!values.email || !values.name || !PLATFORM_ROLES.includes(values.role as Pla
   process.exit(1);
 }
 
-const env = loadEnv();
-const pool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 1 });
+// Operators are written with the schema owner: the API's runtime role cannot create them.
+const { env, pool } = createOwnerPool();
 try {
   const password = randomBytes(12).toString('base64url');
   const passwordHash = await hash(password, {
