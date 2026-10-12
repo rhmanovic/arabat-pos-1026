@@ -6,6 +6,7 @@ import { localizedName, useApi, useAuth } from '@arabat/web-core';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
 import { ShiftStrip } from '../pages/ShiftPages.js';
 import { type CartLine, priceLines, useCart } from './cart.js';
 import {
@@ -126,6 +127,14 @@ export function SalePage() {
             <Button size="sm" variant="secondary" onClick={() => setDialog('held')}>
               {t('sale.heldSales')}
             </Button>
+            {hasPermission('refunds.create') ? (
+              <Link
+                to="/returns"
+                className="rounded-md border border-border px-3 py-1.5 text-sm font-medium"
+              >
+                {t('returns.open')}
+              </Link>
+            ) : null}
           </>
         }
       />

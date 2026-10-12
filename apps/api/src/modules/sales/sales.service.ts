@@ -107,6 +107,8 @@ export class SalesService {
       .where(eq(salesSettings.merchantId, merchantId));
     return {
       maxDiscountPercent: trimDecimal(row?.maxDiscountPercent ?? '10'),
+      refundWindowDays: row?.refundWindowDays ?? 30,
+      refundApprovalLimit: money(row?.refundApprovalLimitMinor ?? 20000n),
       version: row?.version ?? 1,
     };
   }
@@ -117,6 +119,7 @@ export class SalesService {
     ip: string,
   ): Promise<SalesSettings> {
     assertCan(actor, 'merchant.settings.update', null);
+    const limitMinor = parseAmount(input.refundApprovalLimit, 'refundApprovalLimit');
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const [row] = await tx
         .select()
@@ -129,6 +132,8 @@ export class SalesService {
           .update(salesSettings)
           .set({
             maxDiscountPercent: input.maxDiscountPercent,
+            refundWindowDays: input.refundWindowDays,
+            refundApprovalLimitMinor: limitMinor,
             version: sql`${salesSettings.version} + 1`,
             updatedAt: sql`now()`,
           })
@@ -137,6 +142,8 @@ export class SalesService {
         await tx.insert(salesSettings).values({
           merchantId: actor.merchantId,
           maxDiscountPercent: input.maxDiscountPercent,
+          refundWindowDays: input.refundWindowDays,
+          refundApprovalLimitMinor: limitMinor,
           version: 2,
         });
       }
@@ -153,10 +160,35 @@ export class SalesService {
             from: row?.maxDiscountPercent ?? '10',
             to: input.maxDiscountPercent,
           },
+          refundWindowDays: { from: row?.refundWindowDays ?? 30, to: input.refundWindowDays },
+          refundApprovalLimit: {
+            from: (row?.refundApprovalLimitMinor ?? 20000n).toString(),
+            to: limitMinor.toString(),
+          },
         },
       });
       return this.settings(tx, actor.merchantId);
     });
+  }
+
+  /** Raw refund policy for the refunds module (exact minor units). */
+  async getSettingsInTx(tx: Transaction, merchantId: string) {
+    const [row] = await tx
+      .select()
+      .from(salesSettings)
+      .where(eq(salesSettings.merchantId, merchantId));
+    return {
+      refundWindowDays: row?.refundWindowDays ?? 30,
+      refundApprovalLimitMinor: row?.refundApprovalLimitMinor ?? 20000n,
+    };
+  }
+
+  /** Parses and permission-checks cart lines (shared with exchanges). */
+  parseCart(
+    actor: MerchantActor,
+    input: { lines: CartLine[]; orderDiscount: DiscountInput | null },
+  ) {
+    return this.parseLines(actor, input);
   }
 
   // ------------------------------------------------------------ checkout
@@ -211,235 +243,17 @@ export class SalesService {
       await this.database.withMerchantTx(actor.merchantId, async (tx) => {
         // 1. The cashier's own open shift at this branch, locked: one checkout at a time per shift.
         const shift = await this.shifts.lockOwnShift(tx, actor);
-
-        // 2. Authoritative prices and availability from the catalog.
-        const items = await this.loadItems(
-          tx,
-          branchId,
-          lines.map((l) => l.variantId),
-        );
-        const unavailable = lines.flatMap((l, i) =>
-          items.has(l.variantId)
-            ? []
-            : [
-                {
-                  path: `lines.${i}.variantId`,
-                  code: 'unavailable',
-                  message: 'This item cannot be sold here.',
-                },
-              ],
-        );
-        if (unavailable.length)
-          throw new AppError(
-            409,
-            'ITEM_UNAVAILABLE',
-            'Some items are not available at this branch.',
-            unavailable,
-          );
-
-        let priced;
-        try {
-          priced = priceCart(
-            lines.map((l) => ({
-              unitPriceMinor: l.priceOverrideMinor ?? items.get(l.variantId)!.priceMinor,
-              quantityMilli: l.quantityMilli,
-              discount: l.discount,
-            })),
-            orderDiscount,
-          );
-        } catch (error) {
-          if (error instanceof PricingError)
-            throw new AppError(400, error.code, error.message, [
-              {
-                path: error.line === null ? 'orderDiscount' : `lines.${error.line}`,
-                code: 'invalid',
-                message: error.message,
-              },
-            ]);
-          throw error;
-        }
-
-        // 3. Discount limit (exact comparison) unless the cashier may exceed it.
-        const { maxDiscountPercent } = await this.settings(tx, actor.merchantId);
-        if (!can(actor.access, 'sales.discount.override_limit', branchId)) {
-          const overLine = priced.lines.findIndex((p) =>
-            exceedsDiscountLimit(p.lineDiscountMinor, p.grossMinor, maxDiscountPercent),
-          );
-          const orderBase = priced.subtotalMinor - priced.lineDiscountsMinor;
-          if (
-            overLine >= 0 ||
-            exceedsDiscountLimit(priced.orderDiscountMinor, orderBase, maxDiscountPercent)
-          )
-            throw new AppError(
-              403,
-              'DISCOUNT_LIMIT_EXCEEDED',
-              `Discounts above ${maxDiscountPercent}% need a manager.`,
-            );
-        }
-
-        // 4. The total the cashier saw must still be right.
-        if (priced.totalMinor !== expectedTotalMinor)
-          throw new AppError(
-            409,
-            'TOTAL_CHANGED',
-            'Prices changed. Review the cart and try again.',
-          );
-
-        // 5. Payments must cover the total exactly.
-        const paid = await this.preparePayments(tx, input.payments, priced.totalMinor);
-
-        // 6. The order: complete a suspended one, or create it completed.
-        const orderId = await this.completeOrder(tx, actor, shift, input, lines, requestHash);
-
-        // 7. Receipt number (gap-free per branch, atomic increment).
-        const receiptNumber = await this.nextReceiptNumber(tx, actor.merchantId, branchId);
-
-        // 8. Stock: exactly one ledger movement per tracked line, all-or-nothing.
-        const applied = await this.ledger.apply(
-          tx,
-          {
-            merchantId: actor.merchantId,
-            branchId,
-            movementType: 'sale',
-            sourceType: 'sale',
-            sourceId: saleId,
-            userId: actor.userId,
-          },
-          lines.map((l) => ({
-            variantId: l.variantId,
-            mode: 'delta' as const,
-            quantityMilli: -l.quantityMilli,
-          })),
-        );
-
-        // 9. The immutable sale with snapshots, payments and balance entries.
-        let costMinor: bigint | null = 0n;
-        const lineRows = lines.map((l, i) => {
-          const item = items.get(l.variantId)!;
-          const p = priced.lines[i]!;
-          const unitCost = applied[i]!.tracked ? applied[i]!.unitCostMinor : item.costMinor;
-          if (unitCost === null) costMinor = null;
-          else if (costMinor !== null) costMinor += quantityValue(l.quantityMilli, unitCost);
-          return {
-            merchantId: actor.merchantId,
-            saleId,
-            position: i,
-            variantId: l.variantId,
-            productId: item.productId,
-            nameEn: item.nameEn,
-            nameAr: item.nameAr,
-            variantNameEn: item.variantNameEn,
-            variantNameAr: item.variantNameAr,
-            sku: item.sku,
-            quantity: formatQuantity(l.quantityMilli),
-            listUnitPriceMinor: item.priceMinor,
-            unitPriceMinor: l.priceOverrideMinor ?? item.priceMinor,
-            priceOverridden:
-              l.priceOverrideMinor !== null && l.priceOverrideMinor !== item.priceMinor,
-            grossMinor: p.grossMinor,
-            discountType: l.input.discount?.type ?? null,
-            discountValue: l.input.discount?.value ?? null,
-            lineDiscountMinor: p.lineDiscountMinor,
-            orderDiscountMinor: p.orderDiscountMinor,
-            netMinor: p.netMinor,
-            trackInventory: applied[i]!.tracked,
-            unitCostMinor: unitCost,
-          };
-        });
-        const totals = paid.reduce(
-          (t, p) => ({ change: t.change + p.changeMinor, fees: t.fees + p.feeMinor }),
-          { change: 0n, fees: 0n },
-        );
-        await tx.insert(sales).values({
-          id: saleId,
-          merchantId: actor.merchantId,
-          orderId,
-          branchId,
-          registerId: shift.registerId,
-          shiftId: shift.id,
-          membershipId: actor.membershipId,
-          userId: actor.userId,
-          receiptNumber,
-          subtotalMinor: priced.subtotalMinor,
-          lineDiscountsMinor: priced.lineDiscountsMinor,
-          orderDiscountMinor: priced.orderDiscountMinor,
-          totalMinor: priced.totalMinor,
-          paidMinor: priced.totalMinor,
-          changeMinor: totals.change,
-          feesMinor: totals.fees,
-          costMinor,
-        });
-        await tx.insert(saleLines).values(lineRows);
-        if (paid.length > 0) {
-          await tx.insert(payments).values(
-            paid.map((p) => ({
-              id: p.id,
-              merchantId: actor.merchantId,
-              saleId,
-              branchId,
-              shiftId: shift.id,
-              paymentMethodId: p.method.id,
-              methodKind: p.method.kind,
-              methodNameEn: p.method.nameEn,
-              methodNameAr: p.method.nameAr,
-              amountMinor: p.amountMinor,
-              tenderedMinor: p.tenderedMinor,
-              changeMinor: p.changeMinor,
-              feeMinor: p.feeMinor,
-              status: 'succeeded',
-              verification: 'manual',
-              reference: p.reference,
-              financialAccountId: p.method.financialAccountId,
-            })),
-          );
-          const entries = paid.flatMap((p) =>
-            p.method.financialAccountId
-              ? [
-                  { entryType: 'payment', amountMinor: p.amountMinor, p },
-                  ...(p.feeMinor > 0n ? [{ entryType: 'fee', amountMinor: -p.feeMinor, p }] : []),
-                ]
-              : [],
-          );
-          if (entries.length)
-            await tx.insert(financialAccountEntries).values(
-              entries.map((e) => ({
-                id: newId(),
-                merchantId: actor.merchantId,
-                accountId: e.p.method.financialAccountId!,
-                amountMinor: e.amountMinor,
-                entryType: e.entryType,
-                sourceType: 'payment',
-                sourceId: e.p.id,
-                description: receiptNumber,
-                createdByUserId: actor.userId,
-              })),
-            );
-        }
-        await this.audit.recordIn(tx, {
-          merchantId: actor.merchantId,
-          actorType: 'user',
-          actorId: actor.userId,
-          action: 'sale.completed',
-          targetType: 'sale',
-          targetId: saleId,
+        await this.completeSaleInTx(tx, actor, shift, {
+          saleId,
+          lines,
+          orderDiscount,
+          orderDiscountInput: input.orderDiscount,
+          payments: input.payments,
+          expectedTotalMinor,
+          orderId: input.orderId ?? null,
+          idempotency: { key: input.idempotencyKey, hash: requestHash },
+          exchange: null,
           ip,
-          details: {
-            receiptNumber,
-            total: Money.ofMinor(priced.totalMinor, CURRENCY).toDecimalString(),
-            shiftId: shift.id,
-            registerId: shift.registerId,
-            priceOverrides: lineRows
-              .filter((l) => l.priceOverridden)
-              .map((l) => ({
-                variantId: l.variantId,
-                from: Money.ofMinor(l.listUnitPriceMinor, CURRENCY).toDecimalString(),
-                to: Money.ofMinor(l.unitPriceMinor, CURRENCY).toDecimalString(),
-              })),
-            discounts: Money.ofMinor(
-              priced.lineDiscountsMinor + priced.orderDiscountMinor,
-              CURRENCY,
-            ).toDecimalString(),
-          },
         });
       });
     } catch (error) {
@@ -451,6 +265,278 @@ export class SalesService {
       throw error;
     }
     return this.getSale(actor, saleId, 'pos');
+  }
+
+  /**
+   * Steps 2–9 of a checkout inside the caller's transaction (the shift is already locked).
+   * Used by the POS checkout and by exchanges, where part of the total is paid with the
+   * credit of the linked refund.
+   */
+  async completeSaleInTx(
+    tx: Transaction,
+    actor: MerchantActor,
+    shift: { id: string; registerId: string; branchId: string },
+    args: {
+      saleId: string;
+      lines: ParsedLine[];
+      orderDiscount: Discount | null;
+      orderDiscountInput: DiscountInput | null;
+      payments: CheckoutInput['payments'];
+      expectedTotalMinor: bigint;
+      orderId: string | null;
+      idempotency: { key: string; hash: string } | null;
+      exchange: { refundId: string; creditMinor: bigint } | null;
+      ip: string;
+    },
+  ): Promise<{ totalMinor: bigint; receiptNumber: string }> {
+    const { saleId, lines, orderDiscount, ip } = args;
+    const branchId = shift.branchId;
+    // 2. Authoritative prices and availability from the catalog.
+    const items = await this.loadItems(
+      tx,
+      branchId,
+      lines.map((l) => l.variantId),
+    );
+    const unavailable = lines.flatMap((l, i) =>
+      items.has(l.variantId)
+        ? []
+        : [
+            {
+              path: `lines.${i}.variantId`,
+              code: 'unavailable',
+              message: 'This item cannot be sold here.',
+            },
+          ],
+    );
+    if (unavailable.length)
+      throw new AppError(
+        409,
+        'ITEM_UNAVAILABLE',
+        'Some items are not available at this branch.',
+        unavailable,
+      );
+
+    let priced;
+    try {
+      priced = priceCart(
+        lines.map((l) => ({
+          unitPriceMinor: l.priceOverrideMinor ?? items.get(l.variantId)!.priceMinor,
+          quantityMilli: l.quantityMilli,
+          discount: l.discount,
+        })),
+        orderDiscount,
+      );
+    } catch (error) {
+      if (error instanceof PricingError)
+        throw new AppError(400, error.code, error.message, [
+          {
+            path: error.line === null ? 'orderDiscount' : `lines.${error.line}`,
+            code: 'invalid',
+            message: error.message,
+          },
+        ]);
+      throw error;
+    }
+
+    // 3. Discount limit (exact comparison) unless the cashier may exceed it.
+    const { maxDiscountPercent } = await this.settings(tx, actor.merchantId);
+    if (!can(actor.access, 'sales.discount.override_limit', branchId)) {
+      const overLine = priced.lines.findIndex((p) =>
+        exceedsDiscountLimit(p.lineDiscountMinor, p.grossMinor, maxDiscountPercent),
+      );
+      const orderBase = priced.subtotalMinor - priced.lineDiscountsMinor;
+      if (
+        overLine >= 0 ||
+        exceedsDiscountLimit(priced.orderDiscountMinor, orderBase, maxDiscountPercent)
+      )
+        throw new AppError(
+          403,
+          'DISCOUNT_LIMIT_EXCEEDED',
+          `Discounts above ${maxDiscountPercent}% need a manager.`,
+        );
+    }
+
+    // 4. The total the cashier saw must still be right.
+    if (priced.totalMinor !== args.expectedTotalMinor)
+      throw new AppError(409, 'TOTAL_CHANGED', 'Prices changed. Review the cart and try again.');
+
+    // 5. Payments must cover the total exactly.
+    const creditMinor = args.exchange
+      ? args.exchange.creditMinor < priced.totalMinor
+        ? args.exchange.creditMinor
+        : priced.totalMinor
+      : 0n;
+    const paid = await this.preparePayments(tx, args.payments, priced.totalMinor - creditMinor);
+
+    // 6. The order: complete a suspended one, or create it completed.
+    const orderId = await this.completeOrder(tx, actor, shift, args);
+
+    // 7. Receipt number (gap-free per branch, atomic increment).
+    const receiptNumber = await this.nextReceiptNumber(tx, actor.merchantId, branchId);
+
+    // 8. Stock: exactly one ledger movement per tracked line, all-or-nothing.
+    const applied = await this.ledger.apply(
+      tx,
+      {
+        merchantId: actor.merchantId,
+        branchId,
+        movementType: 'sale',
+        sourceType: 'sale',
+        sourceId: saleId,
+        userId: actor.userId,
+      },
+      lines.map((l) => ({
+        variantId: l.variantId,
+        mode: 'delta' as const,
+        quantityMilli: -l.quantityMilli,
+      })),
+    );
+
+    // 9. The immutable sale with snapshots, payments and balance entries.
+    let costMinor: bigint | null = 0n;
+    const lineRows = lines.map((l, i) => {
+      const item = items.get(l.variantId)!;
+      const p = priced.lines[i]!;
+      const unitCost = applied[i]!.tracked ? applied[i]!.unitCostMinor : item.costMinor;
+      if (unitCost === null) costMinor = null;
+      else if (costMinor !== null) costMinor += quantityValue(l.quantityMilli, unitCost);
+      return {
+        merchantId: actor.merchantId,
+        saleId,
+        position: i,
+        variantId: l.variantId,
+        productId: item.productId,
+        nameEn: item.nameEn,
+        nameAr: item.nameAr,
+        variantNameEn: item.variantNameEn,
+        variantNameAr: item.variantNameAr,
+        sku: item.sku,
+        quantity: formatQuantity(l.quantityMilli),
+        listUnitPriceMinor: item.priceMinor,
+        unitPriceMinor: l.priceOverrideMinor ?? item.priceMinor,
+        priceOverridden: l.priceOverrideMinor !== null && l.priceOverrideMinor !== item.priceMinor,
+        grossMinor: p.grossMinor,
+        discountType: l.input.discount?.type ?? null,
+        discountValue: l.input.discount?.value ?? null,
+        lineDiscountMinor: p.lineDiscountMinor,
+        orderDiscountMinor: p.orderDiscountMinor,
+        netMinor: p.netMinor,
+        trackInventory: applied[i]!.tracked,
+        unitCostMinor: unitCost,
+      };
+    });
+    const totals = paid.reduce(
+      (t, p) => ({ change: t.change + p.changeMinor, fees: t.fees + p.feeMinor }),
+      { change: 0n, fees: 0n },
+    );
+    await tx.insert(sales).values({
+      id: saleId,
+      merchantId: actor.merchantId,
+      orderId,
+      branchId,
+      registerId: shift.registerId,
+      shiftId: shift.id,
+      membershipId: actor.membershipId,
+      userId: actor.userId,
+      receiptNumber,
+      subtotalMinor: priced.subtotalMinor,
+      lineDiscountsMinor: priced.lineDiscountsMinor,
+      orderDiscountMinor: priced.orderDiscountMinor,
+      totalMinor: priced.totalMinor,
+      paidMinor: priced.totalMinor,
+      changeMinor: totals.change,
+      feesMinor: totals.fees,
+      costMinor,
+    });
+    await tx.insert(saleLines).values(lineRows);
+    if (creditMinor > 0n)
+      await tx.insert(payments).values({
+        id: newId(),
+        merchantId: actor.merchantId,
+        saleId,
+        branchId,
+        shiftId: shift.id,
+        paymentMethodId: null,
+        methodKind: 'exchange',
+        methodNameEn: 'Exchange credit',
+        methodNameAr: 'رصيد استبدال',
+        amountMinor: creditMinor,
+        refundId: args.exchange!.refundId,
+        status: 'succeeded',
+        verification: 'internal',
+      });
+    if (paid.length > 0) {
+      await tx.insert(payments).values(
+        paid.map((p) => ({
+          id: p.id,
+          merchantId: actor.merchantId,
+          saleId,
+          branchId,
+          shiftId: shift.id,
+          paymentMethodId: p.method.id,
+          methodKind: p.method.kind,
+          methodNameEn: p.method.nameEn,
+          methodNameAr: p.method.nameAr,
+          amountMinor: p.amountMinor,
+          tenderedMinor: p.tenderedMinor,
+          changeMinor: p.changeMinor,
+          feeMinor: p.feeMinor,
+          status: 'succeeded',
+          verification: 'manual',
+          reference: p.reference,
+          financialAccountId: p.method.financialAccountId,
+        })),
+      );
+      const entries = paid.flatMap((p) =>
+        p.method.financialAccountId
+          ? [
+              { entryType: 'payment', amountMinor: p.amountMinor, p },
+              ...(p.feeMinor > 0n ? [{ entryType: 'fee', amountMinor: -p.feeMinor, p }] : []),
+            ]
+          : [],
+      );
+      if (entries.length)
+        await tx.insert(financialAccountEntries).values(
+          entries.map((e) => ({
+            id: newId(),
+            merchantId: actor.merchantId,
+            accountId: e.p.method.financialAccountId!,
+            amountMinor: e.amountMinor,
+            entryType: e.entryType,
+            sourceType: 'payment',
+            sourceId: e.p.id,
+            description: receiptNumber,
+            createdByUserId: actor.userId,
+          })),
+        );
+    }
+    await this.audit.recordIn(tx, {
+      merchantId: actor.merchantId,
+      actorType: 'user',
+      actorId: actor.userId,
+      action: args.exchange ? 'sale.completed_exchange' : 'sale.completed',
+      targetType: 'sale',
+      targetId: saleId,
+      ip,
+      details: {
+        receiptNumber,
+        total: Money.ofMinor(priced.totalMinor, CURRENCY).toDecimalString(),
+        shiftId: shift.id,
+        registerId: shift.registerId,
+        priceOverrides: lineRows
+          .filter((l) => l.priceOverridden)
+          .map((l) => ({
+            variantId: l.variantId,
+            from: Money.ofMinor(l.listUnitPriceMinor, CURRENCY).toDecimalString(),
+            to: Money.ofMinor(l.unitPriceMinor, CURRENCY).toDecimalString(),
+          })),
+        discounts: Money.ofMinor(
+          priced.lineDiscountsMinor + priced.orderDiscountMinor,
+          CURRENCY,
+        ).toDecimalString(),
+      },
+    });
+    return { totalMinor: priced.totalMinor, receiptNumber };
   }
 
   private async replay(
@@ -607,10 +693,14 @@ export class SalesService {
     tx: Transaction,
     actor: MerchantActor,
     shift: { id: string; registerId: string; branchId: string },
-    input: CheckoutInput,
-    lines: ParsedLine[],
-    requestHash: string,
+    args: {
+      lines: ParsedLine[];
+      orderDiscountInput: DiscountInput | null;
+      orderId: string | null;
+      idempotency: { key: string; hash: string } | null;
+    },
   ): Promise<string> {
+    const { lines } = args;
     const lineValues = (orderId: string) =>
       lines.map((l, i) => ({
         merchantId: actor.merchantId,
@@ -622,11 +712,11 @@ export class SalesService {
         discountType: l.input.discount?.type ?? null,
         discountValue: l.input.discount?.value ?? null,
       }));
-    if (input.orderId) {
+    if (args.orderId) {
       const [order] = await tx
         .select()
         .from(orders)
-        .where(eq(orders.id, input.orderId))
+        .where(eq(orders.id, args.orderId))
         .for('update');
       if (!order || order.branchId !== shift.branchId) throw AppError.notFound('Order not found.');
       if (order.status !== 'suspended')
@@ -641,10 +731,10 @@ export class SalesService {
         .update(orders)
         .set({
           status: 'completed',
-          idempotencyKey: input.idempotencyKey,
-          requestHash,
-          orderDiscountType: input.orderDiscount?.type ?? null,
-          orderDiscountValue: input.orderDiscount?.value ?? null,
+          idempotencyKey: args.idempotency?.key ?? null,
+          requestHash: args.idempotency?.hash ?? null,
+          orderDiscountType: args.orderDiscountInput?.type ?? null,
+          orderDiscountValue: args.orderDiscountInput?.value ?? null,
           completedAt: sql`now()`,
           updatedAt: sql`now()`,
           version: sql`${orders.version} + 1`,
@@ -662,10 +752,10 @@ export class SalesService {
       membershipId: actor.membershipId,
       userId: actor.userId,
       status: 'completed',
-      orderDiscountType: input.orderDiscount?.type ?? null,
-      orderDiscountValue: input.orderDiscount?.value ?? null,
-      idempotencyKey: input.idempotencyKey,
-      requestHash,
+      orderDiscountType: args.orderDiscountInput?.type ?? null,
+      orderDiscountValue: args.orderDiscountInput?.value ?? null,
+      idempotencyKey: args.idempotency?.key ?? null,
+      requestHash: args.idempotency?.hash ?? null,
       completedAt: sql`now()`,
     });
     await tx.insert(orderLines).values(lineValues(orderId));
@@ -819,7 +909,10 @@ export class SalesService {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const [s] = (
         await tx.execute(
-          sql`select s.*, u.full_name from sales s join users u on u.id = s.user_id where s.id = ${id}`,
+          sql`select s.*, u.full_name,
+                     (select coalesce(sum(r.total_minor), 0) from refunds r
+                      where r.sale_id = s.id and r.status = 'completed')::text as refunded
+              from sales s join users u on u.id = s.user_id where s.id = ${id}`,
         )
       ).rows as Record<string, unknown>[];
       if (!s) throw AppError.notFound();
@@ -852,6 +945,7 @@ export class SalesService {
         total: money(s['total_minor'] as string),
         paid: money(s['paid_minor'] as string),
         change: money(s['change_minor'] as string),
+        refunded: money(s['refunded'] as string),
         lines: ls.map((l) => ({
           position: l.position,
           variantId: l.variantId,
@@ -985,9 +1079,12 @@ export class SalesService {
       const where = sql.join(conditions, sql` and `);
       const [agg] = (
         await tx.execute(
-          sql`select count(*)::int as n, coalesce(sum(total_minor), 0)::text as amount from sales s where ${where}`,
+          sql`select count(*)::int as n, coalesce(sum(total_minor), 0)::text as amount,
+                     coalesce((select sum(r.total_minor) from refunds r
+                               where r.status = 'completed' and r.sale_id in (select s.id from sales s where ${where})), 0)::text as refunded
+              from sales s where ${where}`,
         )
-      ).rows as { n: number; amount: string }[];
+      ).rows as { n: number; amount: string; refunded: string }[];
       const rows = await this.summaries(
         tx,
         where,
@@ -999,7 +1096,12 @@ export class SalesService {
         total: agg!.n,
         page: query.page,
         pageSize: query.pageSize,
-        totals: { count: agg!.n, amount: money(agg!.amount) },
+        totals: {
+          count: agg!.n,
+          amount: money(agg!.amount),
+          refunded: money(agg!.refunded),
+          net: money(BigInt(agg!.amount) - BigInt(agg!.refunded)),
+        },
       };
     });
   }
@@ -1014,7 +1116,9 @@ export class SalesService {
       await tx.execute(sql`
         select s.id, s.receipt_number, s.branch_id, s.created_at, s.total_minor::text as total, u.full_name,
                (select coalesce(sum(l.quantity), 0)::text from sale_lines l where l.sale_id = s.id) as items,
-               (select coalesce(array_agg(distinct p.method_kind), '{}') from payments p where p.sale_id = s.id) as kinds
+               (select coalesce(array_agg(distinct p.method_kind), '{}') from payments p where p.sale_id = s.id) as kinds,
+               (select coalesce(sum(r.total_minor), 0) from refunds r
+                where r.sale_id = s.id and r.status = 'completed')::text as refunded
         from sales s join users u on u.id = s.user_id
         where ${where}
         order by s.created_at desc, s.id desc limit ${limit} offset ${offset}`)
@@ -1028,6 +1132,7 @@ export class SalesService {
       total: money(r['total'] as string),
       itemCount: formatQuantity(parseQuantity(r['items'] as string)),
       paymentKinds: r['kinds'] as string[],
+      refunded: money(r['refunded'] as string),
     }));
   }
 }

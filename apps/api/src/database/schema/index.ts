@@ -11,3 +11,4 @@ export * from '../../modules/inventory/inventory.schema.js';
 export * from '../../modules/payments/payments.schema.js';
 export * from '../../modules/registers/registers.schema.js';
 export * from '../../modules/sales/sales.schema.js';
+export * from '../../modules/refunds/refunds.schema.js';

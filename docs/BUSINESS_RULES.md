@@ -118,6 +118,19 @@ engineering defaults pending owner confirmation.
 - **BR-085** Held (suspended) sales reserve no stock; any cashier at the branch may resume
   or discard them; a held sale can be completed once.
 
+- **BR-090** Returns are made against the original receipt at the branch of the sale;
+  item quantities can be partial; the refund amount is the paid (net) value of the units.
+- **BR-091** Refunds go back to the original payment methods (split payments per tender,
+  never more than each tender); cash comes from the cashier's drawer.
+- **BR-092** Approval by a supervisor/manager is required above the refund limit or after
+  the return window (both configurable); nobody approves their own refund.
+- **BR-093** Returned items go back to stock only when marked so (not for damaged goods),
+  at the cost they were sold with.
+- **BR-094** A sale of the cashier's open shift may be cancelled (void) by users with
+  `sales.void` while it has no returns; held sales can be discarded; pending refund
+  requests can be withdrawn.
+- **BR-095** Gateway refunds are completed only after the gateway confirms them.
+
 ## 4. Money — Confirmed
 
 - **BR-030** Default currency is **KWD** with **3 decimal places** (1 KWD = 1000 fils).
@@ -151,4 +164,6 @@ engineering defaults pending owner confirmation.
 | OQ-012 | Number display: Latin digits (0-9) or Arabic-Indic (٠-٩) by default? (engineering default: Latin, configurable) | M0 UI |
 | OQ-014 | Costing method: weighted average (implemented default) or FIFO required for accounting? | Reports / accounting |
 | OQ-015 | Blind closing: should cashiers count the drawer without seeing the expected amount first? (implemented: expected is shown) | POS shifts |
+| OQ-016 | Should card processing fees be reversed on refunds (depends on the acquirer contract)? Implemented: not reversed. | Refunds / reports |
+| OQ-017 | Returns without a receipt or at another branch: allowed? Implemented: receipt required, same branch. | Refunds |
 | OQ-013 | Card payments: manual entry of card amount only, or integrated card terminals (e.g. KNET)? | M4 / later |

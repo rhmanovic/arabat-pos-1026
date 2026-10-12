@@ -105,6 +105,8 @@ export function SalesPage() {
           {t('sales.summary', {
             count: list.data.totals.count,
             amount: formatAmount(list.data.totals.amount, i18n.language),
+            refunded: formatAmount(list.data.totals.refunded, i18n.language),
+            net: formatAmount(list.data.totals.net, i18n.language),
           })}
         </p>
       ) : null}
@@ -185,12 +187,21 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
     queryFn: () => api.sales.managerSettings(),
   });
   const [value, setValue] = useState<string | null>(null);
+  const [days, setDays] = useState<string | null>(null);
+  const [limit, setLimit] = useState<string | null>(null);
   const current = value ?? settings.data?.maxDiscountPercent ?? '';
-  const valid = /^(100(\.0{1,2})?|\d{1,2}(\.\d{1,2})?)$/.test(current.trim());
+  const windowDays = days ?? String(settings.data?.refundWindowDays ?? '');
+  const approvalLimit = limit ?? settings.data?.refundApprovalLimit.amount ?? '';
+  const valid =
+    /^(100(\.0{1,2})?|\d{1,2}(\.\d{1,2})?)$/.test(current.trim()) &&
+    /^\d{1,4}$/.test(windowDays.trim()) &&
+    /^\d{1,10}(\.\d{1,3})?$/.test(approvalLimit.trim());
   const save = useMutation({
     mutationFn: () =>
       api.sales.updateSettings({
         maxDiscountPercent: current.trim(),
+        refundWindowDays: Number.parseInt(windowDays.trim(), 10),
+        refundApprovalLimit: approvalLimit.trim(),
         version: settings.data!.version,
       }),
     onSuccess: async () => {
@@ -220,17 +231,41 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
         </>
       }
     >
-      <Field label={t('sales.maxDiscount')} hint={t('sales.maxDiscountHint')}>
-        {(p) => (
-          <Input
-            {...p}
-            dir="ltr"
-            inputMode="decimal"
-            value={current}
-            onChange={(e) => setValue(e.target.value)}
-          />
-        )}
-      </Field>
+      <div className="grid gap-4">
+        <Field label={t('sales.maxDiscount')} hint={t('sales.maxDiscountHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="decimal"
+              value={current}
+              onChange={(e) => setValue(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('sales.refundWindow')} hint={t('sales.refundWindowHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="numeric"
+              value={windowDays}
+              onChange={(e) => setDays(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('sales.refundLimit')} hint={t('sales.refundLimitHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="decimal"
+              value={approvalLimit}
+              onChange={(e) => setLimit(e.target.value)}
+            />
+          )}
+        </Field>
+      </div>
     </Dialog>
   );
 }
@@ -271,6 +306,17 @@ export function SaleDetailPage() {
                 <>
                   {t('sales.orderDiscount')}: <Amount value={s.orderDiscount} />
                 </>
+              }
+            />
+            <StatCard
+              label={t('sales.refunded')}
+              value={<Amount value={s.refunded} />}
+              hint={
+                s.refunded.amount !== '0.000' ? (
+                  <Link className="text-primary" to={`/refunds?saleId=${s.id}`}>
+                    {t('nav.refunds')}
+                  </Link>
+                ) : undefined
               }
             />
             <StatCard label={t('sales.fees')} value={<Amount value={s.fees} />} />

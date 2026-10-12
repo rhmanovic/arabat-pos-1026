@@ -66,6 +66,26 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after Prompt 11 (2026-10-12, local run)
+- `pnpm verify` ✓ (113 unit/web), `pnpm test:integration` ✓ (110), `pnpm test:e2e` ✓ (27).
+- `refunds.int.test.ts` (11): partial then full refunds summing exactly (3 × 0.333);
+  no excess; shift drawer and sales totals (refunded, net); split-payment allocation
+  (proportional default, custom within each tender, invalid allocations refused);
+  conditional restock at original cost; approval above the limit (reservation while
+  pending, cashier/other-branch manager cannot approve, supervisor approves at the till,
+  cash from the requester's drawer, no double decision); reject, withdraw, self-approval
+  blocked; **duplicate and concurrent requests** (same key ×4 → one refund; two cashiers
+  on two shifts racing for the last unit → exactly one) — verified to fail without the
+  per-sale lock; drawer must cover cash refunds and a shift is required; gateway refunds
+  stay processing; voids (permission, own shift, once); exchanges up and down with exact
+  credit/difference and stock, atomic failure; immutability; activity report; isolation.
+- Web: manager approval of a pending refund.
+- `e2e/refunds.spec.ts`: invited cashier refunds one item with receipt, exchanges with a
+  difference paid in cash, requests a large refund that waits; the manager approves in
+  `/manager/refunds`; stock and drawer reconcile exactly.
+- Found and fixed: identical button names for "refund" mode and submit (renamed to
+  "Confirm refund"); the exchange flow hid the new sale's receipt.
+
 ### Results after Prompt 10 (2026-10-12, local run)
 - `pnpm verify` ✓ (112 unit/web), `pnpm test:integration` ✓ (99), `pnpm test:e2e` ✓ (26).
 - `pricing.test.ts`: exact fractional quantities, line/order discounts with exact

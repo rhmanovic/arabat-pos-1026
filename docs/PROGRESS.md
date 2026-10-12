@@ -3,7 +3,7 @@
 Only record what has actually been done and verified. Mocked or partial work
 must be labeled as such.
 
-## Current state (2026-10-12, after Prompt 10 — POS and checkout)
+## Current state (2026-10-12, after Prompt 11 — returns, refunds and exchanges)
 
 | Area | Status | Notes |
 |---|---|---|
@@ -19,7 +19,8 @@ must be labeled as such.
 | Inventory | Done | Per-branch balances, append-only ledger, opening/increase/decrease/count documents with reasons, idempotency, row-locked concurrency, no-oversell policy, thresholds, weighted-average valuation, history, manager screens, POS availability API, reusable engine for sales/refunds/transfers |
 | Payments, registers, shifts | Done | Per-merchant payment methods with exact fees, internal balances (entries ledger), gateway placeholder (not live), registers with access control, shifts with cash in/out, expected vs counted cash, discrepancy, force close, manager monitoring and report, POS shift screens |
 | POS & checkout | Done | Sale screen (search/scan, categories, cart, discounts, price override by permission, split payments, change, receipt + print, hold/resume, recent sales), atomic idempotent checkout, receipt numbers, manager sales history |
-| Automated tests | Passing | 112 unit/web, 99 integration, 26 E2E (local) |
+| Returns & refunds | Done | Full/partial/quantity returns, exchanges, voids, reasons, eligibility (window, limit), supervisor/manager approval, conditional restock, per-tender pay-back, gateway-safe states, history, unusual-activity report, refund receipts |
+| Automated tests | Passing | 113 unit/web, 110 integration, 27 E2E (local) |
 | CI | Written, not yet run | `.github/workflows/ci.yml` |
 | Business modules | Not started | Begin in M1 |
 | Deployment | Not planned | Requires owner approval |
@@ -206,5 +207,14 @@ Not done yet (later prompts): refunds/voids (11), customer on sale (13), offline
 selling (OQ-005), tax (OQ-002), receipt legal fields (OQ-009), quick PIN switching
 (OQ-006).
 
+### 2026-10-12 — Prompt 11: Returns, refunds and exchanges
+Implemented: migrations 0015–0017; refunds module (`RefundsService`: lookup, preview,
+refund, void, exchange via the checkout engine, approve/reject/withdraw, receipts,
+history, activity); shift expected cash includes cash refunds; sales show refunded and
+net amounts; POS returns screen; manager returns page and refund policy settings.
+Verified: see TESTING.md.
+Not done yet / open: OQ-016 (fee reversal), OQ-017 (no-receipt / cross-branch returns);
+gateway refund confirmation arrives with Prompt 16.
+
 ## Next step
-Prompt 11 — returns, refunds and exchanges.
+Prompt 12 — suppliers, purchasing and stock transfers.

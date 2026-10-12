@@ -358,6 +358,24 @@ erDiagram
 | `apps/api/drizzle/0013_sales.sql` | `sales_settings`, `receipt_sequences`, `orders`, `order_lines`, `sales`, `sale_lines`, `payments` (generated) |
 | `apps/api/drizzle/0014_sales_rls.sql` | Forced RLS; `UPDATE/DELETE` revoked on sales, sale lines and payments; triggers making completed/cancelled orders and their lines final |
 
+| `apps/api/drizzle/0015_refunds.sql` | `refunds`, `refund_lines`, `refund_payments`; refund policy columns on `sales_settings`; `payments.refund_id` + nullable method for exchange credit (generated) |
+| `apps/api/drizzle/0016_refunds_rls.sql` | Forced RLS; no deletes; refund lines immutable; triggers: final refund states immutable, only pending refund payments may settle |
+| `apps/api/drizzle/0017_refund_zero_total.sql` | Allow zero-value refunds (returning free items to stock) |
+
+Refund model (implemented, Prompt 11):
+- `refunds`: linked to the original sale (never changed); `kind` refund | void | exchange;
+  `status` pending_approval → processing → completed, or rejected / cancelled;
+  `refund_number` = `{receipt}-R{n}`; requester's shift (cash leaves that drawer);
+  approval reasons, decision (who, when, note); idempotency key + request hash;
+  exchange credit and the new sale id for exchanges.
+- `refund_lines`: original sale line, quantity, amount, `restock` flag, unit cost.
+- `refund_payments`: allocated to the original payments (`original_payment_id`), or
+  `method_kind = 'exchange'` for credit moved to the new sale; `status` pending →
+  succeeded (gateway refunds stay pending until verified).
+- Refundable balances are derived: sold − Σ(active refunds) per line and per payment
+  (active = pending_approval, processing, completed), computed under a per-sale advisory
+  lock, so concurrent requests can never exceed the sale.
+
 Checkout model (implemented, Prompt 10):
 - `orders`: the intent document — `suspended` (held cart) → `completed` | `cancelled`;
   a direct checkout is inserted as `completed`. `idempotency_key` + `request_hash`

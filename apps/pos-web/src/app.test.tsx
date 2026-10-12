@@ -189,6 +189,7 @@ describe('pos app', () => {
       total: money('0.999'),
       paid: money('0.999'),
       change: money('4.001'),
+      refunded: money('0.000'),
       lines: [],
       payments: [],
     };

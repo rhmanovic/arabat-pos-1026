@@ -19,6 +19,16 @@ import {
   invitationPreviewSchema,
   type CreateBranch,
   type ProductListQuery,
+  type CreateRefund,
+  type Exchange,
+  type RefundListQuery,
+  type VoidSale,
+  refundActivitySchema,
+  refundListSchema,
+  refundPreviewSchema,
+  refundReceiptSchema,
+  refundSchema,
+  refundableSaleSchema,
   type Checkout,
   type SaleListQuery,
   type SuspendOrder,
@@ -401,8 +411,46 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('GET', `/manager/sales/${id}/receipt`, { schema: receiptSchema }),
       managerSettings: () =>
         request('GET', '/manager/sales-settings', { schema: salesSettingsSchema }),
-      updateSettings: (body: { maxDiscountPercent: string; version: number }) =>
-        request('PUT', '/manager/sales-settings', { body, schema: salesSettingsSchema }),
+      updateSettings: (body: {
+        maxDiscountPercent: string;
+        refundWindowDays: number;
+        refundApprovalLimit: string;
+        version: number;
+      }) => request('PUT', '/manager/sales-settings', { body, schema: salesSettingsSchema }),
+    },
+    refunds: {
+      lookup: (receipt: string) =>
+        request('GET', `/pos/refunds/lookup?${toParams({ receipt })}`, {
+          schema: refundableSaleSchema,
+        }),
+      preview: (body: { saleId: string; lines: { position: number; quantity: string }[] }) =>
+        request('POST', '/pos/refunds/preview', { body, schema: refundPreviewSchema }),
+      create: (body: CreateRefund) =>
+        request('POST', '/pos/refunds', { body, schema: refundSchema }),
+      exchange: (body: Exchange) =>
+        request('POST', '/pos/exchanges', {
+          body,
+          schema: z.object({ refund: refundSchema, sale: saleSchema }),
+        }),
+      voidSale: (saleId: string, body: VoidSale) =>
+        request('POST', `/pos/sales/${saleId}/void`, { body, schema: refundSchema }),
+      posReceipt: (id: string) =>
+        request('GET', `/pos/refunds/${id}/receipt`, { schema: refundReceiptSchema }),
+      posApprove: (id: string, note: string | null = null) =>
+        request('POST', `/pos/refunds/${id}/approve`, { body: { note }, schema: refundSchema }),
+      posCancel: (id: string) =>
+        request('POST', `/pos/refunds/${id}/cancel`, { body: {}, schema: refundSchema }),
+      list: (query: RefundListQuery = {}) =>
+        request('GET', `/manager/refunds?${toParams(query)}`, { schema: refundListSchema }),
+      get: (id: string) => request('GET', `/manager/refunds/${id}`, { schema: refundSchema }),
+      approve: (id: string, note: string | null = null) =>
+        request('POST', `/manager/refunds/${id}/approve`, { body: { note }, schema: refundSchema }),
+      reject: (id: string, note: string | null = null) =>
+        request('POST', `/manager/refunds/${id}/reject`, { body: { note }, schema: refundSchema }),
+      activity: (query: { branchId?: string; from?: string; to?: string } = {}) =>
+        request('GET', `/manager/refunds/activity?${toParams(query)}`, {
+          schema: refundActivitySchema,
+        }),
     },
     employees: {
       list: () => request('GET', '/manager/employees', { schema: employeeListSchema }),

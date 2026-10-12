@@ -16,6 +16,7 @@ import { PaymentsPage } from './features/cash/PaymentsPage.js';
 import { RegistersPage } from './features/cash/RegistersPage.js';
 import { ShiftDetailPage, ShiftsPage } from './features/cash/ShiftsPage.js';
 import { SaleDetailPage, SalesPage } from './features/sales/SalesPage.js';
+import { RefundsPage } from './features/refunds/RefundsPage.js';
 import { CompanySettingsPage } from './features/company/CompanySettingsPage.js';
 import { DashboardPage } from './features/dashboard/DashboardPage.js';
 import { EmployeeDetailPage } from './features/employees/EmployeeDetailPage.js';
@@ -87,6 +88,7 @@ export const routes: RouteObject[] = [
       { path: 'inventory/movements', element: guard('inventory.read', <MovementsPage />) },
       { path: 'sales', element: guard('sales.read', <SalesPage />) },
       { path: 'sales/:saleId', element: guard('sales.read', <SaleDetailPage />) },
+      { path: 'refunds', element: guard('sales.read', <RefundsPage />) },
       { path: 'payments', element: guard('payments.settings', <PaymentsPage />) },
       { path: 'registers', element: guard('registers.manage', <RegistersPage />) },
       { path: 'shifts', element: guard('shifts.view_all', <ShiftsPage />) },

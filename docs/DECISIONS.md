@@ -420,3 +420,41 @@ ADR; supersede it.
   A sale completes only with succeeded payments; methods configured with a gateway are
   refused at the POS (`PAYMENT_NOT_VERIFIED`) until Prompt 16 adds verified integration.
 
+## ADR-0056 — Refunds as linked records with derived balances
+- **Date:** 2026-10-12 · **Status:** Accepted
+- **Decision:** Sales are never modified. A refund is a new record linked to the sale; what
+  can still be refunded (per line and per payment) is always derived from the active
+  refunds. Requests for one sale are serialized with `pg_advisory_xact_lock` (sales rows
+  cannot be `FOR UPDATE`-locked because the runtime role has no UPDATE on them).
+  Pending requests reserve their quantities, so approving later can never overdraw.
+
+## ADR-0057 — Cumulative refund rounding
+- **Date:** 2026-10-12 · **Status:** Accepted
+- **Decision:** A partial refund of q units of a line refunds
+  `round_half_up(net × (refunded + q) / sold) − already refunded`, so the partial refunds
+  of every unit sum to the line's net amount exactly (e.g. 3 × 0.333 refunds of a 0.999 line).
+
+## ADR-0058 — Refund pay-back allocation
+- **Date:** 2026-10-12 · **Status:** Accepted (BR-091)
+- **Decision:** Money goes back to the original tenders, each at most its remaining
+  refundable amount. The default split is proportional to those amounts (largest
+  remainder); the cashier may choose another split within the limits. Cash leaves the
+  requesting cashier's drawer and is refused when the drawer cannot cover it. Exchange
+  credit on an original sale is refunded in cash. Processing fees of the original payment
+  are not reversed (OQ-016).
+
+## ADR-0059 — Approval rules
+- **Date:** 2026-10-12 · **Status:** Accepted (BR-092)
+- **Decision:** Users without `refunds.approve` need approval for refunds above the
+  merchant limit (default 20.000 KWD) or older than the return window (default 30 days).
+  Requests wait as `pending_approval` (reserving their items); a supervisor approves at
+  the till or a manager in `/manager`. Nobody approves their own request. Approval executes
+  the stored allocation; cash leaves the requester's drawer, which must still be open.
+
+## ADR-0060 — Exchanges in one transaction
+- **Date:** 2026-10-12 · **Status:** Accepted
+- **Decision:** An exchange creates the refund and the new sale in one transaction, reusing
+  the checkout engine. The credit pays the new sale first (an internal `exchange` payment
+  linked to the refund); any difference is paid normally or refunded to the original
+  tenders. Exchanges that would need approval are refused at the till.
+

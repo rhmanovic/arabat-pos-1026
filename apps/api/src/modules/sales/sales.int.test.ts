@@ -174,7 +174,12 @@ describe('checkout', () => {
     const list = (
       await s.c.client.request('GET', '/manager/sales', { cookies: s.c.cookies })
     ).json();
-    expect(list.totals).toEqual({ count: 2, amount: { amount: '3.750', currency: 'KWD' } });
+    expect(list.totals).toEqual({
+      count: 2,
+      amount: { amount: '3.750', currency: 'KWD' },
+      refunded: { amount: '0.000', currency: 'KWD' },
+      net: { amount: '3.750', currency: 'KWD' },
+    });
     const detail = (
       await s.c.client.request('GET', `/manager/sales/${sale.id}`, { cookies: s.c.cookies })
     ).json();

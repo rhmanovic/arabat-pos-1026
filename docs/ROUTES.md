@@ -192,6 +192,24 @@ override by permission — order discount, hold/resume, recent sales, payment di
 split payments, cash tendered/change, receipt with 80 mm printing).
 Manager `/manager/sales` (list, filters, totals, selling policy) and `/manager/sales/:id`.
 
+### Returns API (Prompt 11)
+
+| Method & path | Permission |
+|---|---|
+| `GET /pos/refunds/lookup?receipt=`, `POST /pos/refunds/preview`, `POST /pos/refunds`, `GET /pos/refunds/:id/receipt`, `POST /pos/refunds/:id/cancel` | POS `refunds.create` (own open shift for writes) |
+| `POST /pos/exchanges` | POS `refunds.create` + `sales.create` |
+| `POST /pos/sales/:id/void` | POS `sales.void` (sale of the own open shift, no refunds yet) |
+| `POST /pos/refunds/:id/approve` | POS `refunds.approve` (supervisor at the till; not the requester) |
+| `GET /manager/refunds`, `GET /manager/refunds/:id`, `GET /manager/refunds/activity` | `sales.read` (branch-scoped) |
+| `POST /manager/refunds/:id/approve`, `POST /manager/refunds/:id/reject` | `refunds.approve` at the refund's branch |
+
+Screens: POS `/pos/returns` (find by receipt or recent sale, quantities per line, restock
+toggle, reason, live refund preview with pay-back allocation, refund / exchange with new
+items and difference / cancel sale, printable refund receipt). Manager `/manager/refunds`
+(history with filters, waiting-for-approval with approve/reject, unusual activity per
+employee); sale detail shows refunded amount; selling policy has return window and
+approval limit.
+
 ## 5. API namespaces (backend)
 
 | Prefix | Consumers | Notes |

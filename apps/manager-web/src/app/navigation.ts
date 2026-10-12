@@ -32,6 +32,7 @@ export const NAV: readonly NavItem[] = [
     section: 'operations',
   },
   { key: 'sales', to: '/sales', anyOf: ['sales.read'], available: true, section: 'operations' },
+  { key: 'refunds', to: '/refunds', anyOf: ['sales.read'], available: true, section: 'operations' },
   {
     key: 'shifts',
     to: '/shifts',

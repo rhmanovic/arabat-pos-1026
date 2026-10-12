@@ -31,6 +31,12 @@ export const salesSettings = pgTable('sales_settings', {
     .references(() => merchants.id),
   /** Largest discount (per line and per order, in %) without `sales.discount.override_limit`. */
   maxDiscountPercent: numeric({ precision: 5, scale: 2 }).notNull().default('10'),
+  /** Refunds later than this many days after the sale need approval. */
+  refundWindowDays: integer().notNull().default(30),
+  /** Refunds above this amount (fils) need `refunds.approve`. */
+  refundApprovalLimitMinor: bigint({ mode: 'bigint' })
+    .notNull()
+    .default(sql`20000`),
   version: integer().notNull().default(1),
   updatedAt: updatedAt(),
 });
@@ -227,8 +233,11 @@ export const payments = pgTable(
     saleId: uuid(),
     branchId: uuid().notNull(),
     shiftId: uuid(),
-    paymentMethodId: uuid().notNull(),
+    /** Null only for exchange credit (`method_kind = 'exchange'`). */
+    paymentMethodId: uuid(),
     methodKind: text().notNull(),
+    /** Exchange credit: the refund that funds this payment. */
+    refundId: uuid(),
     methodNameEn: text(),
     methodNameAr: text(),
     amountMinor: minor().notNull(),
@@ -249,7 +258,14 @@ export const payments = pgTable(
   (t) => [
     foreignKey({ columns: [t.merchantId, t.saleId], foreignColumns: [sales.merchantId, sales.id] }),
     check('payments_status_valid', sql`${t.status} in ('succeeded', 'pending', 'failed')`),
-    check('payments_verification_valid', sql`${t.verification} in ('manual', 'gateway')`),
+    check(
+      'payments_verification_valid',
+      sql`${t.verification} in ('manual', 'gateway', 'internal')`,
+    ),
+    check(
+      'payments_exchange_valid',
+      sql`(${t.methodKind} = 'exchange') = (${t.refundId} is not null) and (${t.methodKind} = 'exchange' or ${t.paymentMethodId} is not null)`,
+    ),
     check(
       'payments_amounts_valid',
       sql`${t.amountMinor} > 0 and ${t.feeMinor} >= 0 and ${t.feeMinor} <= ${t.amountMinor} and ${t.changeMinor} >= 0

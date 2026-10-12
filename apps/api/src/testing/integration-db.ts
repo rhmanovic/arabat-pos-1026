@@ -6,6 +6,9 @@ import { integrationDatabaseUrls } from './integration-env.js';
 
 const IDENTITY_TABLES = [
   'audit_log',
+  'refund_payments',
+  'refund_lines',
+  'refunds',
   'payments',
   'sale_lines',
   'sales',

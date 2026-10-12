@@ -1,0 +1,2 @@
+ALTER TABLE "refunds" DROP CONSTRAINT "refunds_amounts_valid";--> statement-breakpoint
+ALTER TABLE "refunds" ADD CONSTRAINT "refunds_amounts_valid" CHECK ("refunds"."total_minor" >= 0 and "refunds"."exchange_credit_minor" >= 0 and "refunds"."exchange_credit_minor" <= "refunds"."total_minor");

@@ -642,7 +642,7 @@ export class ShiftsService {
   // ------------------------------------------------------------ calculations
   /**
    * Cash totals of a shift, from records only. Cash sales come from the checkout payment
-   * records; cash refunds from the refund records (Prompt 11, zero until then).
+   * records; cash refunds from the refund payment records.
    */
   async totals(tx: Transaction, shift: ShiftRecord): Promise<ShiftTotals> {
     const [m] = (
@@ -661,7 +661,13 @@ export class ShiftsService {
           and sale_id is not null`)
     ).rows as { cash_sales: string }[];
     const cashSalesMinor = BigInt(p!.cash_sales);
-    const cashRefundsMinor = 0n;
+    // Cash paid back on refunds processed in this shift (Prompt 11).
+    const [r] = (
+      await tx.execute(sql`
+        select coalesce(sum(amount_minor), 0)::text as cash_refunds
+        from refund_payments where shift_id = ${shift.id} and method_kind = 'cash' and status = 'succeeded'`)
+    ).rows as { cash_refunds: string }[];
+    const cashRefundsMinor = BigInt(r!.cash_refunds);
     return {
       openingFloatMinor: shift.openingFloatMinor,
       cashInMinor,

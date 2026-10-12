@@ -93,7 +93,8 @@ export const saleLineSchema = z.object({
 
 export const salePaymentSchema = z.object({
   id: z.string(),
-  methodId: z.string(),
+  /** Null for exchange credit. */
+  methodId: z.string().nullable(),
   kind: z.string(),
   nameEn: z.string().nullable(),
   nameAr: z.string().nullable(),
@@ -101,7 +102,7 @@ export const salePaymentSchema = z.object({
   tendered: moneySchema.nullable(),
   change: moneySchema,
   status: z.enum(['succeeded', 'pending', 'failed']),
-  verification: z.enum(['manual', 'gateway']),
+  verification: z.enum(['manual', 'gateway', 'internal']),
   reference: z.string().nullable(),
   /** Manager view only. */
   fee: moneySchema.optional(),
@@ -127,6 +128,8 @@ export const saleSchema = z.object({
   /** Manager view only. */
   fees: moneySchema.optional(),
   cost: moneySchema.nullable().optional(),
+  /** Completed refunds against this sale. */
+  refunded: moneySchema,
 });
 export type Sale = z.infer<typeof saleSchema>;
 
@@ -139,6 +142,7 @@ export const saleSummarySchema = z.object({
   total: moneySchema,
   itemCount: z.string(),
   paymentKinds: z.array(z.string()),
+  refunded: moneySchema,
 });
 export type SaleSummary = z.infer<typeof saleSummarySchema>;
 export const saleListSchema = z.object({
@@ -146,7 +150,12 @@ export const saleListSchema = z.object({
   total: z.number().int(),
   page: z.number().int(),
   pageSize: z.number().int(),
-  totals: z.object({ count: z.number().int(), amount: moneySchema }),
+  totals: z.object({
+    count: z.number().int(),
+    amount: moneySchema,
+    refunded: moneySchema,
+    net: moneySchema,
+  }),
 });
 const isoDate = z.iso.date();
 export const saleListQuerySchema = z.object({
@@ -201,6 +210,8 @@ export const suspendedOrderListSchema = z.object({ orders: z.array(suspendedOrde
 
 export const salesSettingsSchema = z.object({
   maxDiscountPercent: z.string(),
+  refundWindowDays: z.number().int(),
+  refundApprovalLimit: moneySchema,
   version: z.number().int(),
 });
 export type SalesSettings = z.infer<typeof salesSettingsSchema>;
@@ -209,5 +220,7 @@ export const updateSalesSettingsSchema = z.object({
     .string()
     .trim()
     .regex(/^(100(\.0{1,2})?|\d{1,2}(\.\d{1,2})?)$/),
+  refundWindowDays: z.number().int().min(0).max(3650),
+  refundApprovalLimit: moneyAmountSchema,
   version: z.number().int().positive(),
 });
