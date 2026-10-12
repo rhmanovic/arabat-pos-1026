@@ -6,6 +6,7 @@ import type {
   ShiftRow,
   closeShiftSchema,
   discrepancyReportQuerySchema,
+  forceCloseShiftSchema,
   openShiftSchema,
   recordCashMovementSchema,
   saveRegisterSchema,
@@ -26,6 +27,17 @@ import { isUniqueViolation } from '../auth/registration.service.js';
 import { versionConflict } from '../branches/branches.service.js';
 import { branches } from '../branches/branches.schema.js';
 import { merchants } from '../merchants/merchants.schema.js';
+import {
+  accountBalance,
+  assertCovers,
+  assertTreasuryCounted,
+  branchTreasury,
+  ensureRegisterAccount,
+  lockAccounts,
+  postEntries,
+  postTransfer,
+  registerAccount,
+} from '../payments/cash-ledger.js';
 import { parseAmount } from '../payments/payments.service.js';
 import { cashMovements, registerMembers, registers, shifts } from './registers.schema.js';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
@@ -34,6 +46,8 @@ type SaveRegister = z.output<typeof saveRegisterSchema>;
 type OpenShiftInput = z.output<typeof openShiftSchema>;
 type CashMovementInput = z.output<typeof recordCashMovementSchema>;
 type CloseShiftInput = z.output<typeof closeShiftSchema>;
+type ForceCloseInput = z.output<typeof forceCloseShiftSchema>;
+type Breakdown = { value: string; count: number }[];
 type ShiftQuery = z.output<typeof shiftListQuerySchema>;
 type ReportQuery = z.output<typeof discrepancyReportQuerySchema>;
 type RegisterRow = typeof registers.$inferSelect;
@@ -68,8 +82,14 @@ export function outcomeOf(
  * Shift policy (BR-073): a register is used by one employee at a time — at most one open
  * shift per register and per employee (enforced by unique indexes). Only the shift owner
  * records cash movements and closes the shift; a manager with `registers.manage` can
- * force-close an abandoned shift. Expected cash is always derived from the records:
- * opening float + cash in − cash out + cash sales − cash refunds.
+ * force-close an abandoned shift.
+ *
+ * Cash custody (ADR-0090): each register's drawer is an account of the cash ledger whose
+ * balance carries across shifts. Opening counts the drawer against that balance (a
+ * difference is a between-shifts discrepancy, or the drawer's first count); closing counts it
+ * again and the difference is booked on the shift; the cash stays in the drawer. Shifts open
+ * at the cutover (`legacy_open`) close with the old record-based expected cash, and their count
+ * becomes the drawer's first balance.
  */
 @Injectable()
 export class ShiftsService {
@@ -136,6 +156,7 @@ export class ShiftsService {
           await tx
             .insert(registers)
             .values({ id: registerId, merchantId: actor.merchantId, ...fields });
+          await ensureRegisterAccount(tx, actor.merchantId, { id: registerId, ...fields });
         }
         await this.setMembers(tx, actor.merchantId, registerId, input.memberIds);
         await this.record(
@@ -180,6 +201,13 @@ export class ShiftsService {
           .where(and(eq(shifts.registerId, id), eq(shifts.status, 'open')));
         if (open)
           throw new AppError(409, 'REGISTER_BUSY', 'Close the open shift before deactivating.');
+        const drawer = await registerAccount(tx, id);
+        if ((await accountBalance(tx, drawer.id)) !== 0n)
+          throw new AppError(
+            409,
+            'REGISTER_HAS_CASH',
+            'Move the cash to the treasury before deactivating the register.',
+          );
       }
       if (status === 'active' && register.status !== 'active')
         await this.subscriptions.assertCapacity(tx, actor.merchantId, 'registers');
@@ -305,6 +333,8 @@ export class ShiftsService {
           nameEn: r.nameEn,
           nameAr: r.nameAr,
           defaultOpeningFloat: money(r.defaultOpeningFloatMinor),
+          expectedCash: money(await accountBalance(tx, (await registerAccount(tx, r.id)).id)),
+          needsCount: r.needsCount,
           availability: !open
             ? ('free' as const)
             : open.membership_id === actor.membershipId
@@ -331,10 +361,17 @@ export class ShiftsService {
     });
   }
 
+  /**
+   * Opens a shift by counting the drawer (ADR-0090). The cashier sees the drawer's balance
+   * and confirms the count; a stale balance (someone moved cash meanwhile) is refused so the
+   * count is always against what the system holds now.
+   */
   async openShift(actor: MerchantActor, input: OpenShiftInput, ip: string): Promise<Shift> {
     const branchId = this.posBranch(actor);
     assertCan(actor, 'shifts.operate', branchId);
-    const openingFloatMinor = parseAmount(input.openingFloat, 'openingFloat');
+    const countedMinor = parseAmount(input.countedCash, 'countedCash');
+    const shownMinor = parseAmount(input.expectedCash, 'expectedCash');
+    checkBreakdown(input.breakdown, countedMinor);
     try {
       return await this.database.withMerchantTx(actor.merchantId, async (tx) => {
         const register = await this.findRegister(tx, input.registerId);
@@ -353,6 +390,42 @@ export class ShiftsService {
           .where(eq(branches.id, branchId));
         if (branch?.status !== 'active')
           throw new AppError(409, 'BRANCH_INACTIVE', 'This branch is inactive.');
+        const drawer = await registerAccount(tx, register.id);
+        await lockAccounts(tx, [drawer.id]);
+        // Under the drawer lock: a concurrent opening has either committed (busy) or not.
+        const [busy] = await tx
+          .select({ id: shifts.id })
+          .from(shifts)
+          .where(and(eq(shifts.registerId, register.id), eq(shifts.status, 'open')));
+        if (busy)
+          throw new AppError(
+            409,
+            'REGISTER_BUSY',
+            'Another shift is already open on this register.',
+          );
+        const expectedMinor = await accountBalance(tx, drawer.id);
+        if (shownMinor !== expectedMinor)
+          throw new AppError(409, 'EXPECTED_CHANGED', 'The drawer balance changed. Count again.');
+        // Whose difference is it? After a forced close without a count, the earlier shift's;
+        // on the drawer's first verified count, nobody's (it sets the balance).
+        const [last] = await tx
+          .select({ id: shifts.id, closeType: shifts.closeType, legacyOpen: shifts.legacyOpen })
+          .from(shifts)
+          .where(and(eq(shifts.registerId, register.id), eq(shifts.status, 'closed')))
+          .orderBy(sql`${shifts.closedAt} desc`)
+          .limit(1);
+        const followsShiftId =
+          last && last.closeType === 'forced_uncounted' && !last.legacyOpen ? last.id : null;
+        const initial = !followsShiftId && register.needsCount;
+        const differenceMinor = countedMinor - expectedMinor;
+        if (!initial && !input.note && abs(differenceMinor) > register.discrepancyToleranceMinor)
+          throw AppError.validation([
+            {
+              path: 'note',
+              code: 'required',
+              message: 'Explain the difference between the drawer and the expected cash.',
+            },
+          ]);
         const id = newId();
         await tx.insert(shifts).values({
           id,
@@ -361,12 +434,35 @@ export class ShiftsService {
           registerId: register.id,
           membershipId: actor.membershipId,
           userId: actor.userId,
-          openingFloatMinor,
+          openingFloatMinor: countedMinor,
+          openingExpectedMinor: expectedMinor,
+          openingDiscrepancyMinor: initial ? null : differenceMinor,
+          openingIsInitial: initial,
+          openingFollowsShiftId: followsShiftId,
+          openingBreakdown: input.breakdown ?? null,
           openingNote: input.note,
         });
+        await postEntries(tx, [
+          {
+            merchantId: actor.merchantId,
+            accountId: drawer.id,
+            amountMinor: differenceMinor,
+            entryType: 'adjustment',
+            sourceType: initial ? 'register_initial_count' : 'shift_open',
+            sourceId: id,
+            description: input.note,
+            createdByUserId: actor.userId,
+            shiftId: id,
+          },
+        ]);
+        await tx.update(registers).set({ needsCount: false }).where(eq(registers.id, register.id));
         await this.record(tx, actor, 'shift.opened', 'shift', id, ip, {
           registerId: register.id,
-          openingFloat: Money.ofMinor(openingFloatMinor, CURRENCY).toDecimalString(),
+          expected: Money.ofMinor(expectedMinor, CURRENCY).toDecimalString(),
+          counted: Money.ofMinor(countedMinor, CURRENCY).toDecimalString(),
+          difference: Money.ofMinor(differenceMinor, CURRENCY).toDecimalString(),
+          initialCount: initial,
+          followsShiftId,
         });
         const [row] = await tx.select().from(shifts).where(eq(shifts.id, id));
         return this.toShift(tx, row!);
@@ -378,6 +474,17 @@ export class ShiftsService {
         throw new AppError(409, 'SHIFT_ALREADY_OPEN', 'You already have an open shift.');
       throw error;
     }
+  }
+
+  /**
+   * Cash physically available in a shift's drawer, under lock. Legacy shifts (open at the
+   * cutover) still use the record-based figure; their drawer account starts at their close.
+   */
+  async drawerCash(tx: Transaction, shift: ShiftRecord): Promise<bigint> {
+    if (shift.legacyOpen) return (await this.totals(tx, shift)).expectedCashMinor;
+    const drawer = await registerAccount(tx, shift.registerId);
+    await lockAccounts(tx, [drawer.id]);
+    return accountBalance(tx, drawer.id);
   }
 
   /** Locks and returns the actor's own open shift at the POS branch. */
@@ -417,14 +524,17 @@ export class ShiftsService {
           }
         }
         const shift = await this.lockOwnShift(tx, actor);
-        if (input.kind === 'cash_out') {
-          const totals = await this.totals(tx, shift);
-          if (amountMinor > totals.expectedCashMinor)
-            throw new AppError(
-              409,
-              'INSUFFICIENT_CASH',
-              'The drawer does not hold this much cash.',
-            );
+        const drawer = await registerAccount(tx, shift.registerId);
+        const treasury =
+          input.reason === 'float_top_up' || input.reason === 'safe_drop'
+            ? await branchTreasury(tx, shift.branchId)
+            : null;
+        await lockAccounts(tx, treasury ? [drawer.id, treasury.id] : [drawer.id]);
+        if (input.kind === 'cash_out')
+          assertCovers(await this.drawerCash(tx, shift), amountMinor, 'register');
+        if (input.reason === 'float_top_up') {
+          assertTreasuryCounted(treasury!);
+          assertCovers(await accountBalance(tx, treasury!.id), amountMinor, 'treasury');
         }
         const id = newId();
         await tx.insert(cashMovements).values({
@@ -440,6 +550,13 @@ export class ShiftsService {
           idempotencyKey: input.idempotencyKey ?? null,
           createdByUserId: actor.userId,
         });
+        await this.postMovement(tx, actor, shift, drawer.id, treasury?.id ?? null, {
+          id,
+          kind: input.kind,
+          reason: input.reason,
+          amountMinor,
+          note: input.note ?? null,
+        });
         await this.record(tx, actor, `shift.${input.kind}`, 'shift', shift.id, ip, {
           movementId: id,
           amount: Money.ofMinor(amountMinor, CURRENCY).toDecimalString(),
@@ -454,6 +571,51 @@ export class ShiftsService {
     }
   }
 
+  /**
+   * Books a drawer movement (ADR-0090): a drop to or top-up from the branch treasury is a
+   * transfer; exchanging notes for coins changes nothing; other reasons move only the drawer.
+   */
+  private async postMovement(
+    tx: Transaction,
+    actor: MerchantActor,
+    shift: ShiftRecord,
+    drawerId: string,
+    treasuryId: string | null,
+    m: { id: string; kind: string; reason: string; amountMinor: bigint; note: string | null },
+  ) {
+    if (m.reason === 'change_received') return;
+    if (m.reason === 'float_top_up' || m.reason === 'safe_drop') {
+      const toDrawer = m.reason === 'float_top_up';
+      await postTransfer(tx, {
+        merchantId: actor.merchantId,
+        fromAccountId: toDrawer ? treasuryId! : drawerId,
+        toAccountId: toDrawer ? drawerId : treasuryId!,
+        amountMinor: m.amountMinor,
+        origin: 'pos_movement',
+        cashMovementId: m.id,
+        note: m.note,
+        userId: actor.userId,
+        fromShiftId: toDrawer ? null : shift.id,
+        toShiftId: toDrawer ? shift.id : null,
+      });
+      return;
+    }
+    await postEntries(tx, [
+      {
+        merchantId: actor.merchantId,
+        accountId: drawerId,
+        amountMinor: m.kind === 'cash_in' ? m.amountMinor : -m.amountMinor,
+        entryType:
+          m.reason === 'correction' || m.reason === 'other' ? 'adjustment' : 'cash_movement',
+        sourceType: 'cash_movement',
+        sourceId: m.id,
+        description: m.note ?? m.reason,
+        createdByUserId: actor.userId,
+        shiftId: shift.id,
+      },
+    ]);
+  }
+
   async closeOwnShift(actor: MerchantActor, input: CloseShiftInput, ip: string): Promise<Shift> {
     const branchId = this.posBranch(actor);
     assertCan(actor, 'shifts.operate', branchId);
@@ -464,10 +626,15 @@ export class ShiftsService {
   }
 
   // ------------------------------------------------------------ manager
+  /**
+   * A manager closes an abandoned shift. With a count it is a verified close; without one
+   * the shift is `forced_uncounted`: nothing is booked, and the drawer must be counted
+   * before the next shift (the difference found then is reported against this shift).
+   */
   async forceClose(
     actor: MerchantActor,
     shiftId: string,
-    input: CloseShiftInput,
+    input: ForceCloseInput,
     ip: string,
   ): Promise<Shift> {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
@@ -484,8 +651,55 @@ export class ShiftsService {
             message: 'Explain why the shift is closed by a manager.',
           },
         ]);
-      return this.close(tx, actor, shift, input, 'forced', ip);
+      if (input.countedCash === undefined)
+        return this.closeUncounted(tx, actor, shift, input.note!, input.version, ip);
+      return this.close(
+        tx,
+        actor,
+        shift,
+        {
+          countedCash: input.countedCash,
+          breakdown: input.breakdown,
+          note: input.note,
+          version: input.version,
+        },
+        'forced',
+        ip,
+      );
     });
+  }
+
+  private async closeUncounted(
+    tx: Transaction,
+    actor: MerchantActor,
+    shift: ShiftRecord,
+    note: string,
+    version: number,
+    ip: string,
+  ): Promise<Shift> {
+    if (shift.version !== version) throw versionConflict();
+    const expectedMinor = await this.drawerCash(tx, shift);
+    const register = await this.findRegister(tx, shift.registerId);
+    await tx
+      .update(shifts)
+      .set({
+        status: 'closed',
+        closedAt: sql`now()`,
+        closedByUserId: actor.userId,
+        closeType: 'forced_uncounted',
+        expectedCashMinor: expectedMinor,
+        discrepancyToleranceMinor: register.discrepancyToleranceMinor,
+        closingNote: note,
+        version: sql`${shifts.version} + 1`,
+      })
+      .where(eq(shifts.id, shift.id));
+    await tx.update(registers).set({ needsCount: true }).where(eq(registers.id, register.id));
+    await this.record(tx, actor, 'shift.force_closed', 'shift', shift.id, ip, {
+      counted: false,
+      expected: Money.ofMinor(expectedMinor, CURRENCY).toDecimalString(),
+    });
+    const [row] = await tx.select().from(shifts).where(eq(shifts.id, shift.id));
+    return this.toShift(tx, row!);
   }
 
   private async close(
@@ -498,19 +712,33 @@ export class ShiftsService {
   ): Promise<Shift> {
     if (shift.version !== input.version) throw versionConflict();
     const countedMinor = parseAmount(input.countedCash, 'countedCash');
-    if (input.breakdown) {
-      let sum = 0n;
-      for (const d of input.breakdown) sum += parseAmount(d.value, 'breakdown') * BigInt(d.count);
-      if (sum !== countedMinor)
-        throw new AppError(
-          400,
-          'INVALID_BREAKDOWN',
-          'The denomination count does not match the counted cash.',
-        );
-    }
-    const totals = await this.totals(tx, shift);
+    checkBreakdown(input.breakdown, countedMinor);
     const register = await this.findRegister(tx, shift.registerId);
-    const discrepancy = countedMinor - totals.expectedCashMinor;
+    const drawer = await registerAccount(tx, shift.registerId);
+    await lockAccounts(tx, [drawer.id]);
+    const balanceMinor = await accountBalance(tx, drawer.id);
+    // Legacy shifts keep the record-based expected cash; their count then becomes the
+    // drawer's first verified balance. Otherwise expected = the drawer balance.
+    const expectedMinor = shift.legacyOpen
+      ? (await this.totals(tx, shift)).expectedCashMinor
+      : balanceMinor;
+    const discrepancy = countedMinor - expectedMinor;
+    // Posted while the shift is still open (register entries carry the open shift).
+    await postEntries(tx, [
+      {
+        merchantId: actor.merchantId,
+        accountId: drawer.id,
+        amountMinor: countedMinor - balanceMinor,
+        entryType: 'adjustment',
+        sourceType: shift.legacyOpen ? 'register_initial_count' : 'shift_close',
+        sourceId: shift.id,
+        description: input.note,
+        createdByUserId: actor.userId,
+        shiftId: shift.id,
+      },
+    ]);
+    await tx.update(registers).set({ needsCount: false }).where(eq(registers.id, register.id));
+    const totals = { expectedCashMinor: expectedMinor };
     await tx
       .update(shifts)
       .set({
@@ -654,7 +882,9 @@ export class ShiftsService {
       await tx.execute(sql`
         select coalesce(sum(amount_minor) filter (where kind = 'cash_in'), 0)::text as cash_in,
                coalesce(sum(amount_minor) filter (where kind = 'cash_out'), 0)::text as cash_out
-        from cash_movements where shift_id = ${shift.id}`)
+        from cash_movements where shift_id = ${shift.id}
+          -- Exchanging notes for coins does not change the drawer (ADR-0090).
+          and (${shift.legacyOpen} or reason <> 'change_received')`)
     ).rows as { cash_in: string; cash_out: string }[];
     const cashInMinor = BigInt(m!.cash_in);
     const cashOutMinor = BigInt(m!.cash_out);
@@ -687,7 +917,7 @@ export class ShiftsService {
   private async toShift(tx: Transaction, r: ShiftRecord): Promise<Shift> {
     const totals =
       r.status === 'closed'
-        ? { ...(await this.totals(tx, r)), expectedCashMinor: r.expectedCashMinor! }
+        ? { ...(await this.totals(tx, r)), expectedCashMinor: r.expectedCashMinor ?? 0n }
         : await this.totals(tx, r);
     const [info] = (
       await tx.execute(sql`
@@ -720,6 +950,10 @@ export class ShiftsService {
         cashSales: money(totals.cashSalesMinor),
         cashRefunds: money(totals.cashRefundsMinor),
         expectedCash: money(totals.expectedCashMinor),
+        openingExpected: r.openingExpectedMinor === null ? null : money(r.openingExpectedMinor),
+        openingDiscrepancy:
+          r.openingDiscrepancyMinor === null ? null : money(r.openingDiscrepancyMinor),
+        openingIsInitial: r.openingIsInitial,
       },
       countedCash: r.countedCashMinor === null ? null : money(r.countedCashMinor),
       discrepancy: r.discrepancyMinor === null ? null : money(r.discrepancyMinor),
@@ -788,4 +1022,21 @@ export class ShiftsService {
       details,
     });
   }
+}
+
+function abs(v: bigint): bigint {
+  return v < 0n ? -v : v;
+}
+
+/** A denomination count must add up exactly to the counted cash. */
+function checkBreakdown(breakdown: Breakdown | null | undefined, countedMinor: bigint) {
+  if (!breakdown) return;
+  let sum = 0n;
+  for (const d of breakdown) sum += parseAmount(d.value, 'breakdown') * BigInt(d.count);
+  if (sum !== countedMinor)
+    throw new AppError(
+      400,
+      'INVALID_BREAKDOWN',
+      'The denomination count does not match the counted cash.',
+    );
 }

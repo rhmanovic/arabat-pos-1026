@@ -35,6 +35,7 @@ import { AuditService } from '../audit/audit.service.js';
 import { isUniqueViolation } from '../auth/registration.service.js';
 import { versionConflict } from '../branches/branches.service.js';
 import { StockLedgerService } from '../inventory/stock-ledger.service.js';
+import { postEntries, registerAccount } from '../payments/cash-ledger.js';
 import { financialAccountEntries } from '../payments/payments.schema.js';
 import { parseAmount } from '../payments/payments.service.js';
 import { ShiftsService } from '../registers/shifts.service.js';
@@ -557,6 +558,13 @@ export class SalesService {
         verification: 'internal',
       });
     if (paid.length > 0) {
+      // Cash settles into the drawer of the register that took it (ADR-0090); other methods
+      // into their linked account (bank), unchanged.
+      const drawer = paid.some((p) => p.method.kind === 'cash')
+        ? (await registerAccount(tx, shift.registerId)).id
+        : null;
+      const accountOf = (p: (typeof paid)[number]) =>
+        p.method.kind === 'cash' ? drawer : p.method.financialAccountId;
       await tx.insert(payments).values(
         paid.map((p) => ({
           id: p.id,
@@ -575,31 +583,32 @@ export class SalesService {
           status: 'succeeded',
           verification: 'manual',
           reference: p.reference,
-          financialAccountId: p.method.financialAccountId,
+          financialAccountId: accountOf(p),
         })),
       );
-      const entries = paid.flatMap((p) =>
-        p.method.financialAccountId
-          ? [
-              { entryType: 'payment', amountMinor: p.amountMinor, p },
-              ...(p.feeMinor > 0n ? [{ entryType: 'fee', amountMinor: -p.feeMinor, p }] : []),
-            ]
-          : [],
-      );
-      if (entries.length)
-        await tx.insert(financialAccountEntries).values(
-          entries.map((e) => ({
-            id: newId(),
+      await postEntries(
+        tx,
+        paid.flatMap((p) => {
+          const accountId = accountOf(p);
+          if (!accountId) return [];
+          const base = {
             merchantId: actor.merchantId,
-            accountId: e.p.method.financialAccountId!,
-            amountMinor: e.amountMinor,
-            entryType: e.entryType,
+            accountId,
             sourceType: 'payment',
-            sourceId: e.p.id,
+            sourceId: p.id,
             description: receiptNumber,
             createdByUserId: actor.userId,
-          })),
-        );
+            shiftId: p.method.kind === 'cash' ? shift.id : null,
+          };
+          return [
+            { ...base, entryType: 'payment' as const, amountMinor: p.amountMinor },
+            // A processing fee is charged by a card network, never taken out of a drawer.
+            ...(p.feeMinor > 0n && p.method.kind !== 'cash'
+              ? [{ ...base, entryType: 'fee' as const, amountMinor: -p.feeMinor }]
+              : []),
+          ];
+        }),
+      );
     }
     await this.audit.recordIn(tx, {
       merchantId: actor.merchantId,

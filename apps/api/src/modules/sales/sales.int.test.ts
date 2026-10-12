@@ -74,7 +74,7 @@ async function cashierWithShift(
   const emp = await s.c.hire([{ roleId: s.c.roles[role], branchId: s.c.main }], 'pos');
   const opened = await s.c.client.request('POST', '/pos/shifts', {
     cookies: emp.cookies,
-    body: { registerId, openingFloat: '10.000' },
+    body: { registerId, countedCash: '10.000', expectedCash: '0.000' },
   });
   if (opened.statusCode !== 201) throw new Error(opened.body);
   return { cookies: emp.cookies, shiftId: opened.json().id as string };
@@ -240,8 +240,14 @@ describe('checkout', () => {
     ).json().accounts as { id: string; kind: string; balance: { amount: string } }[];
     // The card payment net of its fee lands in the linked balance…
     expect(accounts.find((x) => x.id === account.id)!.balance.amount).toBe('22.270');
-    // …and the cash payment (net of change) in the default cash on hand account.
-    expect(accounts.find((x) => x.kind === 'cash')!.balance.amount).toBe('7.333');
+    // …and the cash payment (net of change) in the drawer of the register that took it
+    // (ADR-0090): 10.000 counted at opening + 7.333.
+    const overview = (
+      await s.c.client.request('GET', '/manager/cash/overview', { cookies: s.c.cookies })
+    ).json();
+    const main = overview.branches.find((b: { branchId: string }) => b.branchId === s.c.main);
+    expect(main.registers[0].balance.amount).toBe('17.333');
+    expect(main.treasury.balance.amount).toBe('0.000');
   });
 
   it('never creates two sales for retried or concurrent duplicates of one checkout', async () => {

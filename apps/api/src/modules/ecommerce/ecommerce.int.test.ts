@@ -169,7 +169,7 @@ async function till(s: S) {
   await s.ok(
     'POST',
     '/pos/shifts',
-    { registerId: registers[0]!.id, openingFloat: '10.000' },
+    { registerId: registers[0]!.id, countedCash: '10.000', expectedCash: '0.000' },
     emp.cookies,
   );
   return emp.cookies;

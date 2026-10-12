@@ -85,6 +85,12 @@ export const PERMISSIONS = {
   },
   'shifts.view_all': { scope: 'branch', group: 'registers', description: 'Monitor all shifts' },
   'cash.move': { scope: 'branch', group: 'registers', description: 'Record cash in / cash out' },
+  'cash.custody': {
+    scope: 'branch',
+    group: 'registers',
+    description:
+      'Manage cash custody: treasury counts, transfers between registers and the treasury',
+  },
 
   // Catalog
   'catalog.read': {

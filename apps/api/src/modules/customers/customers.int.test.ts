@@ -74,7 +74,7 @@ async function cashier(s: S, roleId: string, branchId = s.c.main) {
     s,
     'POST',
     '/pos/shifts',
-    { registerId: registers[0]!.id, openingFloat: '20.000' },
+    { registerId: registers[0]!.id, countedCash: '20.000', expectedCash: '0.000' },
     emp.cookies,
   );
   if (shift.statusCode !== 201) throw new Error(shift.body);

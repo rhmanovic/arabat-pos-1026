@@ -1159,6 +1159,7 @@ export const managerAr: ManagerResources = {
     'shifts.operate': 'فتح وإغلاق الوردية',
     'shifts.view_all': 'متابعة كل الورديات',
     'cash.move': 'إيداع / سحب نقدي',
+    'cash.custody': 'إدارة النقدية (الخزينة والتحويلات والجرد)',
     'catalog.read': 'عرض المنتجات',
     'catalog.manage': 'إدارة المنتجات والتصنيفات',
     'catalog.prices.manage': 'إدارة الأسعار والتكلفة',

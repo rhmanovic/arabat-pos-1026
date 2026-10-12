@@ -89,7 +89,7 @@ async function staff(s: Setup, role: keyof Co['roles'], code: string, float = '5
         ).json().id;
   const shift = await s.c.client.request('POST', '/pos/shifts', {
     cookies: emp.cookies,
-    body: { registerId: reg, openingFloat: float },
+    body: { registerId: reg, countedCash: float, expectedCash: '0.000' },
   });
   if (shift.statusCode !== 201) throw new Error(shift.body);
   return { cookies: emp.cookies, shiftId: shift.json().id as string, email: emp.email };
@@ -524,7 +524,8 @@ describe('refunds', () => {
 
   it('refuses cash refunds the drawer cannot cover, and needs an open shift', async () => {
     const s = await setup();
-    const cashier = await staff(s, 'cashier', 'R1', '0');
+    // A safe drop needs cash.move, which cashiers no longer have by default (ADR-0090).
+    const cashier = await staff(s, 'supervisor', 'R1', '0');
     const sale = await sell(
       s,
       cashier.cookies,

@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   bigint,
+  boolean,
   check,
   foreignKey,
   index,
@@ -38,12 +39,18 @@ export const registers = pgTable(
     discrepancyToleranceMinor: bigint({ mode: 'bigint' })
       .notNull()
       .default(sql`0`),
+    /**
+     * The drawer has no verified count yet (new register, cutover) or its last shift was
+     * force-closed without counting: the next opening must count it (ADR-0090).
+     */
+    needsCount: boolean().notNull().default(true),
     version: integer().notNull().default(1),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
     unique('registers_merchant_id_id_key').on(t.merchantId, t.id),
+    unique('registers_merchant_id_id_branch_key').on(t.merchantId, t.id, t.branchId),
     foreignKey({
       columns: [t.merchantId, t.branchId],
       foreignColumns: [branches.merchantId, branches.id],
@@ -97,12 +104,24 @@ export const shifts = pgTable(
       .notNull()
       .references(() => users.id),
     status: text().notNull().default('open'),
+    /** Cash counted in the drawer at opening (before ADR-0090: the float put in). */
     openingFloatMinor: bigint({ mode: 'bigint' }).notNull(),
+    /** Drawer balance the system expected at opening (null before ADR-0090). */
+    openingExpectedMinor: bigint({ mode: 'bigint' }),
+    /** counted − expected at opening; null for the drawer's first count. */
+    openingDiscrepancyMinor: bigint({ mode: 'bigint' }),
+    /** The opening was the drawer's first verified count, not a discrepancy. */
+    openingIsInitial: boolean().notNull().default(false),
+    /** The opening difference belongs to this earlier shift, force-closed without a count. */
+    openingFollowsShiftId: uuid(),
+    openingBreakdown: jsonb(),
+    /** Opened before ADR-0090: closes with the old record-based expected cash. */
+    legacyOpen: boolean().notNull().default(false),
     openingNote: text(),
     openedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     closedAt: timestamp({ withTimezone: true }),
     closedByUserId: uuid().references(() => users.id),
-    /** normal (by the cashier) | forced (by a manager) */
+    /** normal (by the cashier) | forced (manager, counted) | forced_uncounted (manager, no count) */
     closeType: text(),
     expectedCashMinor: bigint({ mode: 'bigint' }),
     countedCashMinor: bigint({ mode: 'bigint' }),
@@ -142,7 +161,14 @@ export const shifts = pgTable(
       sql`(${t.status} = 'open' and ${t.closedAt} is null) or (${t.status} = 'closed' and ${t.closedAt} is not null
            and ${t.expectedCashMinor} is not null and ${t.countedCashMinor} is not null
            and ${t.discrepancyMinor} = ${t.countedCashMinor} - ${t.expectedCashMinor}
-           and ${t.closeType} in ('normal', 'forced'))`,
+           and ${t.closeType} in ('normal', 'forced'))
+          or (${t.status} = 'closed' and ${t.closedAt} is not null and ${t.closeType} = 'forced_uncounted'
+           and ${t.countedCashMinor} is null and ${t.discrepancyMinor} is null)`,
+    ),
+    check(
+      'shifts_opening_discrepancy_valid',
+      sql`${t.openingDiscrepancyMinor} is null
+          or ${t.openingDiscrepancyMinor} = ${t.openingFloatMinor} - ${t.openingExpectedMinor}`,
     ),
     index('shifts_branch_opened_idx').on(t.merchantId, t.branchId, t.openedAt),
     index('shifts_branch_closed_idx').on(t.merchantId, t.branchId, t.closedAt),

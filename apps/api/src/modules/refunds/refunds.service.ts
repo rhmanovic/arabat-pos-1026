@@ -26,7 +26,7 @@ import { newId } from '../../kernel/ids.js';
 import { AuditService } from '../audit/audit.service.js';
 import { isUniqueViolation } from '../auth/registration.service.js';
 import { StockLedgerService } from '../inventory/stock-ledger.service.js';
-import { financialAccountEntries } from '../payments/payments.schema.js';
+import { postEntries, registerAccount } from '../payments/cash-ledger.js';
 import { parseAmount } from '../payments/payments.service.js';
 import { ShiftsService } from '../registers/shifts.service.js';
 import { shifts } from '../registers/registers.schema.js';
@@ -865,8 +865,7 @@ export class RefundsService {
           'SHIFT_REQUIRED',
           'The cash refund needs the requesting cashier’s open shift.',
         );
-      const totals = await this.shiftsService.totals(tx, shift);
-      if (cashMinor > totals.expectedCashMinor)
+      if (cashMinor > (await this.shiftsService.drawerCash(tx, shift)))
         throw new AppError(
           409,
           'INSUFFICIENT_CASH',
@@ -883,24 +882,32 @@ export class RefundsService {
         .update(refundPayments)
         .set({ status: 'succeeded' })
         .where(eq(refundPayments.id, p.id));
-      if (p.originalPaymentId) {
+      const entry = {
+        merchantId: actor.merchantId,
+        amountMinor: -p.amountMinor,
+        entryType: 'refund' as const,
+        sourceType: 'refund_payment',
+        sourceId: p.id,
+        description: refund!.refundNumber,
+        createdByUserId: actor.userId,
+      };
+      if (p.methodKind === 'cash') {
+        // Cash leaves the drawer of the shift paying it out, whichever register took the
+        // sale (ADR-0090) — including an exchange credit paid back in cash.
+        const [payer] = await tx
+          .select({ registerId: shifts.registerId })
+          .from(shifts)
+          .where(eq(shifts.id, refund!.shiftId));
+        const drawer = await registerAccount(tx, payer!.registerId);
+        await postEntries(tx, [{ ...entry, accountId: drawer.id, shiftId: refund!.shiftId }]);
+      } else if (p.originalPaymentId) {
         const [orig] = (
           await tx.execute(
             sql`select financial_account_id from payments where id = ${p.originalPaymentId}`,
           )
         ).rows as { financial_account_id: string | null }[];
         if (orig?.financial_account_id)
-          await tx.insert(financialAccountEntries).values({
-            id: newId(),
-            merchantId: actor.merchantId,
-            accountId: orig.financial_account_id,
-            amountMinor: -p.amountMinor,
-            entryType: 'refund',
-            sourceType: 'refund_payment',
-            sourceId: p.id,
-            description: refund!.refundNumber,
-            createdByUserId: actor.userId,
-          });
+          await postEntries(tx, [{ ...entry, accountId: orig.financial_account_id }]);
       }
     }
     const lines = await tx.select().from(refundLines).where(eq(refundLines.refundId, refundId));

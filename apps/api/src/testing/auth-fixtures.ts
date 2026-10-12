@@ -256,5 +256,28 @@ export async function createCompany(
     return sessionCookie(res, 'pos');
   }
 
-  return { client, ...o, main, second, roles, hire, ownerPos };
+  /**
+   * Records a physical count of a branch treasury (ADR-0090): a treasury pays nothing out
+   * before its opening count. Returns the treasury account id.
+   */
+  async function countTreasury(branchId: string, countedCash: string, note = 'test count') {
+    const overview = (
+      await client.request('GET', `/manager/cash/overview?branchId=${branchId}`, {
+        cookies: o.cookies,
+      })
+    ).json();
+    const treasury = overview.branches[0].treasury;
+    const res = await client.request(
+      'POST',
+      `/manager/cash/accounts/${treasury.accountId}/counts`,
+      {
+        cookies: o.cookies,
+        body: { countedCash, expectedCash: treasury.balance.amount, note },
+      },
+    );
+    if (res.statusCode !== 201) throw new Error(`count failed ${res.statusCode} ${res.body}`);
+    return treasury.accountId as string;
+  }
+
+  return { client, ...o, main, second, roles, hire, ownerPos, countTreasury };
 }

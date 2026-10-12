@@ -184,7 +184,7 @@ async function staff(s: S, role: keyof Co['roles'] | 'kitchen', shift = true) {
     const opened = await s.req(
       'POST',
       '/pos/shifts',
-      { registerId: reg, openingFloat: '20.000' },
+      { registerId: reg, countedCash: '20.000', expectedCash: '0.000' },
       emp.cookies,
     );
     if (opened.statusCode !== 201) throw new Error(opened.body);

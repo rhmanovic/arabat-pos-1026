@@ -9,6 +9,7 @@ import { CatalogModule } from './modules/catalog/catalog.module.js';
 import { InventoryModule } from './modules/inventory/inventory.module.js';
 import { PaymentsModule } from './modules/payments/payments.module.js';
 import { RegistersModule } from './modules/registers/registers.module.js';
+import { CashModule } from './modules/cash/cash.module.js';
 import { SalesModule } from './modules/sales/sales.module.js';
 import { RefundsModule } from './modules/refunds/refunds.module.js';
 import { CustomersModule } from './modules/customers/customers.module.js';
@@ -50,6 +51,7 @@ export class AppModule {
         InventoryModule,
         PaymentsModule,
         RegistersModule,
+        CashModule,
         SalesModule,
         RefundsModule,
         PurchasingModule,

@@ -131,7 +131,30 @@ export class PaymentsService {
     const methodId = id ?? newId();
     try {
       return await this.database.withMerchantTx(actor.merchantId, async (tx) => {
-        if (input.financialAccountId) await this.findAccount(tx, input.financialAccountId);
+        if (input.financialAccountId) {
+          // Cash settles into register drawers (ADR-0090); card-type money into a bank-like
+          // account, never into a drawer, a treasury or an archived account.
+          if (input.kind === 'cash')
+            throw AppError.validation([
+              {
+                path: 'financialAccountId',
+                code: 'invalid',
+                message: 'Cash is recorded in the drawer of the register that takes it.',
+              },
+            ]);
+          const account = await this.findAccount(tx, input.financialAccountId);
+          if (
+            ['register', 'treasury', 'cash'].includes(account.kind) ||
+            account.status === 'archived'
+          )
+            throw AppError.validation([
+              {
+                path: 'financialAccountId',
+                code: 'invalid',
+                message: 'Choose a bank or other non-cash account.',
+              },
+            ]);
+        }
         let before: MethodRow | undefined;
         if (id) {
           if (!input.version)
@@ -199,6 +222,8 @@ export class PaymentsService {
           select a.*, coalesce((select sum(e.amount_minor) from financial_account_entries e
                                 where e.account_id = a.id), 0)::text as balance
           from financial_accounts a
+          -- Registers and treasuries are managed on the cash custody page (ADR-0090).
+          where a.kind not in ('register', 'treasury')
           order by a.created_at`)
       ).rows as Record<string, unknown>[];
       return rows.map((r) => ({
@@ -234,7 +259,9 @@ export class PaymentsService {
           throw AppError.validation([
             { path: 'version', code: 'required', message: 'version is required' },
           ]);
-        await this.findAccount(tx, id);
+        const existing = await this.findAccount(tx, id);
+        if (['register', 'treasury'].includes(existing.kind) || existing.status === 'archived')
+          throw AppError.conflict('This account is managed by the system.');
         const [row] = await tx
           .update(financialAccounts)
           .set({ ...fields, version: sql`${financialAccounts.version} + 1`, updatedAt: sql`now()` })

@@ -1170,6 +1170,7 @@ export const managerEn = {
     'shifts.operate': 'Open and close own shift',
     'shifts.view_all': 'Monitor all shifts',
     'cash.move': 'Cash in / cash out',
+    'cash.custody': 'Cash custody (treasury, transfers, counts)',
     'catalog.read': 'View products',
     'catalog.manage': 'Manage products and categories',
     'catalog.prices.manage': 'Manage prices and costs',

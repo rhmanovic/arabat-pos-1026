@@ -107,7 +107,7 @@ async function till(s: S, branchId: string, role: keyof Co['roles'] = 'cashier')
   const shift = await s.req(
     'POST',
     '/pos/shifts',
-    { registerId: registers[0]!.id, openingFloat: '10.000' },
+    { registerId: registers[0]!.id, countedCash: '10.000', expectedCash: '0.000' },
     emp.cookies,
   );
   if (shift.statusCode !== 201) throw new Error(shift.body);
@@ -123,7 +123,9 @@ async function sell(s: S, cookies: Cookies, body: Record<string, unknown>) {
 /** The shared scenario: 3 sales on two branches, one refund, cash movements, a short close. */
 async function scenario() {
   const s = await setup();
-  const a = await till(s, s.c.main);
+  // Cash in/out needs cash.move (supervisors) and a counted treasury (ADR-0090).
+  await s.c.countTreasury(s.c.main, '20.000');
+  const a = await till(s, s.c.main, 'supervisor');
   const b = await till(s, s.c.second);
   const s1 = await sell(s, a, {
     lines: [{ variantId: s.tea, quantity: '3' }],

@@ -225,6 +225,20 @@
       "when": 1791808699145,
       "tag": "0031_session_lock",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1791838246320,
+      "tag": "0032_cash_custody",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1791838306444,
+      "tag": "0033_cash_custody_rules",
+      "breakpoints": true
     }
   ]
 }

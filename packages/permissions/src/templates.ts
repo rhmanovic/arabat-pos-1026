@@ -127,7 +127,7 @@ export const ROLE_TEMPLATES = {
       ...POS_BASICS,
       'sales.discount',
       'refunds.create',
-      'cash.move',
+      // No 'cash.move' by default (ADR-0090): the owner grants cash in/out to whom they choose.
       'customers.create',
       'restaurant.orders',
     ],

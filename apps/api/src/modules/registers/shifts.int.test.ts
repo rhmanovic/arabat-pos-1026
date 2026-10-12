@@ -4,7 +4,6 @@ import type pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DatabaseService } from '../../database/database.service.js';
 import { newId } from '../../kernel/ids.js';
-import { paymentSetupSeed } from '../../database/seeds/004-payment-setup.js';
 import { ensureDefaultPaymentSetup } from '../payments/merchant-defaults.js';
 import { DbFixtures, createCompany } from '../../testing/auth-fixtures.js';
 import { prepareIntegrationDatabase } from '../../testing/integration-db.js';
@@ -47,8 +46,8 @@ function pos(c: Co, cookies: Cookies) {
   return {
     registers: () => call('GET', '/pos/registers'),
     current: () => call('GET', '/pos/shifts/current'),
-    open: (registerId: string, openingFloat = '50.000') =>
-      call('POST', '/pos/shifts', { registerId, openingFloat }),
+    open: (registerId: string, countedCash = '50.000', expectedCash = '0.000') =>
+      call('POST', '/pos/shifts', { registerId, countedCash, expectedCash }),
     cash: (body: Record<string, unknown>) =>
       call('POST', '/pos/shifts/current/cash-movements', body),
     close: (body: Record<string, unknown>) => call('POST', '/pos/shifts/current/close', body),
@@ -74,8 +73,8 @@ describe('payment methods', () => {
     const accountsA = (
       await a.client.request('GET', '/manager/financial-accounts', { cookies: a.cookies })
     ).json().accounts as { id: string; kind: string; nameEn: string }[];
+    // Cash settles into register drawers (ADR-0090); only banks are listed here.
     expect(accountsA.map((x) => [x.kind, x.nameEn])).toEqual([
-      ['cash', 'Cash on hand'],
       ['bank', 'Bank account 1'],
       ['bank', 'Bank account 2'],
     ]);
@@ -83,7 +82,7 @@ describe('payment methods', () => {
     expect(
       listA.methods.map((m: { financialAccountId: string | null }) => m.financialAccountId),
     ).toEqual([
-      accountOf('Cash on hand'),
+      null,
       accountOf('Bank account 1'),
       accountOf('Bank account 2'),
       accountOf('Bank account 1'),
@@ -211,7 +210,10 @@ describe('payment methods', () => {
       `update payment_methods set financial_account_id = null where merchant_id = $1`,
       [c.merchantId],
     );
-    await owner.query(`delete from financial_accounts where merchant_id = $1`, [c.merchantId]);
+    await owner.query(
+      `delete from financial_accounts where merchant_id = $1 and kind not in ('register', 'treasury')`,
+      [c.merchantId],
+    );
     await owner.query(
       `delete from payment_methods where merchant_id = $1 and kind in ('custom', 'bank_transfer')
          or merchant_id = $1 and name_en = 'Visa / Mastercard'`,
@@ -228,12 +230,13 @@ describe('payment methods', () => {
     const database = app.get(DatabaseService);
     const run = () =>
       database.withMerchantTx(c.merchantId, (tx) => ensureDefaultPaymentSetup(tx, c.merchantId));
-    expect(await run()).toEqual({ accounts: 3, added: 3, linked: 3 });
+    expect(await run()).toEqual({ accounts: 2, added: 3, linked: 2 });
     const list = async () =>
       (await c.client.request('GET', '/manager/payment-methods', { cookies: c.cookies })).json()
         .methods as { nameEn: string; financialAccountId: string | null; version: number }[];
     const methods = await list();
-    // The renamed KNET is kept (not re-added); every method now settles into a balance.
+    // The renamed KNET is kept (not re-added); every non-cash method now settles into a bank
+    // account, and cash into the register drawers (ADR-0090).
     expect(methods.map((m) => m.nameEn).sort()).toEqual(
       [
         'Bank transfer',
@@ -244,7 +247,10 @@ describe('payment methods', () => {
         'WAMD',
       ].sort(),
     );
-    expect(methods.every((m) => m.financialAccountId !== null)).toBe(true);
+    expect(
+      methods.filter((m) => m.nameEn !== 'Cash').every((m) => m.financialAccountId !== null),
+    ).toBe(true);
+    expect(methods.find((m) => m.nameEn === 'Cash')!.financialAccountId).toBeNull();
     // Once set up, later runs (every deploy) change nothing, even after the owner renames.
     const wamd = methods.find((m) => m.nameEn === 'WAMD')!;
     await owner.query(`update payment_methods set name_en = 'Instant transfer' where id = $1`, [
@@ -252,32 +258,6 @@ describe('payment methods', () => {
     ]);
     expect(await run()).toEqual({ accounts: 0, added: 0, linked: 0 });
     expect(await list()).toHaveLength(6);
-  });
-
-  it('renames the first-release «صندوق النقد» account to «الخزينة» unless the owner edited it', async () => {
-    const c = await company();
-    const cash = (
-      await owner.query(
-        `select id from financial_accounts where merchant_id = $1 and kind = 'cash'`,
-        [c.merchantId],
-      )
-    ).rows[0] as { id: string };
-    await owner.query(
-      `update financial_accounts set name_ar = 'صندوق النقد', name_en = 'Cash box' where id = $1`,
-      [cash.id],
-    );
-    const edited = newId();
-    await owner.query(
-      `insert into financial_accounts (id, merchant_id, kind, name_ar, name_en, version)
-       values ($1, $2, 'cash', 'صندوق النقد', 'Cash box', 2)`,
-      [edited, c.merchantId],
-    );
-    await app.get(DatabaseService).withMerchantTx(c.merchantId, (tx) => paymentSetupSeed.run(tx));
-    const names = async (id: string) =>
-      (await owner.query(`select name_ar, name_en from financial_accounts where id = $1`, [id]))
-        .rows[0];
-    expect(await names(cash.id)).toEqual({ name_ar: 'الخزينة', name_en: 'Cash on hand' });
-    expect(await names(edited)).toEqual({ name_ar: 'صندوق النقد', name_en: 'Cash box' });
   });
 
   it('requires payments.settings and shows cashiers only active POS methods without fees', async () => {
@@ -305,7 +285,9 @@ describe('registers and shifts', () => {
   it('runs a full shift: open, cash in/out, close with exact reconciliation and audit', async () => {
     const c = await company();
     const [register] = await registersAt(c, c.main);
-    const cashier = await c.hire([{ roleId: c.roles.cashier, branchId: c.main }], 'pos');
+    await c.countTreasury(c.main, '100.000');
+    // Cashiers no longer move cash by default (ADR-0090); supervisors do.
+    const cashier = await c.hire([{ roleId: c.roles.supervisor, branchId: c.main }], 'pos');
     const p = pos(c, cashier.cookies);
     expect((await p.current()).json().shift).toBeNull();
     // Cash movements need an open shift.
@@ -439,7 +421,8 @@ describe('registers and shifts', () => {
   it('serializes concurrent cash-outs so the drawer never goes below zero', async () => {
     const c = await company();
     const [register] = await registersAt(c, c.main);
-    const cashier = await c.hire([{ roleId: c.roles.cashier, branchId: c.main }], 'pos');
+    await c.countTreasury(c.main, '0.000');
+    const cashier = await c.hire([{ roleId: c.roles.supervisor, branchId: c.main }], 'pos');
     const p = pos(c, cashier.cookies);
     await p.open(register!.id, '10.000');
     const attempts = await Promise.all(

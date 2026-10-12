@@ -20,20 +20,15 @@ export const feePercentSchema = z
   });
 
 // ---------------------------------------------------------------- financial accounts
-export const FINANCIAL_ACCOUNT_KINDS = [
-  'cash',
-  'bank',
-  'card_clearing',
-  'wallet',
-  'other',
-] as const;
+/** Kinds an owner creates. `cash` remains only on archived pre-ADR-0090 accounts. */
+export const FINANCIAL_ACCOUNT_KINDS = ['bank', 'card_clearing', 'wallet', 'other'] as const;
 export const financialAccountSchema = z.object({
   id: z.string(),
   nameEn: z.string().nullable(),
   nameAr: z.string().nullable(),
-  kind: z.enum(FINANCIAL_ACCOUNT_KINDS),
+  kind: z.enum([...FINANCIAL_ACCOUNT_KINDS, 'cash']),
   currency: z.string(),
-  status: z.enum(['active', 'inactive']),
+  status: z.enum(['active', 'inactive', 'archived']),
   balance: moneySchema,
   version: z.number().int(),
 });
@@ -190,6 +185,12 @@ export const shiftSummarySchema = z.object({
   /** Cash paid back on refunds (from Prompt 11). */
   cashRefunds: moneySchema,
   expectedCash: moneySchema,
+  /** Drawer balance expected at opening (null for shifts before ADR-0090). */
+  openingExpected: moneySchema.nullable(),
+  /** counted − expected at opening; null on the drawer's first count. */
+  openingDiscrepancy: moneySchema.nullable(),
+  /** The opening was the drawer's first verified count. */
+  openingIsInitial: z.boolean(),
 });
 
 export const shiftSchema = z.object({
@@ -204,7 +205,8 @@ export const shiftSchema = z.object({
   openingNote: z.string().nullable(),
   closedAt: z.string().nullable(),
   closedByName: z.string().nullable(),
-  closeType: z.enum(['normal', 'forced']).nullable(),
+  /** forced_uncounted: closed by a manager without counting the drawer (ADR-0090). */
+  closeType: z.enum(['normal', 'forced', 'forced_uncounted']).nullable(),
   summary: shiftSummarySchema,
   countedCash: moneySchema.nullable(),
   discrepancy: moneySchema.nullable(),
@@ -270,9 +272,15 @@ export const discrepancyReportSchema = z.object({
 });
 export type DiscrepancyReport = z.infer<typeof discrepancyReportSchema>;
 
+/**
+ * Opening counts the drawer (ADR-0090): `expectedCash` is the balance the cashier was shown,
+ * so a balance that changed meanwhile is refused (EXPECTED_CHANGED) instead of misattributed.
+ */
 export const openShiftSchema = z.object({
   registerId: z.uuid(),
-  openingFloat: moneyAmountSchema,
+  countedCash: moneyAmountSchema,
+  expectedCash: moneyAmountSchema,
+  breakdown: z.array(denominationSchema).max(30).optional(),
   note: text(500),
 });
 export type OpenShift = z.input<typeof openShiftSchema>;
@@ -307,12 +315,25 @@ export const closeShiftSchema = z.object({
 });
 export type CloseShift = z.input<typeof closeShiftSchema>;
 
+/** A manager's forced close: with a count it is verified; without one, `forced_uncounted`. */
+export const forceCloseShiftSchema = z.object({
+  countedCash: moneyAmountSchema.optional(),
+  breakdown: z.array(denominationSchema).max(30).optional(),
+  note: text(1000),
+  version: z.number().int().positive(),
+});
+export type ForceCloseShift = z.input<typeof forceCloseShiftSchema>;
+
 export const posRegisterSchema = z.object({
   id: z.string(),
   code: z.string(),
   nameEn: z.string().nullable(),
   nameAr: z.string().nullable(),
   defaultOpeningFloat: moneySchema,
+  /** The drawer balance carried from the last shift (ADR-0090). */
+  expectedCash: moneySchema,
+  /** The drawer has no verified count yet: the opening sets its balance. */
+  needsCount: z.boolean(),
   /** free | mine | occupied */
   availability: z.enum(['free', 'mine', 'occupied']),
   occupiedBy: z.string().nullable(),

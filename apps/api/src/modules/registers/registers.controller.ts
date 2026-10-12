@@ -4,6 +4,7 @@ import {
   type Shift,
   closeShiftSchema,
   discrepancyReportQuerySchema,
+  forceCloseShiftSchema,
   openShiftSchema,
   recordCashMovementSchema,
   registerStatusSchema,
@@ -111,7 +112,7 @@ export class RegistersController {
   forceClose(
     @CurrentMerchantActor() actor: MerchantActor,
     @Param('id', uuid) id: string,
-    @Body(new ZodPipe(closeShiftSchema)) body: z.output<typeof closeShiftSchema>,
+    @Body(new ZodPipe(forceCloseShiftSchema)) body: z.output<typeof forceCloseShiftSchema>,
     @Req() req: FastifyRequest,
   ): Promise<Shift> {
     return this.shifts.forceClose(actor, id, body, req.ip);
