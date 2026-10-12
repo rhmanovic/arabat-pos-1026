@@ -12,3 +12,4 @@ export * from './refunds.js';
 export * from './purchasing.js';
 export * from './customers.js';
 export * from './reports.js';
+export * from './restaurant.js';

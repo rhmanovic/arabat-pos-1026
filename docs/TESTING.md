@@ -66,6 +66,36 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after Prompt 15 (2026-10-12, local run)
+- `pnpm verify` ✓ (126 unit/web), `pnpm test:integration` ✓ (135), `pnpm test:e2e` ✓ (31).
+- `restaurant.int.test.ts` (4): table order with required/foreign modifier validation,
+  stale version refused, exact due (2 × 2.250 + 0.500); send routes burgers to the
+  kitchen and cola to the bar, re-send creates no tickets, no stock moves before
+  payment; kitchen display with notes/modifiers, forward-only statuses with timestamps,
+  duplicate tap ignored, kitchen creates no sales/payments, cashier cannot change
+  tickets; more items later → new ticket; split bill (burgers cash with change, colas
+  card + cash), idempotent replay returns the same bill, re-paying refused, order
+  closes, revenue = 5.500 exactly once, payments = 5.500; stock bun/patty −2, cheese −4
+  (modifier ingredient), cola −2; cost 0.700 per burger; floor free again; sales list
+  and report by service type. Move (occupied target refused), combine (unpaid items
+  moved, source merged, table freed), cancel unsent (no stock), cashier cannot void sent
+  item, supervisor waste deducts ingredients once (adjustment `restaurant_waste`), ticket
+  cancelled, cancelled item final, empty order cancelled, order with a paid bill cannot
+  be combined, takeaway auto-send on payment. Concurrency: three simultaneous pays of the
+  same item → one sale, stock −3 once — verified to fail without the order lock (the DB
+  trigger still blocks the double bill, with an error). Access: module off → refused;
+  kitchen role cannot take orders; branch manager configures own branch only, not
+  merchant-wide items or the switch; recipe on a tracked item refused; duplicate table
+  code; another merchant gets 404 on orders, tables and menu.
+- Web: POS modifier dialog (required group blocks Add, quantity, request body), bill total
+  from the quote; kitchen-only staff land on the kitchen display, ticket shows note,
+  modifiers and timer and moves to Preparing; manager module switch and page guard.
+- `e2e/restaurant.spec.ts`: manager enables the module and adds area/table in the UI;
+  invited cashier opens T1, orders 2 medium burgers with a note and a cola, sends to the
+  kitchen; invited kitchen staff (second browser) starts and readies the ticket; cashier
+  sees "Ready", pays the burgers in cash (receipt shows the modifier) and the cola by
+  card; table free; stock 18/18/19; two dine-in sales totalling 4.500.
+
 ### Results after Prompt 14 (2026-10-12, local run)
 - `pnpm verify` ✓ (122 unit/web), `pnpm test:integration` ✓ (131), `pnpm test:e2e` ✓ (30).
 - `reports.int.test.ts` (8), on a scenario with 3 sales on two branches (cash, card with

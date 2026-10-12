@@ -554,3 +554,45 @@ ADR; supersede it.
   and need no extra API. Money columns are exported as plain decimals with "(KWD)" in the
   header; a UTF-8 BOM keeps Arabic readable in spreadsheet apps; cells starting with
   `= + @`, tab/CR or a non-numeric `-` are prefixed with `'` (CSV formula injection).
+
+## ADR-0072 — Restaurant is an optional module on top of the retail POS
+- **Date:** 2026-10-12 · **Status:** Accepted (BR-130)
+- **Decision:** A merchant switch (`restaurant_settings.enabled`, off by default) turns
+  on tables, restaurant orders and the kitchen display; the retail sale screen is
+  unchanged. The menu is the product catalog (categories, products, branch
+  availability, prices); the module adds modifier groups, recipes, dining areas and
+  tables, and kitchen stations routed by category (with one default station per
+  branch). Kitchen staff use a dedicated `/pos/kitchen` screen with the `kitchen` role.
+
+## ADR-0073 — Orders are intent; bills are sales
+- **Date:** 2026-10-12 · **Status:** Accepted (BR-131…BR-134, BR-137)
+- **Decision:** A restaurant order (dine-in at a table, takeaway, pickup) is a mutable
+  document of items with their kitchen status. Money is recorded only when a bill is
+  paid: the chosen unpaid items become one immutable sale through the existing checkout
+  engine (cashier's open shift, exact payments, receipt number, idempotency key, price
+  at payment time incl. modifiers, `sales.restaurant_order_id` and `service_type`).
+  Splitting a bill = several pays over different items; splitting among payers =
+  several tenders on one bill. Moving a table changes only the order's table; combining
+  moves unpaid items (orders with paid bills cannot be combined); kitchen updates touch
+  tickets and item statuses only. So no path creates revenue twice. The order row is
+  locked for every change and the database refuses changes to paid or cancelled items.
+
+## ADR-0074 — Inventory consumption for restaurant items
+- **Date:** 2026-10-12 · **Status:** Accepted (BR-135, BR-136)
+- **Decision:** Stock is deducted once, when the item is sold (the sale's ledger
+  movement), never on kitchen events. An item with a recipe consumes its ingredients
+  instead of itself (recipes are only allowed on items that are not stock-tracked, so
+  nothing is deducted twice); a modifier may consume one ingredient per unit (e.g. extra
+  cheese). The same expansion (`stockConsumption`) is used for waste. Sale cost =
+  Σ consumed quantity × weighted-average cost. Cancelling an unsent item has no stock
+  effect; cancelling a sent item needs `restaurant.void_item` and is recorded either as
+  waste (ingredients deducted now, adjustment `restaurant_waste`) or as not prepared.
+  Refunds of recipe items never restock (food is not returned to stock).
+
+## ADR-0075 — Kitchen tickets
+- **Date:** 2026-10-12 · **Status:** Accepted (BR-138)
+- **Decision:** "Send to kitchen" groups the order's unsent items by station into one
+  ticket each; sending again only sends new items. Tickets move forward only
+  (new → preparing → ready → completed) with timestamps; a repeated or stale tap that
+  would not move it forward is ignored. A ticket whose items are all cancelled is
+  cancelled. Takeaway and pickup items can be sent automatically when paid (setting).

@@ -117,7 +117,7 @@ describe('owner registration', () => {
       ],
       branches: [{ code: 'MAIN', is_main: true }],
       memberships: [{ is_owner: true, status: 'active' }],
-      roles: ['branch_manager', 'cashier', 'company_manager', 'supervisor'],
+      roles: ['branch_manager', 'cashier', 'company_manager', 'kitchen', 'supervisor'],
       audit: 1,
     });
   });

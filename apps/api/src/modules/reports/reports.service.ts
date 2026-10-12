@@ -421,6 +421,18 @@ export class ReportsService {
         netSales: money(big(r['net'])),
       }));
 
+      const byServiceType = (
+        await this.rows(
+          tx,
+          sql`select coalesce(s.service_type, 'retail') as t, count(*)::int as n, sum(s.total_minor)::text as net
+              from sales s where ${saleWhere} group by 1 order by sum(s.total_minor) desc`,
+        )
+      ).map((x) => ({
+        serviceType: x['t'] as 'retail',
+        saleCount: int(x['n']),
+        netSales: money(big(x['net'])),
+      }));
+
       // Gross profit (BR-127): only with reports.financial for the whole scope, and only
       // when every sale (and every restocked refund line) in the period has a known cost.
       let profit: SalesReport['profit'] = null;
@@ -475,6 +487,7 @@ export class ReportsService {
         byPaymentMethod,
         byProduct,
         byCategory,
+        byServiceType,
         profit,
       };
     });

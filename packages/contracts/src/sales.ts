@@ -102,6 +102,16 @@ export const saleLineSchema = z.object({
   lineDiscount: moneySchema,
   orderDiscount: moneySchema,
   net: moneySchema,
+  /** Restaurant modifiers (their prices are included in the unit price). */
+  modifiers: z
+    .array(
+      z.object({
+        nameEn: z.string().nullable(),
+        nameAr: z.string().nullable(),
+        price: moneySchema,
+      }),
+    )
+    .default([]),
 });
 
 export const salePaymentSchema = z.object({
@@ -144,6 +154,9 @@ export const saleSchema = z.object({
   /** Completed refunds against this sale. */
   refunded: moneySchema,
   customer: saleCustomerSchema.nullable(),
+  /** Restaurant bills: dine_in | takeaway | pickup; null for retail sales. */
+  serviceType: z.enum(['dine_in', 'takeaway', 'pickup']).nullable().default(null),
+  restaurantOrderId: z.string().nullable().default(null),
 });
 export type Sale = z.infer<typeof saleSchema>;
 
@@ -158,6 +171,7 @@ export const saleSummarySchema = z.object({
   paymentKinds: z.array(z.string()),
   refunded: moneySchema,
   customerName: z.string().nullable(),
+  serviceType: z.enum(['dine_in', 'takeaway', 'pickup']).nullable().default(null),
 });
 export type SaleSummary = z.infer<typeof saleSummarySchema>;
 export const saleListSchema = z.object({
@@ -177,6 +191,8 @@ export const saleListQuerySchema = z.object({
   branchId: z.uuid().optional(),
   shiftId: z.uuid().optional(),
   customerId: z.uuid().optional(),
+  /** retail = no restaurant service type. */
+  serviceType: z.enum(['retail', 'dine_in', 'takeaway', 'pickup']).optional(),
   q: z.string().trim().max(40).optional(),
   from: isoDate.optional(),
   to: isoDate.optional(),

@@ -320,7 +320,7 @@ erDiagram
 | Module | Entities |
 |---|---|
 | purchasing | implemented (Prompt 12) — see §8 |
-| restaurant | `dining_areas`, `dining_tables`, `modifier_groups`, `modifiers`, `order_line_modifiers`, `kitchen_tickets` |
+| restaurant | implemented (Prompt 15) — see §8 |
 | ecommerce | `online_stores`, `channel_listings` (+ `orders.channel = 'online'`) |
 | reporting | implemented on demand from source tables (ADR-0068); summary tables only if volumes require |
 | subscriptions | `plans`, `plan_features`, `subscriptions` (already in 6.1) |
@@ -368,6 +368,22 @@ erDiagram
 | `apps/api/drizzle/0020_customers.sql` | `customers`, `customer_notes`; `orders.customer_id`, `sales.customer_id` with composite merchant FKs and `sales_customer_idx` (generated) |
 | `apps/api/drizzle/0021_customers_rls.sql` | Forced RLS; `DELETE` revoked on customers; notes append-only; trigram indexes on name and phone |
 | `apps/api/drizzle/0022_report_indexes.sql` | Time-range indexes for reports: payments, completed refunds, refund payments, closed shifts, cash movements, purchase receipts, dispatched transfers (generated) |
+| `apps/api/drizzle/0023_restaurant.sql` | `restaurant_settings`, `dining_areas`, `dining_tables`, `kitchen_stations`, `kitchen_station_categories`, `modifier_groups`, `modifiers`, `product_modifier_groups`, `recipe_components`, `restaurant_orders`, `restaurant_order_items`, `restaurant_order_item_modifiers`, `kitchen_tickets`, `sale_line_modifiers`; `sales.restaurant_order_id`, `sales.service_type` (generated) |
+| `apps/api/drizzle/0024_restaurant_rls.sql` | Forced RLS; no deletes of configuration, orders, items, tickets; modifier snapshots immutable; triggers: paid and cancelled items unchangeable, sent items keep product and quantity, final orders immutable; one open order per table; one default station per branch |
+
+Restaurant model (implemented, Prompt 15):
+- Configuration: `restaurant_settings` (switch, auto-send), per branch `dining_areas`,
+  `dining_tables` (unique code), `kitchen_stations` + `kitchen_station_categories`
+  (category routing, one default); merchant-wide `modifier_groups` (min/max) and
+  `modifiers` (price, optional ingredient per unit), `product_modifier_groups`,
+  `recipe_components` (ingredients per unit of a non-tracked menu item).
+- `restaurant_orders` (`R-…`): type, table, guests, label, status open → closed /
+  cancelled / merged. `restaurant_order_items`: product, quantity, note, kitchen status,
+  station, ticket, paying `sale_id`, cancellation (reason, wasted). Modifier choices are
+  snapshotted with their price.
+- `kitchen_tickets`: per station and send; status and start/ready/completion times.
+- Bills are `sales` with `restaurant_order_id` and `service_type`; `sale_line_modifiers`
+  snapshot the modifiers of each sale line.
 
 Customer model (implemented, Prompt 13):
 - `customers`: `code` (C-…, document sequence), `full_name`, canonical `phone` (unique per

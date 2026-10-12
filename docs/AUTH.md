@@ -184,7 +184,12 @@ can(actor, permission, branchId?):
 | `company_manager` — مدير الشركة | all branches | full management, **no POS** |
 | `branch_manager` — مدير الفرع | one branch | branch operations, staff of that branch, **no POS** |
 | `supervisor` — مشرف | one branch | POS + overrides, voids, refund approval, cash moves |
-| `cashier` — كاشير | one branch | POS selling, limited discounts, refunds, cash moves |
+| `cashier` — كاشير | one branch | POS selling, limited discounts, refunds, cash moves, restaurant orders |
+| `kitchen` — طاقم المطبخ | one branch | POS sign-in to the kitchen display only (`kitchen.access`) |
+
+Restaurant permissions (Prompt 15): `restaurant.manage` (branch: tables, areas, stations;
+merchant-wide: module switch, modifier groups, recipes), `restaurant.orders`,
+`restaurant.void_item` (cancel items already sent to the kitchen), `kitchen.access`.
 
 New merchants get all templates at registration; the `002-role-templates` seed adds
 missing templates to existing merchants without touching customized roles.

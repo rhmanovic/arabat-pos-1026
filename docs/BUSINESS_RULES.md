@@ -158,6 +158,27 @@ engineering defaults pending owner confirmation.
 - **BR-114** Customers are deactivated, never deleted; inactive customers cannot be used
   for new sales. Notes cannot be edited or removed.
 
+Restaurant (Prompt 15):
+- **BR-130** The restaurant module is enabled per company; without it the POS works as a
+  retail POS only.
+- **BR-131** A table has at most one open order. Dine-in orders need a table; takeaway and
+  pickup orders may carry a name.
+- **BR-132** Required modifier groups must be answered (minimum/maximum per group);
+  modifier prices are added to the item's unit price and printed on the receipt.
+- **BR-133** A bill pays chosen unpaid items at the current price; an item is paid at most
+  once; an order closes when every remaining item is paid.
+- **BR-134** Discounts on a bill follow the same rules and limits as retail sales.
+- **BR-135** Stock is deducted when items are paid (ingredients for recipe items), never
+  when the kitchen works on them.
+- **BR-136** Cancelling an item already sent to the kitchen needs a supervisor
+  (`restaurant.void_item`) and a reason; if it was prepared it is recorded as waste and
+  its ingredients are deducted.
+- **BR-137** Moving or combining tables never changes money; orders with paid bills
+  cannot be combined.
+- **BR-138** Kitchen status only moves forward and never creates sales or payments.
+- **BR-139** Paid restaurant items are corrected by refunds of their bill (Prompt 11),
+  not by editing the order.
+
 Report metrics (Prompt 14; all exact, in fils, merchant-local days):
 - **BR-120** *Gross sales* = Σ unit price × quantity of items sold, before discounts.
   *Discounts* = item discounts + sale discounts. *Net sales* (sales revenue) = gross −
@@ -225,5 +246,6 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
 | OQ-016 | Should card processing fees be reversed on refunds (depends on the acquirer contract)? Implemented: not reversed. | Refunds / reports |
 | OQ-017 | Returns without a receipt or at another branch: allowed? Implemented: receipt required, same branch. | Refunds |
 | OQ-019 | Loyalty points, store credit and promotions: rules (earning rate, expiry, use as payment)? Also: should customers be able to request erasure of their personal data (anonymisation while keeping sales)? Not implemented. | Customers |
+| OQ-020 | Restaurant: service charge or tips? Courses/fire timing? Printing tickets on kitchen printers (vs. screen)? Table reservations? Not implemented. | Restaurant |
 | OQ-018 | Supplier invoices, payments and balances (accounts payable) and returns to suppliers: needed, and with which payment terms? Not implemented yet. | Purchasing |
 | OQ-013 | Card payments: manual entry of card amount only, or integrated card terminals (e.g. KNET)? | M4 / later |

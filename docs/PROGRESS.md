@@ -3,7 +3,7 @@
 Only record what has actually been done and verified. Mocked or partial work
 must be labeled as such.
 
-## Current state (2026-10-12, after Prompt 14 — financial reporting)
+## Current state (2026-10-12, after Prompt 15 — restaurant module)
 
 | Area | Status | Notes |
 |---|---|---|
@@ -23,7 +23,8 @@ must be labeled as such.
 | Purchasing & transfers | Done | Suppliers, purchase orders with approval and separation of duties, partial/full idempotent receiving into stock at cost, close/cancel rules, branch transfers (request, approve, dispatch/in transit, receive with discrepancy), manager screens |
 | Customers | Done | Profiles (C-numbers, normalised unique phone), search/filter/sort, edit, activate/deactivate, append-only notes, purchase and refund history, exact spending summary scoped by branch, POS search/create/select, walk-in sales, customer on receipts, held sales and exchanges |
 | Reporting | Done | Sales (gross, discounts, net, refunds, by day/hour/branch/employee/product/category/method, trend, comparison, gross profit under policy), payments & cash (collections, fees, pay-outs, cash), shifts (reconciliation, discrepancies), inventory (valuation, stock, movements, adjustments, quantities), purchasing (suppliers, receipts, transfers); dashboard with KPIs, charts, filters and CSV export |
-| Automated tests | Passing | 122 unit/web, 131 integration, 30 E2E (local) |
+| Restaurant | Done (optional module) | Module switch, areas/tables, stations with category routing, modifier groups (required/optional), recipes and modifier ingredients, table/takeaway/pickup orders, modifiers and notes, send to kitchen, kitchen display, cancel/waste, move/combine, split bills via the checkout engine, receipts with modifiers, restaurant sales in lists and reports |
+| Automated tests | Passing | 126 unit/web, 135 integration, 31 E2E (local) |
 | CI | Written, not yet run | `.github/workflows/ci.yml` |
 | Business modules | Not started | Begin in M1 |
 | Deployment | Not planned | Requires owner approval |
@@ -249,5 +250,16 @@ Not done yet / open: no scheduled/e-mailed reports; no XLSX (CSV opens in spread
 apps); profit excludes tax/overheads/landed costs by policy; very large merchants may
 later need summary tables (ADR-0068).
 
+### 2026-10-12 — Prompt 15: Restaurant operations
+Implemented: migrations 0023–0024; restaurant module (configuration, orders, bills,
+kitchen tickets); checkout engine extended with modifiers, recipe/modifier ingredient
+consumption and restaurant links; new permissions and the `kitchen` role; manager
+restaurant screens; POS floor, order and kitchen screens; service type in sales and
+reports.
+Verified: see TESTING.md.
+Not done yet / open: OQ-020 (service charge/tips, courses, kitchen printers,
+reservations); split by equal shares is done as several tenders on one bill (no
+fractional item splitting); waiters need an open shift to use the floor screen.
+
 ## Next step
-Prompt 15 — restaurant module.
+Prompt 16 — e-commerce storefront and payment gateway abstraction.

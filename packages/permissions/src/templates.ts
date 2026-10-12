@@ -46,6 +46,8 @@ export const ROLE_TEMPLATES = {
       'customers.read',
       'customers.create',
       'customers.manage',
+      'restaurant.manage',
+      'restaurant.void_item',
       'reports.sales',
       'reports.financial',
       'reports.inventory',
@@ -81,6 +83,8 @@ export const ROLE_TEMPLATES = {
       'customers.read',
       'customers.create',
       'customers.manage',
+      'restaurant.manage',
+      'restaurant.void_item',
       'reports.sales',
       'reports.inventory',
       'employees.read',
@@ -107,6 +111,9 @@ export const ROLE_TEMPLATES = {
       'customers.create',
       'customers.manage',
       'inventory.read',
+      'restaurant.orders',
+      'restaurant.void_item',
+      'kitchen.access',
     ],
   },
   cashier: {
@@ -119,7 +126,14 @@ export const ROLE_TEMPLATES = {
       'refunds.create',
       'cash.move',
       'customers.create',
+      'restaurant.orders',
     ],
+  },
+  kitchen: {
+    nameEn: 'Kitchen staff',
+    nameAr: 'طاقم المطبخ',
+    typicalScope: 'branch',
+    permissions: ['pos.access', 'kitchen.access', 'catalog.read'],
   },
 } as const satisfies Record<string, RoleTemplate>;
 

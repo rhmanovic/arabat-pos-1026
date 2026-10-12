@@ -209,6 +209,27 @@ items and difference / cancel sale, printable refund receipt). Manager `/manager
 employee); sale detail shows refunded amount; selling policy has return window and
 approval limit.
 
+### Restaurant API (Prompt 15)
+
+| Method & path | Permission |
+|---|---|
+| `GET /manager/restaurant/settings` | any manager session; `PUT` needs merchant-wide `restaurant.manage` |
+| `GET /manager/restaurant/layout?branchId=`, `POST/PUT /manager/restaurant/areas`, `/tables`, `/stations` | `restaurant.manage` at the branch |
+| `GET /manager/restaurant/menu`, `PUT /manager/restaurant/menu/:productId`, `POST/PUT /manager/restaurant/modifier-groups` | merchant-wide `restaurant.manage` (menu read: any) |
+| `GET /pos/restaurant/settings` | POS session |
+| `GET /pos/restaurant/menu`, `GET /pos/restaurant/floor`, `POST /pos/restaurant/orders`, `GET /pos/restaurant/orders/:id` | POS `restaurant.orders` (module enabled) |
+| `POST /pos/restaurant/orders/:id/items`, `/send`, `/move`, `/merge`, `/cancel`, `/quote`, `/items/:itemId/cancel` | POS `restaurant.orders` (sent items: `restaurant.void_item`) |
+| `POST /pos/restaurant/orders/:id/pay` | POS `sales.create` + `restaurant.orders`, own open shift, idempotent |
+| `GET /pos/kitchen/tickets?stationId=`, `POST /pos/kitchen/tickets/:id/status` | POS `kitchen.access` |
+
+Screens: manager `/manager/restaurant` (Setup: module switch and stock policy; Tables &
+stations per branch; Modifiers; Menu with groups and recipes). POS `/pos/tables` (floor by
+area with open-order totals and kitchen badges, takeaway/pickup queue),
+`/pos/tables/orders/:id` (menu, modifier dialog with required/optional groups and note,
+items with kitchen status, send, cancel/waste, move, combine, split bill → payment →
+receipt), `/pos/kitchen` (station filter, New / Preparing / Ready columns, timers). Kitchen-
+only staff land on `/pos/kitchen`. Sales list and reports show the service type.
+
 ### Reports API (Prompt 14)
 
 All take `from`, `to` (local dates, ≤ 366 days), optional `branchId` (checked against the

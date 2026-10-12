@@ -158,6 +158,9 @@ export const sales = pgTable(
     receiptNumber: text().notNull(),
     /** Null for walk-in sales; fixed when the sale is completed. */
     customerId: uuid(),
+    /** Restaurant bill: the order it pays for and its service type (Prompt 15). */
+    restaurantOrderId: uuid(),
+    serviceType: text(),
     currency: char({ length: 3 }).notNull().default('KWD'),
     subtotalMinor: minor().notNull(),
     lineDiscountsMinor: minor().notNull(),
@@ -190,6 +193,11 @@ export const sales = pgTable(
     index('sales_branch_time_idx').on(t.merchantId, t.branchId, t.createdAt),
     index('sales_shift_idx').on(t.merchantId, t.shiftId),
     index('sales_customer_idx').on(t.merchantId, t.customerId, t.createdAt),
+    index('sales_restaurant_order_idx').on(t.merchantId, t.restaurantOrderId),
+    check(
+      'sales_service_type_valid',
+      sql`${t.serviceType} is null or ${t.serviceType} in ('dine_in', 'takeaway', 'pickup')`,
+    ),
     foreignKey({
       columns: [t.merchantId, t.customerId],
       foreignColumns: [customers.merchantId, customers.id],
@@ -288,5 +296,26 @@ export const payments = pgTable(
     index('payments_sale_idx').on(t.merchantId, t.saleId),
     index('payments_shift_idx').on(t.merchantId, t.shiftId),
     index('payments_branch_time_idx').on(t.merchantId, t.branchId, t.createdAt),
+  ],
+);
+
+/** Modifiers chosen on a sale line (snapshot; their prices are part of the line's unit price). */
+export const saleLineModifiers = pgTable(
+  'sale_line_modifiers',
+  {
+    merchantId: merchantId(),
+    saleId: uuid().notNull(),
+    position: integer().notNull(),
+    modifierId: uuid().notNull(),
+    nameEn: text(),
+    nameAr: text(),
+    priceMinor: minor().notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.saleId, t.position, t.modifierId] }),
+    foreignKey({
+      columns: [t.merchantId, t.saleId],
+      foreignColumns: [sales.merchantId, sales.id],
+    }),
   ],
 );

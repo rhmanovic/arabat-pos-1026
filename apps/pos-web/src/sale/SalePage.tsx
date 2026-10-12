@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { ShiftStrip } from '../pages/ShiftPages.js';
+import { useRestaurantEnabled } from '../restaurant/RestaurantPages.js';
 import { type CartLine, priceLines, useCart } from './cart.js';
 import { CustomerBar } from './customer.js';
 import {
@@ -50,6 +51,7 @@ export function SalePage() {
   const { hasPermission } = useAuth();
   const fmt = useMoneyFormat();
   const cart = useCart();
+  const restaurant = useRestaurantEnabled();
   const catalog = useQuery({
     queryKey: catalogKey,
     queryFn: () => api.catalog.posCatalog(),
@@ -128,6 +130,22 @@ export function SalePage() {
             <Button size="sm" variant="secondary" onClick={() => setDialog('held')}>
               {t('sale.heldSales')}
             </Button>
+            {restaurant && hasPermission('restaurant.orders') ? (
+              <Link
+                to="/tables"
+                className="rounded-md border border-border px-3 py-1.5 text-sm font-medium"
+              >
+                {t('restaurant.tables')}
+              </Link>
+            ) : null}
+            {restaurant && hasPermission('kitchen.access') ? (
+              <Link
+                to="/kitchen"
+                className="rounded-md border border-border px-3 py-1.5 text-sm font-medium"
+              >
+                {t('kitchen.title')}
+              </Link>
+            ) : null}
             {hasPermission('refunds.create') ? (
               <Link
                 to="/returns"

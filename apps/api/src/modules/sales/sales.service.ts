@@ -19,7 +19,6 @@ import {
   parseQuantity,
   priceCart,
   processingFee,
-  quantityValue,
   type FeeType,
 } from '@arabat/money';
 import { can, permissionBranchScope } from '@arabat/permissions';
@@ -39,7 +38,16 @@ import { StockLedgerService } from '../inventory/stock-ledger.service.js';
 import { financialAccountEntries } from '../payments/payments.schema.js';
 import { parseAmount } from '../payments/payments.service.js';
 import { ShiftsService } from '../registers/shifts.service.js';
-import { orderLines, orders, payments, saleLines, sales, salesSettings } from './sales.schema.js';
+import {
+  orderLines,
+  orders,
+  payments,
+  saleLineModifiers,
+  saleLines,
+  sales,
+  salesSettings,
+} from './sales.schema.js';
+import { consumptionCosts, stockConsumption } from '../inventory/consumption.js';
 
 type CheckoutInput = z.output<typeof checkoutSchema>;
 type SuspendInput = z.output<typeof suspendOrderSchema>;
@@ -80,13 +88,17 @@ export async function resolveSaleCustomer(
   return customerId;
 }
 
-interface ParsedLine {
+export interface ParsedLine {
   variantId: string;
   quantityMilli: bigint;
   priceOverrideMinor: bigint | null;
   discount: Discount | null;
   input: CartLine;
+  /** Restaurant modifiers: their prices are added to the unit price (Prompt 15). */
+  modifiers: { id: string; nameEn: string | null; nameAr: string | null; priceMinor: bigint }[];
 }
+
+const extraOf = (l: ParsedLine) => l.modifiers.reduce((s, m) => s + m.priceMinor, 0n);
 
 function toDiscount(d: DiscountInput | null, path: string): Discount | null {
   if (!d) return null;
@@ -234,6 +246,7 @@ export class SalesService {
         l.priceOverride === null ? null : parseAmount(l.priceOverride, `lines.${i}.priceOverride`),
       discount: toDiscount(l.discount, `lines.${i}.discount`),
       input: l,
+      modifiers: [],
     }));
     const orderDiscount = toDiscount(input.orderDiscount, 'orderDiscount');
     lines.forEach((l, i) => {
@@ -318,6 +331,8 @@ export class SalesService {
       idempotency: { key: string; hash: string } | null;
       exchange: { refundId: string; creditMinor: bigint } | null;
       customer: { id: string | null; inherited: boolean };
+      /** Restaurant bill: the order it pays and its service type. */
+      restaurant?: { orderId: string; serviceType: string } | null;
       ip: string;
     },
   ): Promise<{ totalMinor: bigint; receiptNumber: string }> {
@@ -359,7 +374,7 @@ export class SalesService {
     try {
       priced = priceCart(
         lines.map((l) => ({
-          unitPriceMinor: l.priceOverrideMinor ?? items.get(l.variantId)!.priceMinor,
+          unitPriceMinor: (l.priceOverrideMinor ?? items.get(l.variantId)!.priceMinor) + extraOf(l),
           quantityMilli: l.quantityMilli,
           discount: l.discount,
         })),
@@ -413,7 +428,16 @@ export class SalesService {
     // 7. Receipt number (gap-free per branch, atomic increment).
     const receiptNumber = await this.nextReceiptNumber(tx, actor.merchantId, branchId);
 
-    // 8. Stock: exactly one ledger movement per tracked line, all-or-nothing.
+    // 8. Stock: one ledger movement per consumed item (the item itself, or its recipe
+    // ingredients and modifier ingredients), all-or-nothing, only here (ADR-0074).
+    const consumption = await stockConsumption(
+      tx,
+      lines.map((l) => ({
+        variantId: l.variantId,
+        quantityMilli: l.quantityMilli,
+        modifierIds: l.modifiers.map((m) => m.id),
+      })),
+    );
     const applied = await this.ledger.apply(
       tx,
       {
@@ -424,11 +448,17 @@ export class SalesService {
         sourceId: saleId,
         userId: actor.userId,
       },
-      lines.map((l) => ({
-        variantId: l.variantId,
+      consumption.map((c) => ({
+        variantId: c.variantId,
         mode: 'delta' as const,
-        quantityMilli: -l.quantityMilli,
+        quantityMilli: -c.quantityMilli,
       })),
+    );
+    const costs = consumptionCosts(
+      lines.length,
+      consumption,
+      applied,
+      (i) => items.get(lines[i]!.variantId)!.costMinor,
     );
 
     // 9. The immutable sale with snapshots, payments and balance entries.
@@ -436,9 +466,16 @@ export class SalesService {
     const lineRows = lines.map((l, i) => {
       const item = items.get(l.variantId)!;
       const p = priced.lines[i]!;
-      const unitCost = applied[i]!.tracked ? applied[i]!.unitCostMinor : item.costMinor;
-      if (unitCost === null) costMinor = null;
-      else if (costMinor !== null) costMinor += quantityValue(l.quantityMilli, unitCost);
+      const lineCost = costs.total[i]!;
+      if (lineCost === null) costMinor = null;
+      else if (costMinor !== null) costMinor += lineCost;
+      // Unit cost of the item itself (used when it is restocked), or the recipe cost per unit.
+      const unitCost =
+        costs.own[i] ??
+        (lineCost === null
+          ? null
+          : (2n * lineCost * 1000n + l.quantityMilli) / (2n * l.quantityMilli));
+      const extra = extraOf(l);
       return {
         merchantId: actor.merchantId,
         saleId,
@@ -451,8 +488,8 @@ export class SalesService {
         variantNameAr: item.variantNameAr,
         sku: item.sku,
         quantity: formatQuantity(l.quantityMilli),
-        listUnitPriceMinor: item.priceMinor,
-        unitPriceMinor: l.priceOverrideMinor ?? item.priceMinor,
+        listUnitPriceMinor: item.priceMinor + extra,
+        unitPriceMinor: (l.priceOverrideMinor ?? item.priceMinor) + extra,
         priceOverridden: l.priceOverrideMinor !== null && l.priceOverrideMinor !== item.priceMinor,
         grossMinor: p.grossMinor,
         discountType: l.input.discount?.type ?? null,
@@ -460,7 +497,7 @@ export class SalesService {
         lineDiscountMinor: p.lineDiscountMinor,
         orderDiscountMinor: p.orderDiscountMinor,
         netMinor: p.netMinor,
-        trackInventory: applied[i]!.tracked,
+        trackInventory: costs.tracked[i]!,
         unitCostMinor: unitCost,
       };
     });
@@ -479,6 +516,8 @@ export class SalesService {
       userId: actor.userId,
       receiptNumber,
       customerId,
+      restaurantOrderId: args.restaurant?.orderId ?? null,
+      serviceType: args.restaurant?.serviceType ?? null,
       subtotalMinor: priced.subtotalMinor,
       lineDiscountsMinor: priced.lineDiscountsMinor,
       orderDiscountMinor: priced.orderDiscountMinor,
@@ -489,6 +528,18 @@ export class SalesService {
       costMinor,
     });
     await tx.insert(saleLines).values(lineRows);
+    const modifierRows = lines.flatMap((l, position) =>
+      l.modifiers.map((m) => ({
+        merchantId: actor.merchantId,
+        saleId,
+        position,
+        modifierId: m.id,
+        nameEn: m.nameEn,
+        nameAr: m.nameAr,
+        priceMinor: m.priceMinor,
+      })),
+    );
+    if (modifierRows.length) await tx.insert(saleLineModifiers).values(modifierRows);
     if (creditMinor > 0n)
       await tx.insert(payments).values({
         id: newId(),
@@ -580,11 +631,7 @@ export class SalesService {
     return { totalMinor: priced.totalMinor, receiptNumber };
   }
 
-  private async replay(
-    actor: MerchantActor,
-    key: string,
-    requestHash: string,
-  ): Promise<Sale | null> {
+  async replay(actor: MerchantActor, key: string, requestHash: string): Promise<Sale | null> {
     const [order] = await this.database.withMerchantTx(actor.merchantId, (tx) =>
       tx
         .select({ id: orders.id, hash: orders.requestHash, status: orders.status })
@@ -604,7 +651,8 @@ export class SalesService {
     return sale ? this.getSale(actor, sale.id, 'pos') : null;
   }
 
-  private async loadItems(tx: Transaction, branchId: string, variantIds: string[]) {
+  /** Sellable variants at a branch with their current price and cost. */
+  async loadItems(tx: Transaction, branchId: string, variantIds: string[]) {
     const rows = (
       await tx.execute(sql`
         select v.id, v.price_minor::text as price, v.cost_minor::text as cost, v.name_en as variant_name_en,
@@ -979,6 +1027,11 @@ export class SalesService {
         .from(payments)
         .where(eq(payments.saleId, id))
         .orderBy(asc(payments.createdAt), asc(payments.id));
+      const mods = await tx
+        .select()
+        .from(saleLineModifiers)
+        .where(eq(saleLineModifiers.saleId, id))
+        .orderBy(asc(saleLineModifiers.position), asc(saleLineModifiers.nameEn));
       const manager = view === 'manager';
       return {
         id,
@@ -997,6 +1050,8 @@ export class SalesService {
         change: money(s['change_minor'] as string),
         refunded: money(s['refunded'] as string),
         customer: customerOf(s),
+        serviceType: (s['service_type'] as Sale['serviceType']) ?? null,
+        restaurantOrderId: (s['restaurant_order_id'] as string | null) ?? null,
         lines: ls.map((l) => ({
           position: l.position,
           variantId: l.variantId,
@@ -1015,6 +1070,9 @@ export class SalesService {
           lineDiscount: money(l.lineDiscountMinor),
           orderDiscount: money(l.orderDiscountMinor),
           net: money(l.netMinor),
+          modifiers: mods
+            .filter((m) => m.position === l.position)
+            .map((m) => ({ nameEn: m.nameEn, nameAr: m.nameAr, price: money(m.priceMinor) })),
         })),
         payments: ps.map((p) => ({
           id: p.id,
@@ -1126,6 +1184,12 @@ export class SalesService {
       const conditions: SQL[] = [scope ?? sql`true`];
       if (query.shiftId) conditions.push(sql`s.shift_id = ${query.shiftId}`);
       if (query.customerId) conditions.push(sql`s.customer_id = ${query.customerId}`);
+      if (query.serviceType)
+        conditions.push(
+          query.serviceType === 'retail'
+            ? sql`s.service_type is null`
+            : sql`s.service_type = ${query.serviceType}`,
+        );
       if (query.q)
         conditions.push(
           sql`s.receipt_number ilike ${`%${query.q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`}`,
@@ -1175,6 +1239,7 @@ export class SalesService {
     const rows = (
       await tx.execute(sql`
         select s.id, s.receipt_number, s.branch_id, s.created_at, s.total_minor::text as total, u.full_name,
+               s.service_type,
                (select coalesce(sum(l.quantity), 0)::text from sale_lines l where l.sale_id = s.id) as items,
                (select coalesce(array_agg(distinct p.method_kind), '{}') from payments p where p.sale_id = s.id) as kinds,
                (select coalesce(sum(r.total_minor), 0) from refunds r
@@ -1195,6 +1260,7 @@ export class SalesService {
       paymentKinds: r['kinds'] as string[],
       refunded: money(r['refunded'] as string),
       customerName: (r['customer_name'] as string | null) ?? null,
+      serviceType: (r['service_type'] as SaleSummary['serviceType']) ?? null,
     }));
   }
 }

@@ -83,6 +83,13 @@ export const NAV: readonly NavItem[] = [
     section: 'operations',
   },
   {
+    key: 'restaurant',
+    to: '/restaurant',
+    anyOf: ['restaurant.manage'],
+    available: true,
+    section: 'operations',
+  },
+  {
     key: 'customers',
     to: '/customers',
     anyOf: ['customers.read'],

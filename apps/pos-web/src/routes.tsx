@@ -2,9 +2,11 @@ import {
   NotFound,
   RedirectIfAuthenticated,
   RequireAuth,
+  RequirePermission,
   RouteErrorBoundary,
+  useAuth,
 } from '@arabat/web-core';
-import type { RouteObject } from 'react-router';
+import { Navigate, type RouteObject } from 'react-router';
 import { POSLayout } from './layouts/POSLayout.js';
 import {
   ForgotPasswordPage,
@@ -13,8 +15,22 @@ import {
   AcceptInvitePage,
 } from './pages/LoginPage.js';
 import { RequireShift, ShiftPage } from './pages/ShiftPages.js';
+import { KitchenPage } from './restaurant/KitchenPage.js';
+import { FloorPage, OrderPage } from './restaurant/RestaurantPages.js';
 import { ReturnsPage } from './sale/ReturnsPage.js';
 import { SalePage } from './sale/SalePage.js';
+
+/** Kitchen-only staff start on the kitchen display; everyone else on the sale screen. */
+function Home() {
+  const { hasPermission } = useAuth();
+  if (!hasPermission('sales.create') && hasPermission('kitchen.access'))
+    return <Navigate to="/kitchen" replace />;
+  return (
+    <RequireShift>
+      <SalePage />
+    </RequireShift>
+  );
+}
 
 /** Route tree of /pos (relative to the /pos basename). See docs/ROUTES.md. */
 export const routes: RouteObject[] = [
@@ -43,12 +59,29 @@ export const routes: RouteObject[] = [
       </RequireAuth>
     ),
     children: [
+      { index: true, element: <Home /> },
       {
-        index: true,
+        path: 'tables',
         element: (
           <RequireShift>
-            <SalePage />
+            <FloorPage />
           </RequireShift>
+        ),
+      },
+      {
+        path: 'tables/orders/:orderId',
+        element: (
+          <RequireShift>
+            <OrderPage />
+          </RequireShift>
+        ),
+      },
+      {
+        path: 'kitchen',
+        element: (
+          <RequirePermission permission="kitchen.access">
+            <KitchenPage />
+          </RequirePermission>
         ),
       },
       { path: 'shift', element: <ShiftPage /> },

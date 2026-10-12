@@ -17,6 +17,7 @@ export type PermissionGroup =
   | 'inventory'
   | 'purchasing'
   | 'customers'
+  | 'restaurant'
   | 'reports'
   | 'payments'
   | 'employees'
@@ -148,6 +149,28 @@ export const PERMISSIONS = {
     scope: 'branch',
     group: 'customers',
     description: 'Edit customers, notes and status',
+  },
+
+  // Restaurant (Prompt 15)
+  'restaurant.manage': {
+    scope: 'branch',
+    group: 'restaurant',
+    description: 'Configure menu modifiers, recipes, tables and kitchen stations',
+  },
+  'restaurant.orders': {
+    scope: 'branch',
+    group: 'restaurant',
+    description: 'Take dine-in, takeaway and pickup orders',
+  },
+  'restaurant.void_item': {
+    scope: 'branch',
+    group: 'restaurant',
+    description: 'Cancel items already sent to the kitchen',
+  },
+  'kitchen.access': {
+    scope: 'branch',
+    group: 'restaurant',
+    description: 'Use the kitchen display',
   },
 
   // Reports

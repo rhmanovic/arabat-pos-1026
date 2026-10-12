@@ -130,6 +130,14 @@ export const salesReportSchema = z.object({
       refunds: moneySchema,
     }),
   ),
+  /** Retail sales vs. restaurant service types (Prompt 15). */
+  byServiceType: z.array(
+    z.object({
+      serviceType: z.enum(['retail', 'dine_in', 'takeaway', 'pickup']),
+      saleCount: z.number().int(),
+      netSales: moneySchema,
+    }),
+  ),
   byCategory: z.array(
     z.object({
       categoryId: z.string().nullable(),

@@ -69,6 +69,10 @@ export const ERROR_CODES = [
   'SUPPLIER_INACTIVE',
   'CUSTOMER_INACTIVE',
   'DUPLICATE_PHONE',
+  'MODULE_DISABLED',
+  'TABLE_OCCUPIED',
+  'ITEM_ALREADY_PAID',
+  'MODIFIER_INVALID',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

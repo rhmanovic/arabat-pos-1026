@@ -230,7 +230,7 @@ export function OrderDiscountDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-interface PlannedPayment {
+export interface PlannedPayment {
   methodId: string;
   amount: string;
   tendered: string | null;
@@ -241,10 +241,16 @@ export function PaymentDialog({
   totalMinor,
   onClose,
   onCompleted,
+  submit,
 }: {
   totalMinor: bigint;
   onClose: () => void;
   onCompleted: (saleId: string) => void;
+  /** Pays something other than the cart (e.g. a restaurant bill); returns the sale. */
+  submit?: (args: {
+    idempotencyKey: string;
+    payments: PlannedPayment[];
+  }) => Promise<{ id: string }>;
 }) {
   const { t, i18n } = useTranslation();
   const api = useApi();
@@ -309,22 +315,24 @@ export function PaymentDialog({
 
   const complete = useMutation({
     mutationFn: () =>
-      api.sales.checkout({
-        idempotencyKey,
-        ...(cart.state.orderId ? { orderId: cart.state.orderId } : {}),
-        lines: cart.state.lines.map((l) => ({
-          variantId: l.variantId,
-          quantity: l.quantity,
-          priceOverride: l.priceOverride,
-          discount: l.discount,
-        })),
-        orderDiscount: cart.state.orderDiscount,
-        customerId: cart.state.customer?.id ?? null,
-        payments: planned,
-        expectedTotal: Money.ofMinor(totalMinor, 'KWD').toDecimalString(),
-      }),
+      submit
+        ? submit({ idempotencyKey, payments: planned })
+        : api.sales.checkout({
+            idempotencyKey,
+            ...(cart.state.orderId ? { orderId: cart.state.orderId } : {}),
+            lines: cart.state.lines.map((l) => ({
+              variantId: l.variantId,
+              quantity: l.quantity,
+              priceOverride: l.priceOverride,
+              discount: l.discount,
+            })),
+            orderDiscount: cart.state.orderDiscount,
+            customerId: cart.state.customer?.id ?? null,
+            payments: planned,
+            expectedTotal: Money.ofMinor(totalMinor, 'KWD').toDecimalString(),
+          }),
     onSuccess: async (sale) => {
-      cart.clear();
+      if (!submit) cart.clear();
       notify.ok(t('sale.completed'));
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: availabilityKey }),
@@ -756,6 +764,11 @@ export function ReceiptView({ receipt }: { receipt: Receipt }) {
                 ? ` — ${localizedName({ nameEn: l.variantNameEn, nameAr: l.variantNameAr }, i18n.language)}`
                 : ''}
             </p>
+            {l.modifiers.length ? (
+              <p className="ps-2 text-xs" data-testid="receipt-modifiers">
+                {l.modifiers.map((m) => localizedName(m, i18n.language)).join(', ')}
+              </p>
+            ) : null}
             <p className="flex justify-between" dir="ltr">
               <span>
                 {l.quantity.replace(/\.?0+$/, '')} × {l.unitPrice.amount}

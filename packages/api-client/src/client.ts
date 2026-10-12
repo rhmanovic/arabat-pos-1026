@@ -125,6 +125,22 @@ import {
   purchasingReportSchema,
   salesReportSchema,
   shiftsReportSchema,
+  type AddOrderItems,
+  type CreateRestaurantOrder,
+  type PayOrder,
+  type SaveMenuItem,
+  type SaveModifierGroup,
+  branchLayoutSchema,
+  floorSchema,
+  kitchenBoardSchema,
+  kitchenTicketSchema,
+  menuListSchema,
+  modifierGroupSchema,
+  orderQuoteSchema,
+  payOrderResultSchema,
+  posMenuSchema,
+  restaurantOrderSchema,
+  restaurantSettingsSchema,
 } from '@arabat/contracts';
 import { z } from 'zod';
 import { ApiError, ContractError, NetworkError, toApiError } from './errors.js';
@@ -510,6 +526,129 @@ export function createApiClient(options: ApiClientOptions = {}) {
           body,
           schema: purchaseOrderSchema,
         }),
+    },
+    restaurant: {
+      settings: () =>
+        request('GET', '/manager/restaurant/settings', { schema: restaurantSettingsSchema }),
+      updateSettings: (body: { enabled: boolean; autoSendOnPayment: boolean; version: number }) =>
+        request('PUT', '/manager/restaurant/settings', { body, schema: restaurantSettingsSchema }),
+      layout: (branchId: string) =>
+        request('GET', `/manager/restaurant/layout?${toParams({ branchId })}`, {
+          schema: branchLayoutSchema,
+        }),
+      saveArea: (
+        id: string | null,
+        body: {
+          branchId: string;
+          nameEn?: string | null;
+          nameAr?: string | null;
+          position?: number;
+          status?: 'active' | 'inactive';
+          version?: number;
+        },
+      ) =>
+        request(
+          id ? 'PUT' : 'POST',
+          id ? `/manager/restaurant/areas/${id}` : '/manager/restaurant/areas',
+          { body, schema: branchLayoutSchema },
+        ),
+      saveTable: (
+        id: string | null,
+        body: {
+          areaId: string;
+          code: string;
+          seats?: number;
+          position?: number;
+          status?: 'active' | 'inactive';
+          version?: number;
+        },
+      ) =>
+        request(
+          id ? 'PUT' : 'POST',
+          id ? `/manager/restaurant/tables/${id}` : '/manager/restaurant/tables',
+          { body, schema: branchLayoutSchema },
+        ),
+      saveStation: (
+        id: string | null,
+        body: {
+          branchId: string;
+          nameEn?: string | null;
+          nameAr?: string | null;
+          isDefault?: boolean;
+          status?: 'active' | 'inactive';
+          categoryIds?: string[];
+          version?: number;
+        },
+      ) =>
+        request(
+          id ? 'PUT' : 'POST',
+          id ? `/manager/restaurant/stations/${id}` : '/manager/restaurant/stations',
+          { body, schema: branchLayoutSchema },
+        ),
+      menu: () => request('GET', '/manager/restaurant/menu', { schema: menuListSchema }),
+      saveMenuItem: (productId: string, body: SaveMenuItem) =>
+        request('PUT', `/manager/restaurant/menu/${productId}`, { body, schema: menuListSchema }),
+      saveGroup: (id: string | null, body: SaveModifierGroup) =>
+        request(
+          id ? 'PUT' : 'POST',
+          id ? `/manager/restaurant/modifier-groups/${id}` : '/manager/restaurant/modifier-groups',
+          { body, schema: modifierGroupSchema },
+        ),
+      // POS
+      posSettings: () =>
+        request('GET', '/pos/restaurant/settings', { schema: restaurantSettingsSchema }),
+      posMenu: () => request('GET', '/pos/restaurant/menu', { schema: posMenuSchema }),
+      floor: () => request('GET', '/pos/restaurant/floor', { schema: floorSchema }),
+      open: (body: CreateRestaurantOrder) =>
+        request('POST', '/pos/restaurant/orders', { body, schema: restaurantOrderSchema }),
+      order: (id: string) =>
+        request('GET', `/pos/restaurant/orders/${id}`, { schema: restaurantOrderSchema }),
+      addItems: (id: string, body: AddOrderItems) =>
+        request('POST', `/pos/restaurant/orders/${id}/items`, {
+          body,
+          schema: restaurantOrderSchema,
+        }),
+      send: (id: string) =>
+        request('POST', `/pos/restaurant/orders/${id}/send`, {
+          body: {},
+          schema: restaurantOrderSchema,
+        }),
+      cancelItem: (id: string, itemId: string, body: { reason: string; waste: boolean }) =>
+        request('POST', `/pos/restaurant/orders/${id}/items/${itemId}/cancel`, {
+          body,
+          schema: restaurantOrderSchema,
+        }),
+      move: (id: string, body: { version: number; tableId: string }) =>
+        request('POST', `/pos/restaurant/orders/${id}/move`, {
+          body,
+          schema: restaurantOrderSchema,
+        }),
+      merge: (id: string, body: { version: number; sourceOrderId: string }) =>
+        request('POST', `/pos/restaurant/orders/${id}/merge`, {
+          body,
+          schema: restaurantOrderSchema,
+        }),
+      cancel: (id: string, version: number) =>
+        request('POST', `/pos/restaurant/orders/${id}/cancel`, { body: { version } }),
+      quote: (
+        id: string,
+        body: {
+          itemIds: string[];
+          orderDiscount?: { type: 'percent' | 'amount'; value: string } | null;
+        },
+      ) =>
+        request('POST', `/pos/restaurant/orders/${id}/quote`, { body, schema: orderQuoteSchema }),
+      pay: (id: string, body: PayOrder) =>
+        request('POST', `/pos/restaurant/orders/${id}/pay`, { body, schema: payOrderResultSchema }),
+      kitchen: (stationId?: string) =>
+        request('GET', `/pos/kitchen/tickets?${toParams({ stationId })}`, {
+          schema: kitchenBoardSchema,
+        }),
+      ticketStatus: (
+        id: string,
+        body: { status: 'preparing' | 'ready' | 'completed'; version: number },
+      ) =>
+        request('POST', `/pos/kitchen/tickets/${id}/status`, { body, schema: kitchenTicketSchema }),
     },
     reports: {
       sales: (query: ReportQuery) =>

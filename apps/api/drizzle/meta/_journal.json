@@ -162,6 +162,20 @@
       "when": 1791789536276,
       "tag": "0022_report_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791791080852,
+      "tag": "0023_restaurant",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791791082807,
+      "tag": "0024_restaurant_rls",
+      "breakpoints": true
     }
   ]
 }

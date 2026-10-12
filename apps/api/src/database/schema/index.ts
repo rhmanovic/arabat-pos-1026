@@ -16,3 +16,4 @@ export * from '../../modules/refunds/refunds.schema.js';
 export * from './sequences.schema.js';
 export * from '../../modules/purchasing/purchasing.schema.js';
 export * from '../../modules/transfers/transfers.schema.js';
+export * from '../../modules/restaurant/restaurant.schema.js';
