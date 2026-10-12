@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { merchants } from '../../modules/merchants/merchants.schema.js';
 import { ensureDefaultPaymentSetup } from '../../modules/payments/merchant-defaults.js';
 import type { Seed } from './seed.types.js';
@@ -15,6 +16,12 @@ export const paymentSetupSeed: Seed = {
     for (const { id } of await tx.select({ id: merchants.id }).from(merchants)) {
       if ((await ensureDefaultPaymentSetup(tx, id)).accounts > 0) set++;
     }
-    return `${set} merchants given the default payment setup`;
+    // The first release named the cash account «صندوق النقد» / «Cash box», which reads like
+    // the register; rename it where the owner has not edited it (version 1).
+    const renamed = await tx.execute(
+      sql`update financial_accounts set name_ar = 'الخزينة', name_en = 'Cash on hand'
+          where kind = 'cash' and name_ar = 'صندوق النقد' and name_en = 'Cash box' and version = 1`,
+    );
+    return `${set} merchants given the default payment setup, ${renamed.rowCount ?? 0} cash accounts renamed`;
   },
 };

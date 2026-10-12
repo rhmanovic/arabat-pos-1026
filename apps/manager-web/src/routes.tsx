@@ -117,6 +117,10 @@ export const routes: RouteObject[] = [
       { path: 'transfers/new', element: guard('inventory.transfer', <NewTransferPage />) },
       { path: 'transfers/:transferId', element: guard('inventory.read', <TransferDetailPage />) },
       { path: 'payments', element: guard('payments.settings', <PaymentsPage />) },
+      {
+        path: 'accounts',
+        element: guard('payments.settings', <PaymentsPage view="accounts" />),
+      },
       { path: 'registers', element: guard('registers.manage', <RegistersPage />) },
       { path: 'shifts', element: guard('shifts.view_all', <ShiftsPage />) },
       { path: 'shifts/:shiftId', element: guard('shifts.view_all', <ShiftDetailPage />) },

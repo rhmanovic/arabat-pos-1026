@@ -240,7 +240,7 @@ describe('checkout', () => {
     ).json().accounts as { id: string; kind: string; balance: { amount: string } }[];
     // The card payment net of its fee lands in the linked balance…
     expect(accounts.find((x) => x.id === account.id)!.balance.amount).toBe('22.270');
-    // …and the cash payment (net of change) in the default cash box.
+    // …and the cash payment (net of change) in the default cash on hand account.
     expect(accounts.find((x) => x.kind === 'cash')!.balance.amount).toBe('7.333');
   });
 

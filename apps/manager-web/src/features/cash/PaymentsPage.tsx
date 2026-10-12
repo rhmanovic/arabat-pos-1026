@@ -23,6 +23,7 @@ import {
 import { ErrorState, localizedName, useApi, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { formatAmount } from '../catalog/ProductsPage.js';
 import { CashTabs } from './shared.js';
@@ -52,10 +53,12 @@ export function feeLabel(m: PaymentMethod, t: (k: string) => string, language: s
   }
 }
 
-export function PaymentsPage() {
+/** Payment methods (`/payments`) and the financial accounts they settle into (`/accounts`). */
+export function PaymentsPage({ view = 'methods' }: { view?: 'methods' | 'accounts' }) {
   const { t, i18n } = useTranslation();
   const api = useApi();
-  const [tab, setTab] = useState<'methods' | 'accounts'>('methods');
+  const navigate = useNavigate();
+  const tab = view;
   const [editing, setEditing] = useState<PaymentMethod | 'new' | null>(null);
   const [account, setAccount] = useState<FinancialAccount | 'new' | null>(null);
   const methods = useQuery({
@@ -74,8 +77,8 @@ export function PaymentsPage() {
   return (
     <div>
       <PageHeader
-        title={t('cash.methodsTitle')}
-        description={t('cash.methodsSubtitle')}
+        title={tab === 'methods' ? t('cash.methodsTitle') : t('cash.accountsTitle')}
+        description={tab === 'methods' ? t('cash.methodsSubtitle') : t('cash.accountsSubtitle')}
         actions={
           tab === 'methods' ? (
             <Button onClick={() => setEditing('new')}>{t('cash.newMethod')}</Button>
@@ -90,7 +93,7 @@ export function PaymentsPage() {
           { key: 'accounts', label: t('cash.tabAccounts') },
         ]}
         active={tab}
-        onChange={(k) => setTab(k as typeof tab)}
+        onChange={(k) => void navigate(k === 'accounts' ? '/accounts' : '/payments')}
       />
       {tab === 'methods' ? (
         <DataTable

@@ -62,7 +62,7 @@ describe('payment methods', () => {
       await a.client.request('GET', '/manager/payment-methods', { cookies: a.cookies })
     ).json();
     // ADR-0089: cash, KNET, Visa/Mastercard, payment link and WAMD, each settling into a
-    // default internal balance (cash box, bank 1, bank 2), without fees.
+    // default financial account (cash on hand, bank 1, bank 2), without fees.
     expect(listA.methods.map((m: { kind: string; nameEn: string }) => [m.kind, m.nameEn])).toEqual([
       ['cash', 'Cash'],
       ['card', 'Card (KNET)'],
@@ -74,7 +74,7 @@ describe('payment methods', () => {
       await a.client.request('GET', '/manager/financial-accounts', { cookies: a.cookies })
     ).json().accounts as { id: string; kind: string; nameEn: string }[];
     expect(accountsA.map((x) => [x.kind, x.nameEn])).toEqual([
-      ['cash', 'Cash box'],
+      ['cash', 'Cash on hand'],
       ['bank', 'Bank account 1'],
       ['bank', 'Bank account 2'],
     ]);
@@ -82,7 +82,7 @@ describe('payment methods', () => {
     expect(
       listA.methods.map((m: { financialAccountId: string | null }) => m.financialAccountId),
     ).toEqual([
-      accountOf('Cash box'),
+      accountOf('Cash on hand'),
       accountOf('Bank account 1'),
       accountOf('Bank account 2'),
       accountOf('Bank account 1'),

@@ -6,9 +6,10 @@ import { financialAccounts, paymentMethods } from './payments.schema.js';
 
 type AccountKey = 'cash' | 'bank1' | 'bank2';
 
-/** Starting internal balances: the shop's cash box and two bank accounts (ADR-0089). */
+/** Starting financial accounts: cash on hand and two bank accounts (ADR-0089). */
 const DEFAULT_ACCOUNTS: { key: AccountKey; kind: string; nameEn: string; nameAr: string }[] = [
-  { key: 'cash', kind: 'cash', nameEn: 'Cash box', nameAr: 'صندوق النقد' },
+  // «Cash on hand», not «cash box»: «صندوق» is the register (the till) in the POS.
+  { key: 'cash', kind: 'cash', nameEn: 'Cash on hand', nameAr: 'الخزينة' },
   { key: 'bank1', kind: 'bank', nameEn: 'Bank account 1', nameAr: 'الحساب البنكي 1' },
   { key: 'bank2', kind: 'bank', nameEn: 'Bank account 2', nameAr: 'الحساب البنكي 2' },
 ];

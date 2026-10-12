@@ -763,7 +763,7 @@ ADR; supersede it.
 
 ## ADR-0089 — Default payment setup: balances and linked methods
 - **Date:** 2026-10-12 · **Status:** Accepted (owner request)
-- **Decision:** Every merchant starts with internal balances «Cash box» (cash), «Bank account
+- **Decision:** Every merchant starts with internal balances «Cash on hand» («الخزينة», cash), «Bank account
   1» and «Bank account 2» (bank), and payment methods Cash, Card (KNET), Visa / Mastercard,
   Payment link (custom) and WAMD (bank transfer), each linked to a balance so every payment and
   fee lands in a ledger (BR-086). `ensureDefaultPaymentSetup` runs at merchant creation and in
@@ -774,4 +774,6 @@ ADR; supersede it.
 - **Consequences:** Seeds run on every start; the «no balance yet» guard is what makes the
   setup one-time. Also fixed with this slice: a 401 from any API call now re-reads the session
   and returns to sign-in, and data tables show load errors instead of looking empty.
-
+- **Naming (2026-10-12):** «صندوق» means the register (till) only. The cash account is «الخزينة»
+  (Cash on hand) and the balances page is «الحسابات المالية» (Financial accounts), with its own
+  menu item `/accounts` instead of a tab hidden inside Payment methods.

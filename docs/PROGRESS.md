@@ -357,7 +357,7 @@ desktop, products-page filter layout, image placeholders, camera barcode scannin
 Cause of the empty Registers / Payment methods pages on staging: the manager session had ended
 (every `/manager/*` call answered 401) but the app kept showing the page with empty tables.
 Fixed: a 401 re-reads the session and shows sign-in; all data tables show load errors.
-New companies (and, once, existing ones without balances) get a cash box, two bank accounts
+New companies (and, once, existing ones without balances) get cash on hand («الخزينة»), two bank accounts
 and Cash / KNET / Visa-Mastercard / payment link / WAMD linked to them (BR-086). Open: real
 fee rates and cash-to-bank transfers (OQ-026).
 
