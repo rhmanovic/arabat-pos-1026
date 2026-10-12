@@ -4,3 +4,17 @@
 /* Scan shared packages for class names used by their components. */
 @source '../../../packages/ui/src';
 @source '../../../packages/web-core/src';
+
+/* Printing a receipt: only the receipt portal is printed (80 mm roll by default). */
+@media print {
+  body > :not([data-print-receipt]) {
+    display: none !important;
+  }
+  body > [data-print-receipt] {
+    display: block !important;
+  }
+  @page {
+    size: 80mm auto;
+    margin: 4mm;
+  }
+}

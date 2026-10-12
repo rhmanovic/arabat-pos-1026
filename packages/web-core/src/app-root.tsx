@@ -27,7 +27,7 @@ export function AppRoot({ appInterface, i18n, children, api, queryClient }: AppR
         <QueryClientProvider client={cache}>
           <ApiProvider client={client}>
             <DirectionRoot>
-              <ToastProvider>
+              <ToastProvider placement={appInterface === 'pos' ? 'top-center' : 'bottom-end'}>
                 <AuthProvider appInterface={appInterface}>{children}</AuthProvider>
               </ToastProvider>
             </DirectionRoot>

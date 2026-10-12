@@ -176,6 +176,22 @@ Screens: `/manager/payments` (methods + internal balances, fee preview),
 shift is open, then the sale screen with a shift strip; `/pos/shift` (expected cash,
 cash in/out, close with optional note/coin count, closing result).
 
+### Checkout API (Prompt 10)
+
+| Method & path | Permission |
+|---|---|
+| `POST /pos/sales` (checkout, idempotency key) | POS `sales.create`, own open shift; `sales.discount`, `sales.discount.override_limit`, `sales.price_override` as needed |
+| `GET /pos/sales/recent`, `GET /pos/sales/:id/receipt`, `GET /pos/sales/settings` | POS `sales.create` (session branch only) |
+| `POST /pos/orders` (hold), `GET /pos/orders/suspended`, `POST /pos/orders/:id/cancel` | POS `sales.create` |
+| `GET /manager/sales?branchId=&q=&from=&to=`, `GET /manager/sales/:id`, `GET …/:id/receipt` | `sales.read` (branch-scoped) |
+| `GET/PUT /manager/sales-settings` | `merchant.settings.read` / `merchant.settings.update` |
+
+Screens: POS `/pos/` is the sale screen (search/scan box with Enter, category chips,
+product tiles with stock badges, cart with line editing — quantity, discount, price
+override by permission — order discount, hold/resume, recent sales, payment dialog with
+split payments, cash tendered/change, receipt with 80 mm printing).
+Manager `/manager/sales` (list, filters, totals, selling policy) and `/manager/sales/:id`.
+
 ## 5. API namespaces (backend)
 
 | Prefix | Consumers | Notes |

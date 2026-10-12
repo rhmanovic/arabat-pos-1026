@@ -376,7 +376,7 @@ export class ShiftsService {
   }
 
   /** Locks and returns the actor's own open shift at the POS branch. */
-  private async lockOwnShift(tx: Transaction, actor: MerchantActor): Promise<ShiftRecord> {
+  async lockOwnShift(tx: Transaction, actor: MerchantActor): Promise<ShiftRecord> {
     const [row] = await tx
       .select()
       .from(shifts)
@@ -641,9 +641,8 @@ export class ShiftsService {
 
   // ------------------------------------------------------------ calculations
   /**
-   * Cash totals of a shift, from records only. Cash sales and cash refunds come from the
-   * checkout (Prompt 10) and refund (Prompt 11) payment records; until those exist they
-   * are zero.
+   * Cash totals of a shift, from records only. Cash sales come from the checkout payment
+   * records; cash refunds from the refund records (Prompt 11, zero until then).
    */
   async totals(tx: Transaction, shift: ShiftRecord): Promise<ShiftTotals> {
     const [m] = (
@@ -654,7 +653,14 @@ export class ShiftsService {
     ).rows as { cash_in: string; cash_out: string }[];
     const cashInMinor = BigInt(m!.cash_in);
     const cashOutMinor = BigInt(m!.cash_out);
-    const cashSalesMinor = 0n;
+    // Cash taken on sales (Prompt 10): the applied amount, i.e. tendered minus change.
+    const [p] = (
+      await tx.execute(sql`
+        select coalesce(sum(amount_minor), 0)::text as cash_sales
+        from payments where shift_id = ${shift.id} and method_kind = 'cash' and status = 'succeeded'
+          and sale_id is not null`)
+    ).rows as { cash_sales: string }[];
+    const cashSalesMinor = BigInt(p!.cash_sales);
     const cashRefundsMinor = 0n;
     return {
       openingFloatMinor: shift.openingFloatMinor,

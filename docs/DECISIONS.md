@@ -383,3 +383,40 @@ ADR; supersede it.
   callers did not expect (a web test caught a crash on an empty amount field). It now
   throws `MoneyError` for every invalid amount.
 
+## ADR-0051 — Server-side atomic checkout with client cart
+- **Date:** 2026-10-12 · **Status:** Accepted
+- **Decision:** The POS keeps the cart locally and sends it once at checkout. The server
+  re-prices from the catalog, checks permissions, validates payments and writes order,
+  sale, lines, payments, stock movements, balance entries and audit in **one**
+  transaction under the cashier's shift row lock. The cashier's expected total is sent
+  and must match (`TOTAL_CHANGED` otherwise), so a price change between display and
+  payment is never silently charged.
+- **Why:** one round trip per sale (fast on busy tills), no partially written sales.
+
+## ADR-0052 — Shared pricing function
+- **Date:** 2026-10-12 · **Status:** Accepted (BR-080)
+- **Decision:** `priceCart()` in `@arabat/money` is used by the POS (display) and the API
+  (authoritative): gross = half-up(unit × qty); line discount (percent half-up or amount
+  ≤ gross); order discount on the remaining base, allocated by largest remainder; no tax
+  (OQ-002), no cash rounding (OQ-003).
+
+## ADR-0053 — Checkout idempotency
+- **Date:** 2026-10-12 · **Status:** Accepted
+- **Decision:** The POS generates one key per payment attempt; `orders.idempotency_key` is
+  unique per merchant. A retry with the same key and body returns the existing sale; the
+  same key with a different body is `IDEMPOTENCY_CONFLICT`. Concurrent duplicates race on
+  the unique index and the loser returns the winner's sale.
+
+## ADR-0054 — Receipt numbering
+- **Date:** 2026-10-12 · **Status:** Accepted
+- **Decision:** `{BRANCH CODE}-{6-digit sequence}` per branch, from an atomic
+  `insert … on conflict do update … returning` inside the checkout transaction, so numbers
+  are unique and gap-free (a failed checkout rolls its number back).
+
+## ADR-0055 — Payment verification states
+- **Date:** 2026-10-12 · **Status:** Accepted
+- **Decision:** Payments carry `status` (succeeded | pending | failed) and `verification`
+  (manual: cashier-confirmed cash/card terminal/transfer; gateway: provider-verified).
+  A sale completes only with succeeded payments; methods configured with a gateway are
+  refused at the POS (`PAYMENT_NOT_VERIFIED`) until Prompt 16 adds verified integration.
+

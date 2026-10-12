@@ -66,6 +66,28 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after Prompt 10 (2026-10-12, local run)
+- `pnpm verify` ✓ (112 unit/web), `pnpm test:integration` ✓ (99), `pnpm test:e2e` ✓ (26).
+- `pricing.test.ts`: exact fractional quantities, line/order discounts with exact
+  allocation, invalid discounts, exact limit comparison.
+- `sales.int.test.ts` (11): normal cash sale (totals, change, receipt numbers, one stock
+  movement, shift expected cash, manager list/detail, audit); split payment with
+  per-payment fees and balance entries; **duplicate requests** (5 concurrent identical →
+  one sale, one payment, one movement; same key different cart → conflict);
+  **concurrent checkout** of the last unit on two registers (one sale, the other
+  INSUFFICIENT_STOCK, nothing left behind); insufficient stock with no side effects
+  (no receipt number consumed); invalid discounts and the limit (cashier vs supervisor,
+  100 % zero-total sale); unauthorized and authorized price override with audit;
+  incorrect payment totals, changed prices, unverified gateway payments; financial
+  precision (0.333 × 1.5, 10 % order discount); shift requirement, branch availability,
+  branch/merchant read restrictions; hold → complete once; DB immutability.
+- Web: barcode scan + cart totals + cash change + exact checkout payload (POS).
+- `e2e/checkout.spec.ts`: the Prompt 10 acceptance scenario end to end (branch via UI,
+  products and stock, invited cashier, POS sign-in at the branch, shift, scan, split
+  payment, receipt, stock deducted exactly once, drawer expected cash, manager view).
+- Found by tests and fixed: a percent-trimming bug turned the default discount limit
+  "10" into "1".
+
 ### Results after Prompt 9 (2026-10-12, local run)
 - `pnpm verify` ✓ (106 unit/web), `pnpm test:integration` ✓ (88), `pnpm test:e2e` ✓ (25).
 - `fees.test.ts`: none/fixed/percentage/combined fees, half-up rounding at the fils, cap.

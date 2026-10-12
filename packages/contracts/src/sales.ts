@@ -1,0 +1,213 @@
+import { z } from 'zod';
+import { moneyAmountSchema, moneySchema } from './catalog.js';
+import { quantitySchema } from './inventory.js';
+
+/** Discount on the wire: percentage ("10", "12.5") or an amount ("0.500"). */
+export const discountInputSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('percent'),
+    value: z
+      .string()
+      .trim()
+      .regex(/^(100(\.0{1,2})?|\d{1,2}(\.\d{1,2})?)$/, {
+        error: 'Percent: 0–100, up to 2 decimals.',
+      }),
+  }),
+  z.object({ type: z.literal('amount'), value: moneyAmountSchema }),
+]);
+export type DiscountInput = z.infer<typeof discountInputSchema>;
+
+export const cartLineInputSchema = z.object({
+  variantId: z.uuid(),
+  quantity: quantitySchema,
+  /** New unit price; requires `sales.price_override`. */
+  priceOverride: moneyAmountSchema.nullish().transform((v) => v ?? null),
+  discount: discountInputSchema.nullish().transform((v) => v ?? null),
+});
+export type CartLineInput = z.input<typeof cartLineInputSchema>;
+
+const cartFields = {
+  lines: z.array(cartLineInputSchema).min(1).max(200),
+  orderDiscount: discountInputSchema.nullish().transform((v) => v ?? null),
+};
+
+export const paymentInputSchema = z.object({
+  methodId: z.uuid(),
+  /** Amount applied to the sale. */
+  amount: moneyAmountSchema,
+  /** Cash only: cash handed over by the customer (≥ amount); the difference is change. */
+  tendered: moneyAmountSchema.nullish().transform((v) => v ?? null),
+  /** E.g. card terminal approval code or transfer reference. */
+  reference: z
+    .string()
+    .trim()
+    .max(80)
+    .nullish()
+    .transform((v) => (v == null || v === '' ? null : v)),
+});
+export type PaymentInput = z.input<typeof paymentInputSchema>;
+
+export const checkoutSchema = z.object({
+  /** Client-generated once per cart; retries with the same key never create a second sale. */
+  idempotencyKey: z.uuid(),
+  /** Completes this suspended order instead of creating a new one. */
+  orderId: z.uuid().optional(),
+  ...cartFields,
+  // Empty only for a zero total (e.g. a 100 % discount).
+  payments: z.array(paymentInputSchema).max(10),
+  /** The total the cashier saw; the server refuses the sale if its own total differs. */
+  expectedTotal: moneyAmountSchema,
+});
+export type Checkout = z.input<typeof checkoutSchema>;
+
+export const suspendOrderSchema = z.object({
+  ...cartFields,
+  label: z
+    .string()
+    .trim()
+    .max(60)
+    .nullish()
+    .transform((v) => (v == null || v === '' ? null : v)),
+});
+export type SuspendOrder = z.input<typeof suspendOrderSchema>;
+
+export const saleLineSchema = z.object({
+  position: z.number().int(),
+  variantId: z.string(),
+  productId: z.string(),
+  nameEn: z.string().nullable(),
+  nameAr: z.string().nullable(),
+  variantNameEn: z.string().nullable(),
+  variantNameAr: z.string().nullable(),
+  sku: z.string().nullable(),
+  quantity: z.string(),
+  listUnitPrice: moneySchema,
+  unitPrice: moneySchema,
+  priceOverridden: z.boolean(),
+  gross: moneySchema,
+  discount: discountInputSchema.nullable(),
+  lineDiscount: moneySchema,
+  orderDiscount: moneySchema,
+  net: moneySchema,
+});
+
+export const salePaymentSchema = z.object({
+  id: z.string(),
+  methodId: z.string(),
+  kind: z.string(),
+  nameEn: z.string().nullable(),
+  nameAr: z.string().nullable(),
+  amount: moneySchema,
+  tendered: moneySchema.nullable(),
+  change: moneySchema,
+  status: z.enum(['succeeded', 'pending', 'failed']),
+  verification: z.enum(['manual', 'gateway']),
+  reference: z.string().nullable(),
+  /** Manager view only. */
+  fee: moneySchema.optional(),
+});
+
+export const saleSchema = z.object({
+  id: z.string(),
+  orderId: z.string(),
+  receiptNumber: z.string(),
+  branchId: z.string(),
+  registerId: z.string(),
+  shiftId: z.string(),
+  cashierName: z.string(),
+  createdAt: z.string(),
+  subtotal: moneySchema,
+  lineDiscounts: moneySchema,
+  orderDiscount: moneySchema,
+  total: moneySchema,
+  paid: moneySchema,
+  change: moneySchema,
+  lines: z.array(saleLineSchema),
+  payments: z.array(salePaymentSchema),
+  /** Manager view only. */
+  fees: moneySchema.optional(),
+  cost: moneySchema.nullable().optional(),
+});
+export type Sale = z.infer<typeof saleSchema>;
+
+export const saleSummarySchema = z.object({
+  id: z.string(),
+  receiptNumber: z.string(),
+  branchId: z.string(),
+  cashierName: z.string(),
+  createdAt: z.string(),
+  total: moneySchema,
+  itemCount: z.string(),
+  paymentKinds: z.array(z.string()),
+});
+export type SaleSummary = z.infer<typeof saleSummarySchema>;
+export const saleListSchema = z.object({
+  sales: z.array(saleSummarySchema),
+  total: z.number().int(),
+  page: z.number().int(),
+  pageSize: z.number().int(),
+  totals: z.object({ count: z.number().int(), amount: moneySchema }),
+});
+const isoDate = z.iso.date();
+export const saleListQuerySchema = z.object({
+  branchId: z.uuid().optional(),
+  shiftId: z.uuid().optional(),
+  q: z.string().trim().max(40).optional(),
+  from: isoDate.optional(),
+  to: isoDate.optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+});
+export type SaleListQuery = z.input<typeof saleListQuerySchema>;
+
+export const receiptSchema = z.object({
+  sale: saleSchema,
+  merchant: z.object({ nameEn: z.string().nullable(), nameAr: z.string().nullable() }),
+  branch: z.object({
+    nameEn: z.string().nullable(),
+    nameAr: z.string().nullable(),
+    phone: z.string().nullable(),
+    address: z.string().nullable(),
+    receiptHeader: z.string().nullable(),
+    receiptFooter: z.string().nullable(),
+  }),
+  register: z.object({
+    code: z.string(),
+    nameEn: z.string().nullable(),
+    nameAr: z.string().nullable(),
+  }),
+});
+export type Receipt = z.infer<typeof receiptSchema>;
+
+export const suspendedOrderSchema = z.object({
+  id: z.string(),
+  label: z.string().nullable(),
+  createdAt: z.string(),
+  cashierName: z.string(),
+  lineCount: z.number().int(),
+  lines: z.array(
+    z.object({
+      variantId: z.string(),
+      quantity: z.string(),
+      priceOverride: moneySchema.nullable(),
+      discount: discountInputSchema.nullable(),
+    }),
+  ),
+  orderDiscount: discountInputSchema.nullable(),
+  version: z.number().int(),
+});
+export type SuspendedOrder = z.infer<typeof suspendedOrderSchema>;
+export const suspendedOrderListSchema = z.object({ orders: z.array(suspendedOrderSchema) });
+
+export const salesSettingsSchema = z.object({
+  maxDiscountPercent: z.string(),
+  version: z.number().int(),
+});
+export type SalesSettings = z.infer<typeof salesSettingsSchema>;
+export const updateSalesSettingsSchema = z.object({
+  maxDiscountPercent: z
+    .string()
+    .trim()
+    .regex(/^(100(\.0{1,2})?|\d{1,2}(\.\d{1,2})?)$/),
+  version: z.number().int().positive(),
+});

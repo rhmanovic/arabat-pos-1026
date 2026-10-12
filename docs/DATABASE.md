@@ -355,6 +355,25 @@ erDiagram
 | `apps/api/drizzle/0011_payments_registers_rls.sql` | Forced RLS; append-only grants on entries and cash movements; no deletes of configuration; trigger making closed shifts immutable; trigger allowing cash movements only on open shifts |
 | `apps/api/drizzle/0012_shift_tolerance.sql` | `shifts.discrepancy_tolerance_minor` (tolerance snapshot at closing) |
 
+| `apps/api/drizzle/0013_sales.sql` | `sales_settings`, `receipt_sequences`, `orders`, `order_lines`, `sales`, `sale_lines`, `payments` (generated) |
+| `apps/api/drizzle/0014_sales_rls.sql` | Forced RLS; `UPDATE/DELETE` revoked on sales, sale lines and payments; triggers making completed/cancelled orders and their lines final |
+
+Checkout model (implemented, Prompt 10):
+- `orders`: the intent document — `suspended` (held cart) → `completed` | `cancelled`;
+  a direct checkout is inserted as `completed`. `idempotency_key` + `request_hash`
+  (unique per merchant) make retries return the first result.
+- `sales` (1:1 with a completed order): receipt number (`{BRANCH}-{000001}`, gap-free
+  per branch from `receipt_sequences`), subtotal, line discounts, order discount, total,
+  paid, change, fees, cost of goods; a check constraint enforces
+  `total = subtotal − line discounts − order discount` and `paid = total`.
+- `sale_lines`: name/SKU/price snapshots, list vs effective unit price (override flag),
+  gross, line discount, allocated order discount, net (`net = gross − both discounts`),
+  unit cost from the inventory ledger.
+- `payments`: method snapshot, amount, tendered/change (cash), fee (computed with the
+  method's rule at payment time), `status` succeeded | pending | failed, `verification`
+  manual | gateway. Only succeeded payments complete a sale; gateway methods are refused
+  until a verified integration exists.
+
 Payments, registers and shifts (implemented, Prompt 9):
 - `payment_methods`: per merchant; `kind` cash | card | bank_transfer | custom (exactly one
   cash method, partial unique index); `status`, `available_in_pos`, `available_online`;

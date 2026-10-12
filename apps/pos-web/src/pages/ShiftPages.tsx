@@ -175,7 +175,7 @@ export function OpenShiftPage() {
 }
 
 /** Compact strip above the sale screen: register, opening time and a link to cash management. */
-export function ShiftStrip() {
+export function ShiftStrip({ extra }: { extra?: ReactNode }) {
   const { t, i18n } = useTranslation();
   const current = useCurrentShift();
   const shift = current.data?.shift;
@@ -197,6 +197,7 @@ export function ShiftStrip() {
         })}
       </span>
       <div className="flex-1" />
+      {extra}
       <Link to="/shift" className="rounded-md bg-primary-soft px-3 py-1.5 font-medium text-primary">
         {t('shift.manage')}
       </Link>

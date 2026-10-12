@@ -13,7 +13,14 @@ interface ToastItem {
 const ToastContext = createContext<((toast: Omit<ToastItem, 'id'>) => void) | null>(null);
 
 /** Notification toasts (announced to screen readers by Radix). */
-export function ToastProvider({ children }: { children: ReactNode }) {
+export function ToastProvider({
+  children,
+  placement = 'bottom-end',
+}: {
+  children: ReactNode;
+  /** The POS uses 'top-center' so toasts never cover the payment buttons. */
+  placement?: 'bottom-end' | 'top-center';
+}) {
   const [items, setItems] = useState<ToastItem[]>([]);
   const push = useCallback((toast: Omit<ToastItem, 'id'>) => {
     setItems((current) => [...current, { ...toast, id: Date.now() + Math.random() }]);
@@ -48,7 +55,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             ) : null}
           </T.Root>
         ))}
-        <T.Viewport className="fixed bottom-4 end-4 z-[60] flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2" />
+        <T.Viewport
+          className={cn(
+            'fixed z-[60] flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2',
+            placement === 'top-center' ? 'inset-x-0 top-16 mx-auto' : 'bottom-4 end-4',
+          )}
+        />
       </T.Provider>
     </ToastContext.Provider>
   );

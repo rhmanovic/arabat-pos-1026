@@ -3,7 +3,7 @@
 Only record what has actually been done and verified. Mocked or partial work
 must be labeled as such.
 
-## Current state (2026-10-12, after Prompt 9 — payments, registers and shifts)
+## Current state (2026-10-12, after Prompt 10 — POS and checkout)
 
 | Area | Status | Notes |
 |---|---|---|
@@ -18,7 +18,8 @@ must be labeled as such.
 | Product catalog | Done | Categories, products, variants, SKU/barcodes, prices (fils), costs (permission), branch availability, images, archive; manager screens; POS catalog API |
 | Inventory | Done | Per-branch balances, append-only ledger, opening/increase/decrease/count documents with reasons, idempotency, row-locked concurrency, no-oversell policy, thresholds, weighted-average valuation, history, manager screens, POS availability API, reusable engine for sales/refunds/transfers |
 | Payments, registers, shifts | Done | Per-merchant payment methods with exact fees, internal balances (entries ledger), gateway placeholder (not live), registers with access control, shifts with cash in/out, expected vs counted cash, discrepancy, force close, manager monitoring and report, POS shift screens |
-| Automated tests | Passing | 106 unit/web, 88 integration, 25 E2E (local) |
+| POS & checkout | Done | Sale screen (search/scan, categories, cart, discounts, price override by permission, split payments, change, receipt + print, hold/resume, recent sales), atomic idempotent checkout, receipt numbers, manager sales history |
+| Automated tests | Passing | 112 unit/web, 99 integration, 26 E2E (local) |
 | CI | Written, not yet run | `.github/workflows/ci.yml` |
 | Business modules | Not started | Begin in M1 |
 | Deployment | Not planned | Requires owner approval |
@@ -192,5 +193,18 @@ Not done yet (by design): cash sales/refunds feed expected cash from Prompts 10/
 fees are stored per payment in Prompt 10; no gateway is connected (Prompt 16, sandbox).
 Open question: OQ-015 (blind closing).
 
+### 2026-10-12 — Prompt 10: Employee POS and checkout engine
+Implemented: `priceCart()`; migrations 0013/0014; sales module (`SalesService`: atomic
+checkout, idempotency, discounts/limits/overrides, payments with fees and balance
+entries, receipt numbering, held orders, receipts, recent and manager history, selling
+policy); shift expected cash now includes cash sales; POS sale screen with dialogs and
+80 mm print layout; manager sales list/detail/policy.
+Verified: see TESTING.md, including the full acceptance scenario; Arabic RTL tablet
+screenshots checked (fixed: toasts covered the Pay button → POS toasts at the top;
+receipt date order in Arabic; monospace font removed for Arabic).
+Not done yet (later prompts): refunds/voids (11), customer on sale (13), offline
+selling (OQ-005), tax (OQ-002), receipt legal fields (OQ-009), quick PIN switching
+(OQ-006).
+
 ## Next step
-Prompt 10 — employee POS interface and checkout engine.
+Prompt 11 — returns, refunds and exchanges.

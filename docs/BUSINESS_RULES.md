@@ -103,6 +103,21 @@ engineering defaults pending owner confirmation.
 - **BR-075** Cash in/out needs a reason ("other" requires a note) and cannot take out more
   cash than the drawer is expected to hold.
 
+- **BR-080** Pricing: line amount = price × quantity rounded half-up to the fils; item
+  discounts (percent or amount, never more than the line); a sale discount on the
+  remaining amount is shared across the items exactly; the total is the sum of the items.
+- **BR-081** Discounts need `sales.discount`; above the merchant's limit (default 10 %,
+  per item and per sale) they need `sales.discount.override_limit` (supervisor).
+- **BR-082** Price changes at the till need `sales.price_override`; the original price
+  and the change are kept on the sale and in the audit log.
+- **BR-083** A sale is completed only when the payments equal the total exactly; only
+  cash may be over-tendered (the difference is change). Split payments are allowed.
+- **BR-084** Selling requires the cashier's own open shift; every sale records merchant,
+  branch, register, shift and employee. Stock is deducted at completion, all-or-nothing;
+  no overselling unless the merchant allows negative stock.
+- **BR-085** Held (suspended) sales reserve no stock; any cashier at the branch may resume
+  or discard them; a held sale can be completed once.
+
 ## 4. Money — Confirmed
 
 - **BR-030** Default currency is **KWD** with **3 decimal places** (1 KWD = 1000 fils).

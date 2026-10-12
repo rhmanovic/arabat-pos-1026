@@ -19,6 +19,16 @@ import {
   invitationPreviewSchema,
   type CreateBranch,
   type ProductListQuery,
+  type Checkout,
+  type SaleListQuery,
+  type SuspendOrder,
+  receiptSchema,
+  saleListSchema,
+  saleSchema,
+  saleSummarySchema,
+  salesSettingsSchema,
+  suspendedOrderListSchema,
+  suspendedOrderSchema,
   type CloseShift,
   type DiscrepancyReportQuery,
   type OpenShift,
@@ -78,7 +88,7 @@ import {
   merchantProfileSchema,
   readyResponseSchema,
 } from '@arabat/contracts';
-import type { z } from 'zod';
+import { z } from 'zod';
 import { ApiError, ContractError, NetworkError, toApiError } from './errors.js';
 
 export interface ApiClientOptions {
@@ -369,6 +379,30 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('POST', '/pos/shifts/current/cash-movements', { body, schema: shiftSchema }),
       close: (body: CloseShift) =>
         request('POST', '/pos/shifts/current/close', { body, schema: shiftSchema }),
+    },
+    sales: {
+      settings: () => request('GET', '/pos/sales/settings', { schema: salesSettingsSchema }),
+      checkout: (body: Checkout) => request('POST', '/pos/sales', { body, schema: saleSchema }),
+      recent: () =>
+        request('GET', '/pos/sales/recent', {
+          schema: z.object({ sales: z.array(saleSummarySchema) }),
+        }),
+      posReceipt: (id: string) =>
+        request('GET', `/pos/sales/${id}/receipt`, { schema: receiptSchema }),
+      suspend: (body: SuspendOrder) =>
+        request('POST', '/pos/orders', { body, schema: suspendedOrderSchema }),
+      suspended: () =>
+        request('GET', '/pos/orders/suspended', { schema: suspendedOrderListSchema }),
+      cancelSuspended: (id: string) => request('POST', `/pos/orders/${id}/cancel`, { body: {} }),
+      list: (query: SaleListQuery = {}) =>
+        request('GET', `/manager/sales?${toParams(query)}`, { schema: saleListSchema }),
+      get: (id: string) => request('GET', `/manager/sales/${id}`, { schema: saleSchema }),
+      receipt: (id: string) =>
+        request('GET', `/manager/sales/${id}/receipt`, { schema: receiptSchema }),
+      managerSettings: () =>
+        request('GET', '/manager/sales-settings', { schema: salesSettingsSchema }),
+      updateSettings: (body: { maxDiscountPercent: string; version: number }) =>
+        request('PUT', '/manager/sales-settings', { body, schema: salesSettingsSchema }),
     },
     employees: {
       list: () => request('GET', '/manager/employees', { schema: employeeListSchema }),

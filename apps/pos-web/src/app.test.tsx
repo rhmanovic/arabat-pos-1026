@@ -159,6 +159,117 @@ describe('pos app', () => {
     expect(call.body).toMatchObject({ countedCash: '46.750', version: 1 });
   });
 
+  it('scans a barcode, prices the cart exactly and pays cash with change', async () => {
+    const item = {
+      variantId: '0190a000-0000-7000-8000-000000000a01',
+      productId: '0190a000-0000-7000-8000-000000000b01',
+      categoryId: null,
+      nameEn: 'Karak tea',
+      nameAr: 'شاي كرك',
+      variantNameEn: null,
+      variantNameAr: null,
+      sku: 'TEA',
+      barcodes: ['6281000000017'],
+      price: money('0.333'),
+      trackInventory: true,
+      imageUrl: null,
+    };
+    const sale = {
+      id: '0190a000-0000-7000-8000-000000000c01',
+      orderId: 'o',
+      receiptNumber: 'MAIN-000001',
+      branchId: SHIFT.branchId,
+      registerId: SHIFT.registerId,
+      shiftId: SHIFT.id,
+      cashierName: 'Cashier',
+      createdAt: '2026-10-12T06:00:00.000Z',
+      subtotal: money('0.999'),
+      lineDiscounts: money('0.000'),
+      orderDiscount: money('0.000'),
+      total: money('0.999'),
+      paid: money('0.999'),
+      change: money('4.001'),
+      lines: [],
+      payments: [],
+    };
+    const fetch = fakeApiFetch({
+      session: makeSession('pos', ['pos.access', 'shifts.operate', 'sales.create']),
+      routes: {
+        'GET /pos/shifts/current': () => ({ status: 200, body: { shift: SHIFT } }),
+        'GET /pos/catalog': () => ({
+          status: 200,
+          body: { branchId: SHIFT.branchId, categories: [], items: [item], version: 'v1' },
+        }),
+        'GET /pos/inventory/availability': () => ({
+          status: 200,
+          body: {
+            branchId: SHIFT.branchId,
+            allowNegativeStock: false,
+            items: [{ variantId: item.variantId, onHand: '5.000', status: 'in_stock' }],
+          },
+        }),
+        'GET /pos/payment-methods': () => ({
+          status: 200,
+          body: {
+            methods: [
+              {
+                id: '0190a000-0000-7000-8000-000000000d01',
+                kind: 'cash',
+                nameEn: 'Cash',
+                nameAr: null,
+                sortOrder: 0,
+              },
+            ],
+          },
+        }),
+        'POST /pos/sales': () => ({ status: 201, body: sale }),
+        'GET /pos/sales/0190a000-0000-7000-8000-000000000c01/receipt': () => ({
+          status: 200,
+          body: {
+            sale,
+            merchant: { nameEn: 'Demo', nameAr: null },
+            branch: {
+              nameEn: 'Main',
+              nameAr: null,
+              phone: null,
+              address: null,
+              receiptHeader: null,
+              receiptFooter: null,
+            },
+            register: { code: 'R1', nameEn: 'Register 1', nameAr: null },
+          },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'pos', i18n, fetch });
+    const search = await screen.findByLabelText('Search or scan barcode');
+    await screen.findByText('Karak tea');
+    for (let i = 0; i < 3; i++) await userEvent.type(search, '6281000000017{Enter}');
+    expect(screen.getAllByTestId('cart-line')).toHaveLength(1);
+    expect(screen.getByTestId('cart-total')).toHaveTextContent('KWD 0.999');
+    // Cashiers without the permission get no discount button.
+    expect(screen.getByRole('button', { name: 'Discount on sale' })).toBeDisabled();
+    await userEvent.type(search, 'nothing{Enter}');
+    expect(screen.getByRole('alert')).toHaveTextContent('No product found');
+
+    await userEvent.click(screen.getByRole('button', { name: /Pay/ }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Cash' }));
+    await userEvent.type(within(dialog).getByLabelText('Cash received (KWD)'), '5');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add payment' }));
+    expect(within(dialog).getByTestId('remaining')).toHaveTextContent('KWD 0.000');
+    expect(within(dialog).getByTestId('change')).toHaveTextContent('KWD 4.001');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Complete sale' }));
+    expect(await screen.findAllByTestId('receipt-number')).not.toHaveLength(0);
+    const call = fetch.calls.find((c) => c.method === 'POST' && c.path === '/pos/sales')!;
+    expect(call.body).toMatchObject({
+      lines: [{ variantId: item.variantId, quantity: '3' }],
+      payments: [{ amount: '0.999', tendered: '5.000' }],
+      expectedTotal: '0.999',
+    });
+    expect((call.body as { idempotencyKey: string }).idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
   it('defines the same translation keys in Arabic and English', () => {
     expect(flattenKeys(resources.ar).sort()).toEqual(flattenKeys(resources.en).sort());
   });
