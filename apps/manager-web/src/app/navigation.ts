@@ -79,7 +79,7 @@ export const NAV: readonly NavItem[] = [
     key: 'reports',
     to: '/reports',
     anyOf: ['reports.sales', 'reports.financial', 'reports.inventory'],
-    available: false,
+    available: true,
     section: 'operations',
   },
   {

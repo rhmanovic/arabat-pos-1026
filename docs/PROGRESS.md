@@ -3,7 +3,7 @@
 Only record what has actually been done and verified. Mocked or partial work
 must be labeled as such.
 
-## Current state (2026-10-12, after Prompt 13 — customer management)
+## Current state (2026-10-12, after Prompt 14 — financial reporting)
 
 | Area | Status | Notes |
 |---|---|---|
@@ -22,7 +22,8 @@ must be labeled as such.
 | Returns & refunds | Done | Full/partial/quantity returns, exchanges, voids, reasons, eligibility (window, limit), supervisor/manager approval, conditional restock, per-tender pay-back, gateway-safe states, history, unusual-activity report, refund receipts |
 | Purchasing & transfers | Done | Suppliers, purchase orders with approval and separation of duties, partial/full idempotent receiving into stock at cost, close/cancel rules, branch transfers (request, approve, dispatch/in transit, receive with discrepancy), manager screens |
 | Customers | Done | Profiles (C-numbers, normalised unique phone), search/filter/sort, edit, activate/deactivate, append-only notes, purchase and refund history, exact spending summary scoped by branch, POS search/create/select, walk-in sales, customer on receipts, held sales and exchanges |
-| Automated tests | Passing | 118 unit/web, 123 integration, 29 E2E (local) |
+| Reporting | Done | Sales (gross, discounts, net, refunds, by day/hour/branch/employee/product/category/method, trend, comparison, gross profit under policy), payments & cash (collections, fees, pay-outs, cash), shifts (reconciliation, discrepancies), inventory (valuation, stock, movements, adjustments, quantities), purchasing (suppliers, receipts, transfers); dashboard with KPIs, charts, filters and CSV export |
+| Automated tests | Passing | 122 unit/web, 131 integration, 30 E2E (local) |
 | CI | Written, not yet run | `.github/workflows/ci.yml` |
 | Business modules | Not started | Begin in M1 |
 | Deployment | Not planned | Requires owner approval |
@@ -238,5 +239,15 @@ Not done yet / open: loyalty, store credit and promotions (OQ-019, by design not
 personal-data erasure (OQ-019); attaching a customer to a sale after it was completed is
 not possible (sales are immutable).
 
+### 2026-10-12 — Prompt 14: Financial reporting and analytics
+Implemented: migration 0022 (report indexes); reports module (5 endpoints, exact
+aggregation, local-day periods, comparison, branch/employee filters, permission scope);
+`/manager/reports` dashboard with KPI cards, charts, report tables and CSV exports;
+metric definitions (BR-120…BR-129, ADR-0068…0071).
+Verified: see TESTING.md.
+Not done yet / open: no scheduled/e-mailed reports; no XLSX (CSV opens in spreadsheet
+apps); profit excludes tax/overheads/landed costs by policy; very large merchants may
+later need summary tables (ADR-0068).
+
 ## Next step
-Prompt 14 — financial reporting and analytics.
+Prompt 15 — restaurant module.

@@ -152,6 +152,7 @@ export const purchaseReceipts = pgTable(
       foreignColumns: [purchaseOrders.merchantId, purchaseOrders.id],
     }),
     index('purchase_receipts_order_idx').on(t.merchantId, t.purchaseOrderId),
+    index('purchase_receipts_branch_time_idx').on(t.merchantId, t.branchId, t.createdAt),
   ],
 );
 

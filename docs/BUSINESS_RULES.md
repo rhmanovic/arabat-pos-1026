@@ -158,6 +158,37 @@ engineering defaults pending owner confirmation.
 - **BR-114** Customers are deactivated, never deleted; inactive customers cannot be used
   for new sales. Notes cannot be edited or removed.
 
+Report metrics (Prompt 14; all exact, in fils, merchant-local days):
+- **BR-120** *Gross sales* = Σ unit price × quantity of items sold, before discounts.
+  *Discounts* = item discounts + sale discounts. *Net sales* (sales revenue) = gross −
+  discounts = Σ completed sale totals. *Average sale* = net sales ÷ number of sales
+  (half-up).
+- **BR-121** *Refunds* = completed refunds, cancelled sales and exchange returns,
+  counted in the period they were completed. *Net after refunds* = net sales − refunds.
+- **BR-122** Breakdowns by branch, employee (who rang up the sale / requested the
+  refund), product, category (the product's current category), hour and day always add
+  up to the totals. "Sales by payment method" is the amount applied to the period's
+  sales per tender, including exchange credit.
+- **BR-123** *Payments collected* = succeeded payments received for sales in the period
+  (cash counted after change), excluding internal exchange credit. It is not revenue.
+- **BR-124** *Paid back* = settled refund payments of refunds completed in the period,
+  per method; gateway refunds still waiting are listed separately and not counted.
+- **BR-125** *Processing fees* = fees stored on each payment from the method's settings;
+  not reversed on refunds (OQ-016). *Net cash* = cash sales − cash refunds + cash in −
+  cash out (the same entries as the drawer's expected cash).
+- **BR-126** *Cash difference* of a shift = counted − expected at closing; balanced when
+  within the register's tolerance, otherwise over or short.
+- **BR-127** *Gross profit* — see ADR-0070; never shown when costs are missing or to users
+  without `reports.financial`.
+- **BR-128** *Inventory value* = current quantity × weighted-average cost per item and
+  branch; items without a known cost are counted, not valued. Purchase values are
+  Σ quantity × order unit cost (half-up per line); transfer values use the cost at
+  dispatch.
+- **BR-129** Access: sales reports need `reports.sales`; payments, cash and shift reports
+  need `reports.financial`; inventory and purchasing reports need `reports.inventory`;
+  each for the branches in the report. Branch managers see only their branches; the
+  default cashier role has no report access.
+
 ## 4. Money — Confirmed
 
 - **BR-030** Default currency is **KWD** with **3 decimal places** (1 KWD = 1000 fils).

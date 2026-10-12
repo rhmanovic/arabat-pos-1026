@@ -80,6 +80,9 @@ export const refunds = pgTable(
     index('refunds_sale_idx').on(t.merchantId, t.saleId),
     index('refunds_branch_time_idx').on(t.merchantId, t.branchId, t.createdAt),
     index('refunds_status_idx').on(t.merchantId, t.status),
+    index('refunds_completed_idx')
+      .on(t.merchantId, t.branchId, t.completedAt)
+      .where(sql`${t.status} = 'completed'`),
   ],
 );
 
@@ -141,5 +144,6 @@ export const refundPayments = pgTable(
     index('refund_payments_refund_idx').on(t.merchantId, t.refundId),
     index('refund_payments_original_idx').on(t.merchantId, t.originalPaymentId),
     index('refund_payments_shift_idx').on(t.merchantId, t.shiftId),
+    index('refund_payments_time_idx').on(t.merchantId, t.createdAt),
   ],
 );

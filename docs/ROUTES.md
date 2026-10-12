@@ -15,7 +15,7 @@ Legend: 🔓 public · 🔑 permission required · 🧩 feature-gated · ⏳ lat
 Implemented screens (Prompt 6): `/` dashboard, `/settings` company profile,
 `/branches`, `/employees`, `/employees/:membershipId`, `/roles`, plus
 `/login`, `/register`, `/forgot-password`, `/reset-password`, `/accept-invite`.
-Modules not built yet (currently reports) appear in the sidebar **disabled with "Not available yet"**,
+Modules not built yet appear in the sidebar **disabled with "Not available yet"** (none at present),
 never as working pages. Sidebar items are hidden without the required permission;
 every page is additionally wrapped in `RequirePermission` and every API call is
 enforced server-side.
@@ -48,7 +48,7 @@ Planned table (status per milestone):
 | `/manager/suppliers` | Suppliers | `purchasing.read` | M6 ✓ |
 | `/manager/purchasing`, `/new`, `/:id` | Purchase orders, receiving | `purchasing.read` | M6 ✓ |
 | `/manager/purchasing/receipts/:id` | Goods receipt | `goods.receive` | M6 |
-| `/manager/reports/sales`, `/inventory`, `/shifts`, `/payments` | Reports | `reports.*` | M7 |
+| `/manager/reports` | Reports dashboard (tabs per permission) | any `reports.*` | M7 ✓ |
 | `/manager/restaurant/tables`, `/modifiers` | 🧩 Restaurant setup | `catalog.manage` | M9 |
 | `/manager/ecommerce/store`, `/listings` | 🧩 Online store | `catalog.manage` | M10 |
 | `/manager/settings/company` | Company profile, language, timezone | `merchant.settings.read` | M1 |
@@ -208,6 +208,25 @@ items and difference / cancel sale, printable refund receipt). Manager `/manager
 (history with filters, waiting-for-approval with approve/reject, unusual activity per
 employee); sale detail shows refunded amount; selling policy has return window and
 approval limit.
+
+### Reports API (Prompt 14)
+
+All take `from`, `to` (local dates, ≤ 366 days), optional `branchId` (checked against the
+permission and the merchant) and, where it applies, `employeeId` (membership).
+
+| Method & path | Permission |
+|---|---|
+| `GET /manager/reports/sales` | `reports.sales` (profit only with `reports.financial` for the whole scope) |
+| `GET /manager/reports/payments` | `reports.financial` |
+| `GET /manager/reports/shifts` | `reports.financial` |
+| `GET /manager/reports/inventory` | `reports.inventory` |
+| `GET /manager/reports/purchasing` | `reports.inventory` |
+
+Screen: `/manager/reports` — tabs per permission (Sales, Payments & cash, Shifts,
+Inventory, Purchasing); period presets and custom dates, the top-bar branch context as
+branch filter, employee filter; KPI cards with change vs the previous period; SVG charts
+(trend by day, by hour, collections) with accessible tooltips; detailed tables with CSV
+export; metric definitions on every tab.
 
 ### Customers API (Prompt 13)
 

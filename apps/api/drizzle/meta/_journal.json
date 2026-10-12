@@ -155,6 +155,13 @@
       "when": 1791788193059,
       "tag": "0021_customers_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791789536276,
+      "tag": "0022_report_indexes",
+      "breakpoints": true
     }
   ]
 }

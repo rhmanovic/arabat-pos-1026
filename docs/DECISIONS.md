@@ -518,3 +518,39 @@ ADR; supersede it.
   deactivation stops new sales from using them. Loyalty, store credit and promotions are
   left for later: they will be separate append-only ledgers keyed by `customer_id` once
   their rules are confirmed (OQ-019).
+
+## ADR-0068 — Reports are computed on demand from the source tables
+- **Date:** 2026-10-12 · **Status:** Accepted (BR-120…BR-129)
+- **Decision:** Reports aggregate the immutable transactional tables (sales, sale lines,
+  payments, refunds, refund payments, shifts, cash movements, stock ledger and levels,
+  purchase and transfer documents) at request time with integer sums in SQL; there are
+  no pre-aggregated summary tables to drift from the source. Time-range indexes
+  (migration 0022) keep the queries on index ranges. A period is at most 366 days. If
+  volumes later require it, daily summaries can be added as a cache rebuilt from the
+  same queries, and the reconciliation tests would then compare both.
+
+## ADR-0069 — Report periods and recognition
+- **Date:** 2026-10-12 · **Status:** Accepted
+- **Decision:** Periods are whole local days in the merchant's time zone
+  (`[from 00:00, to + 1 day 00:00)`). Sales count on their completion time; refunds,
+  voids and exchange returns count when completed (not on the original sale's date);
+  payments when received; pay-outs when the refund completes; shifts when closed. The
+  comparison period has the same number of days immediately before.
+
+## ADR-0070 — Gross profit policy
+- **Date:** 2026-10-12 · **Status:** Accepted (BR-127)
+- **Decision:** Gross profit = net after refunds − (cost of sales at the weighted-average
+  cost recorded on each sale − cost of refunded units returned to stock). It is shown
+  only to users with `reports.financial` for every branch in the report, and only when
+  every sale and every restocked refund line in the period has a known cost; otherwise
+  the report says it is not available and how many documents lack a cost. Processing
+  fees are reported separately and not deducted; no tax, overhead or landed costs are
+  included (no accounting policy for them yet).
+
+## ADR-0071 — CSV exports are built from the displayed values
+- **Date:** 2026-10-12 · **Status:** Accepted
+- **Decision:** Each report table defines its columns once (value + display); the CSV
+  export serialises the same values in the browser, so exports always match the screen
+  and need no extra API. Money columns are exported as plain decimals with "(KWD)" in the
+  header; a UTF-8 BOM keeps Arabic readable in spreadsheet apps; cells starting with
+  `= + @`, tab/CR or a non-numeric `-` are prefixed with `'` (CSV formula injection).

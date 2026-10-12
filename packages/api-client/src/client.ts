@@ -119,6 +119,12 @@ import {
   customerSchema,
   posCustomerListSchema,
   posCustomerSchema,
+  type ReportQuery,
+  inventoryReportSchema,
+  paymentsReportSchema,
+  purchasingReportSchema,
+  salesReportSchema,
+  shiftsReportSchema,
 } from '@arabat/contracts';
 import { z } from 'zod';
 import { ApiError, ContractError, NetworkError, toApiError } from './errors.js';
@@ -503,6 +509,26 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('POST', `/manager/purchase-orders/${id}/receipts`, {
           body,
           schema: purchaseOrderSchema,
+        }),
+    },
+    reports: {
+      sales: (query: ReportQuery) =>
+        request('GET', `/manager/reports/sales?${toParams(query)}`, { schema: salesReportSchema }),
+      payments: (query: ReportQuery) =>
+        request('GET', `/manager/reports/payments?${toParams(query)}`, {
+          schema: paymentsReportSchema,
+        }),
+      shifts: (query: ReportQuery) =>
+        request('GET', `/manager/reports/shifts?${toParams(query)}`, {
+          schema: shiftsReportSchema,
+        }),
+      inventory: (query: ReportQuery) =>
+        request('GET', `/manager/reports/inventory?${toParams(query)}`, {
+          schema: inventoryReportSchema,
+        }),
+      purchasing: (query: ReportQuery) =>
+        request('GET', `/manager/reports/purchasing?${toParams(query)}`, {
+          schema: purchasingReportSchema,
         }),
     },
     customers: {

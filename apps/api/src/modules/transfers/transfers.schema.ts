@@ -69,6 +69,7 @@ export const stockTransfers = pgTable(
     ),
     index('stock_transfers_source_idx').on(t.merchantId, t.sourceBranchId, t.status),
     index('stock_transfers_destination_idx').on(t.merchantId, t.destinationBranchId, t.status),
+    index('stock_transfers_dispatched_idx').on(t.merchantId, t.dispatchedAt),
   ],
 );
 

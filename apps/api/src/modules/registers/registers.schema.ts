@@ -145,6 +145,7 @@ export const shifts = pgTable(
            and ${t.closeType} in ('normal', 'forced'))`,
     ),
     index('shifts_branch_opened_idx').on(t.merchantId, t.branchId, t.openedAt),
+    index('shifts_branch_closed_idx').on(t.merchantId, t.branchId, t.closedAt),
   ],
 );
 
@@ -180,5 +181,6 @@ export const cashMovements = pgTable(
       sql`${t.amountMinor} > 0 and ${t.amountMinor} <= 1000000000`,
     ),
     index('cash_movements_shift_idx').on(t.merchantId, t.shiftId, t.createdAt),
+    index('cash_movements_branch_time_idx').on(t.merchantId, t.branchId, t.createdAt),
   ],
 );

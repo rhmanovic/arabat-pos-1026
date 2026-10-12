@@ -66,6 +66,32 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after Prompt 14 (2026-10-12, local run)
+- `pnpm verify` ✓ (122 unit/web), `pnpm test:integration` ✓ (131), `pnpm test:e2e` ✓ (30).
+- `reports.int.test.ts` (8), on a scenario with 3 sales on two branches (cash, card with
+  1.5 % fee, sale discount), a restocked refund, cash in/out and a short shift close:
+  every sales figure exact (gross 6.666, discounts 0.166, net 6.500, refunds 1.000,
+  average 2.167, items 8) and equal to the sales history; all breakdowns (branch,
+  employee, method, product, category, day, hour) sum to the total; gross profit 3.300 /
+  60.0 %; employee filter; local day boundaries (a sale at 00:30 Kuwait time on the 11th
+  is the 11th, not the 10th) and previous-period comparison — verified to fail when the
+  time zone is ignored; profit hidden when a cost is missing; payments: collections,
+  fees equal to the stored sale fees (0.023 + 0.030), pay-outs, net cash 5.000 and the
+  shift report equal to the shift's own record (expected 15.000, counted 14.750,
+  −0.250 short); inventory valuation 23.600 / 7.200 equal to stock levels, movements,
+  adjustments, product quantities; purchasing summary, suppliers, receipts, transfers
+  with missing quantity and value; access: branch manager limited to their branch, no
+  profit, no financial reports, explicit other-branch filter refused — verified to fail
+  without the branch filter; company manager consolidated; no report permission → 403;
+  POS session → 401; other merchant's branch → 404, employee → 404; invalid periods →
+  400.
+- Web: permitted tabs only, KPI change (+30.0 %), "no previous data", CSV export equal to
+  the table (BOM, headers, plain decimals); page denied without report permissions;
+  CSV cell escaping and injection guard; period change and date presets.
+- `e2e/reports.spec.ts`: two real POS sales → net sales 3.750, gross profit 2.250, chart,
+  downloaded CSV row equals the table, yesterday empty, collections 3.750 and cash 2.500,
+  stock value 3.500.
+
 ### Results after Prompt 13 (2026-10-12, local run)
 - `pnpm verify` ✓ (118 unit/web), `pnpm test:integration` ✓ (123), `pnpm test:e2e` ✓ (29).
 - `customers.int.test.ts` (5): profile create/normalise/duplicate phone in another

@@ -112,7 +112,7 @@ describe('manager app', () => {
     expect(within(nav).queryByRole('link', { name: 'Branches' })).not.toBeInTheDocument();
   });
 
-  it('shows administration links for permitted users and unfinished modules as unavailable', async () => {
+  it('shows administration links for permitted users', async () => {
     const permissions = [
       'manager.access',
       'employees.read',
@@ -153,9 +153,7 @@ describe('manager app', () => {
       expect(within(nav).getByRole('link', { name })).toBeInTheDocument();
     }
     expect(within(nav).getByRole('link', { name: 'Sales' })).toBeInTheDocument();
-    // Unfinished modules (reports) are visible but not links.
-    expect(within(nav).queryByRole('link', { name: /Reports/ })).not.toBeInTheDocument();
-    expect(within(nav).getByText('Reports').closest('[aria-disabled="true"]')).not.toBeNull();
+    expect(within(nav).getByRole('link', { name: 'Reports' })).toBeInTheDocument();
   });
 
   it('denies a management page without its permission even when typed in the address bar', async () => {

@@ -322,7 +322,7 @@ erDiagram
 | purchasing | implemented (Prompt 12) — see §8 |
 | restaurant | `dining_areas`, `dining_tables`, `modifier_groups`, `modifiers`, `order_line_modifiers`, `kitchen_tickets` |
 | ecommerce | `online_stores`, `channel_listings` (+ `orders.channel = 'online'`) |
-| reporting | `daily_sales_summary` (branch, date, totals) and SQL views |
+| reporting | implemented on demand from source tables (ADR-0068); summary tables only if volumes require |
 | subscriptions | `plans`, `plan_features`, `subscriptions` (already in 6.1) |
 | idempotency | `idempotency_keys (merchant_id, key, request_hash, response, expires_at)` |
 | outbox | `outbox_events` (when async delivery is first needed) |
@@ -367,6 +367,7 @@ erDiagram
 | `apps/api/drizzle/0019_purchasing_transfers_rls.sql` | Forced RLS; no deletes; receipts append-only; triggers: order lines editable only while draft, final order/transfer states immutable, transfer line quantities set once |
 | `apps/api/drizzle/0020_customers.sql` | `customers`, `customer_notes`; `orders.customer_id`, `sales.customer_id` with composite merchant FKs and `sales_customer_idx` (generated) |
 | `apps/api/drizzle/0021_customers_rls.sql` | Forced RLS; `DELETE` revoked on customers; notes append-only; trigram indexes on name and phone |
+| `apps/api/drizzle/0022_report_indexes.sql` | Time-range indexes for reports: payments, completed refunds, refund payments, closed shifts, cash movements, purchase receipts, dispatched transfers (generated) |
 
 Customer model (implemented, Prompt 13):
 - `customers`: `code` (C-…, document sequence), `full_name`, canonical `phone` (unique per

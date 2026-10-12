@@ -287,5 +287,6 @@ export const payments = pgTable(
     ),
     index('payments_sale_idx').on(t.merchantId, t.saleId),
     index('payments_shift_idx').on(t.merchantId, t.shiftId),
+    index('payments_branch_time_idx').on(t.merchantId, t.branchId, t.createdAt),
   ],
 );

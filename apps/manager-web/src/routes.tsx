@@ -18,6 +18,7 @@ import { ShiftDetailPage, ShiftsPage } from './features/cash/ShiftsPage.js';
 import { SaleDetailPage, SalesPage } from './features/sales/SalesPage.js';
 import { RefundsPage } from './features/refunds/RefundsPage.js';
 import { CustomerDetailPage, CustomersPage } from './features/customers/CustomersPage.js';
+import { ReportsPage } from './features/reports/ReportsPage.js';
 import { PurchaseOrderPage, PurchaseOrdersPage } from './features/purchasing/PurchaseOrdersPage.js';
 import { SuppliersPage } from './features/purchasing/SuppliersPage.js';
 import {
@@ -97,6 +98,8 @@ export const routes: RouteObject[] = [
       { path: 'sales', element: guard('sales.read', <SalesPage />) },
       { path: 'sales/:saleId', element: guard('sales.read', <SaleDetailPage />) },
       { path: 'refunds', element: guard('sales.read', <RefundsPage />) },
+      // Any of the report permissions; the page shows only the permitted report tabs.
+      { path: 'reports', element: <ReportsPage /> },
       { path: 'customers', element: guard('customers.read', <CustomersPage />) },
       { path: 'customers/:customerId', element: guard('customers.read', <CustomerDetailPage />) },
       { path: 'suppliers', element: guard('purchasing.read', <SuppliersPage />) },

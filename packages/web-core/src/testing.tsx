@@ -28,13 +28,13 @@ export function fakeApiFetch(
   } = {},
 ) {
   const { session = null, healthy = true, routes = {} } = options;
-  const calls: { method: string; path: string; body: unknown }[] = [];
+  const calls: { method: string; path: string; query: string; body: unknown }[] = [];
   const fetchFn = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = String(input);
     const method = init?.method ?? 'GET';
-    const path = url.replace(/^.*\/api\/v1/, '').split('?')[0]!;
+    const [path, query = ''] = url.replace(/^.*\/api\/v1/, '').split('?') as [string, string?];
     const body: unknown = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
-    calls.push({ method, path, body });
+    calls.push({ method, path, query, body });
     const json = (status: number, payload: unknown, type = 'application/json') =>
       new Response(status === 204 ? null : JSON.stringify(payload), {
         status,
