@@ -313,5 +313,13 @@ Open (see the final report): e-mail verification at registration (OQ-025), branc
 permission hints in the UI, metrics endpoint, module boundary refactor (ADR-0083), owner
 decisions OQ-011/021/022/023/024.
 
+### 2026-10-12 — Staging on Railway (ADR-0087)
+Deployed with the owner's approval: Railway project `arabat-pos` (Postgres + web), URL
+`https://web-production-bf628.up.railway.app`. Build, migrations and seeds ran on Railway;
+health check ok; `/manager`, `/pos`, `/platform` load against the live API. Fixed: the domain
+targeted port 3000 while Railway injects `PORT=8080`. Not yet done: SMTP, uploads volume,
+first platform operator. Payments are sandbox only.
+
 ## Next step
-Owner decisions for deployment (OPERATIONS.md §7), then a staging environment.
+First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025
+before any production launch.

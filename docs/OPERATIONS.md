@@ -127,7 +127,15 @@ Variables of the web service:
 | `PAYMENT_MOCK_ENABLED`, `PAYMENT_MOCK_SECRET` | `true` and a random string (staging only: sandbox payments) |
 | `SMTP_URL`, `MAIL_FROM` | optional; without them password reset and invitation e-mails are not delivered |
 
-Generate a public domain under the web service's Networking settings. Optional: a volume
+Generate a public domain under the web service's Networking settings. Railway injects
+`PORT=8080`, so the domain's target port must be **8080** (not the Dockerfile's `EXPOSE
+3000`). Optional: a volume
 mounted at `/app/var` keeps uploaded product images across deploys. First platform operator:
 open a shell on the web service (`railway ssh`) and run
 `node apps/api/dist/database/cli/create-operator.js --email … --name … --role platform.super_admin`.
+
+Current staging deployment (2026-10-12): Railway project `arabat-pos`, environment
+`production`, services `Postgres` + `web`, URL `https://web-production-bf628.up.railway.app`
+(deploys on push to the connected branch). Verified after deploy: `/api/v1/health/ready` ok
+(database ok), `/manager`, `/pos` and `/platform` load and report the server connected. No
+volume, no SMTP and no platform operator have been created yet.
