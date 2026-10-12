@@ -4,6 +4,7 @@ import type pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DatabaseService } from '../../database/database.service.js';
 import { newId } from '../../kernel/ids.js';
+import { paymentSetupSeed } from '../../database/seeds/004-payment-setup.js';
 import { ensureDefaultPaymentSetup } from '../payments/merchant-defaults.js';
 import { DbFixtures, createCompany } from '../../testing/auth-fixtures.js';
 import { prepareIntegrationDatabase } from '../../testing/integration-db.js';
@@ -251,6 +252,32 @@ describe('payment methods', () => {
     ]);
     expect(await run()).toEqual({ accounts: 0, added: 0, linked: 0 });
     expect(await list()).toHaveLength(6);
+  });
+
+  it('renames the first-release «صندوق النقد» account to «الخزينة» unless the owner edited it', async () => {
+    const c = await company();
+    const cash = (
+      await owner.query(
+        `select id from financial_accounts where merchant_id = $1 and kind = 'cash'`,
+        [c.merchantId],
+      )
+    ).rows[0] as { id: string };
+    await owner.query(
+      `update financial_accounts set name_ar = 'صندوق النقد', name_en = 'Cash box' where id = $1`,
+      [cash.id],
+    );
+    const edited = newId();
+    await owner.query(
+      `insert into financial_accounts (id, merchant_id, kind, name_ar, name_en, version)
+       values ($1, $2, 'cash', 'صندوق النقد', 'Cash box', 2)`,
+      [edited, c.merchantId],
+    );
+    await app.get(DatabaseService).withMerchantTx(c.merchantId, (tx) => paymentSetupSeed.run(tx));
+    const names = async (id: string) =>
+      (await owner.query(`select name_ar, name_en from financial_accounts where id = $1`, [id]))
+        .rows[0];
+    expect(await names(cash.id)).toEqual({ name_ar: 'الخزينة', name_en: 'Cash on hand' });
+    expect(await names(edited)).toEqual({ name_ar: 'صندوق النقد', name_en: 'Cash box' });
   });
 
   it('requires payments.settings and shows cashiers only active POS methods without fees', async () => {
