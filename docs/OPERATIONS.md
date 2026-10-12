@@ -129,7 +129,11 @@ Variables of the web service:
 
 Generate a public domain under the web service's Networking settings. Railway injects
 `PORT=8080`, so the domain's target port must be **8080** (not the Dockerfile's `EXPOSE
-3000`). Optional: a volume
+3000`). First platform operator without a shell: set `PLATFORM_BOOTSTRAP_EMAIL` (and
+optionally `PLATFORM_BOOTSTRAP_NAME`); while no operator exists, the start command creates
+one `platform.super_admin` and prints its one-time password and TOTP secret to the deploy
+log once (`apps/api/src/database/cli/bootstrap-operator.ts`). It never re-keys or adds
+operators afterwards. Optional: a volume
 mounted at `/app/var` keeps uploaded product images across deploys. First platform operator:
 open a shell on the web service (`railway ssh`) and run
 `node apps/api/dist/database/cli/create-operator.js --email … --name … --role platform.super_admin`.

@@ -70,6 +70,28 @@ try {
   await runMigrations(owner);
   for (const r of await runSeeds(owner, env.NODE_ENV, SEEDS))
     console.log(`[${r.status}] ${r.name}: ${r.summary}`);
+  const bootstrapEmail = process.env['PLATFORM_BOOTSTRAP_EMAIL'];
+  if (bootstrapEmail) {
+    const { drizzle } = await import('drizzle-orm/node-postgres');
+    const { bootstrapFirstOperator } = await import('./bootstrap-operator.js');
+    const created = await drizzle({ client: owner, casing: 'snake_case' }).transaction((tx) =>
+      bootstrapFirstOperator(tx as never, {
+        email: bootstrapEmail,
+        fullName: process.env['PLATFORM_BOOTSTRAP_NAME'] ?? 'Platform owner',
+        encryptionKey: env.MFA_ENCRYPTION_KEY,
+      }),
+    );
+    if (created) {
+      // Printed once, to the deploy log only the project's members can read.
+      console.log('First platform operator created (platform.super_admin). Sign in at /platform:');
+      console.log(`  e-mail:      ${created.email}`);
+      console.log(`  password:    ${created.password}`);
+      console.log(`  TOTP secret: ${created.totpSecret}`);
+      console.log(`  otpauth URI: ${created.otpauthUri}`);
+    } else {
+      console.log('Platform operators exist; PLATFORM_BOOTSTRAP_EMAIL ignored.');
+    }
+  }
 } finally {
   await owner.end();
 }
