@@ -34,7 +34,7 @@ export function StatCard({
 }) {
   return (
     <div className={cn('min-w-0 rounded-lg border border-border bg-surface p-3 sm:p-5', className)}>
-      <p className="truncate text-xs text-fg-muted sm:text-sm">{label}</p>
+      <p className="line-clamp-2 text-xs text-fg-muted sm:text-sm">{label}</p>
       <p className="mt-1 text-2xl font-semibold tabular-nums sm:mt-2 sm:text-3xl">{value}</p>
       {hint ? <p className="mt-1 hidden text-xs text-fg-muted sm:block">{hint}</p> : null}
     </div>

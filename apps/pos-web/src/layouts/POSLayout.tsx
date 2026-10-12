@@ -1,7 +1,6 @@
-import { Button, Menu, MenuItem } from '@arabat/ui';
+import { Button, Menu, MenuItem, cn } from '@arabat/ui';
 import {
   ApiStatus,
-  LanguageSwitcher,
   localizedName,
   useApi,
   useAuth,
@@ -14,6 +13,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Outlet } from 'react-router';
 import { CartProvider } from '../sale/cart.js';
+import { useShiftSummary } from '../pages/ShiftPages.js';
+import { UpdateBanner } from './update-check.js';
 
 function useClock(): Date {
   const [now, setNow] = useState(() => new Date());
@@ -67,6 +68,7 @@ export function POSLayout() {
   });
   const lockNow = lock.mutate;
   useIdleLock(lockNow, session !== null && !lock.isPending);
+  const shiftSummary = useShiftSummary();
 
   return (
     <CartProvider>
@@ -75,15 +77,26 @@ export function POSLayout() {
           aria-label={t('toolbarLabel')}
           className="flex h-14 shrink-0 items-center gap-2 bg-console px-3 text-console-fg sm:gap-3 sm:px-4"
         >
-          <span className="truncate text-base font-semibold whitespace-nowrap">{t('title')}</span>
+          <span
+            className={cn(
+              'truncate text-base font-semibold whitespace-nowrap',
+              shiftSummary && 'max-sm:hidden',
+            )}
+          >
+            {t('title')}
+          </span>
+          {/* Phones: the open shift lives in the header instead of its own card. */}
+          {shiftSummary ? (
+            <span className="min-w-0 truncate text-sm sm:hidden" data-testid="pos-shift-compact">
+              <span className="me-1.5 inline-block size-2 rounded-full bg-success" aria-hidden />
+              {shiftSummary}
+            </span>
+          ) : null}
           <span className="hidden text-sm text-console-fg/70 sm:inline" data-testid="pos-context">
             {session?.merchant ? localizedName(session.merchant, i18n.language) : ''} ·{' '}
             {t('branch')}:{' '}
             {session?.branch ? localizedName(session.branch, i18n.language) : t('noBranch')}
           </span>
-          {session ? (
-            <span className="hidden text-sm md:inline">{session.actor.fullName}</span>
-          ) : null}
           <div className="flex-1" />
           <ApiStatus className="hidden text-console-fg/80 md:inline-flex" />
           <time className="hidden text-sm tabular-nums sm:inline" dateTime={now.toISOString()}>
@@ -93,68 +106,51 @@ export function POSLayout() {
               numberingSystem: 'latn',
             })}
           </time>
-          <LanguageSwitcher className="hidden sm:inline-flex" />
-          {/* Phones: the session actions fold into one menu so the strip fits one line. */}
-          <div className="sm:hidden">
-            <Menu
-              trigger={
-                <Button
-                  variant="secondary"
-                  size="icon"
-                  className="size-11 text-lg"
-                  aria-label={t('moreActions')}
-                >
-                  ☰
-                </Button>
-              }
-            >
-              {session?.availableInterfaces.includes('manager') ? (
-                <MenuItem onSelect={() => toManager.mutate({ target: 'manager' })}>
-                  {t('common:interfaces.manager')}
-                </MenuItem>
-              ) : null}
-              <MenuItem onSelect={() => lockNow()}>{t('common:lock.lockNow')}</MenuItem>
-              <MenuItem
-                onSelect={() =>
-                  void i18n.changeLanguage(i18n.resolvedLanguage === 'en' ? 'ar' : 'en')
-                }
-              >
-                {i18n.resolvedLanguage === 'en' ? 'العربية' : 'English'}
-              </MenuItem>
-              <MenuItem tone="danger" onSelect={() => logout.mutate()}>
-                {t('common:actions.signOut')}
-              </MenuItem>
-            </Menu>
-          </div>
-          <div className="hidden items-center gap-3 sm:flex">
-            {session?.availableInterfaces.includes('manager') ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="hidden sm:inline-flex"
+            loading={lock.isPending}
+            onClick={() => lockNow()}
+          >
+            {t('common:lock.lockNow')}
+          </Button>
+          {/* One user menu for every screen size keeps the strip calm; phones also get Lock here. */}
+          <Menu
+            trigger={
               <Button
                 variant="secondary"
-                size="sm"
-                loading={toManager.isPending}
-                onClick={() => toManager.mutate({ target: 'manager' })}
+                className="h-11 min-w-11 px-3 sm:h-8"
+                aria-label={t('moreActions')}
               >
-                {t('common:interfaces.manager')}
+                <span className="hidden max-w-40 truncate sm:inline">
+                  {session?.actor.fullName}
+                </span>
+                <span aria-hidden>☰</span>
               </Button>
+            }
+          >
+            {session?.availableInterfaces.includes('manager') ? (
+              <MenuItem onSelect={() => toManager.mutate({ target: 'manager' })}>
+                {t('common:interfaces.manager')}
+              </MenuItem>
             ) : null}
-            <Button
-              variant="secondary"
-              size="sm"
-              loading={lock.isPending}
-              onClick={() => lockNow()}
+            <div className="sm:hidden">
+              <MenuItem onSelect={() => lockNow()}>{t('common:lock.lockNow')}</MenuItem>
+            </div>
+            <MenuItem
+              onSelect={() =>
+                void i18n.changeLanguage(i18n.resolvedLanguage === 'en' ? 'ar' : 'en')
+              }
             >
-              {t('common:lock.lockNow')}
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              loading={logout.isPending}
-              onClick={() => logout.mutate()}
-            >
+              {i18n.resolvedLanguage === 'en' ? 'العربية' : 'English'}
+            </MenuItem>
+            <MenuItem tone="danger" onSelect={() => logout.mutate()}>
               {t('common:actions.signOut')}
-            </Button>
-          </div>
+            </MenuItem>
+          </Menu>
         </header>
+        <UpdateBanner />
         <main className="min-h-0 flex-1">
           <Outlet />
         </main>

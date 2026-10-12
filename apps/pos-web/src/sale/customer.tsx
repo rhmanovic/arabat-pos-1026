@@ -1,4 +1,4 @@
-import { Button, Dialog, Field, Input, Spinner } from '@arabat/ui';
+import { Button, Dialog, Field, Input, Kbd, Spinner } from '@arabat/ui';
 import { useApi, useAuth, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
@@ -34,8 +34,14 @@ export function CustomerBar() {
             {t('customer.remove')}
           </Button>
         ) : null}
-        <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => setOpen(true)}
+          data-shortcut="customer"
+        >
           {customer ? t('customer.change') : t('customer.choose')}
+          <Kbd>F4</Kbd>
         </Button>
       </span>
       {open ? <CustomerDialog onClose={() => setOpen(false)} /> : null}

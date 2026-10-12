@@ -274,7 +274,8 @@ describe('pos app', () => {
     await userEvent.type(search, 'nothing{Enter}');
     expect(screen.getByRole('alert')).toHaveTextContent('No product found');
 
-    await userEvent.click(screen.getByRole('button', { name: /Pay/ }));
+    // F12 is the desktop shortcut for Pay.
+    await userEvent.keyboard('{F12}');
     const dialog = await screen.findByRole('dialog');
     await userEvent.click(await within(dialog).findByRole('button', { name: 'Cash' }));
     await userEvent.type(within(dialog).getByLabelText('Cash received (KWD)'), '5');

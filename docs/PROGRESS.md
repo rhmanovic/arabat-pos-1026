@@ -341,6 +341,18 @@ three-column dashboard cards; show/hide password on sign-in; POS sign-in card at
 phones. Kept by owner decision: cart −/+ shown on tap; on-hand quantity on every tracked tile.
 Not done: camera barcode scanning, web app manifest (installable app).
 
+### 2026-10-12 — Third UI review
+Phones: the shift moves into the header («Register 1 · Opened 06:32 PM»), register actions sit
+behind «More» next to the 44px search; tighter spacing. Product list ≈ 68% of a 375×812 screen
+(was ≈ 44%). Desktop: F2 search, F4 customer, F8 hold, F12 pay, Esc clears search (hints on
+buttons); one user menu (manager, language, sign out) with Lock kept visible; product grid
+`auto-fill minmax(160px,1fr)`; empty cart shows «Add products» instead of a faded Pay.
+Update banner: the POS compares the served entry script with the loaded one on tab focus and
+every 5 min; an empty sale reloads silently. Manager: sidebar items 44px with a ✕ close
+button, whole onboarding rows clickable, stat labels wrap. Installable POS (web manifest,
+192/512 icons, standalone). Not done: per-category tile colours, empty-cart recent sale on
+desktop, products-page filter layout, image placeholders, camera barcode scanning, sound.
+
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025
 before any production launch.

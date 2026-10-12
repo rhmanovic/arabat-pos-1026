@@ -101,16 +101,20 @@ export function DashboardPage() {
           </h2>
           <ul className="divide-y divide-border">
             {steps.map((step) => (
-              <li key={step.key} className="flex items-center justify-between gap-3 px-5 py-4">
-                <span className="text-sm">{t(`dashboard.${step.key}`)}</span>
-                <span className="flex items-center gap-3">
-                  <Badge tone={step.done ? 'success' : 'warning'}>
-                    {step.done ? t('dashboard.done') : t('dashboard.todo')}
-                  </Badge>
-                  <Link to={step.to} className="text-sm font-medium text-primary hover:underline">
-                    {t('dashboard.open')}
-                  </Link>
-                </span>
+              <li key={step.key}>
+                {/* The whole row is the link: an easy touch target on phones. */}
+                <Link
+                  to={step.to}
+                  className="flex min-h-14 items-center justify-between gap-3 px-5 py-4 hover:bg-surface-muted"
+                >
+                  <span className="text-sm">{t(`dashboard.${step.key}`)}</span>
+                  <span className="flex items-center gap-3">
+                    <Badge tone={step.done ? 'success' : 'warning'}>
+                      {step.done ? t('dashboard.done') : t('dashboard.todo')}
+                    </Badge>
+                    <span className="text-sm font-medium text-primary">{t('dashboard.open')}</span>
+                  </span>
+                </Link>
               </li>
             ))}
           </ul>

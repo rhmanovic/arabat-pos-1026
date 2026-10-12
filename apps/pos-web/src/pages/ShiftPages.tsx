@@ -1,7 +1,19 @@
 import { CASH_IN_REASONS, CASH_OUT_REASONS, type Shift } from '@arabat/contracts';
 import { formatMoney } from '@arabat/i18n';
 import { Money, MoneyError } from '@arabat/money';
-import { Alert, Badge, Button, Dialog, Field, Input, Select, Spinner, Textarea } from '@arabat/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Dialog,
+  Field,
+  Input,
+  Menu,
+  MenuItem,
+  Select,
+  Spinner,
+  Textarea,
+} from '@arabat/ui';
 import { localizedName, useApi, useAuth, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ReactNode, useState } from 'react';
@@ -175,14 +187,66 @@ export function OpenShiftPage() {
 }
 
 /** Compact strip above the sale screen: register, opening time and a link to cash management. */
-export function ShiftStrip({ extra }: { extra?: ReactNode }) {
+export interface StripAction {
+  key: string;
+  label: string;
+  /** Either a route or a handler. */
+  to?: string;
+  onSelect?: () => void;
+}
+
+/** «Register 1 · Opened 06:32 PM» for the open shift, or null without one. */
+export function useShiftSummary(): string | null {
+  const { t, i18n } = useTranslation();
+  const shift = useCurrentShift().data?.shift;
+  if (!shift) return null;
+  const since = t('shift.since', {
+    time: new Date(shift.openedAt).toLocaleTimeString(i18n.language, {
+      hour: '2-digit',
+      minute: '2-digit',
+      numberingSystem: 'latn',
+    }),
+  });
+  return `${localizedName(shift.registerName, i18n.language)} · ${since}`;
+}
+
+function withShiftLink(actions: StripAction[], label: string): StripAction[] {
+  return [...actions, { key: 'shift', label, to: '/shift' }];
+}
+
+/** Phones: the register's secondary actions behind one «More» button. */
+export function ShiftMoreMenu({ actions = [] }: { actions?: StripAction[] }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  return (
+    <Menu
+      trigger={
+        <Button variant="secondary" className="h-11 shrink-0">
+          {t('shift.more')}
+        </Button>
+      }
+    >
+      {withShiftLink(actions, t('shift.manage')).map((a) => (
+        <MenuItem key={a.key} onSelect={() => (a.to ? void navigate(a.to) : a.onSelect?.())}>
+          {a.label}
+        </MenuItem>
+      ))}
+    </Menu>
+  );
+}
+
+/**
+ * Tablets and desktops: the open shift and the register's secondary actions in one row.
+ * Phones show the shift in the header and the actions in {@link ShiftMoreMenu}.
+ */
+export function ShiftStrip({ actions = [] }: { actions?: StripAction[] }) {
   const { t, i18n } = useTranslation();
   const current = useCurrentShift();
   const shift = current.data?.shift;
   if (!shift) return null;
   return (
     <div
-      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg bg-surface px-3 py-2 text-sm sm:px-4"
+      className="hidden flex-wrap items-center gap-3 rounded-lg bg-surface px-4 py-2 text-sm sm:flex"
       data-testid="shift-strip"
     >
       <Badge tone="success">{t('shift.current')}</Badge>
@@ -198,17 +262,26 @@ export function ShiftStrip({ extra }: { extra?: ReactNode }) {
           }),
         })}
       </span>
-      <div className="hidden flex-1 sm:block" />
-      {/* On phones the actions take their own row and wrap with full-size touch targets. */}
-      <div className="flex w-full flex-wrap gap-2 sm:w-auto [&>*]:inline-flex [&>*]:min-h-11 [&>*]:items-center [&>*]:whitespace-nowrap sm:[&>*]:min-h-0">
-        {extra}
-        <Link
-          to="/shift"
-          className="rounded-md bg-primary-soft px-3 py-1.5 font-medium text-primary"
-        >
-          {t('shift.manage')}
-        </Link>
-      </div>
+      <div className="flex-1" />
+      {withShiftLink(actions, t('shift.manage')).map((a) =>
+        a.to ? (
+          <Link
+            key={a.key}
+            to={a.to}
+            className={
+              a.key === 'shift'
+                ? 'rounded-md bg-primary-soft px-3 py-1.5 font-medium text-primary'
+                : 'rounded-md border border-border px-3 py-1.5 font-medium'
+            }
+          >
+            {a.label}
+          </Link>
+        ) : (
+          <Button key={a.key} size="sm" variant="secondary" onClick={a.onSelect}>
+            {a.label}
+          </Button>
+        ),
+      )}
     </div>
   );
 }

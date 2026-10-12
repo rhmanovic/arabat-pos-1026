@@ -108,6 +108,10 @@ export const posAr: PosResources = {
     save: 'حفظ واستخدام',
     created: 'تمت إضافة العميل',
   },
+  update: {
+    available: 'يوجد تحديث جديد للنظام. أكمل البيع الحالي ثم حدّث.',
+    reload: 'تحديث الآن',
+  },
   sale: {
     date: 'التاريخ',
     search: 'ابحث أو امسح الباركود',
@@ -123,6 +127,7 @@ export const posAr: PosResources = {
     searchHintShort: 'ابحث أو امسح الباركود',
     confirmClear: 'تأكيد المسح',
     discountShort: 'خصم',
+    addProducts: 'أضف منتجات',
     edit: 'تعديل',
     increase: 'زيادة الكمية',
     decrease: 'إنقاص الكمية',
@@ -243,7 +248,8 @@ export const posAr: PosResources = {
     opened: 'تم فتح الوردية',
     current: 'الوردية',
     register: 'الصندوق',
-    since: 'منذ {{time}}',
+    since: 'بدأت {{time}}',
+    more: 'المزيد',
     manage: 'الوردية والنقد',
     expected: 'النقد المتوقع في الدرج',
     openingCash: 'النقد الافتتاحي',

@@ -56,10 +56,18 @@ function Shell() {
           <span className="grid size-8 place-items-center rounded-md bg-primary text-sm font-bold text-primary-fg">
             ع
           </span>
-          <div className="leading-tight">
+          <div className="flex-1 leading-tight">
             <p className="text-sm font-semibold">{t('common:appName')}</p>
             <p className="text-xs text-fg-muted">{t('title')}</p>
           </div>
+          <button
+            type="button"
+            aria-label={t('common:actions.closeMenu')}
+            className="grid size-11 place-items-center rounded-md text-xl text-fg-muted hover:bg-surface-muted lg:hidden"
+            onClick={() => setMenuOpen(false)}
+          >
+            ✕
+          </button>
         </div>
         <nav aria-label={t('navLabel')} className="flex-1 overflow-y-auto p-3">
           {SECTIONS.map((section) => {
@@ -82,7 +90,7 @@ function Shell() {
                           onClick={() => setMenuOpen(false)}
                           className={({ isActive }) =>
                             cn(
-                              'block rounded-md px-3 py-2 text-sm font-medium',
+                              'flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium lg:min-h-0',
                               isActive
                                 ? 'bg-primary-soft text-primary'
                                 : 'text-fg hover:bg-surface-muted',
@@ -94,7 +102,7 @@ function Shell() {
                       ) : (
                         <span
                           aria-disabled="true"
-                          className="flex items-center justify-between gap-2 rounded-md px-3 py-2 text-sm text-fg-subtle"
+                          className="flex min-h-11 items-center justify-between gap-2 rounded-md px-3 py-2 text-sm text-fg-subtle lg:min-h-0"
                         >
                           {t(`nav.${item.key}`)}
                           <Badge>{t('comingSoon')}</Badge>

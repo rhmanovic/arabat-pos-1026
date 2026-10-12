@@ -28,7 +28,7 @@ test('owner manages branches, employees and roles through the UI', async ({ page
   await expect(page.getByTestId('toast').filter({ hasText: 'Changes saved' })).toBeVisible();
 
   // Branch creation
-  await page.getByRole('link', { name: 'Branches' }).click();
+  await page.getByRole('link', { name: 'Branches', exact: true }).click();
   await page.getByRole('button', { name: 'Add branch' }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Code').fill('jahra');
@@ -49,7 +49,7 @@ test('owner manages branches, employees and roles through the UI', async ({ page
   await expect(page.getByText('Stock clerk')).toBeVisible();
 
   // Invite a cashier at Jahra
-  await page.getByRole('link', { name: 'Employees' }).click();
+  await page.getByRole('link', { name: 'Employees', exact: true }).click();
   await page.getByRole('button', { name: 'Invite employee' }).click();
   const invite = page.getByRole('dialog');
   const cashierEmail = uniqueEmail('ui-cashier');
@@ -103,7 +103,7 @@ test('owner manages branches, employees and roles through the UI', async ({ page
 
 test('a company manager without POS rights cannot grant POS roles', async ({ page }) => {
   await signIn(page, 'manager', DEV.manager);
-  await page.getByRole('link', { name: 'Employees' }).click();
+  await page.getByRole('link', { name: 'Employees', exact: true }).click();
   await page.getByRole('button', { name: 'Invite employee' }).click();
   const invite = page.getByRole('dialog');
   await invite.getByLabel('Full name').fill('Nope');
@@ -126,7 +126,7 @@ test('manager layout works on a phone-sized screen with the drawer menu', async 
   await signIn(page, 'manager', DEV.owner);
   await expect(page.getByRole('navigation', { name: 'Manager navigation' })).not.toBeInViewport();
   await page.getByRole('button', { name: 'Open menu' }).click();
-  await page.getByRole('link', { name: 'Branches' }).click();
+  await page.getByRole('link', { name: 'Branches', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Branches' })).toBeVisible();
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth > window.innerWidth,

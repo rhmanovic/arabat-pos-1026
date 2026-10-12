@@ -106,6 +106,10 @@ export const posEn = {
     save: 'Save and use',
     created: 'Customer added',
   },
+  update: {
+    available: 'A new version is available. Finish this sale, then reload.',
+    reload: 'Reload now',
+  },
   sale: {
     date: 'Date',
     search: 'Search or scan barcode',
@@ -121,6 +125,7 @@ export const posEn = {
     searchHintShort: 'Search or scan barcode',
     confirmClear: 'Confirm clear',
     discountShort: 'Discount',
+    addProducts: 'Add products',
     edit: 'Edit',
     increase: 'Increase quantity',
     decrease: 'Decrease quantity',
@@ -241,7 +246,8 @@ export const posEn = {
     opened: 'Shift opened',
     current: 'Shift',
     register: 'Register',
-    since: 'Since {{time}}',
+    since: 'Opened {{time}}',
+    more: 'More',
     manage: 'Shift & cash',
     expected: 'Expected cash in drawer',
     openingCash: 'Opening cash',

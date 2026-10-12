@@ -5,6 +5,7 @@ export * from './controls.js';
 export * from './dialog.js';
 export * from './feedback.js';
 export * from './input.js';
+export * from './kbd.js';
 export * from './menu.js';
 export * from './page.js';
 export * from './segmented.js';

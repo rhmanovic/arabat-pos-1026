@@ -1,13 +1,12 @@
 import type { PosCatalogItem } from '@arabat/contracts';
 import { formatMoney } from '@arabat/i18n';
 import { Money, parseQuantity } from '@arabat/money';
-import { Badge, Button, Spinner, cn } from '@arabat/ui';
+import { Badge, Button, Kbd, Spinner, cn } from '@arabat/ui';
 import { ErrorState, localizedName, useApi, useAuth } from '@arabat/web-core';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router';
-import { ShiftStrip } from '../pages/ShiftPages.js';
+import { ShiftMoreMenu, ShiftStrip, type StripAction } from '../pages/ShiftPages.js';
 import { useRestaurantEnabled } from '../restaurant/RestaurantPages.js';
 import { type CartLine, formatQty, priceLines, useCart } from './cart.js';
 import { CustomerBar } from './customer.js';
@@ -141,56 +140,58 @@ export function SalePage() {
     } else setNotFound(code);
   };
 
+  const stripActions: StripAction[] = [
+    { key: 'recent', label: t('sale.recent'), onSelect: () => setDialog('recent') },
+    { key: 'held', label: t('sale.heldSales'), onSelect: () => setDialog('held') },
+    ...(restaurant && hasPermission('restaurant.orders')
+      ? [{ key: 'tables', label: t('restaurant.tables'), to: '/tables' }]
+      : []),
+    ...(restaurant && hasPermission('kitchen.access')
+      ? [{ key: 'kitchen', label: t('kitchen.title'), to: '/kitchen' }]
+      : []),
+    ...(hasPermission('refunds.create')
+      ? [{ key: 'returns', label: t('returns.open'), to: '/returns' }]
+      : []),
+  ];
   const canDiscount = hasPermission('sales.discount');
+
+  // Desktop shortcuts: F2 search, F4 customer, F8 hold, F12 pay, Esc clears the search box.
+  const ready = cart.state.lines.length > 0 && pricing?.ok === true;
+  const busy = dialog !== null || editing !== null || receiptId !== null;
+  const hasSearch = search !== '';
+  useEffect(() => {
+    if (busy) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (document.querySelector('[role="dialog"]')) return;
+      if (e.key === 'F2') searchRef.current?.focus();
+      else if (e.key === 'F4')
+        document.querySelector<HTMLButtonElement>('[data-shortcut="customer"]')?.click();
+      else if (e.key === 'F8' && ready) setDialog('suspend');
+      else if (e.key === 'F12' && ready) setDialog('pay');
+      else if (e.key === 'Escape' && hasSearch) {
+        setSearch('');
+        setNotFound(null);
+      } else return;
+      e.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [busy, ready, hasSearch]);
   const total = pricing?.ok ? pricing.cart.totalMinor : null;
 
   return (
-    <div className="flex h-full flex-col gap-3 p-3">
-      <ShiftStrip
-        extra={
-          <>
-            <Button size="sm" variant="secondary" onClick={() => setDialog('recent')}>
-              {t('sale.recent')}
-            </Button>
-            <Button size="sm" variant="secondary" onClick={() => setDialog('held')}>
-              {t('sale.heldSales')}
-            </Button>
-            {restaurant && hasPermission('restaurant.orders') ? (
-              <Link
-                to="/tables"
-                className="rounded-md border border-border px-3 py-1.5 text-sm font-medium"
-              >
-                {t('restaurant.tables')}
-              </Link>
-            ) : null}
-            {restaurant && hasPermission('kitchen.access') ? (
-              <Link
-                to="/kitchen"
-                className="rounded-md border border-border px-3 py-1.5 text-sm font-medium"
-              >
-                {t('kitchen.title')}
-              </Link>
-            ) : null}
-            {hasPermission('refunds.create') ? (
-              <Link
-                to="/returns"
-                className="rounded-md border border-border px-3 py-1.5 text-sm font-medium"
-              >
-                {t('returns.open')}
-              </Link>
-            ) : null}
-          </>
-        }
-      />
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] gap-3 md:grid-cols-[minmax(0,1fr)_24rem]">
+    <div className="flex h-full flex-col gap-2 p-2 sm:gap-3 sm:p-3">
+      <ShiftStrip actions={stripActions} />
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] gap-2 sm:gap-3 md:grid-cols-[minmax(0,1fr)_24rem]">
         <section
           aria-labelledby="catalog-title"
-          className="flex min-w-0 min-h-0 flex-col gap-3 rounded-lg bg-surface p-3"
+          className="flex min-w-0 min-h-0 flex-col gap-2 rounded-lg bg-surface p-2 sm:gap-3 sm:p-3"
         >
           <h1 id="catalog-title" className="sr-only">
             {t('register.catalogTitle')}
           </h1>
           <form
+            className="flex gap-2"
             onSubmit={(e) => {
               e.preventDefault();
               submitSearch();
@@ -201,14 +202,18 @@ export function SalePage() {
               type="search"
               aria-label={t('sale.search')}
               placeholder={t('sale.searchHintShort')}
+              title="F2"
               autoComplete="off"
-              className="h-14 w-full rounded-lg border border-border bg-surface px-4 text-lg outline-none focus:border-primary"
+              className="h-11 w-full min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 text-base outline-none focus:border-primary sm:h-14 sm:px-4 sm:text-lg"
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
                 setNotFound(null);
               }}
             />
+            <div className="sm:hidden">
+              <ShiftMoreMenu actions={stripActions} />
+            </div>
           </form>
           {notFound ? (
             <p role="alert" className="text-sm text-danger">
@@ -239,7 +244,7 @@ export function SalePage() {
             ))}
           </div>
           <ul
-            className="grid min-h-0 flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto [scrollbar-width:none] sm:grid-cols-3 md:[scrollbar-width:auto] lg:grid-cols-4"
+            className="grid min-h-0 flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto [scrollbar-width:none] sm:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] md:[scrollbar-width:auto]"
             aria-label={t('register.catalogTitle')}
           >
             {catalog.isPending ? (
@@ -281,8 +286,8 @@ export function SalePage() {
                         {t('sale.inStock', { qty: formatQty(parseQuantity(s.onHand)) })}
                       </span>
                     ) : null}
-                    <span className="flex items-center justify-between gap-2">
-                      <span className="font-semibold tabular-nums" dir="ltr">
+                    <span className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                      <span className="font-semibold whitespace-nowrap tabular-nums" dir="ltr">
                         {fmt(item.price)}
                       </span>
                       {item.trackInventory &&
@@ -428,6 +433,7 @@ export function SalePage() {
               onClick={() => setDialog('suspend')}
             >
               {t('sale.suspend')}
+              <Kbd>F8</Kbd>
             </Button>
             <Button
               variant="secondary"
@@ -438,14 +444,21 @@ export function SalePage() {
               {t('sale.discountShort')}
             </Button>
           </div>
-          <Button
-            size="lg"
-            className="mt-2 h-16 text-xl"
-            disabled={!pricing?.ok}
-            onClick={() => setDialog('pay')}
-          >
-            {t('sale.pay')} {total !== null ? fmt(total) : ''}
-          </Button>
+          {cart.state.lines.length === 0 ? (
+            <div className="mt-2 flex h-16 items-center justify-center rounded-md bg-surface-muted text-lg text-fg-muted">
+              {t('sale.addProducts')}
+            </div>
+          ) : (
+            <Button
+              size="lg"
+              className="mt-2 h-16 text-xl"
+              disabled={!pricing?.ok}
+              onClick={() => setDialog('pay')}
+            >
+              {t('sale.pay')} {total !== null ? fmt(total) : ''}
+              <Kbd>F12</Kbd>
+            </Button>
+          )}
         </aside>
       </div>
       <Button
