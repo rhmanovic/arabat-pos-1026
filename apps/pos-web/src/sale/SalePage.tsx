@@ -66,6 +66,8 @@ export function SalePage() {
   const [category, setCategory] = useState<string | null>(null);
   const [notFound, setNotFound] = useState<string | null>(null);
   const [editing, setEditing] = useState<CartLine | null>(null);
+  /** The cart line whose quick actions (−/+, edit, remove) are shown. */
+  const [selected, setSelected] = useState<string | null>(null);
   const [dialog, setDialog] = useState<'pay' | 'discount' | 'suspend' | 'held' | 'recent' | null>(
     null,
   );
@@ -289,10 +291,14 @@ export function SalePage() {
                 const priced = pricing?.ok ? pricing.cart.lines[index] : null;
                 const bad = pricing && !pricing.ok && pricing.line === index;
                 return (
-                  <li key={l.key} className="py-2">
+                  <li
+                    key={l.key}
+                    className={cn('rounded-md px-2 py-2', selected === l.key && 'bg-primary-soft')}
+                  >
                     <button
                       type="button"
-                      onClick={() => setEditing(l)}
+                      aria-expanded={selected === l.key}
+                      onClick={() => setSelected(selected === l.key ? null : l.key)}
                       className={cn(
                         'flex w-full items-start justify-between gap-2 text-start',
                         bad && 'text-danger',
@@ -315,7 +321,18 @@ export function SalePage() {
                         {priced ? fmt(priced.netMinor) : '—'}
                       </span>
                     </button>
-                    <QuantityStepper line={l} />
+                    {selected === l.key ? (
+                      <div className="mt-2 flex items-center gap-2">
+                        <QuantityStepper line={l} />
+                        <span className="flex-1" />
+                        <Button size="sm" variant="secondary" onClick={() => setEditing(l)}>
+                          {t('sale.edit')}
+                        </Button>
+                        <Button size="sm" variant="secondary" onClick={() => cart.remove(l.key)}>
+                          {t('sale.remove')}
+                        </Button>
+                      </div>
+                    ) : null}
                   </li>
                 );
               })}
@@ -432,13 +449,13 @@ function QuantityStepper({ line }: { line: CartLine }) {
     else cart.update(line.key, { quantity: formatQty(next) });
   };
   return (
-    <div className="mt-1 flex items-center gap-2" dir="ltr">
+    <div className="flex items-center gap-1" dir="ltr">
       <button
         type="button"
         aria-label={t('sale.decrease')}
         disabled={milli === null}
         onClick={() => step(-1000n)}
-        className="flex h-9 w-9 items-center justify-center rounded-md border border-border text-lg font-semibold hover:border-primary disabled:opacity-50"
+        className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-surface text-lg font-semibold hover:border-primary disabled:opacity-50"
       >
         −
       </button>
@@ -450,7 +467,7 @@ function QuantityStepper({ line }: { line: CartLine }) {
         aria-label={t('sale.increase')}
         disabled={milli === null}
         onClick={() => step(1000n)}
-        className="flex h-9 w-9 items-center justify-center rounded-md border border-border text-lg font-semibold hover:border-primary disabled:opacity-50"
+        className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-surface text-lg font-semibold hover:border-primary disabled:opacity-50"
       >
         +
       </button>

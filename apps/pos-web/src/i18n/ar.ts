@@ -117,6 +117,7 @@ export const posAr: PosResources = {
     outOfStock: 'نفد',
     lowStock: 'منخفض',
     inStock: 'المتوفر: {{qty}}',
+    edit: 'تعديل',
     increase: 'زيادة الكمية',
     decrease: 'إنقاص الكمية',
     cart: 'عملية البيع الحالية',

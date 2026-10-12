@@ -250,13 +250,21 @@ describe('pos app', () => {
     expect(screen.getAllByTestId('cart-line')).toHaveLength(1);
     expect(screen.getByTestId('cart-total')).toHaveTextContent('KWD 0.999');
     expect(await screen.findByTestId('tile-stock')).toHaveTextContent('In stock: 5');
-    // The −/+ buttons step the line by one unit.
+    // Tapping a line shows its −/+ buttons; they step the line by one unit.
+    expect(screen.queryByRole('button', { name: 'Increase quantity' })).toBeNull();
+    await userEvent.click(screen.getByTestId('cart-line'));
     await userEvent.click(screen.getByRole('button', { name: 'Increase quantity' }));
     expect(screen.getByTestId('line-qty')).toHaveTextContent('4');
     expect(screen.getByTestId('cart-total')).toHaveTextContent('KWD 1.332');
     await userEvent.click(screen.getByRole('button', { name: 'Decrease quantity' }));
     expect(screen.getByTestId('line-qty')).toHaveTextContent('3');
     expect(screen.getByTestId('cart-total')).toHaveTextContent('KWD 0.999');
+    // Edit opens the full line dialog; tapping the line again hides the quick actions.
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const lineDialog = await screen.findByRole('dialog');
+    await userEvent.click(within(lineDialog).getByRole('button', { name: 'Done' }));
+    await userEvent.click(screen.getByTestId('cart-line'));
+    expect(screen.queryByRole('button', { name: 'Increase quantity' })).toBeNull();
     // Cashiers without the permission get no discount button.
     expect(screen.getByRole('button', { name: 'Discount on sale' })).toBeDisabled();
     await userEvent.type(search, 'nothing{Enter}');

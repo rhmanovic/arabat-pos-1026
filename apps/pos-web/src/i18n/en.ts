@@ -115,6 +115,7 @@ export const posEn = {
     outOfStock: 'Out',
     lowStock: 'Low',
     inStock: 'In stock: {{qty}}',
+    edit: 'Edit',
     increase: 'Increase quantity',
     decrease: 'Decrease quantity',
     cart: 'Current sale',
