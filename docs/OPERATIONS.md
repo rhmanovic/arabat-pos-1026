@@ -144,3 +144,16 @@ Current staging deployment (2026-10-12): Railway project `arabat-pos`, environme
 (database ok), `/manager`, `/pos` and `/platform` load and report the server connected. No
 volume and no SMTP yet. First platform operator created by the bootstrap (credentials only
 in the deploy log of 2026-10-12 14:42 UTC).
+
+### Cash custody cutover (ADR-0090, migration 0033)
+
+Runs automatically with the migrations; it is guarded per merchant (skips a merchant that already
+has a treasury). After the deploy:
+1. The old cash account appears archived as «حساب النقد القديم» on the payments page; its history
+   stays, it is in no total.
+2. Every branch treasury and register starts at 0 "not yet counted". The owner (or anyone with
+   `cash.custody`) records each treasury's opening count on `/manager/cash`; until then the
+   treasury cannot pay out (top-ups and transfers from it are refused).
+3. A shift that was open at deploy closes the old way; its counted cash becomes the drawer
+   balance. Other registers get their balance from the count at their next opening.
+4. Cashier roles no longer have `cash.move`; grant it per employee or role where needed.

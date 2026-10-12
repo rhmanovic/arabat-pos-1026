@@ -157,6 +157,16 @@ Acceptance criteria:
 2. Stock reservation/decrement consistent with POS stock.
 3. Fulfilment status visible in manager; conversion to sale on payment.
 
+## M11 — Cash custody (ADR-0090)
+- **Phase A ✅ (2026-10-12):** register and branch treasury balances, cutover, shift open/close
+  counts, forced close with or without a count, manager counts, register ↔ treasury transfers,
+  `cash.custody`, manager cash page.
+- **Phase B:** cash disbursements (expenses by category, supplier payments linked to a supplier,
+  reversals), `cash.deposit` and bank deposits, branch-to-branch transfers via in-transit with
+  receipt confirmation, supplier payments on the supplier page.
+- **Phase C:** cash report categories, expenses and supplier payments reports, discrepancy report
+  sections (close type, after an uncounted forced close, between shifts), dashboard total-cash card.
+
 ## Later / to be decided
 Offline POS (OQ-005), loyalty, PIN quick switch (OQ-006), card terminal / KNET
 integration (OQ-013), deployment (OQ-011), multi-currency (OQ-004).

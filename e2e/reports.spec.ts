@@ -51,7 +51,7 @@ test('reports show real transactions, filter by period and export what is displa
   expect(
     (
       await page.request.post('/api/v1/pos/shifts', {
-        data: { registerId: registers[0]!.id, openingFloat: '5.000' },
+        data: { registerId: registers[0]!.id, countedCash: '5.000', expectedCash: '0.000' },
       })
     ).status(),
   ).toBe(201);

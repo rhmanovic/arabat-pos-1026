@@ -144,7 +144,7 @@ test('restaurant: setup, table order with modifiers, kitchen display, split bill
   // Cashier: table T1, two burgers (medium, note) and a cola, sent to the kitchen.
   const pos = await employee(page, browser, 'cashier', main, 'Rana Cashier');
   await pos.getByRole('radio', { name: /Register 1/ }).click();
-  await pos.getByLabel('Opening cash (KWD)').fill('10');
+  await pos.getByLabel('Counted cash (KWD)').fill('10');
   await pos.getByRole('button', { name: 'Open shift' }).click();
   await pos.getByRole('link', { name: 'Tables' }).click();
   await pos.getByRole('button', { name: 'Table T1' }).click();

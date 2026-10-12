@@ -88,7 +88,7 @@ test('customer profiles in the manager and customer selection at the POS', async
   await expect(pos.getByText('Your account is ready.')).toBeVisible();
   await signIn(pos, 'pos', cashierEmail, 'Cashier-Pass-2026');
   await pos.getByRole('radio', { name: /Register 1/ }).click();
-  await pos.getByLabel('Opening cash (KWD)').fill('10');
+  await pos.getByLabel('Counted cash (KWD)').fill('10');
   await pos.getByRole('button', { name: 'Open shift' }).click();
 
   const tile = pos.getByTestId('product-tile').filter({ hasText: 'Orange juice' });

@@ -27,6 +27,9 @@ const SHIFT = {
     cashSales: money('0.000'),
     cashRefunds: money('0.000'),
     expectedCash: money('50.000'),
+    openingExpected: money('50.000'),
+    openingDiscrepancy: money('0.000'),
+    openingIsInitial: false,
   },
   countedCash: null,
   discrepancy: null,
@@ -80,6 +83,8 @@ describe('pos app', () => {
                 nameEn: 'Register 1',
                 nameAr: null,
                 defaultOpeningFloat: money('25.000'),
+                expectedCash: money('25.000'),
+                needsCount: false,
                 availability: 'free',
                 occupiedBy: null,
               },
@@ -89,6 +94,8 @@ describe('pos app', () => {
                 nameEn: 'Register 2',
                 nameAr: null,
                 defaultOpeningFloat: money('0.000'),
+                expectedCash: money('0.000'),
+                needsCount: true,
                 availability: 'occupied',
                 occupiedBy: 'Sara',
               },
@@ -106,17 +113,22 @@ describe('pos app', () => {
     expect(await screen.findByRole('radio', { name: /Register 2/ })).toBeDisabled();
     expect(screen.getByRole('radio', { name: /In use by Sara/ })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('radio', { name: /Register 1/ }));
-    const float = screen.getByLabelText('Opening cash (KWD)');
-    expect(float).toHaveValue('25.000');
-    await userEvent.clear(float);
-    await userEvent.type(float, '50');
+    // The drawer keeps its cash between shifts: the cashier counts against the expected balance.
+    expect(screen.getByTestId('open-expected')).toHaveTextContent('KWD 25.000');
+    await userEvent.type(screen.getByLabelText('Counted cash (KWD)'), '24');
+    expect(screen.getByTestId('open-difference')).toHaveTextContent('KWD -1.000');
+    // A difference needs an explanation before opening.
+    expect(screen.getByRole('button', { name: 'Open shift' })).toBeDisabled();
+    await userEvent.type(screen.getByLabelText('Note (optional)'), 'one note missing');
     await userEvent.click(screen.getByRole('button', { name: 'Open shift' }));
     expect(await screen.findByRole('heading', { name: 'Products' })).toBeInTheDocument();
     expect(
       fetch.calls.find((c) => c.method === 'POST' && c.path === '/pos/shifts')?.body,
     ).toMatchObject({
       registerId: SHIFT.registerId,
-      openingFloat: '50',
+      countedCash: '24.000',
+      expectedCash: '25.000',
+      note: 'one note missing',
     });
   });
 

@@ -36,13 +36,21 @@ test('payment fee setup, a full POS shift with cash movements, and the managerâ€
     'KWD 0.100 + 2%',
   );
 
+  // Cash custody (ADR-0090): the treasury pays nothing out before its opening count.
+  await page.goto('/manager/cash');
+  await expect(page.getByText('Not yet counted')).toBeVisible();
+  await page.getByTestId('cash-place-treasury').getByRole('button', { name: 'Count' }).click();
+  await page.getByRole('dialog').getByLabel('Counted cash (KWD)').fill('100');
+  await page.getByRole('dialog').getByRole('button', { name: 'Save count' }).click();
+  await expect(page.getByTestId('cash-place-treasury')).toContainText('KWD 100.000');
+
   // The owner works a shift in the POS (explicit switch through the server).
   await page.goto('/manager/');
   await page.getByRole('button', { name: 'Switch to Point of Sale' }).click();
   await expect(page).toHaveURL(/\/pos\/$/);
   await expect(page.getByRole('heading', { name: 'Open a shift' })).toBeVisible();
   await page.getByRole('radio', { name: /Register 1/ }).click();
-  await page.getByLabel('Opening cash (KWD)').fill('20');
+  await page.getByLabel('Counted cash (KWD)').fill('20');
   await page.getByRole('button', { name: 'Open shift' }).click();
   await expect(page.getByTestId('shift-strip')).toContainText('Register 1');
 
@@ -75,8 +83,13 @@ test('payment fee setup, a full POS shift with cash movements, and the managerâ€
   await expect(row).toContainText('Short');
   await row.click();
   await expect(page.getByTestId('shift-summary')).toContainText('KWD 22.250');
-  await expect(page.getByRole('cell', { name: 'Safe drop' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Drop to treasury' })).toBeVisible();
   await page.goto('/manager/shifts');
   await page.getByRole('button', { name: 'Cash discrepancies' }).click();
   await expect(page.getByText('KWD 0.250').first()).toBeVisible();
+
+  // The counted cash stayed in the drawer; the top-up and drop moved treasury cash.
+  await page.goto('/manager/cash');
+  await expect(page.getByTestId('cash-place-register')).toContainText('KWD 22.000');
+  await expect(page.getByTestId('cash-place-treasury')).toContainText('KWD 97.750');
 });

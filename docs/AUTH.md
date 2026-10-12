@@ -171,7 +171,7 @@ can(actor, permission, branchId?):
 | Access | `manager.access`, `pos.access` | branch |
 | Sales | `sales.create`, `sales.read`, `sales.discount`, `sales.discount.override_limit`, `sales.price_override`, `sales.void` | branch |
 | Refunds | `refunds.create`, `refunds.approve` | branch |
-| Registers | `registers.manage`, `shifts.operate`, `shifts.view_all`, `cash.move` | branch |
+| Registers | `registers.manage`, `shifts.operate`, `shifts.view_all`, `cash.move`, `cash.custody` | branch |
 | Catalog | `catalog.read` (branch), `catalog.manage`, `catalog.prices.manage` (merchant) | mixed |
 | Inventory | `inventory.read`, `inventory.adjust`, `inventory.transfer`, `inventory.transfer.approve` | branch |
 | Purchasing | `purchasing.read`, `purchasing.manage`, `purchasing.approve`, `purchasing.receive` | branch |
@@ -189,7 +189,7 @@ can(actor, permission, branchId?):
 | `company_manager` — مدير الشركة | all branches | full management, **no POS** |
 | `branch_manager` — مدير الفرع | one branch | branch operations, staff of that branch, **no POS** |
 | `supervisor` — مشرف | one branch | POS + overrides, voids, refund approval, cash moves |
-| `cashier` — كاشير | one branch | POS selling, limited discounts, refunds, cash moves, restaurant orders |
+| `cashier` — كاشير | one branch | POS selling, limited discounts, refunds, restaurant orders (no `cash.move` since ADR-0090; granted per employee) |
 | `kitchen` — طاقم المطبخ | one branch | POS sign-in to the kitchen display only (`kitchen.access`) |
 
 Restaurant permissions (Prompt 15): `restaurant.manage` (branch: tables, areas, stations;

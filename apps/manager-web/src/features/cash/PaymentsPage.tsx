@@ -138,7 +138,8 @@ export function PaymentsPage({ view = 'methods' }: { view?: 'methods' | 'account
               key: 'account',
               header: t('cash.account'),
               hideBelow: 'lg',
-              cell: (m) => accountName(m.financialAccountId),
+              cell: (m) =>
+                m.kind === 'cash' ? t('cash.settlesInDrawer') : accountName(m.financialAccountId),
             },
             {
               key: 'status',
@@ -164,7 +165,8 @@ export function PaymentsPage({ view = 'methods' }: { view?: 'methods' | 'account
             }
             rows={accounts.data?.accounts}
             rowKey={(a) => a.id}
-            onRowClick={setAccount}
+            // The archived pre-ADR-0090 cash account is history only.
+            onRowClick={(a) => (a.status === 'archived' ? undefined : setAccount(a))}
             columns={[
               {
                 key: 'name',
@@ -184,7 +186,12 @@ export function PaymentsPage({ view = 'methods' }: { view?: 'methods' | 'account
               {
                 key: 'status',
                 header: t('common.status'),
-                cell: (a) => (a.status === 'active' ? t('common.active') : t('common.inactive')),
+                cell: (a) =>
+                  a.status === 'archived'
+                    ? t('cash.archived')
+                    : a.status === 'active'
+                      ? t('common.active')
+                      : t('common.inactive'),
               },
             ]}
           />
@@ -260,7 +267,7 @@ function MethodDialog({
         ...v,
         nameAr: v.nameAr || null,
         nameEn: v.nameEn || null,
-        financialAccountId: v.financialAccountId || null,
+        financialAccountId: v.kind === 'cash' ? null : v.financialAccountId || null,
         gatewayProvider: (v.gatewayProvider || null) as PaymentMethod['gatewayProvider'],
         feeFixed: v.feeFixed.trim() || '0',
         feePercent: v.feePercent.trim() || '0',
@@ -429,24 +436,32 @@ function MethodDialog({
             ) : null}
           </div>
         ) : null}
-        <Field label={t('cash.account')}>
-          {(p) => (
-            <Select
-              {...p}
-              value={v.financialAccountId}
-              onChange={(e) => set({ financialAccountId: e.target.value })}
-            >
-              <option value="">{t('cash.noAccount')}</option>
-              {accounts
-                .filter((a) => a.status === 'active' || a.id === v.financialAccountId)
-                .map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {localizedName(a, i18n.language)}
-                  </option>
-                ))}
-            </Select>
-          )}
-        </Field>
+        {v.kind === 'cash' ? (
+          // Cash settles into the drawer of the register that takes it (ADR-0090).
+          <Alert tone="info">{t('cash.settlesInDrawerHint')}</Alert>
+        ) : (
+          <Field label={t('cash.account')}>
+            {(p) => (
+              <Select
+                {...p}
+                value={v.financialAccountId}
+                onChange={(e) => set({ financialAccountId: e.target.value })}
+              >
+                <option value="">{t('cash.noAccount')}</option>
+                {accounts
+                  .filter(
+                    (a) =>
+                      (a.status === 'active' && a.kind !== 'cash') || a.id === v.financialAccountId,
+                  )
+                  .map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {localizedName(a, i18n.language)}
+                    </option>
+                  ))}
+              </Select>
+            )}
+          </Field>
+        )}
         {v.kind !== 'cash' ? (
           <Field label={t('cash.gateway')}>
             {(p) => (
@@ -487,8 +502,8 @@ function AccountDialog({
   const [v, setV] = useState({
     nameAr: account?.nameAr ?? '',
     nameEn: account?.nameEn ?? '',
-    kind: account?.kind ?? ('bank' as FinancialAccount['kind']),
-    status: account?.status ?? ('active' as const),
+    kind: (account?.kind ?? 'bank') as (typeof FINANCIAL_ACCOUNT_KINDS)[number],
+    status: (account?.status ?? 'active') as 'active' | 'inactive',
   });
   const save = useMutation({
     mutationFn: () => {
@@ -550,7 +565,9 @@ function AccountDialog({
             <Select
               {...p}
               value={v.kind}
-              onChange={(e) => setV({ ...v, kind: e.target.value as FinancialAccount['kind'] })}
+              onChange={(e) =>
+                setV({ ...v, kind: e.target.value as (typeof FINANCIAL_ACCOUNT_KINDS)[number] })
+              }
             >
               {FINANCIAL_ACCOUNT_KINDS.map((k) => (
                 <option key={k} value={k}>

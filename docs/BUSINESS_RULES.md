@@ -101,7 +101,30 @@ engineering defaults pending owner confirmation.
   coins) and the difference (counted − expected). Differences within the register's
   tolerance are "balanced"; otherwise "over" or "short". Closed shifts never change.
 - **BR-075** Cash in/out needs a reason ("other" requires a note) and cannot take out more
-  cash than the drawer is expected to hold.
+  cash than the drawer holds. Drop to treasury and top-up from treasury are transfers between
+  the register and its branch treasury; a change swap moves no money (ADR-0090).
+- **BR-076** Cash places (ADR-0090): every register (drawer) has a balance that carries over
+  between shifts; every branch has its own treasury; bank accounts belong to the company.
+  Company cash = all treasuries + all registers. Cash sales and cash refunds change only the
+  register of the shift; KNET, cards, payment link and WAMD go straight to their bank minus the
+  fee. Money moves between places only by a recorded transfer, which is never a sale, revenue or
+  expense. No transfer may take more than the source holds; a treasury pays out only after its
+  first count.
+- **BR-077** A shift is a period of responsibility. Opening = count against the register's
+  expected balance; a difference is "between shifts" (needs a note beyond the tolerance) and is
+  never charged to the opening cashier; the first count of a register is its opening balance, not
+  a difference. Closing = count; the difference is booked on the shift (shown by cashier name,
+  never deducted automatically) and the cash stays in the drawer.
+- **BR-078** Manager force-close: with the manager's own count it is a verified close; without a
+  count it is "forced, not counted": nothing is booked, the register keeps its book balance and
+  needs a count, and the difference found at the next count is attributed to the forced shift.
+  Anyone with `cash.custody` may count a register without an open shift or a treasury.
+- **BR-079** Cutover to custody (2026-10-12): history is kept and nothing is reset. The old cash
+  account becomes the archived «حساب النقد القديم» (statement only, in no total, belongs to no
+  branch); new treasuries and registers start at 0 "not yet counted" and get their opening balance
+  from a physical count («رصيد افتتاحي بالجرد»); a shift open at cutover closes the old way and its
+  count becomes the drawer balance; sales reports are unchanged. `cash.move` was removed from the
+  cashier role, existing cashiers included (owner decision); supervisors keep it.
 
 - **BR-080** Pricing: line amount = price × quantity rounded half-up to the fils; item
   discounts (percent or amount, never more than the line); a sale discount on the
@@ -115,11 +138,12 @@ engineering defaults pending owner confirmation.
 - **BR-084** Selling requires the cashier's own open shift; every sale records merchant,
   branch, register, shift and employee. Stock is deducted at completion, all-or-nothing;
   no overselling unless the merchant allows negative stock.
-- **BR-086** Every payment settles into an internal balance (cash on hand or bank account): the
-  payment and its processing fee are posted to that balance's ledger. A new company starts
-  with cash on hand («الخزينة»), two bank accounts and the methods Cash → cash on hand, KNET → bank 1,
-  Visa/Mastercard → bank 2, payment link → bank 1, WAMD → bank 1, all without fees and all
-  editable (owner confirmed, ADR-0089). Fee rates are entered by the owner per method.
+- **BR-086** Every non-cash payment settles into a bank account: the payment and its processing
+  fee are posted to that account's ledger. Cash payments settle into the register drawer of the
+  shift (BR-076). A new company starts with a treasury per branch, a drawer account per register,
+  two bank accounts and the methods Cash → register drawer, KNET → bank 1, Visa/Mastercard → bank 2,
+  payment link → bank 1, WAMD → bank 1, all without fees and all editable (ADR-0089, amended by
+  ADR-0090). Fee rates are entered by the owner per method.
 - **BR-085** Held (suspended) sales reserve no stock; any cashier at the branch may resume
   or discard them; a held sale can be completed once.
 
@@ -317,7 +341,7 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
 | OQ-020 | Restaurant: service charge or tips? Courses/fire timing? Printing tickets on kitchen printers (vs. screen)? Table reservations? Not implemented. | Restaurant |
 | OQ-023 | Restaurant bills: charge the item price at ordering time or at payment time? Implemented: modifiers at ordering, item at payment (audit F3). | Restaurant |
 | OQ-024 | Discount limit: per discount (implemented: item and sale discounts checked separately, so 10 % + 10 % passes) or combined? | Sales |
-| OQ-026 | Actual processing fees per method (KNET, Visa/Mastercard, payment link, WAMD) and which bank account each settles into; how cash is deposited from cash on hand to the bank (a transfer between balances is not built yet); whether the opening float, cash in/out and the counted cash at shift close should post to «الخزينة» (today only cash sales and cash refunds post there, at the moment of the sale). Defaults: no fees; KNET, link and WAMD → bank 1, Visa/Mastercard → bank 2. | Payments |
+| OQ-026 | Actual processing fees per method (KNET, Visa/Mastercard, payment link, WAMD) and which bank account each settles into. Defaults: no fees; KNET, link and WAMD → bank 1, Visa/Mastercard → bank 2. Cash custody is decided (ADR-0090); expenses, supplier payments, bank deposits and branch-to-branch transfers come in phase B. | Payments |
 | OQ-025 | Verify the owner's e-mail at self-registration (blocks squatting someone's address)? Not implemented. | Auth |
 | OQ-022 | Subscription pricing and billing: prices per plan, billing provider, invoices/VAT, what happens automatically when a subscription lapses (grace period, read-only, suspension), and data retention after closing? Implemented: no billing, lapse never blocks, closing keeps data. | Platform |
 | OQ-021 | Online store: which gateway(s) first and the merchant contracts/credentials; delivery zones and fees per area; shopper accounts, coupons, scheduled orders; cash on delivery; automatic gateway refunds? Not implemented. | Online store |

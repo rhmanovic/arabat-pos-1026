@@ -57,6 +57,97 @@ function useMoney() {
     );
 }
 
+/** Counting the drawer: a typed total or a notes-and-coins count (shared by open and close). */
+function useCashCount() {
+  const [counted, setCounted] = useState('');
+  const [byCount, setByCount] = useState(false);
+  const [counts, setCounts] = useState<Record<string, string>>({});
+  const breakdownTotal = DENOMINATIONS.reduce((sum, d) => {
+    const n = /^\d{1,6}$/.test(counts[d] ?? '') ? BigInt(counts[d]!) : 0n;
+    return sum + minor(d)! * n;
+  }, 0n);
+  const countedMinor = byCount ? breakdownTotal : counted.trim() ? minor(counted) : null;
+  return {
+    counted,
+    setCounted,
+    byCount,
+    setByCount,
+    counts,
+    setCounts,
+    breakdownTotal,
+    countedMinor,
+    payload: () => ({
+      countedCash: Money.ofMinor(countedMinor!, 'KWD').toDecimalString(),
+      ...(byCount
+        ? {
+            breakdown: DENOMINATIONS.map((value) => ({
+              value,
+              count: /^\d{1,6}$/.test(counts[value] ?? '') ? Number(counts[value]) : 0,
+            })),
+          }
+        : {}),
+    }),
+  };
+}
+
+function CashCountFields({ count }: { count: ReturnType<typeof useCashCount> }) {
+  const { t } = useTranslation();
+  const fmt = useMoney();
+  return (
+    <>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          className="size-5 accent-primary"
+          checked={count.byCount}
+          onChange={(e) => count.setByCount(e.target.checked)}
+        />
+        {t('shift.countNotes')}
+      </label>
+      {count.byCount ? (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {DENOMINATIONS.map((d) => (
+            <Field key={d} label={d.replace(/\.?0+$/, '')}>
+              {(p) => (
+                <Input
+                  {...p}
+                  dir="ltr"
+                  inputMode="numeric"
+                  value={count.counts[d] ?? ''}
+                  onChange={(e) => count.setCounts((c) => ({ ...c, [d]: e.target.value }))}
+                />
+              )}
+            </Field>
+          ))}
+          <p className="col-span-full text-lg font-semibold" dir="ltr" data-testid="count-total">
+            {t('shift.total')}: {fmt(count.breakdownTotal)}
+          </p>
+        </div>
+      ) : (
+        <Field
+          label={t('shift.counted')}
+          error={
+            count.counted.trim() && count.countedMinor === null
+              ? t('common:errors.INVALID_PRICE')
+              : undefined
+          }
+        >
+          {(p) => (
+            <Input
+              {...p}
+              className="h-14 text-xl"
+              dir="ltr"
+              inputMode="decimal"
+              value={count.counted}
+              onChange={(e) => count.setCounted(e.target.value)}
+            />
+          )}
+        </Field>
+      )}
+    </>
+  );
+}
+
 export function useCurrentShift() {
   const api = useApi();
   const { hasPermission } = useAuth();
@@ -88,32 +179,47 @@ export function RequireShift({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Opening a shift = counting the drawer (ADR-0090). The drawer keeps its cash between shifts,
+ * so the cashier sees the expected balance and confirms what is really there.
+ */
 export function OpenShiftPage() {
   const { t, i18n } = useTranslation();
   const api = useApi();
   const notify = useNotify();
+  const fmt = useMoney();
   const queryClient = useQueryClient();
   const registers = useQuery({
     queryKey: ['pos', 'registers'],
     queryFn: () => api.shifts.posRegisters(),
   });
   const [registerId, setRegisterId] = useState<string | null>(null);
-  const [float, setFloat] = useState('');
   const [note, setNote] = useState('');
+  const count = useCashCount();
   const free = registers.data?.registers.filter((r) => r.availability !== 'occupied') ?? [];
   const selected = registers.data?.registers.find((r) => r.id === registerId);
+  const expectedMinor = selected ? minor(selected.expectedCash.amount)! : 0n;
+  const difference =
+    selected && count.countedMinor !== null ? count.countedMinor - expectedMinor : null;
+  // The drawer's first count sets its balance; later differences need an explanation.
+  const needsNote = Boolean(selected && !selected.needsCount && difference && !note.trim());
   const open = useMutation({
     mutationFn: () =>
       api.shifts.open({
         registerId: registerId!,
-        openingFloat: float.trim(),
+        ...count.payload(),
+        expectedCash: selected!.expectedCash.amount,
         note: note.trim() || null,
       }),
     onSuccess: async () => {
       notify.ok(t('shift.opened'));
       await queryClient.invalidateQueries({ queryKey: shiftKey });
     },
-    onError: notify.fail,
+    onError: async (error) => {
+      notify.fail(error);
+      // Someone moved cash meanwhile: show the new expected balance to count against.
+      await queryClient.invalidateQueries({ queryKey: ['pos', 'registers'] });
+    },
   });
   return (
     <div className="mx-auto grid max-w-3xl gap-4 p-4">
@@ -132,10 +238,7 @@ export function OpenShiftPage() {
             role="radio"
             aria-checked={registerId === r.id}
             disabled={r.availability === 'occupied'}
-            onClick={() => {
-              setRegisterId(r.id);
-              setFloat(r.defaultOpeningFloat.amount);
-            }}
+            onClick={() => setRegisterId(r.id)}
             className="flex min-h-20 flex-col items-start justify-center rounded-lg border-2 border-border bg-surface p-4 text-start aria-checked:border-primary disabled:opacity-50"
           >
             <span className="text-lg font-semibold">{localizedName(r, i18n.language)}</span>
@@ -151,22 +254,25 @@ export function OpenShiftPage() {
       </div>
       {selected ? (
         <div className="grid gap-4 rounded-lg bg-surface p-4">
-          <Field
-            label={t('shift.openingFloat')}
-            error={minor(float) === null && float ? t('common:errors.INVALID_PRICE') : undefined}
-          >
-            {(p) => (
-              <Input
-                {...p}
-                className="h-14 text-xl"
-                dir="ltr"
-                inputMode="decimal"
-                value={float}
-                onChange={(e) => setFloat(e.target.value)}
-              />
-            )}
-          </Field>
-          <Field label={t('shift.note')}>
+          {selected.needsCount ? (
+            <Alert tone="info">{t('shift.firstCount')}</Alert>
+          ) : (
+            <div className="flex items-baseline justify-between gap-3 text-lg">
+              <span>{t('shift.expectedInDrawer')}</span>
+              <span dir="ltr" className="font-semibold tabular-nums" data-testid="open-expected">
+                {fmt(selected.expectedCash)}
+              </span>
+            </div>
+          )}
+          <CashCountFields count={count} />
+          {difference !== null && difference !== 0n && !selected.needsCount ? (
+            <Alert tone="warning">
+              <span data-testid="open-difference">
+                {t('shift.openingDifference', { amount: fmt(difference) })}
+              </span>
+            </Alert>
+          ) : null}
+          <Field label={t('shift.note')} error={needsNote ? t('shift.noteRequired') : undefined}>
             {(p) => (
               <Textarea {...p} rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
             )}
@@ -174,7 +280,7 @@ export function OpenShiftPage() {
           <Button
             size="lg"
             className="h-14 text-lg"
-            disabled={minor(float) === null || free.length === 0}
+            disabled={count.countedMinor === null || free.length === 0 || needsNote}
             loading={open.isPending}
             onClick={() => open.mutate()}
           >
@@ -492,6 +598,11 @@ function MovementDialog({ kind, onClose }: { kind: 'cash_in' | 'cash_out'; onClo
             </Select>
           )}
         </Field>
+        {['float_top_up', 'safe_drop', 'change_received'].includes(reason) ? (
+          <p className="text-sm text-fg-muted" data-testid="movement-hint">
+            {t(`shift.movementHint_${reason}`)}
+          </p>
+        ) : null}
         <Field label={t('shift.note')}>
           {(p) => (
             <Textarea {...p} rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
@@ -515,28 +626,13 @@ function CloseDialog({
   const api = useApi();
   const notify = useNotify();
   const queryClient = useQueryClient();
-  const fmt = useMoney();
-  const [counted, setCounted] = useState('');
-  const [byCount, setByCount] = useState(false);
-  const [counts, setCounts] = useState<Record<string, string>>({});
   const [note, setNote] = useState('');
-  const breakdownTotal = DENOMINATIONS.reduce((sum, d) => {
-    const n = /^\d{1,6}$/.test(counts[d] ?? '') ? BigInt(counts[d]!) : 0n;
-    return sum + minor(d)! * n;
-  }, 0n);
-  const countedMinor = byCount ? breakdownTotal : minor(counted);
+  const count = useCashCount();
+  const countedMinor = count.countedMinor;
   const close = useMutation({
     mutationFn: () =>
       api.shifts.close({
-        countedCash: Money.ofMinor(countedMinor!, 'KWD').toDecimalString(),
-        ...(byCount
-          ? {
-              breakdown: DENOMINATIONS.map((value) => ({
-                value,
-                count: /^\d{1,6}$/.test(counts[value] ?? '') ? Number(counts[value]) : 0,
-              })),
-            }
-          : {}),
+        ...count.payload(),
         note: note.trim() || null,
         version: shift.version,
       }),
@@ -573,48 +669,7 @@ function CloseDialog({
       }
     >
       <div className="grid gap-4">
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="size-5 accent-primary"
-            checked={byCount}
-            onChange={(e) => setByCount(e.target.checked)}
-          />
-          {t('shift.countNotes')}
-        </label>
-        {byCount ? (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {DENOMINATIONS.map((d) => (
-              <Field key={d} label={d.replace(/\.?0+$/, '')}>
-                {(p) => (
-                  <Input
-                    {...p}
-                    dir="ltr"
-                    inputMode="numeric"
-                    value={counts[d] ?? ''}
-                    onChange={(e) => setCounts((c) => ({ ...c, [d]: e.target.value }))}
-                  />
-                )}
-              </Field>
-            ))}
-            <p className="col-span-full text-lg font-semibold" dir="ltr" data-testid="count-total">
-              {t('shift.total')}: {fmt(breakdownTotal)}
-            </p>
-          </div>
-        ) : (
-          <Field label={t('shift.counted')}>
-            {(p) => (
-              <Input
-                {...p}
-                className="h-14 text-xl"
-                dir="ltr"
-                inputMode="decimal"
-                value={counted}
-                onChange={(e) => setCounted(e.target.value)}
-              />
-            )}
-          </Field>
-        )}
+        <CashCountFields count={count} />
         <Field label={t('shift.note')}>
           {(p) => (
             <Textarea {...p} rows={2} value={note} onChange={(e) => setNote(e.target.value)} />

@@ -12,6 +12,7 @@ import { BranchesPage } from './features/branches/BranchesPage.js';
 import { CategoriesPage } from './features/catalog/CategoriesPage.js';
 import { ProductEditorPage } from './features/catalog/ProductEditorPage.js';
 import { ProductsPage } from './features/catalog/ProductsPage.js';
+import { CashCustodyPage } from './features/cash/CashCustodyPage.js';
 import { PaymentsPage } from './features/cash/PaymentsPage.js';
 import { RegistersPage } from './features/cash/RegistersPage.js';
 import { ShiftDetailPage, ShiftsPage } from './features/cash/ShiftsPage.js';
@@ -116,6 +117,7 @@ export const routes: RouteObject[] = [
       { path: 'transfers', element: guard('inventory.read', <TransfersPage />) },
       { path: 'transfers/new', element: guard('inventory.transfer', <NewTransferPage />) },
       { path: 'transfers/:transferId', element: guard('inventory.read', <TransferDetailPage />) },
+      { path: 'cash', element: guard('cash.custody', <CashCustodyPage />) },
       { path: 'payments', element: guard('payments.settings', <PaymentsPage />) },
       {
         path: 'accounts',

@@ -777,3 +777,33 @@ ADR; supersede it.
 - **Naming (2026-10-12):** «صندوق» means the register (till) only. The cash account is «الخزينة»
   (Cash on hand) and the balances page is «الحسابات المالية» (Financial accounts), with its own
   menu item `/accounts` instead of a tab hidden inside Payment methods.
+
+## ADR-0090 — Cash custody: registers, branch treasuries and transfers
+- **Date:** 2026-10-12 · **Status:** Accepted (owner approved the plan; phase A implemented)
+- **Context:** Cash sales posted into one company «الخزينة» account, so its balance was net cash
+  sales, not the cash actually held. Registers had no balance between shifts and cash in/out moved
+  nothing. The owner rejected a clearing account for KNET/cards.
+- **Decision:**
+  - Registers and branch treasuries are rows of `financial_accounts` (kinds `register`,
+    `treasury`), so one append-only ledger holds every place cash can be and a transfer can never
+    count cash twice. A company treasury (`branch_id` null) is reserved by a unique index but not
+    created.
+  - Cash sales and cash refunds post to the register of the shift (`shift_id` on the entry,
+    enforced by a trigger). Non-cash methods are unchanged (straight to the bank minus the fee).
+  - Shifts open and close with a count against the register balance (BR-077, BR-078); the
+    register's balance is the expected cash. `forced_uncounted` closes book nothing.
+  - Register ↔ same-branch treasury transfers are `cash_transfers` headers with exactly two
+    balanced entries (deferred constraint trigger). POS drop/top-up need `cash.move` on the open
+    shift; managers use the new branch-scoped `cash.custody`.
+  - Cutover (`cash_custody_cutover`, migration 0033) archives the old cash account, creates
+    treasuries and register accounts at 0 (uncounted), marks open shifts `legacy_open`, and removes
+    `cash.move` from cashier-template roles of existing merchants (BR-079).
+  - Lock order: shift row, then account rows sorted by id.
+- **Phases:** A (this) custody core; B cash disbursements (expenses with categories, supplier
+  payments linked to a supplier), `cash.deposit` and bank deposits, branch-to-branch transfers via
+  an in-transit account with receipt confirmation; C cash reports and a dashboard total-cash card.
+  Until B, the POS reasons petty expense, supplier payment and bank deposit post as plain register
+  debits with their reason.
+- **Consequences:** This is a cash custody ledger, not a general ledger. Amends ADR-0089: the
+  cash method is no longer linked to an account; cash settles in the drawer. After deploy each
+  treasury needs an opening count before it can pay out.

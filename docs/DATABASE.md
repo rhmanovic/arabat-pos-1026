@@ -1,6 +1,6 @@
 # Database
 
-Status: **Implemented** — 32 migrations (`0000`–`0031`, §8); RLS on every merchant table.
+Status: **Implemented** — 34 migrations (`0000`–`0033`, §8); RLS on every merchant table.
 The tenant is called **merchant** in the schema (`merchant_id`).
 
 ---
@@ -315,6 +315,11 @@ erDiagram
 - Receipt numbers: gap-free per branch via `receipt_sequences`
   (row lock in the sale transaction).
 - `sales.idempotency_key` unique per merchant.
+- Cash custody (ADR-0090): registers and branch treasuries are `financial_accounts` rows; their
+  balance is the sum of their `financial_account_entries`. Cash payments and cash refunds post to
+  the register with the shift id; `cash_transfers` move cash between a register and its branch
+  treasury as one balanced pair. All cash postings go through `apps/api/src/modules/payments/cash-ledger.ts`
+  and lock the shift row first, then the accounts in id order.
 
 ### 6.4 Later modules (entities only; designed in detail when scheduled)
 | Module | Entities |
@@ -374,6 +379,8 @@ erDiagram
 | `apps/api/drizzle/0027_platform_subscriptions.sql` | `plans` (global: code, names, status, default/public flags, optional limits for branches/employees/products/registers, features, informational price + period, trial days), `subscriptions` (one per merchant: plan, status, start/end, trial end, version), `subscription_events` (append-only history: from/to plan and status, operator, reason) |
 | `apps/api/drizzle/0028_platform_rls.sql` | RLS on subscriptions and events; no deletes; events append-only; `app_current_operator_id()`; triggers: subscription updates, `changed` events and merchant status changes need an operator context, closed merchants final; seeded plans `standard` (default), `basic`, `professional`; existing merchants backfilled to `standard`; `store_merchant` ignores non-active merchants; `SECURITY DEFINER` platform summaries `platform_merchants`, `platform_overview`, `platform_audit`, `platform_plan_counts` |
 | `apps/api/drizzle/0024_restaurant_rls.sql` | Forced RLS; no deletes of configuration, orders, items, tickets; modifier snapshots immutable; triggers: paid and cancelled items unchangeable, sent items keep product and quantity, final orders immutable; one open order per table; one default station per branch |
+| `apps/api/drizzle/0032_cash_custody.sql` | Cash custody (ADR-0090): `financial_accounts` gains `branch_id`, `register_id`, `counted_at`, kinds `register`/`treasury`, status `archived`, a shape check per kind and unique indexes (one account per register, one treasury per branch, one company treasury where `branch_id` is null); `financial_account_entries.shift_id`; `registers.needs_count` and unique `(merchant_id, id, branch_id)`; shift opening count columns (`opening_expected_minor`, `opening_discrepancy_minor`, `opening_is_initial`, `opening_follows_shift_id`, `opening_breakdown`), `legacy_open`, close type `forced_uncounted`; table `cash_transfers` |
+| `apps/api/drizzle/0033_cash_custody_rules.sql` | RLS and no UPDATE/DELETE on `cash_transfers`; trigger `financial_account_entries_guard` (no entries on archived accounts; register entries carry the register's open shift, other accounts none); `cash_transfers_direction` (register ↔ treasury of the same branch, both active); deferred `cash_transfers_balanced` (exactly two entries summing to 0); function `cash_custody_cutover(merchant)` run for every merchant (archives the old cash account, unlinks the cash method, creates treasuries and register accounts at 0, marks open shifts `legacy_open`, audit row); removes `cash.move` from cashier-template roles (audit row) |
 
 Restaurant model (implemented, Prompt 15):
 - Configuration: `restaurant_settings` (switch, auto-send), per branch `dining_areas`,

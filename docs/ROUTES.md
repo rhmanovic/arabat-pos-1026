@@ -32,6 +32,7 @@ the permission.
 | `/restaurant` | Restaurant setup (module, floor, stations, modifiers, menu) | `restaurant.manage` |
 | `/online` | Online store: orders, settings, products online | `online.orders` / `online.manage` |
 | `/payments` | Payment methods and internal balances | `payments.settings` |
+| `/cash` | Cash custody: treasury and register balances per branch, counts, statements, transfers | `cash.custody` |
 | `/registers` | Registers | `registers.manage` |
 | `/shifts`, `/shifts/:shiftId` | Shift history, X/Z summary | `shifts.view_all` |
 | `/branches` | Branches | `branches.read` |
@@ -49,7 +50,7 @@ cashier, clock, language, Lock and Sign out.
 | Route | Screen | Permission |
 |---|---|---|
 | `/` | Register: shift strip, search/scan, categories, product grid, cart with customer, discounts, held carts, recent sales, payment (cash/card/split), receipt | `sales.create` (open shift) |
-| `/shift` | Open shift (float), cash in/out, count and close, X/Z summary | `shifts.operate` / `cash.move` |
+| `/shift` | Open shift (count against the expected drawer), cash in/out (drop to / top-up from treasury), count and close, X/Z summary | `shifts.operate` / `cash.move` |
 | `/returns` | Find sale, return lines, refund / exchange / void, refund receipt | `refunds.create` |
 | `/tables`, `/tables/orders/:orderId` | Restaurant floor and order (module enabled) | `restaurant.orders` |
 | `/kitchen` | Kitchen display | `kitchen.access` |
@@ -142,7 +143,8 @@ per-branch breakdown, settings dialog), `/manager/inventory/adjustments`,
 | `GET /manager/registers?branchId=`, `POST /manager/registers`, `PATCH /manager/registers/:id`, `POST …/:id/status` | `registers.manage` at the branch |
 | `GET /manager/shifts?branchId=&status=&outcome=&from=&to=`, `GET /manager/shifts/:id` | `shifts.view_all` (branch-scoped) |
 | `GET /manager/shifts/discrepancies?branchId=&from=&to=` | `shifts.view_all` |
-| `POST /manager/shifts/:id/force-close` | `registers.manage` at the shift's branch (note required) |
+| `POST /manager/shifts/:id/force-close` | `registers.manage` at the shift's branch (note required; optional `countedCash` — without it the shift closes `forced_uncounted`) |
+| `GET /manager/cash/overview`, `GET /manager/cash/accounts/:id/entries`, `POST /manager/cash/accounts/:id/counts`, `GET/POST /manager/cash/transfers` | `cash.custody` (branch-scoped; ADR-0090) |
 | `GET /pos/payment-methods` | POS `sales.create` (active POS methods, no fees) |
 | `GET /pos/registers`, `GET /pos/shifts/current`, `POST /pos/shifts`, `POST /pos/shifts/current/close` | POS `shifts.operate` at the bound branch + register access |
 | `POST /pos/shifts/current/cash-movements` | POS `cash.move` (own open shift) |

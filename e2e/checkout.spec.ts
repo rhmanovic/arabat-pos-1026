@@ -104,7 +104,7 @@ test('end-to-end sale from setup to manager review', async ({ page, browser }) =
   await signIn(pos, 'pos', cashierEmail, 'Cashier-Pass-2026');
   await expect(pos.getByTestId('pos-context')).toContainText('Avenues');
   await pos.getByRole('radio', { name: /Register 1/ }).click();
-  await pos.getByLabel('Opening cash (KWD)').fill('10');
+  await pos.getByLabel('Counted cash (KWD)').fill('10');
   await pos.getByRole('button', { name: 'Open shift' }).click();
 
   // 6. Scan (keyboard wedge: digits + Enter) and select products.

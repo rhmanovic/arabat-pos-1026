@@ -53,6 +53,14 @@ import {
   suspendedOrderListSchema,
   suspendedOrderSchema,
   type CloseShift,
+  type ForceCloseShift,
+  type CashCount,
+  type CreateCashTransfer,
+  cashBranchSchema,
+  cashOverviewSchema,
+  cashStatementSchema,
+  cashTransferListSchema,
+  cashTransferSchema,
   type DiscrepancyReportQuery,
   type OpenShift,
   type RecordCashMovement,
@@ -473,6 +481,31 @@ export function createApiClient(options: ApiClientOptions = {}) {
       posMethods: () =>
         request('GET', '/pos/payment-methods', { schema: posPaymentMethodListSchema }),
     },
+    cash: {
+      overview: (branchId?: string | null) =>
+        request('GET', `/manager/cash/overview?${toParams({ branchId })}`, {
+          schema: cashOverviewSchema,
+        }),
+      statement: (accountId: string, page = 1, pageSize = 25) =>
+        request(
+          'GET',
+          `/manager/cash/accounts/${accountId}/entries?${toParams({ page, pageSize })}`,
+          {
+            schema: cashStatementSchema,
+          },
+        ),
+      count: (accountId: string, body: CashCount) =>
+        request('POST', `/manager/cash/accounts/${accountId}/counts`, {
+          body,
+          schema: cashBranchSchema,
+        }),
+      transfers: (query: { branchId?: string | null; page?: number; pageSize?: number } = {}) =>
+        request('GET', `/manager/cash/transfers?${toParams(query)}`, {
+          schema: cashTransferListSchema,
+        }),
+      transfer: (body: CreateCashTransfer) =>
+        request('POST', '/manager/cash/transfers', { body, schema: cashTransferSchema }),
+    },
     registers: {
       list: (branchId?: string | null) =>
         request('GET', `/manager/registers?${toParams({ branchId })}`, {
@@ -496,7 +529,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('GET', `/manager/shifts/discrepancies?${toParams(query)}`, {
           schema: discrepancyReportSchema,
         }),
-      forceClose: (id: string, body: CloseShift) =>
+      forceClose: (id: string, body: ForceCloseShift) =>
         request('POST', `/manager/shifts/${id}/force-close`, { body, schema: shiftSchema }),
       posRegisters: () => request('GET', '/pos/registers', { schema: posRegisterListSchema }),
       current: () => request('GET', '/pos/shifts/current', { schema: currentShiftSchema }),

@@ -339,6 +339,17 @@ export function ShiftDetailPage() {
               ))}
             </dl>
             <p className="mt-3 text-xs text-fg-muted">{t('cash.salesNote')}</p>
+            {s.summary.openingExpected ? (
+              <p className="mt-2 text-sm" data-testid="opening-count">
+                {s.summary.openingIsInitial
+                  ? t('cash.openingInitial')
+                  : t('cash.openingCount', {
+                      expected: formatAmount(s.summary.openingExpected, i18n.language),
+                      counted: formatAmount(s.summary.openingFloat, i18n.language),
+                      difference: formatAmount(s.summary.openingDiscrepancy, i18n.language),
+                    })}
+              </p>
+            ) : null}
           </Section>
           {s.status === 'closed' ? (
             <Section title={t('cash.closed')}>
@@ -348,6 +359,7 @@ export function ShiftDetailPage() {
                   <dd>
                     {s.closedByName}
                     {s.closeType === 'forced' ? ` (${t('cash.forced')})` : ''}
+                    {s.closeType === 'forced_uncounted' ? ` (${t('cash.forcedUncounted')})` : ''}
                   </dd>
                 </div>
                 {s.closingNote ? (
@@ -436,16 +448,23 @@ function ForceCloseDialog({
   const queryClient = useQueryClient();
   const [counted, setCounted] = useState('');
   const [note, setNote] = useState('');
+  // With a count the close is verified; without one it is «forced, uncounted» (ADR-0090).
+  const [withCount, setWithCount] = useState(true);
   let valid = Boolean(note.trim());
-  try {
-    Money.parse(counted.trim(), 'KWD');
-  } catch (error) {
-    if (!(error instanceof MoneyError)) throw error;
-    valid = false;
-  }
+  if (withCount)
+    try {
+      Money.parse(counted.trim(), 'KWD');
+    } catch (error) {
+      if (!(error instanceof MoneyError)) throw error;
+      valid = false;
+    }
   const close = useMutation({
     mutationFn: () =>
-      api.shifts.forceClose(shiftId, { countedCash: counted.trim(), note: note.trim(), version }),
+      api.shifts.forceClose(shiftId, {
+        ...(withCount ? { countedCash: counted.trim() } : {}),
+        note: note.trim(),
+        version,
+      }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: shiftsKey });
       notify.ok(t('common.saved'));
@@ -476,17 +495,30 @@ function ForceCloseDialog({
       }
     >
       <div className="grid gap-4">
-        <Field label={t('cash.counted')}>
-          {(p) => (
-            <Input
-              {...p}
-              dir="ltr"
-              inputMode="decimal"
-              value={counted}
-              onChange={(e) => setCounted(e.target.value)}
-            />
-          )}
-        </Field>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="size-5 accent-primary"
+            checked={withCount}
+            onChange={(e) => setWithCount(e.target.checked)}
+          />
+          {t('cash.forceWithCount')}
+        </label>
+        {withCount ? (
+          <Field label={t('cash.counted')}>
+            {(p) => (
+              <Input
+                {...p}
+                dir="ltr"
+                inputMode="decimal"
+                value={counted}
+                onChange={(e) => setCounted(e.target.value)}
+              />
+            )}
+          </Field>
+        ) : (
+          <Alert tone="info">{t('cash.forceUncountedHint')}</Alert>
+        )}
         <Field label={t('cash.note')}>
           {(p) => (
             <Textarea {...p} rows={3} value={note} onChange={(e) => setNote(e.target.value)} />

@@ -66,7 +66,7 @@ test('cashier refunds and exchanges at the POS; a large refund waits for manager
   await expect(pos.getByText('Your account is ready.')).toBeVisible();
   await signIn(pos, 'pos', cashierEmail, 'Cashier-Pass-2026');
   await pos.getByRole('radio', { name: /Register 1/ }).click();
-  await pos.getByLabel('Opening cash (KWD)').fill('50');
+  await pos.getByLabel('Counted cash (KWD)').fill('50');
   await pos.getByRole('button', { name: 'Open shift' }).click();
   await expect(pos.getByTestId('shift-strip')).toBeVisible();
 
