@@ -387,6 +387,9 @@ importers:
       '@arabat/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
+      '@arabat/permissions':
+        specifier: workspace:*
+        version: link:../../packages/permissions
       '@arabat/ui':
         specifier: workspace:*
         version: link:../../packages/ui

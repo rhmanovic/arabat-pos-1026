@@ -51,6 +51,7 @@ Planned table (status per milestone):
 | `/manager/reports` | Reports dashboard (tabs per permission) | any `reports.*` | M7 ✓ |
 | `/manager/restaurant/tables`, `/modifiers` | 🧩 Restaurant setup | `catalog.manage` | M9 |
 | `/manager/online` | Online store: orders (status filter, detail, fulfilment steps, cancel unpaid), store settings (status, address, branding, fulfilment, fees, reservation time, payment methods), products online | `online.orders` / `online.manage` | M10 ✓ |
+| `/manager/subscription` | Own plan, status, usage vs limits, available plans | `merchant.settings.read` | M8 ✓ |
 | `/manager/settings/company` | Company profile, language, timezone | `merchant.settings.read` | M1 |
 | `/manager/settings/payment-methods` | Payment methods | `payment_methods.manage` | M4 |
 | `/manager/settings/receipts` | Receipt layout | `merchant.settings.update` | M4 |
@@ -107,13 +108,12 @@ No session; every call goes to the public store API. Cart kept per store in the 
 | Route | Screen | Permission | Milestone |
 |---|---|---|---|
 | `/platform/login`, `/platform/mfa` | Sign in + TOTP | 🔓 | M1 |
-| `/platform` | Overview (merchant counts, health) | operator | M1 / M8 |
-| `/platform/merchants`, `/new`, `/:id` | Merchant list, create (with owner invite), detail, suspend | `platform.super_admin` / `platform.support` | M1 |
-| `/platform/plans`, `/:id` | Plans & features | `platform.billing` | M8 |
-| `/platform/subscriptions` | Merchant subscriptions | `platform.billing` | M8 |
-| `/platform/operators` | Operator accounts | `platform.super_admin` | M1 |
-| `/platform/audit` | Platform audit log | `platform.super_admin` | M1 |
-| `/platform/system` | System status | operator | M8 |
+| `/platform` | Overview (merchant counts by status, trials ending, lapsed, usage, plans, newest) | any operator | M8 ✓ |
+| `/platform/merchants` | List, search, status filter, create merchant (dialog) | any operator (create: super admin, support) | M8 ✓ |
+| `/platform/merchants/:id` | Profile, owner, onboarding, usage vs limits, branches, subscription (change with readiness check), history, platform actions; suspend / reactivate / close | any operator (actions per role) | M8 ✓ |
+| `/platform/plans` | Plans with limits, features, informational price; create / edit | any operator (edit: super admin, billing) | M8 ✓ |
+| `/platform/audit` | Platform audit log | super admin, support | M8 ✓ |
+| `/platform/operators` | Operator accounts | — | CLI only (AUTH.md §8) |
 
 ---
 
@@ -242,6 +242,15 @@ area with open-order totals and kitchen badges, takeaway/pickup queue),
 items with kitchen status, send, cancel/waste, move, combine, split bill → payment →
 receipt), `/pos/kitchen` (station filter, New / Preparing / Ready columns, timers). Kitchen-
 only staff land on `/pos/kitchen`. Sales list and reports show the service type.
+
+### Platform and subscription API (Prompt 17)
+
+| Method & path | Platform role |
+|---|---|
+| `GET /platform/overview`, `GET /platform/merchants?q=&status=&page=`, `GET /platform/merchants/:id`, `GET /platform/merchants/:id/plan-check?planId=`, `GET /platform/plans` | any operator |
+| `POST /platform/merchants`, `POST /platform/merchants/:id/status` (close: super admin only), `GET /platform/audit?merchantId=&action=` | super admin, support |
+| `PUT /platform/merchants/:id/subscription`, `POST /platform/plans`, `PUT /platform/plans/:id` | super admin, billing |
+| `GET /manager/subscription` | merchant `merchant.settings.read` (own merchant only) |
 
 ### Online store API (Prompt 16)
 

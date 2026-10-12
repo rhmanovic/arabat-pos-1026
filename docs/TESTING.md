@@ -66,6 +66,45 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after Prompt 17 (2026-10-12, local run)
+- `pnpm verify` ✓ (145 unit/web), `pnpm test:integration` ✓ (146), `pnpm test:e2e` ✓ (33).
+- `platform.int.test.ts` (7), security and authorization:
+  - Anonymous, owner manager, POS and a manager cookie presented as `plat_sid` all get
+    401 on `/platform/*`; an operator cookie gets 401 on manager APIs.
+  - Billing cannot suspend; support cannot change subscriptions, close or create plans;
+    billing cannot read the audit log or onboard merchants; unknown merchant → 404.
+  - Search by name/owner e-mail; wildcard characters are plain text; usage counts
+    (branches, employees, registers) and onboarding facts.
+  - A merchant sees only its own subscription; RLS hides other merchants' subscriptions;
+    the runtime role cannot update subscriptions or merchant status without an operator
+    context, nor delete subscriptions.
+  - Suspension (stale version refused): manager and POS sessions end (2 ended), sign-in
+    → `MERCHANT_SUSPENDED`, public store 404; audited with operator, reason and session
+    count and visible in the merchant's own audit trail; reactivation restores sign-in
+    and the store; closing by a super admin is final.
+  - Limits: branch, register, 4th invitation, restaurant enable, non-draft store refused
+    on the Basic plan; 6 concurrent product creations on a 3-product plan → exactly 3
+    created — verified to fail (6 created) without the subscription row lock; archiving
+    frees a slot and restoring needs one.
+  - Downgrade with 2 branches/registers → `PLAN_CHANGE_BLOCKED` with reasons; upgrade
+    fits; past-due status does not block work; history records operator and reason;
+    stale version refused.
+  - Onboarding: new owner gets a set-password e-mail, cannot sign in before, signs in
+    after, sees the chosen plan; an existing account becomes owner keeping its password
+    (audited `existingOwnerAccount`).
+  - Plans: unique code (case-insensitive), price requires a period, exact price
+    `12.500`, one default at a time, the default cannot be unset, overview counts.
+- Updated: `auth.int.test.ts` suspension fixture now needs an operator context and
+  expects `MERCHANT_SUSPENDED`.
+- Web: platform merchants list, suspend dialog (reason required, version sent), support
+  vs billing actions, blocked downgrade explained and not savable, plan editor (empty
+  limit = unlimited), role-based navigation; manager subscription page (status, usage,
+  missing features, plan prices) and permission guard.
+- `e2e/platform.spec.ts`: operator created with the CLI signs in with TOTP, finds the
+  merchant, moves it to Basic (readiness shown), merchant's second branch refused and its
+  subscription page shows 1 / 1; suspension signs the owner out and sign-in shows
+  "company suspended"; audit log shows the reason; reactivation restores sign-in.
+
 ### Results after Prompt 16 (2026-10-12, local run)
 - `pnpm verify` ✓ (138 unit/web), `pnpm test:integration` ✓ (139), `pnpm test:e2e` ✓ (32).
 - `ecommerce.int.test.ts` (4): storefront shows only listed products of a published store,

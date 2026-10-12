@@ -191,6 +191,16 @@ Restaurant permissions (Prompt 15): `restaurant.manage` (branch: tables, areas, 
 merchant-wide: module switch, modifier groups, recipes), `restaurant.orders`,
 `restaurant.void_item` (cancel items already sent to the kitchen), `kitchen.access`.
 
+Platform roles (Prompt 17): all operators read the overview, merchants, plans and plan
+checks; `platform.support` and `platform.super_admin` create merchants, suspend and
+reactivate, and read the platform audit log; only `platform.super_admin` closes a
+merchant; `platform.billing` and `platform.super_admin` manage plans and subscriptions.
+Merchant owners and employees never hold platform roles (separate realm, ADR-0007), and
+the database refuses merchant-status and subscription changes without an operator context
+(ADR-0080). Sign-in of a user whose companies are all suspended answers
+`MERCHANT_SUSPENDED` (after the password is proven); invitations of a suspended company
+cannot be accepted.
+
 Online store permissions (Prompt 16): `online.manage` (merchant-wide: store settings,
 listings, reconciliation), `online.orders` (branch: view and move online orders of the
 fulfilment branch). `company_manager` has both, `branch_manager` has `online.orders`.
@@ -288,6 +298,7 @@ prints a one-time password and the TOTP secret/otpauth URI. Development seed:
 - Roles: `platform.super_admin`, `platform.support`, `platform.billing`
   (code-defined, small set).
 - MFA mandatory; short sessions; all actions audited in the platform audit log.
+- The `--` separator pnpm forwards to the CLI is ignored (fixed in Prompt 17).
 - Merchant impersonation/support access is **not** provided initially; if
   added, it requires explicit merchant consent or a recorded reason, a time
   limit, read-only by default, and is visible to the merchant owner.

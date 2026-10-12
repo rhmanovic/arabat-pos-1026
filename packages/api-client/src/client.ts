@@ -154,6 +154,20 @@ import {
   storeProductListSchema,
   storeProductSchema,
   storefrontSchema,
+  type ChangeSubscription,
+  type CreateMerchant,
+  type PlatformAuditQuery,
+  type PlatformMerchantQuery,
+  type SavePlan,
+  managerSubscriptionSchema,
+  planCheckSchema,
+  planListSchema,
+  planSchema,
+  platformAuditListSchema,
+  platformMerchantDetailSchema,
+  platformMerchantListSchema,
+  platformOverviewSchema,
+  subscriptionViewSchema,
 } from '@arabat/contracts';
 import { z } from 'zod';
 import { ApiError, ContractError, NetworkError, toApiError } from './errors.js';
@@ -284,6 +298,47 @@ export function createApiClient(options: ApiClientOptions = {}) {
         }),
       acceptInvitation: (body: AcceptInvitation) =>
         request('POST', '/auth/invitations/accept', { body, schema: acceptInvitationResultSchema }),
+    },
+    /** The signed-in merchant's own subscription (Prompt 17). */
+    subscription: {
+      get: () => request('GET', '/manager/subscription', { schema: managerSubscriptionSchema }),
+    },
+    /** SaaS operator console (platform realm only). */
+    platform: {
+      overview: () => request('GET', '/platform/overview', { schema: platformOverviewSchema }),
+      merchants: (query: PlatformMerchantQuery = {}) =>
+        request('GET', `/platform/merchants?${toParams(query)}`, {
+          schema: platformMerchantListSchema,
+        }),
+      merchant: (id: string) =>
+        request('GET', `/platform/merchants/${id}`, { schema: platformMerchantDetailSchema }),
+      createMerchant: (body: CreateMerchant) =>
+        request('POST', '/platform/merchants', { body, schema: platformMerchantDetailSchema }),
+      setStatus: (
+        id: string,
+        body: { status: 'active' | 'suspended' | 'closed'; reason: string; version: number },
+      ) =>
+        request('POST', `/platform/merchants/${id}/status`, {
+          body,
+          schema: platformMerchantDetailSchema,
+        }),
+      planCheck: (id: string, planId: string) =>
+        request('GET', `/platform/merchants/${id}/plan-check?${toParams({ planId })}`, {
+          schema: planCheckSchema,
+        }),
+      changeSubscription: (id: string, body: ChangeSubscription) =>
+        request('PUT', `/platform/merchants/${id}/subscription`, {
+          body,
+          schema: subscriptionViewSchema,
+        }),
+      plans: () => request('GET', '/platform/plans', { schema: planListSchema }),
+      savePlan: (id: string | null, body: SavePlan) =>
+        request(id ? 'PUT' : 'POST', id ? `/platform/plans/${id}` : '/platform/plans', {
+          body,
+          schema: planSchema,
+        }),
+      audit: (query: PlatformAuditQuery = {}) =>
+        request('GET', `/platform/audit?${toParams(query)}`, { schema: platformAuditListSchema }),
     },
     merchant: {
       get: () => request('GET', '/manager/merchant', { schema: merchantProfileSchema }),

@@ -164,6 +164,8 @@ Before reporting work as done, run `pnpm verify`, `pnpm test:integration` and
   `merchant_id` themselves.
 - Prettier reformats long literals; scripted text edits must assert that the target
   string exists before replacing.
+- Merchant status and subscription updates need `app.operator_id` (database trigger), also in
+  owner-role fixtures: `select set_config('app.operator_id', gen_random_uuid()::text, true)`.
 - Uploaded files go through `FileStorage` (`apps/api/src/kernel/storage`); never write
   to disk directly. Local storage lives in `var/` (git-ignored).
 - In this cloud sandbox: Node 24 is at `~/.local/node24/bin`, Docker must be started
@@ -175,7 +177,10 @@ Before reporting work as done, run `pnpm verify`, `pnpm test:integration` and
 Implemented: foundation, authentication, branches/employees/RBAC, manager dashboard,
 product catalog, inventory engine, payments/registers/shifts, POS checkout, returns/refunds,
 purchasing and branch transfers, customers, reports, restaurant module, online store with a
-sandbox payment gateway (see `docs/PROGRESS.md`). No real payment gateway is connected.
+sandbox payment gateway, platform administration with subscription plans and limits (see
+`docs/PROGRESS.md`). No real payment gateway is connected and nothing is billed.
+Plan limits are checked with `SubscriptionsService.assertCapacity` in the creating transaction;
+platform code uses `withPlatformContext` (merchant status/subscription changes need it).
 Online reservations (`stock_reservations`) are honoured by `StockLedgerService.apply`.
 Stock consumption of sold items is expanded by `stockConsumption` (recipes, modifier ingredients).
 Stock balances change **only** through `StockLedgerService.apply` (inventory module).

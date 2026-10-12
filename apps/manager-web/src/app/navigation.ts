@@ -119,6 +119,13 @@ export const NAV: readonly NavItem[] = [
     section: 'organization',
   },
   {
+    key: 'subscription',
+    to: '/subscription',
+    anyOf: ['merchant.settings.read'],
+    available: true,
+    section: 'organization',
+  },
+  {
     key: 'settings',
     to: '/settings',
     anyOf: ['merchant.settings.read'],

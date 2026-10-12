@@ -179,6 +179,32 @@ Restaurant (Prompt 15):
 - **BR-139** Paid restaurant items are corrected by refunds of their bill (Prompt 11),
   not by editing the order.
 
+Platform and subscriptions (Prompt 17):
+- **BR-150** Every merchant has exactly one subscription to a plan. New merchants start on
+  the default plan (trial when the plan has trial days). Plans can be archived, never
+  deleted; archived plans cannot be assigned.
+- **BR-151** Plan limits (empty = unlimited): active branches, employees (active
+  non-owner members plus pending invitations), active products, active registers. Creating
+  or reactivating beyond a limit is refused (`PLAN_LIMIT_REACHED`); existing records are
+  never removed. A new branch also needs room for its default register.
+- **BR-152** Merchant status is active, suspended or closed and is changed only by
+  platform operators, with a reason. Support and super admins suspend and reactivate; only
+  super admins close. Closing is final.
+- **BR-153** Suspension takes effect at once: every session ends, sign-in answers
+  "company suspended", invitations cannot be accepted and the online store disappears.
+  Data is kept. Online payments already started are still recorded (no money is lost).
+- **BR-154** A plan change is allowed only when current usage fits the new plan and no
+  feature in use (restaurant module, non-draft online store) would be removed.
+- **BR-155** No automatic billing. Plan prices are informational; subscription status
+  (trial, active, past due, cancelled, expired) and dates are set by operators and never
+  block daily work by themselves (ADR-0082).
+- **BR-156** Merchants see only their own subscription, usage and the public plans.
+- **BR-157** Operators see merchant summaries (counts, plan, last sale date), never sales
+  lines, customers or other business documents.
+- **BR-158** Operators are created only with the CLI; every platform action (sign-in,
+  merchant creation, status, subscription and plan changes) is audited with operator,
+  reason and IP.
+
 Online store (Prompt 16):
 - **BR-140** A store is draft (hidden), published (open for orders) or paused (browse
   only). Publishing needs a fulfilment branch, pickup or delivery, and at least one
@@ -266,7 +292,7 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
 | OQ-005 | Does the POS need to work offline (network outage) and sync later?      | POS architecture    |
 | OQ-006 | Employee POS login: email + password (implemented default) — add quick PIN switching on shared terminals? | POS |
 | OQ-007 | Is the BR-033 rounding rule (half-up per line) acceptable?              | Sales slice         |
-| OQ-008 | Subscription plans / billing for tenants: in scope, and when?           | Platform slice      |
+| OQ-008 | ~~Subscription plans~~ **Resolved:** plans and limits implemented (Prompt 17); billing remains open in OQ-022. | — |
 | OQ-009 | Receipt requirements (printer types, legal fields, e-receipts)?         | Sales slice         |
 | OQ-010 | ~~Merchant sign-up~~ **Resolved:** self-service owner registration (Prompt 4, BR-040). | — |
 | OQ-011 | Hosting provider, region and data residency (Kuwait / GCC requirements?) — affects cost | Deployment |
@@ -277,6 +303,7 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
 | OQ-017 | Returns without a receipt or at another branch: allowed? Implemented: receipt required, same branch. | Refunds |
 | OQ-019 | Loyalty points, store credit and promotions: rules (earning rate, expiry, use as payment)? Also: should customers be able to request erasure of their personal data (anonymisation while keeping sales)? Not implemented. | Customers |
 | OQ-020 | Restaurant: service charge or tips? Courses/fire timing? Printing tickets on kitchen printers (vs. screen)? Table reservations? Not implemented. | Restaurant |
+| OQ-022 | Subscription pricing and billing: prices per plan, billing provider, invoices/VAT, what happens automatically when a subscription lapses (grace period, read-only, suspension), and data retention after closing? Implemented: no billing, lapse never blocks, closing keeps data. | Platform |
 | OQ-021 | Online store: which gateway(s) first and the merchant contracts/credentials; delivery zones and fees per area; shopper accounts, coupons, scheduled orders; cash on delivery; automatic gateway refunds? Not implemented. | Online store |
 | OQ-018 | Supplier invoices, payments and balances (accounts payable) and returns to suppliers: needed, and with which payment terms? Not implemented yet. | Purchasing |
 | OQ-013 | Card payments: manual entry of card amount only, or integrated card terminals (e.g. KNET)? | M4 / later |

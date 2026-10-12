@@ -12,6 +12,8 @@ import { upsertOperator } from '../../modules/platform-admin/operators.js';
  *   pnpm --filter @arabat/api run platform:create-operator -- --email a@b.c --name "Name" --role platform.super_admin
  */
 const { values } = parseArgs({
+  // pnpm forwards the `--` separator as an argument; it is ignored.
+  args: process.argv.slice(2).filter((arg) => arg !== '--'),
   options: {
     email: { type: 'string' },
     name: { type: 'string' },

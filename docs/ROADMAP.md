@@ -131,11 +131,11 @@ Acceptance criteria:
 4. CSV export.
 
 ## M8 — Platform administration & subscriptions
-Blocked by: OQ-008 (billing).
+Status: implemented without billing (Prompt 17). Billing blocked by OQ-022.
 
 Acceptance criteria:
 1. Plans with features/limits; assign plan to merchant; feature gates enforced
-   by the backend (`FEATURE_NOT_IN_PLAN`).
+   by the backend (`PLAN_FEATURE_UNAVAILABLE`, `PLAN_LIMIT_REACHED`).
 2. Merchant list, detail, suspend/reactivate; platform audit log.
 3. Platform metrics (merchants, active branches, sales volume) without exposing
    merchant line-level data.

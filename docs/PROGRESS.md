@@ -278,5 +278,21 @@ charges in memory (single API instance); no shopper accounts, coupons, delivery 
 cash on delivery or automatic gateway refunds; paid online orders are refunded through
 the existing refund engine (gateway refund stays pending per BR-095).
 
+### 2026-10-12 — Prompt 17: Platform administration and subscriptions
+Implemented: migrations 0027–0028; `subscriptions` module (plans, one subscription per
+merchant, history, limit and feature checks used by branches, registers, invitations,
+employees, products, restaurant and online store; `/manager/subscription`);
+`platform-admin` API (overview, merchant list/search/detail with usage and onboarding,
+create merchant with owner set-up e-mail, suspend/reactivate/close with session
+revocation, plan management, subscription changes with readiness check, platform audit);
+database guards for operator-only changes; `MERCHANT_SUSPENDED` sign-in answer; platform
+console screens (overview, merchants, merchant detail, plans, audit) and the manager
+subscription page; CLI fix for `platform:create-operator -- …`.
+Verified: see TESTING.md.
+Not done / open: **no billing** (prices informational, no invoices or payment collection
+— OQ-022); lapsed subscriptions are not acted on automatically; operator accounts are
+managed with the CLI only (no screen); no merchant impersonation; the shared
+`restaurant`/`ecommerce` feature list is fixed in code.
+
 ## Next step
-Prompt 17 — platform administration and subscriptions.
+Prompt 18 — final audit and production readiness report.

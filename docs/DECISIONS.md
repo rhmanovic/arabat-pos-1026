@@ -656,3 +656,44 @@ ADR; supersede it.
   created.
 - **Consequences:** The public catalog shows availability as on-hand minus reservations
   and never the exact stock (offered maximum ≤ 20).
+
+## ADR-0080 — Platform access to merchant data: narrow functions and an operator context
+- **Date:** 2026-10-12 · **Status:** Accepted (Prompt 17)
+- **Decision:** The API keeps a single runtime role without `BYPASSRLS`. Platform
+  operators read across merchants only through `SECURITY DEFINER` functions that return
+  summaries (`platform_merchants`, `platform_overview`, `platform_audit`,
+  `platform_plan_counts`) — never sales lines, customers or other business documents.
+  Anything about one merchant (detail, status, subscription, onboarding) runs in
+  `DatabaseService.withPlatformContext(operatorId, merchantId)`: that merchant's RLS
+  context plus `app.operator_id`. The database refuses subscription updates, `changed`
+  subscription events and merchant status changes without an operator context
+  (triggers), so no merchant code path can lift a suspension or change its own plan; a
+  closed merchant cannot be reopened. Platform actions are audited with the operator as
+  actor and the merchant as event owner, so the merchant's own audit trail shows them.
+- **Consequences:** The `platform_*` functions are callable by the runtime role; only
+  the platform-admin module uses them (reviewed in code). Impersonation is still not
+  provided (AUTH.md §8).
+
+## ADR-0081 — Subscription plans and backend-enforced limits
+- **Date:** 2026-10-12 · **Status:** Accepted (BR-150, BR-151, BR-154)
+- **Decision:** Global `plans` (optional limits for branches, employees incl. pending
+  invitations, active products, registers; features `restaurant`, `ecommerce`; trial
+  days; informational price) and one `subscriptions` row per merchant with an
+  append-only `subscription_events` history. `SubscriptionsService.assertCapacity` runs
+  inside the creating transaction (branch, register, invitation, product, and
+  reactivations) and locks the subscription row when the plan is limited, so
+  concurrent creations cannot exceed it. Features are checked when the restaurant
+  module is enabled and when the online store leaves draft. Plan changes are checked
+  against current usage and features in use; a plan that does not fit is refused with
+  the reasons (`PLAN_CHANGE_BLOCKED`) instead of disabling data.
+- **Consequences:** Starting plans: `standard` (default, unlimited, all features,
+  30-day trial), `basic`, `professional`; existing merchants were moved to `standard`.
+
+## ADR-0082 — No automatic billing; lapsed subscriptions do not lock merchants out
+- **Date:** 2026-10-12 · **Status:** Accepted until OQ-022 is decided (BR-155)
+- **Decision:** Subscription status and dates are recorded by operators. Nothing is
+  charged, invoiced or collected automatically, and a past-due, expired or ended trial
+  never blocks selling: the merchant and the operators see it, and only an operator's
+  explicit suspension stops access. Prices on plans are display values only.
+- **Consequences:** Billing (provider, invoices, dunning, automatic suspension) needs the
+  owner's pricing and provider decision first.
