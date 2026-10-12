@@ -331,6 +331,16 @@ Below `md` the sale screen shows products full screen with a bottom «Cart (n) �
 cart opens full screen with a back button. Shift strip actions scroll on one row; header session
 actions fold into a ☰ menu below `sm`. Desktop/tablet unchanged. Phone e2e project added.
 
+### 2026-10-12 — Phone review fixes
+Fixed: the sale grid overflowed phones (implicit `auto` column grew to the category bar's width;
+now `minmax(0,1fr)` + `min-w-0`). Touch targets ≥ 44px (☰, menu items, shift actions, cart
+stepper/edit/remove); language switch moves into the ☰ menu on phones; shift actions wrap
+instead of scrolling; «Clear» needs a second tap within 3 s; tile highlight + short vibration
+on add; short search hint and «Discount» label; scrollbars hidden on phones; compact
+three-column dashboard cards; show/hide password on sign-in; POS sign-in card at the top on
+phones. Kept by owner decision: cart −/+ shown on tap; on-hand quantity on every tracked tile.
+Not done: camera barcode scanning, web app manifest (installable app).
+
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025
 before any production launch.

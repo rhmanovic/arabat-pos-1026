@@ -42,6 +42,8 @@ export const commonEn = {
     passwordsDiffer: 'Passwords do not match.',
     fullName: 'Full name',
     signingIn: 'Signing in…',
+    showPassword: 'Show',
+    hidePassword: 'Hide',
     forgotPassword: 'Forgot your password?',
     backToSignIn: 'Back to sign in',
     chooseMerchant: 'Choose a company',

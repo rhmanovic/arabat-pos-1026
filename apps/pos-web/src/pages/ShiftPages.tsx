@@ -199,8 +199,8 @@ export function ShiftStrip({ extra }: { extra?: ReactNode }) {
         })}
       </span>
       <div className="hidden flex-1 sm:block" />
-      {/* On phones the actions take their own row and scroll sideways instead of overflowing. */}
-      <div className="-mx-1 flex w-full gap-2 overflow-x-auto px-1 sm:mx-0 sm:w-auto sm:overflow-visible sm:px-0 [&>*]:shrink-0 [&>*]:whitespace-nowrap">
+      {/* On phones the actions take their own row and wrap with full-size touch targets. */}
+      <div className="flex w-full flex-wrap gap-2 sm:w-auto [&>*]:inline-flex [&>*]:min-h-11 [&>*]:items-center [&>*]:whitespace-nowrap sm:[&>*]:min-h-0">
         {extra}
         <Link
           to="/shift"

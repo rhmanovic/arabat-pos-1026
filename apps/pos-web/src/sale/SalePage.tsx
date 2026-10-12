@@ -70,6 +70,26 @@ export function SalePage() {
   const [selected, setSelected] = useState<string | null>(null);
   /** Phones show the catalog full screen; the cart opens over it from the bottom bar. */
   const [cartOpen, setCartOpen] = useState(false);
+  /** Brief highlight of the tile just added, plus a short vibration where supported. */
+  const [flash, setFlash] = useState<string | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const feedback = (variantId: string) => {
+    try {
+      navigator.vibrate?.(10);
+    } catch {
+      // Vibration is optional.
+    }
+    setFlash(variantId);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setFlash(null), 400);
+  };
+  /** "Clear" needs a second tap within a few seconds so one slip cannot wipe the sale. */
+  const [confirmClear, setConfirmClear] = useState(false);
+  useEffect(() => {
+    if (!confirmClear) return;
+    const id = setTimeout(() => setConfirmClear(false), 3000);
+    return () => clearTimeout(id);
+  }, [confirmClear]);
   const [dialog, setDialog] = useState<'pay' | 'discount' | 'suspend' | 'held' | 'recent' | null>(
     null,
   );
@@ -115,6 +135,7 @@ export function SalePage() {
     const match = exact ?? (visible.length === 1 ? visible[0] : undefined);
     if (match) {
       cart.add(match.variantId);
+      feedback(match.variantId);
       setSearch('');
       setNotFound(null);
     } else setNotFound(code);
@@ -161,10 +182,10 @@ export function SalePage() {
           </>
         }
       />
-      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] gap-3 md:grid-cols-[1fr_24rem]">
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] gap-3 md:grid-cols-[minmax(0,1fr)_24rem]">
         <section
           aria-labelledby="catalog-title"
-          className="flex min-h-0 flex-col gap-3 rounded-lg bg-surface p-3"
+          className="flex min-w-0 min-h-0 flex-col gap-3 rounded-lg bg-surface p-3"
         >
           <h1 id="catalog-title" className="sr-only">
             {t('register.catalogTitle')}
@@ -179,7 +200,7 @@ export function SalePage() {
               ref={searchRef}
               type="search"
               aria-label={t('sale.search')}
-              placeholder={t('sale.searchHint')}
+              placeholder={t('sale.searchHintShort')}
               autoComplete="off"
               className="h-14 w-full rounded-lg border border-border bg-surface px-4 text-lg outline-none focus:border-primary"
               value={search}
@@ -195,7 +216,7 @@ export function SalePage() {
             </p>
           ) : null}
           <div
-            className="flex gap-2 overflow-x-auto pb-1"
+            className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] md:[scrollbar-width:auto]"
             role="group"
             aria-label={t('sale.allCategories')}
           >
@@ -218,7 +239,7 @@ export function SalePage() {
             ))}
           </div>
           <ul
-            className="grid min-h-0 flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3 lg:grid-cols-4"
+            className="grid min-h-0 flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto [scrollbar-width:none] sm:grid-cols-3 md:[scrollbar-width:auto] lg:grid-cols-4"
             aria-label={t('register.catalogTitle')}
           >
             {catalog.isPending ? (
@@ -242,8 +263,14 @@ export function SalePage() {
                 <li key={item.variantId}>
                   <button
                     type="button"
-                    onClick={() => cart.add(item.variantId)}
-                    className="flex min-h-28 w-full flex-col justify-between gap-1 rounded-lg border border-border p-3 text-start hover:border-primary active:bg-primary-soft"
+                    onClick={() => {
+                      cart.add(item.variantId);
+                      feedback(item.variantId);
+                    }}
+                    className={cn(
+                      'flex min-h-28 w-full flex-col justify-between gap-1 rounded-lg border border-border p-3 text-start transition-colors hover:border-primary active:bg-primary-soft',
+                      flash === item.variantId && 'border-primary bg-primary-soft',
+                    )}
                     data-testid="product-tile"
                   >
                     <span className="line-clamp-2 font-medium">
@@ -285,9 +312,8 @@ export function SalePage() {
               {t('sale.cart')}
             </h2>
             <Button
-              size="sm"
               variant="secondary"
-              className="md:hidden"
+              className="h-11 md:hidden"
               onClick={() => setCartOpen(false)}
             >
               {t('sale.backToProducts')}
@@ -340,10 +366,14 @@ export function SalePage() {
                       <div className="mt-2 flex items-center gap-2">
                         <QuantityStepper line={l} />
                         <span className="flex-1" />
-                        <Button size="sm" variant="secondary" onClick={() => setEditing(l)}>
+                        <Button className="h-11" variant="secondary" onClick={() => setEditing(l)}>
                           {t('sale.edit')}
                         </Button>
-                        <Button size="sm" variant="secondary" onClick={() => cart.remove(l.key)}>
+                        <Button
+                          className="h-11"
+                          variant="secondary"
+                          onClick={() => cart.remove(l.key)}
+                        >
                           {t('sale.remove')}
                         </Button>
                       </div>
@@ -382,10 +412,15 @@ export function SalePage() {
           <div className="mt-3 grid grid-cols-3 gap-2">
             <Button
               variant="secondary"
+              className={cn(confirmClear && 'border-danger bg-danger/10 text-danger')}
               disabled={cart.state.lines.length === 0}
-              onClick={() => cart.clear()}
+              onClick={() => {
+                if (!confirmClear) return setConfirmClear(true);
+                setConfirmClear(false);
+                cart.clear();
+              }}
             >
-              {t('sale.clear')}
+              {confirmClear ? t('sale.confirmClear') : t('sale.clear')}
             </Button>
             <Button
               variant="secondary"
@@ -398,8 +433,9 @@ export function SalePage() {
               variant="secondary"
               disabled={!canDiscount || cart.state.lines.length === 0}
               onClick={() => setDialog('discount')}
+              aria-label={t('sale.orderDiscount')}
             >
-              {t('sale.orderDiscount')}
+              {t('sale.discountShort')}
             </Button>
           </div>
           <Button
@@ -482,7 +518,7 @@ function QuantityStepper({ line }: { line: CartLine }) {
         aria-label={t('sale.decrease')}
         disabled={milli === null}
         onClick={() => step(-1000n)}
-        className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-surface text-lg font-semibold hover:border-primary disabled:opacity-50"
+        className="flex size-11 items-center justify-center rounded-md border border-border bg-surface text-lg font-semibold hover:border-primary disabled:opacity-50"
       >
         −
       </button>
@@ -494,7 +530,7 @@ function QuantityStepper({ line }: { line: CartLine }) {
         aria-label={t('sale.increase')}
         disabled={milli === null}
         onClick={() => step(1000n)}
-        className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-surface text-lg font-semibold hover:border-primary disabled:opacity-50"
+        className="flex size-11 items-center justify-center rounded-md border border-border bg-surface text-lg font-semibold hover:border-primary disabled:opacity-50"
       >
         +
       </button>

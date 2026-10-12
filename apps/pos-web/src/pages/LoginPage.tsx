@@ -19,7 +19,7 @@ function PosAuthShell({ children }: { children: ReactNode }) {
         <span className="text-lg font-semibold">{t('common:appName')}</span>
         <LanguageSwitcher />
       </div>
-      <div className="flex flex-1 items-center justify-center py-8">
+      <div className="flex flex-1 items-start justify-center py-6 sm:items-center sm:py-8">
         <div className="flex w-full max-w-md flex-col gap-5 rounded-xl bg-surface p-6 text-fg shadow-lg sm:p-8">
           {children}
           <ApiStatus />

@@ -44,6 +44,8 @@ export const commonAr: CommonResources = {
     passwordsDiffer: 'كلمتا المرور غير متطابقتين.',
     fullName: 'الاسم الكامل',
     signingIn: 'جارٍ تسجيل الدخول…',
+    showPassword: 'إظهار',
+    hidePassword: 'إخفاء',
     forgotPassword: 'نسيت كلمة المرور؟',
     backToSignIn: 'العودة لتسجيل الدخول',
     chooseMerchant: 'اختر الشركة',

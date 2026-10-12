@@ -91,6 +91,7 @@ export function MerchantLoginForm({
     LoginResult,
     { status: 'select_merchant' }
   > | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   const form = useForm({
     resolver: zodResolver(loginFormSchema),
     defaultValues: { email: '', password: '' },
@@ -151,14 +152,24 @@ export function MerchantLoginForm({
         error={form.formState.errors.password && t('errors.VALIDATION_FAILED')}
       >
         {(p) => (
-          <Input
-            {...p}
-            {...form.register('password')}
-            type="password"
-            autoComplete="current-password"
-            dir="ltr"
-            className={inputClass}
-          />
+          <div className="relative">
+            <Input
+              {...p}
+              {...form.register('password')}
+              type={showPassword ? 'text' : 'password'}
+              autoComplete="current-password"
+              dir="ltr"
+              className={cn(inputClass, 'pe-20')}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-pressed={showPassword}
+              className="absolute inset-y-0 end-0 min-w-11 px-3 text-sm font-medium text-primary"
+            >
+              {showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+            </button>
+          </div>
         )}
       </Field>
       <Button

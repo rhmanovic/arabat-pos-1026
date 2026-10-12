@@ -93,12 +93,17 @@ export function POSLayout() {
               numberingSystem: 'latn',
             })}
           </time>
-          <LanguageSwitcher />
+          <LanguageSwitcher className="hidden sm:inline-flex" />
           {/* Phones: the session actions fold into one menu so the strip fits one line. */}
           <div className="sm:hidden">
             <Menu
               trigger={
-                <Button variant="secondary" size="sm" aria-label={t('moreActions')}>
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  className="size-11 text-lg"
+                  aria-label={t('moreActions')}
+                >
                   ☰
                 </Button>
               }
@@ -109,6 +114,13 @@ export function POSLayout() {
                 </MenuItem>
               ) : null}
               <MenuItem onSelect={() => lockNow()}>{t('common:lock.lockNow')}</MenuItem>
+              <MenuItem
+                onSelect={() =>
+                  void i18n.changeLanguage(i18n.resolvedLanguage === 'en' ? 'ar' : 'en')
+                }
+              >
+                {i18n.resolvedLanguage === 'en' ? 'العربية' : 'English'}
+              </MenuItem>
               <MenuItem tone="danger" onSelect={() => logout.mutate()}>
                 {t('common:actions.signOut')}
               </MenuItem>

@@ -265,6 +265,10 @@ describe('pos app', () => {
     await userEvent.click(within(lineDialog).getByRole('button', { name: 'Done' }));
     await userEvent.click(screen.getByTestId('cart-line'));
     expect(screen.queryByRole('button', { name: 'Increase quantity' })).toBeNull();
+    // Clear needs a second tap: one slip does not wipe the sale.
+    await userEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(screen.getAllByTestId('cart-line')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Confirm clear' })).toBeInTheDocument();
     // Cashiers without the permission get no discount button.
     expect(screen.getByRole('button', { name: 'Discount on sale' })).toBeDisabled();
     await userEvent.type(search, 'nothing{Enter}');
