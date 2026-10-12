@@ -109,6 +109,7 @@ approval from the product owner and a new entry in `docs/DECISIONS.md`.
 | `docs/ROADMAP.md`        | Milestones and their acceptance criteria                    |
 | `docs/PROGRESS.md`       | What is actually done, verified, and pending                |
 | `docs/TESTING.md`        | Testing strategy, commands, and coverage expectations       |
+| `docs/OPERATIONS.md`     | Configuration, release, migrations rollback, backups, monitoring, incidents |
 
 Rule: if a requirement or decision is confirmed in conversation, it must be
 written into the appropriate document in the same session.

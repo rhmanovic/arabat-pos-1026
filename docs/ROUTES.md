@@ -1,10 +1,10 @@
 # Application Routing Structure
 
-Status: **Implemented routes are marked ✓; others are designed only.** Each SPA uses React Router (data
-mode, `createBrowserRouter`) with its own `basename`, lazy-loaded feature
-routes, and a route-level `RequirePermission` guard (UX only — the API is the
-authority). Feature-gated routes (restaurant, e-commerce) render only if the
-subscription includes the feature.
+Status: the tables below list the implemented routes (verified against each app's
+`routes.tsx`, Prompt 18). Each SPA uses React Router (data mode, `createBrowserRouter`)
+with its own `basename` and a route-level `RequirePermission` guard (UX only — the API is
+the authority). Routes are not lazy-loaded yet (recommended for the manager app). Plan
+features (restaurant, online store) are enforced by the API (`PLAN_FEATURE_UNAVAILABLE`).
 
 Legend: 🔓 public · 🔑 permission required · 🧩 feature-gated · ⏳ later milestone
 
@@ -12,83 +12,48 @@ Legend: 🔓 public · 🔑 permission required · 🧩 feature-gated · ⏳ lat
 
 ## 1. `/manager` — manager-web
 
-Implemented screens (Prompt 6): `/` dashboard, `/settings` company profile,
-`/branches`, `/employees`, `/employees/:membershipId`, `/roles`, plus
-`/login`, `/register`, `/forgot-password`, `/reset-password`, `/accept-invite`.
-Modules not built yet appear in the sidebar **disabled with "Not available yet"** (none at present),
-never as working pages. Sidebar items are hidden without the required permission;
-every page is additionally wrapped in `RequirePermission` and every API call is
-enforced server-side.
+Public: `/login`, `/register`, `/forgot-password`, `/reset-password`, `/accept-invite`.
+Every other route requires a manager session; each page is wrapped in `RequirePermission`
+(UX only) and every API call is enforced server-side. Sidebar items are hidden without
+the permission.
 
-Planned table (status per milestone):
-
-| Route | Screen | Permission | Milestone |
-|---|---|---|---|
-| `/manager/login` | Sign in | 🔓 | M1 |
-| `/manager/select-merchant` | Choose company (multi-membership users) | session | M1 |
-| `/manager/accept-invite/:token` | Accept invitation, set password | 🔓 | M1 |
-| `/manager/forgot-password`, `/manager/reset-password/:token` | Password reset | 🔓 | M1 |
-| `/manager` | Dashboard (KPIs for accessible branches) | `manager.access` | M1 (shell), M7 (KPIs) |
-| `/manager/branches`, `/manager/branches/:id` | Branches | `branches.read` | M1 |
-| `/manager/staff`, `/manager/staff/:membershipId` | Employees, invitations, role assignments per branch | `users.read` | M1 |
-| `/manager/roles`, `/manager/roles/:id` | Roles & permission matrix | `roles.read` | M1 |
-| `/manager/catalog/products`, `/manager/catalog/products/:id` | Products & variants, barcodes | `catalog.read` | M2 |
-| `/manager/catalog/categories` | Categories | `catalog.read` | M2 |
-| `/manager/catalog/prices` | Branch price lists | `catalog.prices.manage` | M2 |
-| `/manager/catalog/taxes` | Tax rates | `catalog.manage` | M2 |
-| `/manager/inventory` | Stock on hand per branch | `inventory.read` | M3 |
-| `/manager/inventory/adjustments`, `/new` | Adjustments | `inventory.adjust` | M3 |
-| `/manager/transfers`, `/new`, `/:id` | Branch transfers | `inventory.transfer` or `inventory.transfer.approve` | M3 ✓ |
-| `/manager/registers` | Registers per branch | `registers.manage` | M4 |
-| `/manager/shifts`, `/manager/shifts/:id` | Shift history, X/Z reports | `shifts.view_all` | M4 |
-| `/manager/sales`, `/manager/sales/:id` | Sales history & receipt | `sales.read` | M4 |
-| `/manager/orders`, `/manager/orders/:id` | Orders (held/online/table) | `orders.manage` | M4 |
-| `/manager/refunds`, `/manager/refunds/:id` | Refunds | `sales.read` | M5 |
-| `/manager/customers`, `/manager/customers/:id` | Customers, profile, history, notes | `customers.read` | M5 ✓ |
-| `/manager/suppliers` | Suppliers | `purchasing.read` | M6 ✓ |
-| `/manager/purchasing`, `/new`, `/:id` | Purchase orders, receiving | `purchasing.read` | M6 ✓ |
-| `/manager/purchasing/receipts/:id` | Goods receipt | `goods.receive` | M6 |
-| `/manager/reports` | Reports dashboard (tabs per permission) | any `reports.*` | M7 ✓ |
-| `/manager/restaurant/tables`, `/modifiers` | 🧩 Restaurant setup | `catalog.manage` | M9 |
-| `/manager/online` | Online store: orders (status filter, detail, fulfilment steps, cancel unpaid), store settings (status, address, branding, fulfilment, fees, reservation time, payment methods), products online | `online.orders` / `online.manage` | M10 ✓ |
-| `/manager/subscription` | Own plan, status, usage vs limits, available plans | `merchant.settings.read` | M8 ✓ |
-| `/manager/settings/company` | Company profile, language, timezone | `merchant.settings.read` | M1 |
-| `/manager/settings/payment-methods` | Payment methods | `payment_methods.manage` | M4 |
-| `/manager/settings/receipts` | Receipt layout | `merchant.settings.update` | M4 |
-| `/manager/settings/subscription` | Current plan (read-only) | `subscription.read` | M8 |
-| `/manager/audit-log` | Audit log | `audit.read` | M1 |
-| `/manager/account` | My profile, language, password | session | M1 |
-
-Layout: persistent sidebar (start side; flips with `dir`), top bar with branch
-switcher, language toggle, user menu.
-
----
+| Route | Screen | Permission (UI guard) |
+|---|---|---|
+| `/` | Dashboard | `manager.access` |
+| `/products`, `/products/new`, `/products/:productId` | Products, editor (variants, barcodes, images, prices) | `catalog.read` / `catalog.manage` |
+| `/categories` | Categories | `catalog.read` |
+| `/inventory`, `/inventory/adjustments`, `/inventory/adjustments/new`, `/inventory/adjustments/:id`, `/inventory/movements` | Stock levels, adjustments, movement ledger | `inventory.read` / `inventory.adjust` |
+| `/transfers`, `/transfers/new`, `/transfers/:transferId` | Branch transfers | `inventory.read` / `inventory.transfer` |
+| `/suppliers`, `/purchasing`, `/purchasing/new`, `/purchasing/:orderId` | Suppliers, purchase orders, receiving | `purchasing.read` / `purchasing.manage` |
+| `/sales`, `/sales/:saleId` | Sales (POS + online, channel filter), detail and receipt | `sales.read` |
+| `/refunds` | Returns history, approvals, unusual activity | `sales.read` |
+| `/reports` | Reports (tabs per report permission) | any `reports.*` |
+| `/customers`, `/customers/:customerId` | Customers, history, notes | `customers.read` |
+| `/restaurant` | Restaurant setup (module, floor, stations, modifiers, menu) | `restaurant.manage` |
+| `/online` | Online store: orders, settings, products online | `online.orders` / `online.manage` |
+| `/payments` | Payment methods and internal balances | `payments.settings` |
+| `/registers` | Registers | `registers.manage` |
+| `/shifts`, `/shifts/:shiftId` | Shift history, X/Z summary | `shifts.view_all` |
+| `/branches` | Branches | `branches.read` |
+| `/employees`, `/employees/:membershipId` | Employees, invitations, role assignments | `employees.read` |
+| `/roles` | Roles and permissions | `employees.read` |
+| `/subscription` | Own plan, usage and limits | `merchant.settings.read` |
+| `/settings` | Company profile | `merchant.settings.read` |
 
 ## 2. `/pos` — pos-web
 
-| Route | Screen | Permission | Milestone |
-|---|---|---|---|
-| `/pos/login` | Sign in (large touch keypad; PIN mode later) | 🔓 | M1 |
-| `/pos/setup` | Select branch (only those with `pos.access`) & register | `pos.access` | M1 (branch), M4 (register) |
-| `/pos/shift/open` | Open shift, opening float | `shifts.open` | M4 |
-| `/pos/sell` | **Register screen**: search/scan, product grid, cart, pay panel | `sales.create` | M4 |
-| `/pos/sell/pay` | Payment (cash keypad, card, split) — modal route | `sales.create` | M4 |
-| `/pos/receipt/:saleId` | Receipt / reprint | `sales.create` | M4 |
-| `/pos/orders` | Held carts / open orders | `orders.create` | M4 |
-| `/pos/sales` | This shift's sales | `sales.create` | M4 |
-| `/pos/refund` | Find sale → select lines → refund | `refunds.create` or override | M5 |
-| (sale screen) | Customer picker on the cart: search, choose, create, walk-in | `customers.read` / `customers.create` | M5 ✓ |
-| `/pos/cash` | Cash in / cash out | `cash.move` | M4 |
-| `/pos/shift/close` | Count drawer, close shift, Z summary | `shifts.close` | M4 |
-| `/pos/tables` | 🧩 Floor plan / open tabs | `orders.create` | M9 |
-| `/pos/kitchen` | 🧩 Kitchen display | `orders.manage` | M9 |
-| `/pos/lock` | Lock screen (idle) | session | M1 |
+Public: `/login`, `/forgot-password`, `/reset-password`, `/accept-invite`. A POS session is
+bound to one branch. Full-screen layout (no sidebar): top strip with company, branch,
+cashier, clock, language, Lock and Sign out.
 
-Layout: full-screen, no sidebar; top strip with branch/register/shift, cashier,
-language toggle, lock button. Override dialog (manager approval) is a global
-modal available on any POS route.
-
----
+| Route | Screen | Permission |
+|---|---|---|
+| `/` | Register: shift strip, search/scan, categories, product grid, cart with customer, discounts, held carts, recent sales, payment (cash/card/split), receipt | `sales.create` (open shift) |
+| `/shift` | Open shift (float), cash in/out, count and close, X/Z summary | `shifts.operate` / `cash.move` |
+| `/returns` | Find sale, return lines, refund / exchange / void, refund receipt | `refunds.create` |
+| `/tables`, `/tables/orders/:orderId` | Restaurant floor and order (module enabled) | `restaurant.orders` |
+| `/kitchen` | Kitchen display | `kitchen.access` |
+| (any route) | Lock screen when the session is locked (idle 5 min or Lock button) | session |
 
 ## 2b. `/store` — store-web (public storefront, Prompt 16)
 

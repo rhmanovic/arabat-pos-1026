@@ -71,7 +71,7 @@ client-side role label.
   | Interface | Idle | Absolute |
   |---|---|---|
   | manager | 60 min | 12 h |
-  | pos | screen lock after 5 min idle (re-auth to unlock) | 16 h (a long shift) |
+  | pos | screen lock after 5 min without input, server-enforced (`SESSION_LOCKED`, unlock with the user's password; ADR-0085) — server idle expiry 8 h | 16 h (a long shift) |
   | platform | 15 min | 8 h |
 - Revocation is immediate: deactivating a user/membership, changing password,
   or suspending a merchant revokes the relevant sessions.
@@ -106,6 +106,11 @@ instances; scaled by `AUTH_RATE_LIMIT_SCALE`; `429 RATE_LIMITED` + `Retry-After`
 | merchant selection per IP | 30 / 10 min |
 | platform sign-in per IP / failures per e-mail | 10 / 15 min, 5 / 15 min |
 | TOTP per IP (+ 5 attempts per ticket) | 20 / 15 min |
+| wrong TOTP codes per operator (any IP/ticket) | 5 / 15 min |
+| wrong passwords on a locked POS (then the session ends) | 5 / 15 min |
+
+Client IPs come from `X-Forwarded-For` only when `TRUST_PROXY` names the load balancer
+(ADR-0086); otherwise the socket address is used.
 - MFA: TOTP (RFC 6238, ±1 step, replay-protected via `mfa_last_step`) mandatory for
   platform operators; secrets AES-256-GCM encrypted with `MFA_ENCRYPTION_KEY`.
   Merchant-user MFA: planned.

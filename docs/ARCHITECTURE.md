@@ -1,6 +1,18 @@
 # Architecture
 
-Status: **Designed (architecture phase). Not yet implemented.**
+Status: **Implemented** (Prompts 1–17; audited in Prompt 18). Where the original design and
+the code differ, the code wins and the differences are listed here:
+
+- Validation uses Zod 4 with a small `ZodPipe` (no `nestjs-zod`, no generated OpenAPI yet).
+- No Zustand, TanStack Table, lucide or IndexedDB persistence: state is TanStack Query plus
+  React context (e.g. the POS cart), tables are the `DataTable` primitive in `packages/ui`.
+- Pricing lives in `packages/money` (`priceCart`); there is no `packages/pricing`.
+  Quantities are bigint thousandths (`parseQuantity`), not decimal.js.
+- Idempotency keys travel in the request body (`idempotencyKey`), not a header.
+- Modules as built: `sales` also owns orders (held carts), `reports` (not "reporting"),
+  `transfers`, `subscriptions`, `ecommerce` creates online-channel sales directly
+  (ADR-0077). Read-only cross-module SQL is used by several modules (ADR-0083).
+- A fourth app, `apps/store-web`, serves the public storefront (ADR-0076).
 Related documents: `AUTH.md` (authentication & permissions), `ROUTES.md`
 (routing), `DATABASE.md`
 (entities & ERD), `DECISIONS.md` (ADRs), `ROADMAP.md` (milestones).

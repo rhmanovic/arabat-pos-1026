@@ -48,7 +48,7 @@ pnpm db:seed          # reference data (currencies)
 
 ```bash
 pnpm db:up            # if PostgreSQL is not running
-pnpm dev              # API (watch) + three Vite dev servers; /api is proxied to :3000
+pnpm dev              # API (watch) + four Vite dev servers; /api is proxied to :3000
 ```
 
 ## Production-like run (single origin)

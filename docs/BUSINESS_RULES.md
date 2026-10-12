@@ -179,6 +179,13 @@ Restaurant (Prompt 15):
 - **BR-139** Paid restaurant items are corrected by refunds of their bill (Prompt 11),
   not by editing the order.
 
+Security hardening (Prompt 18):
+- **BR-160** The POS locks after 5 minutes without input or on demand; only the same
+  user's password unlocks it; five wrong passwords end the session. Others sign in with
+  their own account.
+- **BR-161** A payment confirmed after its order was cancelled or failed is recorded (never
+  ignored) and the order is flagged "needs attention" for a refund at the provider.
+
 Platform and subscriptions (Prompt 17):
 - **BR-150** Every merchant has exactly one subscription to a plan. New merchants start on
   the default plan (trial when the plan has trial days). Plans can be archived, never
@@ -303,6 +310,9 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
 | OQ-017 | Returns without a receipt or at another branch: allowed? Implemented: receipt required, same branch. | Refunds |
 | OQ-019 | Loyalty points, store credit and promotions: rules (earning rate, expiry, use as payment)? Also: should customers be able to request erasure of their personal data (anonymisation while keeping sales)? Not implemented. | Customers |
 | OQ-020 | Restaurant: service charge or tips? Courses/fire timing? Printing tickets on kitchen printers (vs. screen)? Table reservations? Not implemented. | Restaurant |
+| OQ-023 | Restaurant bills: charge the item price at ordering time or at payment time? Implemented: modifiers at ordering, item at payment (audit F3). | Restaurant |
+| OQ-024 | Discount limit: per discount (implemented: item and sale discounts checked separately, so 10 % + 10 % passes) or combined? | Sales |
+| OQ-025 | Verify the owner's e-mail at self-registration (blocks squatting someone's address)? Not implemented. | Auth |
 | OQ-022 | Subscription pricing and billing: prices per plan, billing provider, invoices/VAT, what happens automatically when a subscription lapses (grace period, read-only, suspension), and data retention after closing? Implemented: no billing, lapse never blocks, closing keeps data. | Platform |
 | OQ-021 | Online store: which gateway(s) first and the merchant contracts/credentials; delivery zones and fees per area; shopper accounts, coupons, scheduled orders; cash on delivery; automatic gateway refunds? Not implemented. | Online store |
 | OQ-018 | Supplier invoices, payments and balances (accounts payable) and returns to suppliers: needed, and with which payment terms? Not implemented yet. | Purchasing |

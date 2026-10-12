@@ -697,3 +697,46 @@ ADR; supersede it.
   explicit suspension stops access. Prices on plans are display values only.
 - **Consequences:** Billing (provider, invoices, dunning, automatic suspension) needs the
   owner's pricing and provider decision first.
+
+## ADR-0083 — Read-only cross-module SQL is tolerated, writes are not
+- **Date:** 2026-10-12 · **Status:** Accepted (final audit, Prompt 18)
+- **Context:** The audit found modules reading other modules' tables with SQL (sales →
+  customers/payment methods/shifts, refunds → sales, reports, platform and subscriptions
+  counts) and one write: ecommerce creating the delivery-fee catalog item.
+- **Decision:** Read-only joins inside the caller's merchant transaction stay for now (RLS
+  still applies, they are covered by integration tests). Writes to another module's tables
+  are not allowed for new code; the delivery item is the documented exception, created
+  under an advisory lock with a zero cost.
+- **Consequences:** Before extracting a module (ARCHITECTURE §13) these reads must move
+  behind the owning service. Largest services (`sales.service.ts` ~1,500 lines) should be
+  split (checkout, held orders, queries, receipt numbers).
+
+## ADR-0084 — One lock order and automatic retry on deadlock
+- **Date:** 2026-10-12 · **Status:** Accepted (final audit)
+- **Decision:** Lock order everywhere: shift → receipt sequence → stock (POS and online
+  sales alike); payment attempt → online order (webhooks, cancellation, expiry);
+  subscription row with one lock per transaction (shared for unlimited plans, exclusive for
+  limited ones; never upgraded). As a safety net `DatabaseService` re-runs a whole
+  transaction up to 3 times on `40P01`/`40001`; work functions keep e-mails and gateway
+  calls outside transactions. The reconcile job catches errors per merchant and payment.
+- **Consequences:** Measured: concurrent POS sales and online payments for the same item
+  finish without errors (integration test); retries are logged for monitoring.
+
+## ADR-0085 — Server-enforced POS screen lock
+- **Date:** 2026-10-12 · **Status:** Accepted (BR-160)
+- **Decision:** The POS locks after 5 minutes without user input (not without requests:
+  screens poll) or when the cashier taps Lock. The server stores `sessions.locked_at` and
+  answers `SESSION_LOCKED` to every request of that session until the same user enters the
+  password (`POST /auth/pos/unlock`, 5 wrong passwords end the session). Anyone else can
+  only end the locked session and sign in themselves. A PIN-based quick unlock waits for
+  OQ-006.
+
+## ADR-0086 — Client IP only from configured proxies
+- **Date:** 2026-10-12 · **Status:** Accepted (final audit, high finding)
+- **Decision:** `trustProxy` is configured by `TRUST_PROXY` (default off; hop count or proxy
+  CIDRs; `true` is refused) so clients cannot fake `X-Forwarded-For` to dodge per-IP rate
+  limits or forge audit IPs. Wrong TOTP codes are also limited per operator (5 / 15 min),
+  independent of IP and ticket. Operators can only be created by the owner role (CLI); the
+  runtime role may only update their sign-in progress columns, and the platform summary
+  functions refuse to run without an operator context. Production refuses development
+  secrets.

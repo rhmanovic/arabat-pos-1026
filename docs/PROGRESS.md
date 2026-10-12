@@ -31,6 +31,9 @@ must be labeled as such.
 
 ## Log
 
+Entries below are a dated log: each "Not done yet" note describes the state on that date
+(later entries record what was completed since).
+
 ### 2026-10-11 — Session 1: Project foundation
 - Created `CLAUDE.md` with permanent requirements and working procedure.
 - Created `docs/ARCHITECTURE.md`, `DATABASE.md`, `BUSINESS_RULES.md`,
@@ -294,5 +297,21 @@ Not done / open: **no billing** (prices informational, no invoices or payment co
 managed with the CLI only (no screen); no merchant impersonation; the shared
 `restaurant`/`ecommerce` feature list is fixed in code.
 
+### 2026-10-12 — Prompt 18: Final audit and production readiness
+Four independent audits (security, financial integrity, transaction reliability,
+architecture/frontend), a reconciliation of the dev database, a 20,000-sale load test and a
+backup/restore drill. Fixed and covered by tests: client-controlled `X-Forwarded-For`
+(high); payments succeeding after cancel/failure were ignored (high); POS screen lock
+(server-enforced); deadlocks between POS and online sales and between payment callbacks and
+cancel/expiry (lock order + retry); reconcile job stopped on one error; platform summary
+functions and operator table hardened; per-operator TOTP limit; production refuses dev
+secrets; delivery fee hid gross profit; duplicate exchange line → 500; cross-merchant ids in
+restaurant setup; share→update lock upgrade in plan checks; tracking tokens in logs; POS
+register without error state; stale docs (ROUTES, ARCHITECTURE). New: `docs/OPERATIONS.md`,
+`scripts/ops/db-backup.sh`, `db-restore.sh`, `scripts/perf/load-test.mjs`.
+Open (see the final report): e-mail verification at registration (OQ-025), branch-aware
+permission hints in the UI, metrics endpoint, module boundary refactor (ADR-0083), owner
+decisions OQ-011/021/022/023/024.
+
 ## Next step
-Prompt 18 — final audit and production readiness report.
+Owner decisions for deployment (OPERATIONS.md §7), then a staging environment.

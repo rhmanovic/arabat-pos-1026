@@ -66,6 +66,47 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after Prompt 18 — final audit (2026-10-12, local run)
+- `pnpm verify` ✓ (150 unit/web), `pnpm test:integration` ✓ (153), `pnpm test:e2e` ✓ (33).
+- New regression tests, each verified to **fail** with the defect put back:
+  - `hardening.int.test.ts` (5): a client `X-Forwarded-For` does not change the recorded
+    IP; 5 wrong TOTP codes from fresh IPs/tickets block the operator (even the right code
+    → 429); POS lock → every request `SESSION_LOCKED`, wrong password refused, right one
+    unlocks, both audited, 5 wrong passwords end the session, "someone else" ends it;
+    runtime role cannot call platform summaries without an operator context nor insert or
+    update operators.
+  - `ecommerce.int.test.ts` (+2): payment succeeding after cancel and after a reported
+    failure → recorded, order needs attention, no sale; 3 online payments + 2 POS sales of
+    the same item at once → all succeed, stock exactly 0, 5 sales (stable over 3 runs).
+    Profit stays available with a delivery fee (cost 2.000, profit 4.750).
+  - `refunds.int.test.ts`: an exchange naming the same line twice → 400 (was 500).
+  - `restaurant.int.test.ts`: another merchant's variant in a modifier → 400.
+  - Unit: production refuses development secrets; `TRUST_PROXY` parsing; URL redaction.
+  - Web: POS lock screen (wrong/right password, sign in as someone else).
+- Independent audits (security, financial integrity, transaction reliability,
+  architecture): live reconciliation of the dev database (3,082 sales, 29 refunds, 12
+  shifts, 11,278 movements) found 0 mismatches except the delivery-fee profit defect
+  (fixed). Lint and typecheck clean; i18n key parity in every app.
+
+#### Measured performance (production build, 1 API process, PostgreSQL 18 in Docker, 4 vCPU)
+`node scripts/perf/load-test.mjs --products 5000 --sales 20000 --concurrency 16`
+(own merchant, 0 failures):
+
+| Operation | Result |
+|---|---|
+| Create product (16 parallel) | p50 157 ms, p95 242 ms, 98/s |
+| Opening stock, 200 lines per document | p50 4.9 s per document (~40 lines/s) |
+| POS checkout, 2 lines, one shift, 16 parallel | p50 443 ms, p95 602 ms, p99 689 ms, **35 sales/s** (serialised per shift by design) |
+| POS catalog, 5,000 items (1.5 MB) | 206–257 ms (an earlier run right after bulk insert took 6.1 s once: stale planner statistics) |
+| Manager products page / search | p50 23 ms / 132 ms |
+| Inventory levels page | p50 87 ms |
+| Sales list page (23,000 sales) | p50 64 ms |
+| Sales report, one day with 20,000 sales | p50 890 ms, p95 1.06 s |
+| Inventory report | p50 484 ms |
+| Payments report | p50 122 ms |
+
+Backup/restore drill: see OPERATIONS.md §4.
+
 ### Results after Prompt 17 (2026-10-12, local run)
 - `pnpm verify` ✓ (145 unit/web), `pnpm test:integration` ✓ (146), `pnpm test:e2e` ✓ (33).
 - `platform.int.test.ts` (7), security and authorization:

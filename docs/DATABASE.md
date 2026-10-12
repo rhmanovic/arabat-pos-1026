@@ -1,6 +1,6 @@
 # Database
 
-Status: **Identity tables implemented (Prompt 4).** Later modules are added per slice.
+Status: **Implemented** — 32 migrations (`0000`–`0031`, §8); RLS on every merchant table.
 The tenant is called **merchant** in the schema (`merchant_id`).
 
 ---
