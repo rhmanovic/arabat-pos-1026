@@ -35,6 +35,7 @@ import {
   users,
 } from './iam.schema.js';
 import { RolesService, escalation } from './roles.service.js';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
 
 export const INVITATION_TTL_DAYS = 7;
 
@@ -72,6 +73,7 @@ export class EmployeesService {
     private readonly audit: AuditService,
     private readonly mailer: Mailer,
     private readonly resets: PasswordResetService,
+    private readonly subscriptions: SubscriptionsService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -102,6 +104,8 @@ export class EmployeesService {
     const token = generateToken();
     const invitation = await this.database.withMerchantTx(actor.merchantId, async (tx) => {
       await this.assertGrantable(tx, actor, input.assignments);
+      // Pending invitations count towards the employee limit (BR-151).
+      await this.subscriptions.assertCapacity(tx, actor.merchantId, 'employees');
       const [member] = await tx
         .select({ id: memberships.id })
         .from(memberships)
@@ -241,7 +245,9 @@ export class EmployeesService {
     ip: string,
   ): Promise<Employee> {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
-      await this.manageableMember(tx, actor, membershipId, { allowSelf: false });
+      const member = await this.manageableMember(tx, actor, membershipId, { allowSelf: false });
+      if (status === 'active' && member.status !== 'active')
+        await this.subscriptions.assertCapacity(tx, actor.merchantId, 'employees');
       await tx
         .update(memberships)
         .set({ status, updatedAt: sql`now()` })

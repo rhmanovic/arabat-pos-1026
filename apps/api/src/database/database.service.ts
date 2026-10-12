@@ -83,6 +83,26 @@ export class DatabaseService implements OnModuleDestroy {
     });
   }
 
+  /**
+   * Transaction of a platform operator acting on one merchant (ADR-0080): the merchant's RLS
+   * context plus `app.operator_id`, which the database requires for subscription and
+   * merchant-status changes. Only the platform-admin module calls this.
+   */
+  async withPlatformContext<T>(
+    operatorId: string,
+    merchantId: string | null,
+    work: (tx: Transaction) => Promise<T>,
+  ): Promise<T> {
+    const operator = uuidSchema.parse(operatorId);
+    const merchant = merchantId ? uuidSchema.parse(merchantId) : '';
+    return this.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select set_config('app.merchant_id', ${merchant}, true), set_config('app.operator_id', ${operator}, true)`,
+      );
+      return work(tx);
+    });
+  }
+
   async onModuleDestroy(): Promise<void> {
     await this.pool.end();
   }

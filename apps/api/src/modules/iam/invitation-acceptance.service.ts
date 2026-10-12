@@ -24,6 +24,9 @@ import {
 const INVALID = () =>
   new AppError(400, 'INVITATION_INVALID', 'This invitation is invalid, expired or already used.');
 
+const MERCHANT_SUSPENDED = () =>
+  new AppError(403, 'MERCHANT_SUSPENDED', 'This company account is suspended.');
+
 /** Public side of invitations: the invited person previews and accepts with their own password. */
 @Injectable()
 export class InvitationAcceptanceService {
@@ -109,6 +112,11 @@ export class InvitationAcceptanceService {
         )
         .returning({ id: invitations.id });
       if (!claimed) throw INVALID();
+      const [company] = await tx
+        .select({ status: merchants.status })
+        .from(merchants)
+        .where(eq(merchants.id, invitation.merchantId));
+      if (company?.status !== 'active') throw MERCHANT_SUSPENDED();
 
       if (newUserHash) {
         await tx.insert(users).values({

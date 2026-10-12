@@ -14,3 +14,4 @@ export * from './customers.js';
 export * from './reports.js';
 export * from './restaurant.js';
 export * from './ecommerce.js';
+export * from './platform.js';

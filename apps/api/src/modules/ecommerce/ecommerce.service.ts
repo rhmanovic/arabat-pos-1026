@@ -40,6 +40,7 @@ import {
   onlineStores,
 } from './ecommerce.schema.js';
 import { OnlinePaymentsService, historyEntry } from './online-payments.service.js';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
 
 type Row = Record<string, unknown>;
 const CURRENCY = 'KWD' as const;
@@ -71,6 +72,7 @@ export class EcommerceService {
     private readonly ledger: StockLedgerService,
     private readonly sales: SalesService,
     private readonly payments: OnlinePaymentsService,
+    private readonly subscriptions: SubscriptionsService,
     private readonly storage: FileStorage,
     @Inject(ENV) private readonly env: Env,
   ) {}
@@ -140,6 +142,8 @@ export class EcommerceService {
       await this.database.withMerchantTx(actor.merchantId, async (tx) => {
         const [row] = await tx.select().from(onlineStores).for('update');
         if ((row?.version ?? 0) !== input.version) throw versionConflict();
+        if (input.status !== 'draft')
+          await this.subscriptions.assertFeature(tx, actor.merchantId, 'ecommerce');
         if (input.fulfillmentBranchId) {
           const [b] = (
             await tx.execute(

@@ -30,6 +30,7 @@ import {
   productVariants,
   products,
 } from './catalog.schema.js';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
 
 type SaveProductInput = z.output<typeof saveProductSchema>;
 type SaveCategoryInput = z.output<typeof saveCategorySchema>;
@@ -61,6 +62,7 @@ export class CatalogService {
     private readonly database: DatabaseService,
     private readonly audit: AuditService,
     private readonly storage: FileStorage,
+    private readonly subscriptions: SubscriptionsService,
   ) {}
 
   // ------------------------------------------------------------ categories
@@ -265,6 +267,7 @@ export class CatalogService {
     const productId = newId();
     return this.write(async () =>
       this.database.withMerchantTx(actor.merchantId, async (tx) => {
+        await this.subscriptions.assertCapacity(tx, actor.merchantId, 'products');
         await this.validateReferences(tx, input);
         await tx
           .insert(products)
@@ -325,7 +328,9 @@ export class CatalogService {
     ip: string,
   ): Promise<Product> {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
-      await this.loadProduct(tx, actor, productId);
+      const current = await this.loadProduct(tx, actor, productId);
+      if (status === 'active' && current.status !== 'active')
+        await this.subscriptions.assertCapacity(tx, actor.merchantId, 'products');
       await tx
         .update(products)
         .set({ status, version: sql`${products.version} + 1`, updatedAt: sql`now()` })

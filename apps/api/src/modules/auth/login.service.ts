@@ -178,6 +178,13 @@ export class LoginService {
 }
 
 function noAccessError(memberships: MembershipAccess[]): AppError {
+  // Every company of this user is suspended or closed by the platform (BR-153).
+  if (memberships.length > 0 && memberships.every((m) => !m.access.merchantActive))
+    return new AppError(
+      403,
+      'MERCHANT_SUSPENDED',
+      'This company account is suspended. Contact the platform support.',
+    );
   const available = [...new Set(memberships.flatMap((m) => interfacesFor(m)))];
   if (available.length > 0) {
     return new AppError(

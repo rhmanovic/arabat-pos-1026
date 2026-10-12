@@ -3,7 +3,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 import { ENV } from '../../config/config.module.js';
 import type { Env } from '../../config/env.js';
-import { DatabaseService } from '../../database/database.service.js';
+import { DatabaseService, type Transaction } from '../../database/database.service.js';
 import { generateToken, hashToken } from '../../kernel/crypto/tokens.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
@@ -15,6 +15,8 @@ import { PasswordService } from './password.service.js';
 import { AUTH_LIMITS, RateLimiterService } from './rate-limiter.service.js';
 import { RESET_TOKEN_TTL_SECONDS } from './session-policy.js';
 import { type ClientInfo, SessionService } from './session.service.js';
+
+const SETUP_TOKEN_TTL_HOURS = 72;
 
 const INVALID_TOKEN = () =>
   new AppError(400, 'RESET_TOKEN_INVALID', 'This password reset link is invalid or has expired.');
@@ -109,6 +111,47 @@ export class PasswordResetService {
         'If you did not request this, ignore this e-mail.',
       ].join('\n'),
     });
+  }
+
+  /**
+   * Account set-up link for an owner created by the platform (Prompt 17): the same single-use
+   * reset token, valid for 72 hours, sent as a welcome e-mail. Runs in the caller's
+   * transaction; the e-mail is sent after it commits (`send`).
+   */
+  async issueAccountSetup(
+    tx: Transaction,
+    user: { id: string; email: string; fullName: string },
+    companyName: string,
+  ): Promise<{ send: () => Promise<void> }> {
+    const token = generateToken();
+    await tx
+      .update(passwordResetTokens)
+      .set({ usedAt: sql`now()` })
+      .where(and(eq(passwordResetTokens.userId, user.id), isNull(passwordResetTokens.usedAt)));
+    await tx.insert(passwordResetTokens).values({
+      id: newId(),
+      tokenHash: hashToken(token),
+      userId: user.id,
+      expiresAt: sql`now() + make_interval(hours => ${SETUP_TOKEN_TTL_HOURS})`,
+      requestedIp: null,
+    });
+    const link = `${this.env.PUBLIC_MANAGER_URL.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(token)}`;
+    return {
+      send: () =>
+        this.mailer.send({
+          to: user.email,
+          subject: `حساب ${companyName} جاهز | Your ${companyName} account is ready`,
+          text: [
+            `مرحباً ${user.fullName}،`,
+            `تم إنشاء حساب شركتك "${companyName}". لتعيين كلمة المرور افتح الرابط خلال ${SETUP_TOKEN_TTL_HOURS} ساعة:`,
+            link,
+            '',
+            `Hello ${user.fullName},`,
+            `Your company account "${companyName}" has been created. Set your password within ${SETUP_TOKEN_TTL_HOURS} hours:`,
+            link,
+          ].join('\n'),
+        }),
+    };
   }
 
   async resetPassword(token: string, newPassword: string, client: ClientInfo): Promise<void> {

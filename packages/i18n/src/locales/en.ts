@@ -142,6 +142,11 @@ export const commonEn = {
     GATEWAY_NOT_CONFIGURED: 'Online payment is not available yet. Choose another method.',
     PAYMENT_SIGNATURE_INVALID: 'The payment notification could not be verified.',
     MINIMUM_ORDER: 'The order is below the store’s minimum.',
+    PLAN_LIMIT_REACHED:
+      'Your subscription plan limit is reached. Ask the platform to change your plan.',
+    PLAN_FEATURE_UNAVAILABLE: 'Your subscription plan does not include this feature.',
+    PLAN_CHANGE_BLOCKED: 'The merchant’s current usage does not fit this plan.',
+    MERCHANT_SUSPENDED: 'This company account is suspended. Contact the platform support.',
     NETWORK: 'Cannot reach the server. Check your connection.',
     UNKNOWN: 'An unexpected error occurred.',
   },

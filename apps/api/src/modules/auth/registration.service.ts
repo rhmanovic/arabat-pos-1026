@@ -1,5 +1,4 @@
 import type { registerRequestSchema } from '@arabat/contracts';
-import { ROLE_TEMPLATES } from '@arabat/permissions';
 import { Injectable } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import type { z } from 'zod';
@@ -7,13 +6,9 @@ import { DatabaseService } from '../../database/database.service.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
 import { AuditService } from '../audit/audit.service.js';
-import { branches } from '../branches/branches.schema.js';
-import { memberships, rolePermissions, roles, users } from '../iam/iam.schema.js';
-import {
-  ensureDefaultPaymentMethods,
-  ensureDefaultRegister,
-} from '../payments/merchant-defaults.js';
-import { merchants } from '../merchants/merchants.schema.js';
+import { users } from '../iam/iam.schema.js';
+import { provisionMerchant } from '../merchants/provision.js';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
 import type { LoginOutcome } from './login.service.js';
 import { PasswordService } from './password.service.js';
 import { AUTH_LIMITS, RateLimiterService } from './rate-limiter.service.js';
@@ -42,6 +37,7 @@ export class RegistrationService {
     private readonly limiter: RateLimiterService,
     private readonly sessions: SessionService,
     private readonly audit: AuditService,
+    private readonly subscriptions: SubscriptionsService,
   ) {}
 
   async register(
@@ -73,44 +69,17 @@ export class RegistrationService {
           fullName: input.owner.fullName,
           preferredLanguage: language,
         });
-        await tx.insert(merchants).values({
-          id: merchantId,
-          displayNameAr: input.company.nameAr ?? null,
-          displayNameEn: input.company.nameEn ?? null,
+        const { branchId } = await provisionMerchant(tx, {
+          merchantId,
+          ownerUserId: userId,
+          membershipId,
+          nameEn: input.company.nameEn ?? null,
+          nameAr: input.company.nameAr ?? null,
           legalName: input.company.legalName ?? null,
           contactEmail: input.owner.email,
           defaultLanguage: language,
         });
-        const branchId = newId();
-        await tx.insert(branches).values({
-          id: branchId,
-          merchantId,
-          code: 'MAIN',
-          nameAr: 'الفرع الرئيسي',
-          nameEn: 'Main branch',
-          isMain: true,
-        });
-        await tx
-          .insert(memberships)
-          .values({ id: membershipId, merchantId, userId, isOwner: true, status: 'active' });
-        await ensureDefaultPaymentMethods(tx, merchantId);
-        await ensureDefaultRegister(tx, merchantId, branchId);
-
-        for (const [templateKey, template] of Object.entries(ROLE_TEMPLATES)) {
-          const roleId = newId();
-          await tx.insert(roles).values({
-            id: roleId,
-            merchantId,
-            templateKey,
-            nameEn: template.nameEn,
-            nameAr: template.nameAr,
-          });
-          await tx
-            .insert(rolePermissions)
-            .values(
-              template.permissions.map((permissionKey) => ({ merchantId, roleId, permissionKey })),
-            );
-        }
+        await this.subscriptions.createInitial(tx, merchantId, null, 'Self-service registration');
 
         const session = await this.sessions.create(
           {

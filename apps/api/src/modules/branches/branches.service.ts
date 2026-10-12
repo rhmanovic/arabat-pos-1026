@@ -13,6 +13,7 @@ import { isUniqueViolation } from '../auth/registration.service.js';
 import { roleAssignments } from '../iam/iam.schema.js';
 import { branches } from './branches.schema.js';
 import { ensureDefaultRegister } from '../payments/merchant-defaults.js';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
 
 type CreateInput = z.output<typeof createBranchSchema>;
 type UpdateInput = z.output<typeof updateBranchSchema>;
@@ -23,6 +24,7 @@ export class BranchesService {
   constructor(
     private readonly database: DatabaseService,
     private readonly audit: AuditService,
+    private readonly subscriptions: SubscriptionsService,
   ) {}
 
   /** Branches visible to the actor: all for merchant-wide access, else assigned branches. */
@@ -56,6 +58,9 @@ export class BranchesService {
     const id = newId();
     try {
       return await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+        // Plan limits (BR-151): the branch and its default register.
+        await this.subscriptions.assertCapacity(tx, actor.merchantId, 'branches');
+        await this.subscriptions.assertCapacity(tx, actor.merchantId, 'registers');
         const [row] = await tx
           .insert(branches)
           .values({ id, merchantId: actor.merchantId, ...input, isMain: false })
@@ -107,6 +112,8 @@ export class BranchesService {
       if (status === 'inactive' && branch.isMain) {
         throw AppError.conflict('The main branch cannot be deactivated.');
       }
+      if (status === 'active' && branch.status !== 'active')
+        await this.subscriptions.assertCapacity(tx, actor.merchantId, 'branches');
       const [row] = await tx
         .update(branches)
         .set({ status, version: sql`${branches.version} + 1`, updatedAt: sql`now()` })

@@ -28,6 +28,7 @@ import { branches } from '../branches/branches.schema.js';
 import { merchants } from '../merchants/merchants.schema.js';
 import { parseAmount } from '../payments/payments.service.js';
 import { cashMovements, registerMembers, registers, shifts } from './registers.schema.js';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
 
 type SaveRegister = z.output<typeof saveRegisterSchema>;
 type OpenShiftInput = z.output<typeof openShiftSchema>;
@@ -75,6 +76,7 @@ export class ShiftsService {
   constructor(
     private readonly database: DatabaseService,
     private readonly audit: AuditService,
+    private readonly subscriptions: SubscriptionsService,
   ) {}
 
   // ------------------------------------------------------------ registers (manager)
@@ -130,6 +132,7 @@ export class ShiftsService {
             .returning({ id: registers.id });
           if (!row) throw versionConflict();
         } else {
+          await this.subscriptions.assertCapacity(tx, actor.merchantId, 'registers');
           await tx
             .insert(registers)
             .values({ id: registerId, merchantId: actor.merchantId, ...fields });
@@ -178,6 +181,8 @@ export class ShiftsService {
         if (open)
           throw new AppError(409, 'REGISTER_BUSY', 'Close the open shift before deactivating.');
       }
+      if (status === 'active' && register.status !== 'active')
+        await this.subscriptions.assertCapacity(tx, actor.merchantId, 'registers');
       await tx
         .update(registers)
         .set({ status, version: sql`${registers.version} + 1`, updatedAt: sql`now()` })

@@ -36,6 +36,7 @@ import {
   recipeComponents,
   restaurantSettings,
 } from './restaurant.schema.js';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
 
 type Row = Record<string, unknown>;
 const money = (minor: bigint | string) => Money.ofMinor(BigInt(minor), 'KWD').toJSON();
@@ -58,6 +59,7 @@ export class RestaurantConfigService {
   constructor(
     private readonly database: DatabaseService,
     private readonly audit: AuditService,
+    private readonly subscriptions: SubscriptionsService,
   ) {}
 
   async settingsIn(tx: Transaction): Promise<RestaurantSettings> {
@@ -84,6 +86,8 @@ export class RestaurantConfigService {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const current = await this.settingsIn(tx);
       if (current.version !== input.version) throw versionConflict();
+      if (input.enabled && !current.enabled)
+        await this.subscriptions.assertFeature(tx, actor.merchantId, 'restaurant');
       await tx
         .insert(restaurantSettings)
         .values({

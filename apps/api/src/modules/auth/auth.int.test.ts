@@ -405,12 +405,17 @@ describe('sessions', () => {
 
     const other = await registerOwner(client);
     await db.inMerchant(other.merchantId, (c) =>
-      c.query(`update merchants set status = 'suspended' where id = $1`, [other.merchantId]),
+      c.query(
+        // Status changes need an operator context (database guard, Prompt 17).
+        `select set_config('app.operator_id', gen_random_uuid()::text, true);
+         update merchants set status = 'suspended' where id = '${other.merchantId}'`,
+      ),
     );
     expect(
       (await client.request('GET', '/auth/manager/me', { cookies: other.cookies })).statusCode,
     ).toBe(401);
-    expect((await login(client, 'manager', other.email)).json().code).toBe('NO_MERCHANT_ACCESS');
+    // A suspended company gets a specific answer once the password is proven (BR-153).
+    expect((await login(client, 'manager', other.email)).json().code).toBe('MERCHANT_SUSPENDED');
   });
 
   it('switches from /manager to /pos only when authorized', async () => {
