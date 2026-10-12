@@ -127,6 +127,7 @@ apps/api            NestJS + Fastify modular monolith (/api/v1), Drizzle, migrat
 apps/manager-web    React SPA, basename /manager (ManagerLayout)
 apps/pos-web        React SPA, basename /pos (POSLayout)
 apps/platform-web   React SPA, basename /platform (PlatformLayout)
+apps/store-web      Public storefront SPA, basename /store (no session; public store API)
 packages/money        bigint Money (KWD 3 decimals)          — built to dist (used by API)
 packages/permissions  permission catalog + can()             — built to dist (used by API)
 packages/contracts    Zod API contracts                      — built to dist (used by API)
@@ -173,7 +174,9 @@ Before reporting work as done, run `pnpm verify`, `pnpm test:integration` and
 
 Implemented: foundation, authentication, branches/employees/RBAC, manager dashboard,
 product catalog, inventory engine, payments/registers/shifts, POS checkout, returns/refunds,
-purchasing and branch transfers, customers, reports, restaurant module (see `docs/PROGRESS.md`).
+purchasing and branch transfers, customers, reports, restaurant module, online store with a
+sandbox payment gateway (see `docs/PROGRESS.md`). No real payment gateway is connected.
+Online reservations (`stock_reservations`) are honoured by `StockLedgerService.apply`.
 Stock consumption of sold items is expanded by `stockConsumption` (recipes, modifier ingredients).
 Stock balances change **only** through `StockLedgerService.apply` (inventory module).
 See `docs/PROGRESS.md` for the current state and `docs/ROADMAP.md` for next steps.

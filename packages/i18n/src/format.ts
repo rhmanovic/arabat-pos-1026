@@ -12,3 +12,11 @@ export function formatMoney(money: Money, language: string): string {
     money.currency === DEFAULT_CURRENCY && language.startsWith('ar') ? 'د.ك' : money.currency;
   return language.startsWith('ar') ? `${amount} ${symbol}` : `${symbol} ${amount}`;
 }
+
+/** Date and time in the UI language, Latin digits (OQ-012). */
+export function formatDateTime(iso: string, language: string): string {
+  return new Intl.DateTimeFormat(language.startsWith('ar') ? 'ar-KW-u-nu-latn' : 'en-GB', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(iso));
+}

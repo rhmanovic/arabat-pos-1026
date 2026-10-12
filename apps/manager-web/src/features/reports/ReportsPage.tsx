@@ -348,6 +348,27 @@ function SalesTab({
         ]}
       />
       <ReportTable
+        title={t('reports.byChannel')}
+        description={t('reports.byChannelHint')}
+        filename={`sales-by-channel-${query.from}-${query.to}`}
+        rows={r.byChannel}
+        rowKey={(x) => x.channel}
+        columns={[
+          {
+            key: 'channel',
+            header: t('sales.channel'),
+            value: (x) => t(`sales.channel_${x.channel}`),
+          },
+          { key: 'count', header: t('reports.saleCount'), value: (x) => String(x.saleCount) },
+          {
+            key: 'net',
+            header: t('reports.netSales'),
+            money: true,
+            value: (x) => x.netSales.amount,
+          },
+        ]}
+      />
+      <ReportTable
         title={t('reports.byEmployee')}
         filename={`sales-by-employee-${query.from}-${query.to}`}
         rows={r.byEmployee}

@@ -191,6 +191,12 @@ Restaurant permissions (Prompt 15): `restaurant.manage` (branch: tables, areas, 
 merchant-wide: module switch, modifier groups, recipes), `restaurant.orders`,
 `restaurant.void_item` (cancel items already sent to the kitchen), `kitchen.access`.
 
+Online store permissions (Prompt 16): `online.manage` (merchant-wide: store settings,
+listings, reconciliation), `online.orders` (branch: view and move online orders of the
+fulfilment branch). `company_manager` has both, `branch_manager` has `online.orders`.
+Shoppers are anonymous: the public store API has no session and resolves the merchant from
+the store address; gateway webhooks are authenticated by the provider signature only.
+
 New merchants get all templates at registration; the `002-role-templates` seed adds
 missing templates to existing merchants without touching customized roles.
 

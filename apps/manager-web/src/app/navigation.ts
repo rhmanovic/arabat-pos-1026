@@ -90,6 +90,13 @@ export const NAV: readonly NavItem[] = [
     section: 'operations',
   },
   {
+    key: 'online',
+    to: '/online',
+    anyOf: ['online.manage', 'online.orders'],
+    available: true,
+    section: 'operations',
+  },
+  {
     key: 'customers',
     to: '/customers',
     anyOf: ['customers.read'],

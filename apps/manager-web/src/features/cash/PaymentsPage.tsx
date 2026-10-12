@@ -443,9 +443,9 @@ function MethodDialog({
                 onChange={(e) => set({ gatewayProvider: e.target.value })}
               >
                 <option value="">{t('cash.gatewayNone')}</option>
-                {GATEWAY_PROVIDERS.filter((g) => g !== 'mock').map((g) => (
+                {GATEWAY_PROVIDERS.map((g) => (
                   <option key={g} value={g}>
-                    {g[0]!.toUpperCase() + g.slice(1)}
+                    {g === 'mock' ? t('cash.gatewayMock') : g[0]!.toUpperCase() + g.slice(1)}
                   </option>
                 ))}
               </Select>

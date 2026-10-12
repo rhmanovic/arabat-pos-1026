@@ -562,6 +562,11 @@ export function createApiClient(options: ApiClientOptions = {}) {
         },
       ) =>
         request('POST', `/manager/online/orders/${id}/action`, { body, schema: onlineOrderSchema }),
+      /** Re-checks unpaid orders with their gateway and expires overdue ones. */
+      reconcile: () =>
+        request('POST', '/manager/online/reconcile', {
+          schema: z.object({ checked: z.number(), paid: z.number(), expired: z.number() }),
+        }),
     },
     /** Public storefront (no session). */
     store: {

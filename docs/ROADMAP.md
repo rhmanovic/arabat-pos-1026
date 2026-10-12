@@ -149,7 +149,8 @@ Acceptance criteria:
    sale logic).
 
 ## M10 — E-commerce (feature-gated)
-Blocked by: online payment provider approval.
+Status: implemented with the sandbox gateway (Prompt 16). Live payments blocked by
+provider approval and credentials (OQ-021).
 
 Acceptance criteria:
 1. Channel listings from catalog; online orders enter the orders module.

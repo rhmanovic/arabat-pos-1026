@@ -66,6 +66,30 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after Prompt 16 (2026-10-12, local run)
+- `pnpm verify` ✓ (138 unit/web), `pnpm test:integration` ✓ (139), `pnpm test:e2e` ✓ (32).
+- `ecommerce.int.test.ts` (4): storefront shows only listed products of a published store,
+  draft stores are not public, other merchants' products are not reachable; checkout
+  re-prices exactly (2 × 1.250 + 0.500 delivery = 3.000), same key → same order, reserved
+  stock blocks the POS (5 on hand, 2 reserved: POS sells 3, not 4) — verified to fail when
+  the reservation check is removed; signed sandbox webhook → one online sale with the
+  delivery line, fee, receipt number and stock deducted once; duplicate and replayed
+  notifications change nothing — verified to fail without event de-duplication; invalid
+  signature refused; fulfilment steps per pickup/delivery, paid orders cannot be
+  cancelled, history in the tracking view; declined/cancelled/wrong-amount payments release
+  stock (wrong amount → needs attention, no sale); expiry releases stock and a late
+  payment becomes a sale only if stock remains, else needs attention; Tap/UPayments/
+  Hesabe/Bookeey refuse with `GATEWAY_NOT_CONFIGURED`; paused store refuses orders;
+  branch-scoped and unauthorised managers refused; POS/online split in sales and reports.
+- Web: storefront (catalog and sold-out, cart capped at the offered maximum with exact
+  totals, minimum order, checkout body and redirect to the gateway, new idempotency key
+  after a refused checkout, tracking, sandbox page refuses foreign return URLs); manager
+  online page (actions per fulfilment, version sent, settings save, listings).
+- `e2e/store.spec.ts`: owner lists a product and publishes the store in the manager; an
+  anonymous shopper buys 2 with delivery (3.000), pays on the sandbox page and sees
+  "Paid"; stock 5 → 3; manager sees the order and starts preparing; the sales list shows
+  it as an online sale and the report's channel table shows the online total.
+
 ### Results after Prompt 15 (2026-10-12, local run)
 - `pnpm verify` ✓ (126 unit/web), `pnpm test:integration` ✓ (135), `pnpm test:e2e` ✓ (31).
 - `restaurant.int.test.ts` (4): table order with required/foreign modifier validation,

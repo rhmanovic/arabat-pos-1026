@@ -4,7 +4,7 @@ const PORT = Number(process.env['E2E_PORT'] ?? 3100);
 const baseURL = `http://localhost:${PORT}`;
 
 /**
- * End-to-end tests run against the production build: the API serves the three built SPAs
+ * End-to-end tests run against the production build: the API serves the built SPAs
  * from one origin (SERVE_WEB=true) and talks to a real PostgreSQL database.
  * Prerequisites: `pnpm db:up && pnpm db:migrate && pnpm build`.
  */
@@ -39,6 +39,7 @@ export default defineConfig({
       AUTH_RATE_LIMIT_SCALE: '50',
       PUBLIC_MANAGER_URL: `${baseURL}/manager`,
       PUBLIC_POS_URL: `${baseURL}/pos`,
+      PUBLIC_STORE_URL: `${baseURL}/store`,
     },
   },
 });

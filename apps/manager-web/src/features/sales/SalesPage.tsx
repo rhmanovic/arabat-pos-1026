@@ -8,6 +8,7 @@ import {
   Input,
   PageHeader,
   Section,
+  Select,
   StatCard,
 } from '@arabat/ui';
 import { localizedName, useApi, useNotify } from '@arabat/web-core';
@@ -44,11 +45,12 @@ export function SalesPage() {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [policy, setPolicy] = useState(false);
+  const [channel, setChannel] = useState<'' | 'pos' | 'online'>('');
   useEffect(() => {
     const id = setTimeout(() => setQ(search.trim()), 300);
     return () => clearTimeout(id);
   }, [search]);
-  const filterKey = JSON.stringify([q, from, to, branchId]);
+  const filterKey = JSON.stringify([q, from, to, branchId, channel]);
   const [paging, setPaging] = useState({ key: filterKey, page: 1 });
   const page = paging.key === filterKey ? paging.page : 1;
   const query: SaleListQuery = {
@@ -58,6 +60,7 @@ export function SalesPage() {
     ...(DATE.test(from) ? { from } : {}),
     ...(DATE.test(to) ? { to } : {}),
     ...(branchId ? { branchId } : {}),
+    ...(channel ? { channel } : {}),
   };
   const list = useQuery({
     queryKey: [...salesKey, query],
@@ -99,6 +102,16 @@ export function SalesPage() {
           {t('inventory.to')}
           <Input type="date" className="w-40" value={to} onChange={(e) => setTo(e.target.value)} />
         </label>
+        <Select
+          className="w-40"
+          aria-label={t('sales.channel')}
+          value={channel}
+          onChange={(e) => setChannel(e.target.value as '' | 'pos' | 'online')}
+        >
+          <option value="">{t('sales.channelAll')}</option>
+          <option value="pos">{t('sales.channel_pos')}</option>
+          <option value="online">{t('sales.channel_online')}</option>
+        </Select>
       </div>
       {list.data ? (
         <p className="mb-3 text-sm text-fg-muted" data-testid="sales-summary">
@@ -125,6 +138,15 @@ export function SalesPage() {
               <span dir="ltr" className="font-medium">
                 {s.receiptNumber}
               </span>
+            ),
+          },
+          {
+            key: 'channel',
+            header: t('sales.channel'),
+            cell: (s) => (
+              <Badge tone={s.channel === 'online' ? 'primary' : 'neutral'}>
+                {t(`sales.channel_${s.channel}`)}
+              </Badge>
             ),
           },
           {

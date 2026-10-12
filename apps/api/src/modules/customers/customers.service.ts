@@ -53,11 +53,15 @@ export async function ensureCustomerByPhone(
 ): Promise<string | null> {
   const phone = normalizePhone(input.phone);
   if (!phone) return null;
-  const [found] = (await tx.execute(sql`select id from customers where phone = ${phone}`)).rows as { id: string }[];
+  const [found] = (await tx.execute(sql`select id from customers where phone = ${phone}`)).rows as {
+    id: string;
+  }[];
   if (found) return found.id;
   const id = newId();
   const code = await nextDocumentNumber(tx, merchantId, 'customer', 'C');
-  await tx.insert(customers).values({ id, merchantId, code, fullName: input.fullName, phone, email: input.email });
+  await tx
+    .insert(customers)
+    .values({ id, merchantId, code, fullName: input.fullName, phone, email: input.email });
   return id;
 }
 

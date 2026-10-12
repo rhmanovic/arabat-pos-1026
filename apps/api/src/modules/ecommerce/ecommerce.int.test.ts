@@ -409,10 +409,11 @@ describe('online checkout and payments', () => {
         })
       ).json().code,
     ).toBe('INVALID_STATE');
-    managed = await s.ok('POST', `/manager/online/orders/${managed.id}/action`, {
+    const completed = await s.ok('POST', `/manager/online/orders/${managed.id}/action`, {
       action: 'completed',
       version: managed.version,
     });
+    expect(completed.status).toBe('completed');
     expect(
       (await pub(s, 'GET', `/orders/${order.trackingToken}`))
         .json()

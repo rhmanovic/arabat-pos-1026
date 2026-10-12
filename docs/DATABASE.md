@@ -321,7 +321,7 @@ erDiagram
 |---|---|
 | purchasing | implemented (Prompt 12) — see §8 |
 | restaurant | implemented (Prompt 15) — see §8 |
-| ecommerce | `online_stores`, `channel_listings` (+ `orders.channel = 'online'`) |
+| ecommerce | implemented (Prompt 16) — see §8 |
 | reporting | implemented on demand from source tables (ADR-0068); summary tables only if volumes require |
 | subscriptions | `plans`, `plan_features`, `subscriptions` (already in 6.1) |
 | idempotency | `idempotency_keys (merchant_id, key, request_hash, response, expires_at)` |
@@ -369,6 +369,8 @@ erDiagram
 | `apps/api/drizzle/0021_customers_rls.sql` | Forced RLS; `DELETE` revoked on customers; notes append-only; trigram indexes on name and phone |
 | `apps/api/drizzle/0022_report_indexes.sql` | Time-range indexes for reports: payments, completed refunds, refund payments, closed shifts, cash movements, purchase receipts, dispatched transfers (generated) |
 | `apps/api/drizzle/0023_restaurant.sql` | `restaurant_settings`, `dining_areas`, `dining_tables`, `kitchen_stations`, `kitchen_station_categories`, `modifier_groups`, `modifiers`, `product_modifier_groups`, `recipe_components`, `restaurant_orders`, `restaurant_order_items`, `restaurant_order_item_modifiers`, `kitchen_tickets`, `sale_line_modifiers`; `sales.restaurant_order_id`, `sales.service_type` (generated) |
+| `apps/api/drizzle/0025_ecommerce.sql` | `online_stores` (one per merchant, unique address), `online_listings`, `online_orders` (intent, status history, tracking token, idempotency key + request hash, reservation deadline), `online_order_lines` (price snapshot), `stock_reservations` (active/consumed/released, expiry), `online_payments` (gateway attempts, unique provider + reference), `payment_events` (unique provider + event id); `sales.channel` (`pos`/`online`), `sales.online_order_id` (unique); register/shift/cashier columns of `sales` nullable for online sales (CHECK `sales_channel_valid`); `customers.created_by_user_id` nullable |
+| `apps/api/drizzle/0026_ecommerce_rls.sql` | Forced RLS on all e-commerce tables; no deletes; `payment_events` and order lines append-only; triggers: completed/payment-failed/cancelled orders final, only initiated/expired payment attempts change; `SECURITY DEFINER` lookups `store_merchant(slug)`, `online_payment_merchant(provider, reference)`, `online_orders_due_merchants()` for the public API, webhooks and reconciliation |
 | `apps/api/drizzle/0024_restaurant_rls.sql` | Forced RLS; no deletes of configuration, orders, items, tickets; modifier snapshots immutable; triggers: paid and cancelled items unchangeable, sent items keep product and quantity, final orders immutable; one open order per table; one default station per branch |
 
 Restaurant model (implemented, Prompt 15):

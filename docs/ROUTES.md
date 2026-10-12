@@ -1,6 +1,6 @@
 # Application Routing Structure
 
-Status: **Designed. Not yet implemented.** Each SPA uses React Router (data
+Status: **Implemented routes are marked ✓; others are designed only.** Each SPA uses React Router (data
 mode, `createBrowserRouter`) with its own `basename`, lazy-loaded feature
 routes, and a route-level `RequirePermission` guard (UX only — the API is the
 authority). Feature-gated routes (restaurant, e-commerce) render only if the
@@ -50,7 +50,7 @@ Planned table (status per milestone):
 | `/manager/purchasing/receipts/:id` | Goods receipt | `goods.receive` | M6 |
 | `/manager/reports` | Reports dashboard (tabs per permission) | any `reports.*` | M7 ✓ |
 | `/manager/restaurant/tables`, `/modifiers` | 🧩 Restaurant setup | `catalog.manage` | M9 |
-| `/manager/ecommerce/store`, `/listings` | 🧩 Online store | `catalog.manage` | M10 |
+| `/manager/online` | Online store: orders (status filter, detail, fulfilment steps, cancel unpaid), store settings (status, address, branding, fulfilment, fees, reservation time, payment methods), products online | `online.orders` / `online.manage` | M10 ✓ |
 | `/manager/settings/company` | Company profile, language, timezone | `merchant.settings.read` | M1 |
 | `/manager/settings/payment-methods` | Payment methods | `payment_methods.manage` | M4 |
 | `/manager/settings/receipts` | Receipt layout | `merchant.settings.update` | M4 |
@@ -88,6 +88,19 @@ language toggle, lock button. Override dialog (manager approval) is a global
 modal available on any POS route.
 
 ---
+
+## 2b. `/store` — store-web (public storefront, Prompt 16)
+
+No session; every call goes to the public store API. Cart kept per store in the browser.
+
+| Route | Screen |
+|---|---|
+| `/store/:slug` | Catalog (search, categories, sold-out badges) |
+| `/store/:slug/products/:productId` | Product details, options, quantity, add to cart |
+| `/store/:slug/cart` | Cart (exact totals, minimum order, sold-out items removed) |
+| `/store/:slug/checkout` | Contact, pickup/delivery, address, payment method, summary |
+| `/store/:slug/orders/:token` | Order tracking (status, history, pay link while unpaid) |
+| `/store/pay/:reference` | Sandbox gateway page (mock adapter only) |
 
 ## 3. `/platform` — platform-web
 
@@ -230,6 +243,18 @@ items with kitchen status, send, cancel/waste, move, combine, split bill → pay
 receipt), `/pos/kitchen` (station filter, New / Preparing / Ready columns, timers). Kitchen-
 only staff land on `/pos/kitchen`. Sales list and reports show the service type.
 
+### Online store API (Prompt 16)
+
+| Method & path | Permission |
+|---|---|
+| `GET/PUT /manager/online/store`, `GET/PUT /manager/online/listings`, `POST /manager/online/reconcile` | merchant-wide `online.manage` |
+| `GET /manager/online/orders?status=`, `GET /manager/online/orders/:id`, `POST /manager/online/orders/:id/action` | `online.orders` (branch of the order) |
+| `GET /store/:slug`, `/products`, `/products/:id`, `/images/:productId/:imageId` | 🔓 published or paused store |
+| `POST /store/:slug/checkout` | 🔓 published store; idempotency key; 30 per 10 min per IP |
+| `GET /store/:slug/orders/:token` | 🔓 tracking token |
+| `POST /webhooks/payments/:provider` | 🔓 provider signature (raw body) |
+| `GET/POST /payments/mock/:reference` | 🔓 sandbox only (disabled in production by default) |
+
 ### Reports API (Prompt 14)
 
 All take `from`, `to` (local dates, ≤ 366 days), optional `branchId` (checked against the
@@ -294,7 +319,8 @@ stock, approve, dispatch and receive dialogs, discrepancy note, missing quantity
 | `/api/v1/manager/<module>/*` | manager-web | `manager.access` + per-route permission + branch |
 | `/api/v1/pos/<module>/*` | pos-web | `pos.access` + permission; branch from POS session |
 | `/api/v1/platform/<module>/*` | platform-web | operator realm |
-| `/api/v1/public/*` | ⏳ storefront (M10) | not in scope yet |
+| `/api/v1/store/:slug/*` | store-web | 🔓 merchant resolved from the store address |
+| `/api/v1/webhooks/payments/:provider`, `/api/v1/payments/mock/*` | gateways, sandbox page | 🔓 signature-checked / sandbox only |
 
 Example — the same `SalesService` behind two adapters:
 - `POST /api/v1/pos/sales` (create sale in the bound branch/shift)
@@ -302,6 +328,6 @@ Example — the same `SalesService` behind two adapters:
 
 ## 5. Serving & URLs
 - Production: one origin; the proxy serves `/manager/*`, `/pos/*`,
-  `/platform/*` from each app's static build with SPA fallback to that app's
+  `/platform/*`, `/store/*` from each app's static build with SPA fallback to that app's
   `index.html`, and forwards `/api/*` to the API.
 - `/` redirects to `/manager` (marketing site is out of scope).

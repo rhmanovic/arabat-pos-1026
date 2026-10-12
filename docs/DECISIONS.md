@@ -596,3 +596,63 @@ ADR; supersede it.
   (new → preparing → ready → completed) with timestamps; a repeated or stale tap that
   would not move it forward is ignored. A ticket whose items are all cancelled is
   cancelled. Takeaway and pickup items can be sent automatically when paid (setting).
+
+## ADR-0076 — The online store is a separate public app over the shared commerce engine
+- **Date:** 2026-10-12 · **Status:** Accepted (Prompt 16)
+- **Decision:** A fourth SPA, `apps/store-web` (basename `/store`), is the public
+  storefront. It has no session and no `AuthProvider`; it calls only the public
+  `/api/v1/store/:slug/*` endpoints, which resolve the merchant from the store address
+  through a `SECURITY DEFINER` function (`store_merchant(slug)`) and then run inside
+  `withMerchantTx` (RLS). The client never sends a merchant id. Configuration and order
+  handling live in `/manager/online` (permissions `online.manage`, merchant-wide, and
+  `online.orders`, branch-scoped). Products, prices and stock come from the existing
+  catalog and the fulfilment branch's inventory; nothing is duplicated.
+- **Consequences:** The storefront can later move to its own domain without changing
+  the API. Store addresses `pay`, `assets`, `api`, `admin` are reserved.
+
+## ADR-0077 — Online orders are intent; payment creates an online-channel sale
+- **Date:** 2026-10-12 · **Status:** Accepted (BR-140…BR-146)
+- **Decision:** `online_orders` holds the shopper's intent with a price snapshot,
+  status and an append-only status history. When the gateway confirms payment, the
+  order becomes an immutable `sales` row with `channel = 'online'` (no register, shift
+  or cashier; CHECK `sales_channel_valid`) through `SalesService.completeOnlineSaleInTx`,
+  which reuses the checkout engine: stock consumption, costs, processing fees, receipt
+  number, financial entries and audit. The delivery fee is a sale line on an archived
+  service product (`ONLINE-DELIVERY`) so totals reconcile. Paid orders are corrected by
+  refunding the sale (refund engine, Prompt 11); they cannot be cancelled in place.
+- **Consequences:** Reports split POS vs. online (`byChannel`); employee reports cover
+  POS only. Sales/receipt queries use left joins for register and cashier.
+
+## ADR-0078 — Payment gateway abstraction, sandbox adapter only
+- **Date:** 2026-10-12 · **Status:** Accepted (BR-143, BR-147)
+- **Decision:** `PaymentGateway` (initiate → redirect URL + provider reference, verify,
+  parseWebhook with signature check, `ready`). Adapters registered: Tap, UPayments,
+  Hesabe, Bookeey as `UnconfiguredGateway` (refuse with `GATEWAY_NOT_CONFIGURED`, never
+  ready) and `MockGateway` (in-memory sandbox, HMAC-SHA256 `x-mock-signature`, constant-
+  time compare, hosted test page at `/store/pay/:reference`). Mock payments are on by
+  default except in production (`PAYMENT_MOCK_ENABLED`). Payment attempts live in a
+  mutable `online_payments` table (unique provider + reference; final states immutable)
+  while `payments` stays append-only; every notification is stored once in the
+  append-only `payment_events` (unique provider + event id) with its outcome, so
+  repeated webhooks are idempotent. Success, failure, cancellation and amount mismatch
+  are handled; pending orders are reconciled lazily (tracking page, checkout) and by a
+  60-second background job, and a manager can trigger reconciliation.
+- **Consequences:** Activating a real provider needs: owner approval, merchant
+  credentials as environment secrets, the provider's verification and webhook signature
+  implementation, and sandbox tests — then only `ready` changes. No real money moves
+  today.
+
+## ADR-0079 — Stock reservations against overselling
+- **Date:** 2026-10-12 · **Status:** Accepted (BR-144, BR-145)
+- **Decision:** Checkout reserves the ordered quantities at the fulfilment branch in
+  `stock_reservations` (locks the stock levels `FOR UPDATE`, refuses with
+  `INSUFFICIENT_STOCK`), valid for the store's reservation time (5–1440 min, default
+  30). `StockLedgerService.apply` counts other orders' active, unexpired reservations as
+  unavailable for `sale` and `transfer_out` movements, so the POS and transfers cannot
+  sell reserved stock (unless the merchant allows negative stock). Paying consumes the
+  reservation and deducts stock through the ledger; failure, cancellation, expiry and
+  amount mismatch release it. A payment that arrives after expiry is accepted only if
+  the stock is still available; otherwise the order is `needs_attention` and no sale is
+  created.
+- **Consequences:** The public catalog shows availability as on-hand minus reservations
+  and never the exact stock (offered maximum ≤ 20).

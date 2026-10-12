@@ -261,5 +261,22 @@ Not done yet / open: OQ-020 (service charge/tips, courses, kitchen printers,
 reservations); split by equal shares is done as several tenders on one bill (no
 fractional item splitting); waiters need an open shift to use the floor screen.
 
+### 2026-10-12 — Prompt 16: Online store and payment gateway abstraction
+Implemented: migrations 0025–0026; `ecommerce` module (store settings, listings, public
+storefront API, checkout with idempotency and server pricing, stock reservations honoured
+by POS sales and transfers, online orders with fulfilment steps, payment attempts and
+append-only gateway events, signed webhooks, lazy + background reconciliation); payment
+gateway abstraction with Tap/UPayments/Hesabe/Bookeey adapters (not connected) and a
+sandbox adapter; paid orders become online-channel sales through the checkout engine;
+new public app `apps/store-web` (catalog, product, cart, checkout, sandbox payment page,
+tracking; Arabic/English); manager `/manager/online`; sales channel column/filter and
+"sales by channel" report; permissions `online.manage` / `online.orders`.
+Verified: see TESTING.md.
+Not done / open: **no real payment gateway is connected** (needs owner approval,
+merchant credentials and provider sandbox tests — OQ-021); the sandbox gateway keeps its
+charges in memory (single API instance); no shopper accounts, coupons, delivery zones,
+cash on delivery or automatic gateway refunds; paid online orders are refunded through
+the existing refund engine (gateway refund stays pending per BR-095).
+
 ## Next step
-Prompt 16 — e-commerce storefront and payment gateway abstraction.
+Prompt 17 — platform administration and subscriptions.

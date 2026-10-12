@@ -94,6 +94,7 @@ apps/
   manager-web/            React SPA, basename /manager
   pos-web/                React SPA, basename /pos
   platform-web/           React SPA, basename /platform
+  store-web/              Public storefront SPA, basename /store (no session, ADR-0076)
 packages/
   contracts/              Zod request/response schemas, error codes, enums (API ⇄ web)      [M0]
   permissions/            Permission catalog (keys, scope) + can() evaluation              [M0]
@@ -442,7 +443,7 @@ Full design in `AUTH.md`.
   `docker/postgres/init`). Mailpit (local e-mail capture) is added in M1 when the
   first e-mail (invitations) exists.
 - `pnpm dev` runs: API (`:3000`), manager-web (`:5173`, base `/manager`),
-  pos-web (`:5174`, base `/pos`), platform-web (`:5175`, base `/platform`).
+  pos-web (`:5174`, base `/pos`), platform-web (`:5175`, base `/platform`), store-web (`:5176`, base `/store`).
   Each Vite dev server proxies `/api` to the API (cookies are host-scoped, so the
   ports share sessions on `localhost`). For a single-origin run use
   `pnpm build && SERVE_WEB=true pnpm start` (ADR-0021).

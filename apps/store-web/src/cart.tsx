@@ -71,7 +71,9 @@ export function CartProvider({ slug, children }: { slug: string; children: React
           );
         }),
       setQuantity: (variantId, quantity) =>
-        update((current) => current.map((l) => (l.variantId === variantId ? { ...l, quantity } : l))),
+        update((current) =>
+          current.map((l) => (l.variantId === variantId ? { ...l, quantity } : l)),
+        ),
       remove: (variantId) => update((current) => current.filter((l) => l.variantId !== variantId)),
       clear: () => update(() => []),
     }),
@@ -130,8 +132,6 @@ export function priceLines(
   const currency = priced[0]?.unitPrice.currency ?? DEFAULT_CURRENCY;
   const subtotal = priced.reduce((sum, l) => sum.add(l.lineTotal), Money.zero(currency));
   const deliveryFee =
-    fulfillment === 'delivery'
-      ? toMoney(store.deliveryFee)
-      : Money.zero(currency);
+    fulfillment === 'delivery' ? toMoney(store.deliveryFee) : Money.zero(currency);
   return { priced, missing, subtotal, deliveryFee, total: subtotal.add(deliveryFee) };
 }

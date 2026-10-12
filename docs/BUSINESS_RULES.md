@@ -179,6 +179,36 @@ Restaurant (Prompt 15):
 - **BR-139** Paid restaurant items are corrected by refunds of their bill (Prompt 11),
   not by editing the order.
 
+Online store (Prompt 16):
+- **BR-140** A store is draft (hidden), published (open for orders) or paused (browse
+  only). Publishing needs a fulfilment branch, pickup or delivery, and at least one
+  online payment method whose gateway is ready.
+- **BR-141** Only listed, active products appear online, at their catalog price; stock
+  and availability are those of the fulfilment branch. Untracked and recipe items are
+  always available.
+- **BR-142** Checkout re-prices the cart on the server and refuses it if the total the
+  shopper saw changed (`TOTAL_CHANGED`) or is below the minimum order (`MINIMUM_ORDER`).
+  Whole quantities only, at most 20 per item. Repeating a checkout with the same key
+  returns the same order.
+- **BR-143** Online payments go through a gateway; only the sandbox gateway is active.
+  Tap, UPayments, Hesabe and Bookeey are not connected until the owner approves them and
+  tested credentials exist. The sandbox never moves real money.
+- **BR-144** An unpaid order reserves its stock for the store's reservation time
+  (default 30 minutes). Reserved stock cannot be sold at the POS or transferred.
+- **BR-145** When payment is confirmed the order becomes a sale (channel "online") and
+  stock is deducted once. Failed, cancelled or expired payments release the stock. A
+  payment whose amount differs from the order, or that arrives after the stock was sold,
+  is not turned into a sale: the order needs attention.
+- **BR-146** Order flow: paid → preparing → ready (pickup) or out for delivery
+  (delivery) → completed. Only unpaid or needs-attention orders can be cancelled; paid
+  orders are cancelled by refunding their sale.
+- **BR-147** Each gateway notification is processed once (provider event id), only with
+  a valid signature, and repeated notifications change nothing.
+- **BR-148** The delivery fee is part of the sale total (its own line); processing fees
+  of the online method apply as for POS card payments.
+- **BR-149** Shoppers need no account; a customer profile is found or created by phone
+  number. Orders are tracked through an unguessable link.
+
 Report metrics (Prompt 14; all exact, in fils, merchant-local days):
 - **BR-120** *Gross sales* = Σ unit price × quantity of items sold, before discounts.
   *Discounts* = item discounts + sale discounts. *Net sales* (sales revenue) = gross −
@@ -247,5 +277,6 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
 | OQ-017 | Returns without a receipt or at another branch: allowed? Implemented: receipt required, same branch. | Refunds |
 | OQ-019 | Loyalty points, store credit and promotions: rules (earning rate, expiry, use as payment)? Also: should customers be able to request erasure of their personal data (anonymisation while keeping sales)? Not implemented. | Customers |
 | OQ-020 | Restaurant: service charge or tips? Courses/fire timing? Printing tickets on kitchen printers (vs. screen)? Table reservations? Not implemented. | Restaurant |
+| OQ-021 | Online store: which gateway(s) first and the merchant contracts/credentials; delivery zones and fees per area; shopper accounts, coupons, scheduled orders; cash on delivery; automatic gateway refunds? Not implemented. | Online store |
 | OQ-018 | Supplier invoices, payments and balances (accounts payable) and returns to suppliers: needed, and with which payment terms? Not implemented yet. | Purchasing |
 | OQ-013 | Card payments: manual entry of card amount only, or integrated card terminals (e.g. KNET)? | M4 / later |
