@@ -1,6 +1,6 @@
 import { type Category, saveCategorySchema } from '@arabat/contracts';
 import { Badge, Button, DataTable, Dialog, Field, Input, PageHeader, Select } from '@arabat/ui';
-import { localizedName, useApi, useNotify } from '@arabat/web-core';
+import { ErrorState, localizedName, useApi, useNotify } from '@arabat/web-core';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
@@ -48,6 +48,11 @@ export function CategoriesPage() {
       <DataTable
         caption={t('catalog.categoriesTitle')}
         loading={list.isPending}
+        error={
+          list.isError ? (
+            <ErrorState error={list.error} onRetry={() => void list.refetch()} />
+          ) : null
+        }
         rows={categories}
         rowKey={(c) => c.id}
         empty={t('catalog.emptyCategories')}

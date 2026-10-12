@@ -11,7 +11,7 @@ import {
   Select,
   StatCard,
 } from '@arabat/ui';
-import { localizedName, useApi, useNotify } from '@arabat/web-core';
+import { ErrorState, localizedName, useApi, useNotify } from '@arabat/web-core';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -126,6 +126,11 @@ export function SalesPage() {
       <DataTable
         caption={t('sales.title')}
         loading={list.isPending}
+        error={
+          list.isError ? (
+            <ErrorState error={list.error} onRetry={() => void list.refetch()} />
+          ) : null
+        }
         rows={list.data?.sales}
         rowKey={(s) => s.id}
         empty={t('sales.empty')}

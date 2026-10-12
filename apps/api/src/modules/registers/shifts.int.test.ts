@@ -4,6 +4,7 @@ import type pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DatabaseService } from '../../database/database.service.js';
 import { newId } from '../../kernel/ids.js';
+import { ensureDefaultPaymentSetup } from '../payments/merchant-defaults.js';
 import { DbFixtures, createCompany } from '../../testing/auth-fixtures.js';
 import { prepareIntegrationDatabase } from '../../testing/integration-db.js';
 import { InMemoryMailer, createTestApp, testEnv } from '../../testing/test-app.js';
@@ -60,11 +61,34 @@ describe('payment methods', () => {
     const listA = (
       await a.client.request('GET', '/manager/payment-methods', { cookies: a.cookies })
     ).json();
-    expect(listA.methods.map((m: { kind: string }) => m.kind)).toEqual([
-      'cash',
-      'card',
-      'bank_transfer',
+    // ADR-0089: cash, KNET, Visa/Mastercard, payment link and WAMD, each settling into a
+    // default internal balance (cash box, bank 1, bank 2), without fees.
+    expect(listA.methods.map((m: { kind: string; nameEn: string }) => [m.kind, m.nameEn])).toEqual([
+      ['cash', 'Cash'],
+      ['card', 'Card (KNET)'],
+      ['card', 'Visa / Mastercard'],
+      ['custom', 'Payment link'],
+      ['bank_transfer', 'WAMD'],
     ]);
+    const accountsA = (
+      await a.client.request('GET', '/manager/financial-accounts', { cookies: a.cookies })
+    ).json().accounts as { id: string; kind: string; nameEn: string }[];
+    expect(accountsA.map((x) => [x.kind, x.nameEn])).toEqual([
+      ['cash', 'Cash box'],
+      ['bank', 'Bank account 1'],
+      ['bank', 'Bank account 2'],
+    ]);
+    const accountOf = (name: string) => accountsA.find((x) => x.nameEn === name)!.id;
+    expect(
+      listA.methods.map((m: { financialAccountId: string | null }) => m.financialAccountId),
+    ).toEqual([
+      accountOf('Cash box'),
+      accountOf('Bank account 1'),
+      accountOf('Bank account 2'),
+      accountOf('Bank account 1'),
+      accountOf('Bank account 1'),
+    ]);
+    expect(listA.methods.every((m: { feeType: string }) => m.feeType === 'none')).toBe(true);
     expect(listA.methods.every((m: { gatewayLive: boolean }) => m.gatewayLive === false)).toBe(
       true,
     );
@@ -175,8 +199,58 @@ describe('payment methods', () => {
     );
     const accounts = (
       await a.client.request('GET', '/manager/financial-accounts', { cookies: a.cookies })
-    ).json().accounts;
-    expect(accounts[0].balance.amount).toBe('12.000');
+    ).json().accounts as { id: string; balance: { amount: string } }[];
+    expect(accounts.find((x) => x.id === account.id)!.balance.amount).toBe('12.000');
+  });
+
+  it('gives an existing merchant the default payment setup once, keeping what it has', async () => {
+    const c = await company();
+    // Recreate a merchant from before ADR-0089: no internal balances, three unlinked methods.
+    await owner.query(
+      `update payment_methods set financial_account_id = null where merchant_id = $1`,
+      [c.merchantId],
+    );
+    await owner.query(`delete from financial_accounts where merchant_id = $1`, [c.merchantId]);
+    await owner.query(
+      `delete from payment_methods where merchant_id = $1 and kind in ('custom', 'bank_transfer')
+         or merchant_id = $1 and name_en = 'Visa / Mastercard'`,
+      [c.merchantId],
+    );
+    await owner.query(
+      `update payment_methods set name_en = 'KNET terminal' where merchant_id = $1 and kind = 'card'`,
+      [c.merchantId],
+    );
+    await owner.query(
+      `insert into payment_methods (id, merchant_id, kind, name_en) values ($1, $2, 'bank_transfer', 'Bank transfer')`,
+      [newId(), c.merchantId],
+    );
+    const database = app.get(DatabaseService);
+    const run = () =>
+      database.withMerchantTx(c.merchantId, (tx) => ensureDefaultPaymentSetup(tx, c.merchantId));
+    expect(await run()).toEqual({ accounts: 3, added: 3, linked: 3 });
+    const list = async () =>
+      (await c.client.request('GET', '/manager/payment-methods', { cookies: c.cookies })).json()
+        .methods as { nameEn: string; financialAccountId: string | null; version: number }[];
+    const methods = await list();
+    // The renamed KNET is kept (not re-added); every method now settles into a balance.
+    expect(methods.map((m) => m.nameEn).sort()).toEqual(
+      [
+        'Bank transfer',
+        'Cash',
+        'KNET terminal',
+        'Payment link',
+        'Visa / Mastercard',
+        'WAMD',
+      ].sort(),
+    );
+    expect(methods.every((m) => m.financialAccountId !== null)).toBe(true);
+    // Once set up, later runs (every deploy) change nothing, even after the owner renames.
+    const wamd = methods.find((m) => m.nameEn === 'WAMD')!;
+    await owner.query(`update payment_methods set name_en = 'Instant transfer' where id = $1`, [
+      (wamd as unknown as { id: string }).id,
+    ]);
+    expect(await run()).toEqual({ accounts: 0, added: 0, linked: 0 });
+    expect(await list()).toHaveLength(6);
   });
 
   it('requires payments.settings and shows cashiers only active POS methods without fees', async () => {
@@ -189,7 +263,13 @@ describe('payment methods', () => {
     const cashier = await c.hire([{ roleId: c.roles.cashier, branchId: c.main }], 'pos');
     const res = await c.client.request('GET', '/pos/payment-methods', { cookies: cashier.cookies });
     expect(res.statusCode).toBe(200);
-    expect(res.json().methods.map((m: { kind: string }) => m.kind)).toEqual(['cash', 'card']);
+    expect(res.json().methods.map((m: { kind: string }) => m.kind)).toEqual([
+      'cash',
+      'card',
+      'card',
+      'custom',
+      'bank_transfer',
+    ]);
     expect(res.body).not.toContain('fee');
   });
 });

@@ -12,7 +12,7 @@ import {
   StatCard,
   Textarea,
 } from '@arabat/ui';
-import { useApi, useNotify } from '@arabat/web-core';
+import { ErrorState, useApi, useNotify } from '@arabat/web-core';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -109,6 +109,11 @@ export function CustomersPage() {
       <DataTable<Customer>
         caption={t('customers.title')}
         loading={list.isPending}
+        error={
+          list.isError ? (
+            <ErrorState error={list.error} onRetry={() => void list.refetch()} />
+          ) : null
+        }
         rows={list.data?.customers}
         rowKey={(c) => c.id}
         empty={q || status ? t('customers.noMatch') : t('customers.empty')}
@@ -413,6 +418,11 @@ export function CustomerDetailPage() {
           <DataTable<SaleRow>
             caption={t('customers.purchaseHistory')}
             loading={salesQuery.isPending}
+            error={
+              salesQuery.isError ? (
+                <ErrorState error={salesQuery.error} onRetry={() => void salesQuery.refetch()} />
+              ) : null
+            }
             rows={salesQuery.data?.sales}
             rowKey={(s) => s.id}
             empty={t('customers.noPurchases')}
@@ -460,6 +470,11 @@ export function CustomerDetailPage() {
           <DataTable<RefundRow>
             caption={t('customers.refundHistory')}
             loading={refunds.isPending}
+            error={
+              refunds.isError ? (
+                <ErrorState error={refunds.error} onRetry={() => void refunds.refetch()} />
+              ) : null
+            }
             rows={refunds.data?.refunds}
             rowKey={(r) => r.id}
             empty={t('customers.noRefunds')}

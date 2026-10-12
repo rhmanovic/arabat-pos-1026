@@ -1,6 +1,6 @@
 import type { AdjustmentKind } from '@arabat/contracts';
 import { Badge, Button, DataTable, PageHeader, Section, Select } from '@arabat/ui';
-import { useApi } from '@arabat/web-core';
+import { ErrorState, useApi } from '@arabat/web-core';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -77,6 +77,11 @@ export function AdjustmentsPage() {
       <DataTable
         caption={t('inventory.adjustmentsTitle')}
         loading={list.isPending}
+        error={
+          list.isError ? (
+            <ErrorState error={list.error} onRetry={() => void list.refetch()} />
+          ) : null
+        }
         rows={list.data?.adjustments}
         rowKey={(a) => a.id}
         empty={t('inventory.adjustmentsEmpty')}

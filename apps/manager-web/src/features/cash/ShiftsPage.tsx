@@ -13,7 +13,7 @@ import {
   StatCard,
   Textarea,
 } from '@arabat/ui';
-import { localizedName, useApi, useNotify } from '@arabat/web-core';
+import { ErrorState, localizedName, useApi, useNotify } from '@arabat/web-core';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -130,6 +130,11 @@ function ShiftList({ from, to }: { from: string | undefined; to: string | undefi
       <DataTable
         caption={t('cash.shiftsTitle')}
         loading={list.isPending}
+        error={
+          list.isError ? (
+            <ErrorState error={list.error} onRetry={() => void list.refetch()} />
+          ) : null
+        }
         rows={list.data?.shifts}
         rowKey={(s) => s.id}
         empty={t('cash.shiftEmpty')}

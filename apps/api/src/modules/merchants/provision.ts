@@ -3,10 +3,7 @@ import type { Transaction } from '../../database/database.service.js';
 import { newId } from '../../kernel/ids.js';
 import { branches } from '../branches/branches.schema.js';
 import { memberships, rolePermissions, roles } from '../iam/iam.schema.js';
-import {
-  ensureDefaultPaymentMethods,
-  ensureDefaultRegister,
-} from '../payments/merchant-defaults.js';
+import { ensureDefaultPaymentSetup, ensureDefaultRegister } from '../payments/merchant-defaults.js';
 import { merchants } from './merchants.schema.js';
 
 /**
@@ -54,7 +51,7 @@ export async function provisionMerchant(
     isOwner: true,
     status: 'active',
   });
-  await ensureDefaultPaymentMethods(tx, merchantId);
+  await ensureDefaultPaymentSetup(tx, merchantId);
   await ensureDefaultRegister(tx, merchantId, branchId);
 
   for (const [templateKey, template] of Object.entries(ROLE_TEMPLATES)) {

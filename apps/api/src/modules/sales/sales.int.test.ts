@@ -237,8 +237,11 @@ describe('checkout', () => {
     expect(detail.change.amount).toBe('2.667');
     const accounts = (
       await s.c.client.request('GET', '/manager/financial-accounts', { cookies: s.c.cookies })
-    ).json().accounts;
-    expect(accounts[0].balance.amount).toBe('22.270');
+    ).json().accounts as { id: string; kind: string; balance: { amount: string } }[];
+    // The card payment net of its fee lands in the linked balance…
+    expect(accounts.find((x) => x.id === account.id)!.balance.amount).toBe('22.270');
+    // …and the cash payment (net of change) in the default cash box.
+    expect(accounts.find((x) => x.kind === 'cash')!.balance.amount).toBe('7.333');
   });
 
   it('never creates two sales for retried or concurrent duplicates of one checkout', async () => {

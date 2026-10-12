@@ -12,7 +12,7 @@ import {
   Select,
   Textarea,
 } from '@arabat/ui';
-import { localizedName, useApi, useNotify } from '@arabat/web-core';
+import { ErrorState, localizedName, useApi, useNotify } from '@arabat/web-core';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -140,6 +140,11 @@ function RefundList({ pendingOnly }: { pendingOnly: boolean }) {
       <DataTable<Row>
         caption={t('refunds.title')}
         loading={list.isPending}
+        error={
+          list.isError ? (
+            <ErrorState error={list.error} onRetry={() => void list.refetch()} />
+          ) : null
+        }
         rows={list.data?.refunds}
         rowKey={(r) => r.id}
         empty={pendingOnly ? t('refunds.noPending') : t('refunds.empty')}
@@ -389,6 +394,11 @@ function Activity() {
       <DataTable<A>
         caption={t('refunds.tabActivity')}
         loading={activity.isPending}
+        error={
+          activity.isError ? (
+            <ErrorState error={activity.error} onRetry={() => void activity.refetch()} />
+          ) : null
+        }
         rows={activity.data?.byEmployee}
         rowKey={(a) => a.membershipId}
         columns={[

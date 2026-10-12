@@ -1,5 +1,5 @@
 import { DataTable, Input, PageHeader } from '@arabat/ui';
-import { useApi } from '@arabat/web-core';
+import { ErrorState, useApi } from '@arabat/web-core';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -35,6 +35,11 @@ export function AuditPage() {
       <DataTable
         caption={t('audit.title')}
         loading={audit.isPending}
+        error={
+          audit.isError ? (
+            <ErrorState error={audit.error} onRetry={() => void audit.refetch()} />
+          ) : null
+        }
         rows={audit.data?.entries}
         rowKey={(e) => e.id}
         empty={t('audit.empty')}

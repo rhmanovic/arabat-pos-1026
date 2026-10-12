@@ -11,7 +11,7 @@ import {
   Select,
   StatCard,
 } from '@arabat/ui';
-import { useApi, useNotify } from '@arabat/web-core';
+import { ErrorState, useApi, useNotify } from '@arabat/web-core';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -157,6 +157,11 @@ export function InventoryPage() {
       <DataTable
         caption={t('inventory.title')}
         loading={levels.isPending}
+        error={
+          levels.isError ? (
+            <ErrorState error={levels.error} onRetry={() => void levels.refetch()} />
+          ) : null
+        }
         rows={levels.data?.levels}
         rowKey={(l) => l.variantId}
         empty={t('inventory.empty')}
@@ -365,6 +370,11 @@ function VariantDialog({ level, onClose }: { level: StockLevel; onClose: () => v
       <DataTable
         caption={t('inventory.byBranch')}
         loading={stock.isPending}
+        error={
+          stock.isError ? (
+            <ErrorState error={stock.error} onRetry={() => void stock.refetch()} />
+          ) : null
+        }
         rows={stock.data?.branches}
         rowKey={(b) => b.branchId}
         columns={[

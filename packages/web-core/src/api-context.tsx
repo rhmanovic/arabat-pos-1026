@@ -22,15 +22,18 @@ export function shouldRetry(failureCount: number, error: unknown): boolean {
 }
 
 export function createQueryClient(): QueryClient {
-  // Any request refused because the POS locked itself re-reads the session, which turns
-  // the auth state to "locked" and shows the lock screen.
-  const onError = (error: unknown) => {
-    if (error instanceof ApiError && error.code === 'SESSION_LOCKED')
+  // A request refused because the POS locked itself, or because the session ended (expired,
+  // signed out elsewhere, revoked), re-reads the session: the auth state turns "locked" or
+  // "unauthenticated" and the guards show the lock screen or the sign-in page, instead of
+  // pages that look empty. The session query itself is skipped so a 401 there cannot loop.
+  const onError = (error: unknown, queryKey?: readonly unknown[]) => {
+    if (queryKey?.[0] === 'auth' || !(error instanceof ApiError)) return;
+    if (error.code === 'SESSION_LOCKED' || error.status === 401)
       void client.invalidateQueries({ queryKey: ['auth'] });
   };
   const client: QueryClient = new QueryClient({
-    queryCache: new QueryCache({ onError }),
-    mutationCache: new MutationCache({ onError }),
+    queryCache: new QueryCache({ onError: (error, query) => onError(error, query.queryKey) }),
+    mutationCache: new MutationCache({ onError: (error) => onError(error) }),
     defaultOptions: {
       queries: { retry: shouldRetry, staleTime: 30_000, refetchOnWindowFocus: false },
       mutations: { retry: false },

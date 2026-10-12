@@ -17,7 +17,7 @@ import {
   Section,
   Select,
 } from '@arabat/ui';
-import { localizedName, useApi, useNotify } from '@arabat/web-core';
+import { ErrorState, localizedName, useApi, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -556,6 +556,11 @@ function ModifiersTab() {
         rows={menu.data?.groups}
         rowKey={(g) => g.id}
         loading={menu.isPending}
+        error={
+          menu.isError ? (
+            <ErrorState error={menu.error} onRetry={() => void menu.refetch()} />
+          ) : null
+        }
         empty={t('restaurant.noGroups')}
         onRowClick={setEditing}
         columns={[
@@ -844,6 +849,11 @@ function MenuTab() {
         rows={menu.data?.items}
         rowKey={(i) => i.productId}
         loading={menu.isPending}
+        error={
+          menu.isError ? (
+            <ErrorState error={menu.error} onRetry={() => void menu.refetch()} />
+          ) : null
+        }
         onRowClick={setEditing}
         columns={[
           { key: 'name', header: t('common.name'), cell: (i) => localizedName(i, i18n.language) },

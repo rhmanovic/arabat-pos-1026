@@ -11,7 +11,7 @@ import {
   Input,
   PageHeader,
 } from '@arabat/ui';
-import { localizedName, useApi, useNotify } from '@arabat/web-core';
+import { ErrorState, localizedName, useApi, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -56,6 +56,11 @@ export function RolesPage() {
       <DataTable
         caption={t('roles.title')}
         loading={roles.isPending}
+        error={
+          roles.isError ? (
+            <ErrorState error={roles.error} onRetry={() => void roles.refetch()} />
+          ) : null
+        }
         rows={roles.data?.roles}
         rowKey={(r) => r.id}
         columns={[

@@ -19,7 +19,7 @@ import {
   Select,
   Textarea,
 } from '@arabat/ui';
-import { AccessDenied, localizedName, useApi, useNotify } from '@arabat/web-core';
+import { ErrorState, AccessDenied, localizedName, useApi, useNotify } from '@arabat/web-core';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -153,6 +153,11 @@ function OrdersTab() {
       <DataTable
         caption={t('online.tabOrders')}
         loading={list.isPending}
+        error={
+          list.isError ? (
+            <ErrorState error={list.error} onRetry={() => void list.refetch()} />
+          ) : null
+        }
         rows={list.data?.orders}
         rowKey={(o) => o.id}
         empty={t('online.noOrders')}
@@ -641,6 +646,11 @@ function ProductsTab() {
       <DataTable
         caption={t('online.tabProducts')}
         loading={listings.isPending}
+        error={
+          listings.isError ? (
+            <ErrorState error={listings.error} onRetry={() => void listings.refetch()} />
+          ) : null
+        }
         rows={rows}
         rowKey={(p) => p.productId}
         empty={t('online.noProducts')}

@@ -13,7 +13,7 @@ import {
   Select,
   Textarea,
 } from '@arabat/ui';
-import { localizedName, useApi, useNotify } from '@arabat/web-core';
+import { ErrorState, localizedName, useApi, useNotify } from '@arabat/web-core';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -128,6 +128,11 @@ export function PurchaseOrdersPage() {
       <DataTable<Row>
         caption={t('purchasing.ordersTitle')}
         loading={list.isPending}
+        error={
+          list.isError ? (
+            <ErrorState error={list.error} onRetry={() => void list.refetch()} />
+          ) : null
+        }
         rows={list.data?.orders}
         rowKey={(o) => o.id}
         empty={t('purchasing.empty')}

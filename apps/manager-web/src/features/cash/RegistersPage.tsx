@@ -11,7 +11,7 @@ import {
   PageHeader,
   Select,
 } from '@arabat/ui';
-import { localizedName, useApi, useNotify } from '@arabat/web-core';
+import { ErrorState, localizedName, useApi, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -61,6 +61,11 @@ export function RegistersPage() {
       <DataTable
         caption={t('cash.registersTitle')}
         loading={list.isPending}
+        error={
+          list.isError ? (
+            <ErrorState error={list.error} onRetry={() => void list.refetch()} />
+          ) : null
+        }
         rows={list.data?.registers}
         rowKey={(r) => r.id}
         onRowClick={setEditing}

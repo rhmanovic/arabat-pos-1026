@@ -19,6 +19,7 @@ export function DataTable<T>({
   rows,
   rowKey,
   loading,
+  error,
   empty,
   caption,
   onRowClick,
@@ -27,6 +28,8 @@ export function DataTable<T>({
   rows: T[] | undefined;
   rowKey: (row: T) => string;
   loading?: boolean;
+  /** Shown instead of the rows when loading failed, so a failure never looks like «no data». */
+  error?: ReactNode;
   empty?: ReactNode;
   caption?: string;
   onRowClick?: (row: T) => void;
@@ -58,6 +61,12 @@ export function DataTable<T>({
             <tr>
               <td colSpan={columns.length} className="px-4 py-10 text-center text-primary">
                 <Spinner />
+              </td>
+            </tr>
+          ) : error ? (
+            <tr>
+              <td colSpan={columns.length} className="px-4 py-6">
+                {error}
               </td>
             </tr>
           ) : rows && rows.length > 0 ? (

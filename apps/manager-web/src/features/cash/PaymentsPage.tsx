@@ -20,7 +20,7 @@ import {
   PageHeader,
   Select,
 } from '@arabat/ui';
-import { localizedName, useApi, useNotify } from '@arabat/web-core';
+import { ErrorState, localizedName, useApi, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -96,6 +96,11 @@ export function PaymentsPage() {
         <DataTable
           caption={t('cash.methodsTitle')}
           loading={methods.isPending}
+          error={
+            methods.isError ? (
+              <ErrorState error={methods.error} onRetry={() => void methods.refetch()} />
+            ) : null
+          }
           rows={methods.data?.methods}
           rowKey={(m) => m.id}
           onRowClick={setEditing}
@@ -149,6 +154,11 @@ export function PaymentsPage() {
           <DataTable
             caption={t('cash.accountsTitle')}
             loading={accounts.isPending}
+            error={
+              accounts.isError ? (
+                <ErrorState error={accounts.error} onRetry={() => void accounts.refetch()} />
+              ) : null
+            }
             rows={accounts.data?.accounts}
             rowKey={(a) => a.id}
             onRowClick={setAccount}

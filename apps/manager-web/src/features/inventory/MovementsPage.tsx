@@ -1,6 +1,6 @@
 import { MOVEMENT_TYPES, type MovementQuery, type MovementType } from '@arabat/contracts';
 import { Button, DataTable, Input, PageHeader, Select } from '@arabat/ui';
-import { useApi } from '@arabat/web-core';
+import { ErrorState, useApi } from '@arabat/web-core';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -105,6 +105,11 @@ export function MovementsPage() {
       <DataTable
         caption={t('inventory.movementsTitle')}
         loading={list.isPending}
+        error={
+          list.isError ? (
+            <ErrorState error={list.error} onRetry={() => void list.refetch()} />
+          ) : null
+        }
         rows={list.data?.movements}
         rowKey={(m) => m.id}
         empty={t('inventory.movementsEmpty')}

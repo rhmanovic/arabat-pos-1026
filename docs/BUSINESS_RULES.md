@@ -115,6 +115,11 @@ engineering defaults pending owner confirmation.
 - **BR-084** Selling requires the cashier's own open shift; every sale records merchant,
   branch, register, shift and employee. Stock is deducted at completion, all-or-nothing;
   no overselling unless the merchant allows negative stock.
+- **BR-086** Every payment settles into an internal balance (cash box or bank account): the
+  payment and its processing fee are posted to that balance's ledger. A new company starts
+  with a cash box, two bank accounts and the methods Cash → cash box, KNET → bank 1,
+  Visa/Mastercard → bank 2, payment link → bank 1, WAMD → bank 1, all without fees and all
+  editable (owner confirmed, ADR-0089). Fee rates are entered by the owner per method.
 - **BR-085** Held (suspended) sales reserve no stock; any cashier at the branch may resume
   or discard them; a held sale can be completed once.
 
@@ -312,6 +317,7 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
 | OQ-020 | Restaurant: service charge or tips? Courses/fire timing? Printing tickets on kitchen printers (vs. screen)? Table reservations? Not implemented. | Restaurant |
 | OQ-023 | Restaurant bills: charge the item price at ordering time or at payment time? Implemented: modifiers at ordering, item at payment (audit F3). | Restaurant |
 | OQ-024 | Discount limit: per discount (implemented: item and sale discounts checked separately, so 10 % + 10 % passes) or combined? | Sales |
+| OQ-026 | Actual processing fees per method (KNET, Visa/Mastercard, payment link, WAMD) and which bank account each settles into; how cash is deposited from the cash box to the bank (a transfer between balances is not built yet). Defaults: no fees; KNET, link and WAMD → bank 1, Visa/Mastercard → bank 2. | Payments |
 | OQ-025 | Verify the owner's e-mail at self-registration (blocks squatting someone's address)? Not implemented. | Auth |
 | OQ-022 | Subscription pricing and billing: prices per plan, billing provider, invoices/VAT, what happens automatically when a subscription lapses (grace period, read-only, suspension), and data retention after closing? Implemented: no billing, lapse never blocks, closing keeps data. | Platform |
 | OQ-021 | Online store: which gateway(s) first and the merchant contracts/credentials; delivery zones and fees per area; shopper accounts, coupons, scheduled orders; cash on delivery; automatic gateway refunds? Not implemented. | Online store |

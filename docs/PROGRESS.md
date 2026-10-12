@@ -353,6 +353,14 @@ button, whole onboarding rows clickable, stat labels wrap. Installable POS (web 
 192/512 icons, standalone). Not done: per-category tile colours, empty-cart recent sale on
 desktop, products-page filter layout, image placeholders, camera barcode scanning, sound.
 
+### 2026-10-12 — Default payment setup and silent-empty pages (ADR-0089)
+Cause of the empty Registers / Payment methods pages on staging: the manager session had ended
+(every `/manager/*` call answered 401) but the app kept showing the page with empty tables.
+Fixed: a 401 re-reads the session and shows sign-in; all data tables show load errors.
+New companies (and, once, existing ones without balances) get a cash box, two bank accounts
+and Cash / KNET / Visa-Mastercard / payment link / WAMD linked to them (BR-086). Open: real
+fee rates and cash-to-bank transfers (OQ-026).
+
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025
 before any production launch.

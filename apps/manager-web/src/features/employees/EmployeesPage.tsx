@@ -11,7 +11,7 @@ import {
   TabPanel,
   Tabs,
 } from '@arabat/ui';
-import { useApi, useNotify } from '@arabat/web-core';
+import { ErrorState, useApi, useNotify } from '@arabat/web-core';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
@@ -121,6 +121,11 @@ export function EmployeesPage() {
           <DataTable
             caption={t('employees.title')}
             loading={list.isPending}
+            error={
+              list.isError ? (
+                <ErrorState error={list.error} onRetry={() => void list.refetch()} />
+              ) : null
+            }
             rows={employees}
             rowKey={(e) => e.membershipId}
             empty={t('employees.empty')}
@@ -176,6 +181,11 @@ export function EmployeesPage() {
           <DataTable
             caption={t('employees.tabInvitations')}
             loading={list.isPending}
+            error={
+              list.isError ? (
+                <ErrorState error={list.error} onRetry={() => void list.refetch()} />
+              ) : null
+            }
             rows={invitations}
             rowKey={(i) => i.id}
             empty={t('employees.noInvitations')}

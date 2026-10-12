@@ -74,3 +74,49 @@ describe('payment methods', () => {
     });
   });
 });
+
+describe('failed loading', () => {
+  const unauthenticated = {
+    status: 401,
+    body: {
+      type: 'urn:arabat:error:unauthenticated',
+      title: 'Authentication required',
+      status: 401,
+      code: 'UNAUTHENTICATED',
+    },
+  };
+
+  it('shows an error in the table instead of an empty list', async () => {
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'payments.settings']),
+      routes: {
+        'GET /manager/payment-methods': () => ({
+          status: 500,
+          body: { type: 'x', title: 'Internal', status: 500, code: 'INTERNAL_ERROR' },
+        }),
+        'GET /manager/financial-accounts': () => ({ status: 200, body: { accounts: [] } }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/payments', fetch });
+    expect(await screen.findByText('Something went wrong')).toBeInTheDocument();
+  });
+
+  it('returns to sign-in when the session ended, instead of empty pages', async () => {
+    let ended = false;
+    const session = makeSession('manager', ['manager.access', 'payments.settings']);
+    const fetch = fakeApiFetch({
+      routes: {
+        'GET /auth/manager/me': () => (ended ? unauthenticated : { status: 200, body: session }),
+        'GET /manager/payment-methods': () => {
+          ended = true;
+          return unauthenticated;
+        },
+        'GET /manager/financial-accounts': () => unauthenticated,
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/payments', fetch });
+    expect(
+      await screen.findByRole('heading', { name: 'Sign in to management' }),
+    ).toBeInTheDocument();
+  });
+});

@@ -760,3 +760,18 @@ ADR; supersede it.
   the `md` breakpoint the sale screen shows the catalog full screen with a bottom cart bar that
   opens the cart full screen; header session actions fold into one menu below `sm`.
 - **Consequences:** Faster feedback loop on staging. A phone e2e project checks the POS sign-in.
+
+## ADR-0089 — Default payment setup: balances and linked methods
+- **Date:** 2026-10-12 · **Status:** Accepted (owner request)
+- **Decision:** Every merchant starts with internal balances «Cash box» (cash), «Bank account
+  1» and «Bank account 2» (bank), and payment methods Cash, Card (KNET), Visa / Mastercard,
+  Payment link (custom) and WAMD (bank transfer), each linked to a balance so every payment and
+  fee lands in a ledger (BR-086). `ensureDefaultPaymentSetup` runs at merchant creation and in
+  seed `004-payment-setup` for existing merchants; it acts only on a merchant without any
+  internal balance, so it applies once and never re-adds or relinks what the owner changed.
+  For existing merchants it reuses equivalent methods (matched by kind or name) and links every
+  method that settled nowhere. Fees default to none (OQ-026).
+- **Consequences:** Seeds run on every start; the «no balance yet» guard is what makes the
+  setup one-time. Also fixed with this slice: a 401 from any API call now re-reads the session
+  and returns to sign-in, and data tables show load errors instead of looking empty.
+

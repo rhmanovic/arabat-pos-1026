@@ -10,7 +10,7 @@ import {
   Select,
   Textarea,
 } from '@arabat/ui';
-import { localizedName, useApi, useNotify } from '@arabat/web-core';
+import { ErrorState, localizedName, useApi, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -40,6 +40,11 @@ export function SuppliersPage() {
       <DataTable<Supplier>
         caption={t('purchasing.suppliersTitle')}
         loading={list.isPending}
+        error={
+          list.isError ? (
+            <ErrorState error={list.error} onRetry={() => void list.refetch()} />
+          ) : null
+        }
         rows={list.data?.suppliers}
         rowKey={(s) => s.id}
         onRowClick={can('purchasing.manage') ? setEditing : undefined}

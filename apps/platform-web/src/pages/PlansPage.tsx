@@ -12,7 +12,7 @@ import {
   PageHeader,
   Select,
 } from '@arabat/ui';
-import { useApi, useErrorMessage, useNotify } from '@arabat/web-core';
+import { ErrorState, useApi, useErrorMessage, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -42,6 +42,11 @@ export function PlansPage() {
       <DataTable
         caption={t('plans.title')}
         loading={plans.isPending}
+        error={
+          plans.isError ? (
+            <ErrorState error={plans.error} onRetry={() => void plans.refetch()} />
+          ) : null
+        }
         rows={plans.data?.plans}
         rowKey={(p) => p.id}
         {...(editable ? { onRowClick: (p: Plan) => setEditing(p) } : {})}
