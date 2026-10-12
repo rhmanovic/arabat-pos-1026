@@ -55,6 +55,20 @@ import {
   type CloseShift,
   type ForceCloseShift,
   type CashCount,
+  type CancelCashBranchTransfer,
+  type CashDisbursementQuery,
+  type CreateBankDeposit,
+  type CreateCashBranchTransfer,
+  type CreateCashDisbursement,
+  type ReceiveCashBranchTransfer,
+  type ReverseCashDisbursement,
+  bankAccountOptionsSchema,
+  cashBranchTransferListSchema,
+  cashBranchTransferSchema,
+  cashDisbursementListSchema,
+  cashDisbursementSchema,
+  supplierOptionsSchema,
+  supplierPaymentsSchema,
   type CreateCashTransfer,
   cashBranchSchema,
   cashOverviewSchema,
@@ -505,6 +519,54 @@ export function createApiClient(options: ApiClientOptions = {}) {
         }),
       transfer: (body: CreateCashTransfer) =>
         request('POST', '/manager/cash/transfers', { body, schema: cashTransferSchema }),
+      disbursements: (query: CashDisbursementQuery = {}) =>
+        request('GET', `/manager/cash/disbursements?${toParams(query)}`, {
+          schema: cashDisbursementListSchema,
+        }),
+      disburse: (body: CreateCashDisbursement) =>
+        request('POST', '/manager/cash/disbursements', { body, schema: cashDisbursementSchema }),
+      reverse: (id: string, body: ReverseCashDisbursement) =>
+        request('POST', `/manager/cash/disbursements/${id}/reverse`, {
+          body,
+          schema: cashDisbursementSchema,
+        }),
+      suppliers: () => request('GET', '/manager/cash/suppliers', { schema: supplierOptionsSchema }),
+      payableOrders: (supplierId: string) =>
+        request('GET', `/manager/cash/suppliers/${supplierId}/orders`, {
+          schema: z.object({ orders: z.array(z.object({ id: z.string(), number: z.string() })) }),
+        }),
+      bankAccounts: () =>
+        request('GET', '/manager/cash/bank-accounts', { schema: bankAccountOptionsSchema }),
+      deposit: (body: CreateBankDeposit) =>
+        request('POST', '/manager/cash/deposits', { body, schema: cashTransferSchema }),
+      branchTransfers: (
+        query: { status?: string; branchId?: string | null; page?: number; pageSize?: number } = {},
+      ) =>
+        request('GET', `/manager/cash/branch-transfers?${toParams(query)}`, {
+          schema: cashBranchTransferListSchema,
+        }),
+      sendToBranch: (body: CreateCashBranchTransfer) =>
+        request('POST', '/manager/cash/branch-transfers', {
+          body,
+          schema: cashBranchTransferSchema,
+        }),
+      receiveFromBranch: (id: string, body: ReceiveCashBranchTransfer) =>
+        request('POST', `/manager/cash/branch-transfers/${id}/receive`, {
+          body,
+          schema: cashBranchTransferSchema,
+        }),
+      cancelBranchTransfer: (id: string, body: CancelCashBranchTransfer) =>
+        request('POST', `/manager/cash/branch-transfers/${id}/cancel`, {
+          body,
+          schema: cashBranchTransferSchema,
+        }),
+      supplierPayments: (supplierId: string) =>
+        request('GET', `/manager/suppliers/${supplierId}/payments`, {
+          schema: supplierPaymentsSchema,
+        }),
+      posBankAccounts: () =>
+        request('GET', '/pos/cash/bank-accounts', { schema: bankAccountOptionsSchema }),
+      posSuppliers: () => request('GET', '/pos/cash/suppliers', { schema: supplierOptionsSchema }),
     },
     registers: {
       list: (branchId?: string | null) =>

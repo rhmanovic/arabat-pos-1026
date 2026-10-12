@@ -17,8 +17,15 @@ import { ErrorState, localizedName, useApi, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useBranchContext } from '../../app/context.js';
+import { useBranchContext, useSession } from '../../app/context.js';
 import { formatAmount } from '../catalog/ProductsPage.js';
+import {
+  BranchTransferList,
+  DepositDialog,
+  DisbursementDialog,
+  DisbursementList,
+  SendToBranchDialog,
+} from './CashPayouts.js';
 import { CashTabs } from './shared.js';
 
 export const cashKey = ['manager', 'cash'] as const;
@@ -64,8 +71,12 @@ export function CashCustodyPage() {
   const { t, i18n } = useTranslation();
   const api = useApi();
   const { branchId } = useBranchContext();
-  const [tab, setTab] = useState<'balances' | 'transfers'>('balances');
+  const { can } = useSession();
+  const [tab, setTab] = useState<'balances' | 'transfers' | 'payouts' | 'branchTransfers'>(
+    'balances',
+  );
   const [transferOpen, setTransferOpen] = useState(false);
+  const [dialog, setDialog] = useState<'pay' | 'deposit' | 'send' | null>(null);
   const [counting, setCounting] = useState<Place | null>(null);
   const [statement, setStatement] = useState<Place | null>(null);
   const overview = useQuery({
@@ -80,25 +91,51 @@ export function CashCustodyPage() {
         title={t('cashCustody.title')}
         description={t('cashCustody.subtitle')}
         actions={
-          <Button onClick={() => setTransferOpen(true)} disabled={!data?.branches.length}>
-            {t('cashCustody.transfer')}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => setTransferOpen(true)} disabled={!data?.branches.length}>
+              {t('cashCustody.transfer')}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => setDialog('pay')}
+              disabled={!data?.branches.length}
+            >
+              {t('cashCustody.pay')}
+            </Button>
+            {can('cash.deposit') ? (
+              <Button
+                variant="secondary"
+                onClick={() => setDialog('deposit')}
+                disabled={!data?.branches.length}
+              >
+                {t('cashCustody.deposit')}
+              </Button>
+            ) : null}
+            {(data?.branches.length ?? 0) > 1 ? (
+              <Button variant="secondary" onClick={() => setDialog('send')}>
+                {t('cashCustody.sendToBranch')}
+              </Button>
+            ) : null}
+          </div>
         }
       />
       {overview.isError ? (
         <ErrorState error={overview.error} onRetry={() => void overview.refetch()} />
       ) : null}
       {data ? (
-        <div className="mb-6 grid grid-cols-3 gap-2 sm:gap-4">
+        <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
           <StatCard label={t('cashCustody.total')} value={fmt(data.total)} />
           <StatCard label={t('cashCustody.treasuries')} value={fmt(data.treasuriesTotal)} />
           <StatCard label={t('cashCustody.registers')} value={fmt(data.registersTotal)} />
+          <StatCard label={t('cashCustody.inTransit')} value={fmt(data.inTransitTotal)} />
         </div>
       ) : null}
       <CashTabs
         tabs={[
           { key: 'balances', label: t('cashCustody.tabBalances') },
           { key: 'transfers', label: t('cashCustody.tabTransfers') },
+          { key: 'payouts', label: t('cashCustody.tabPayouts') },
+          { key: 'branchTransfers', label: t('cashCustody.tabBranchTransfers') },
         ]}
         active={tab}
         onChange={(k) => setTab(k as typeof tab)}
@@ -169,9 +206,22 @@ export function CashCustodyPage() {
             </section>
           ))}
         </div>
-      ) : (
+      ) : tab === 'transfers' ? (
         <TransferList />
+      ) : tab === 'payouts' ? (
+        <DisbursementList />
+      ) : (
+        <BranchTransferList />
       )}
+      {dialog === 'pay' && data ? (
+        <DisbursementDialog overview={data} onClose={() => setDialog(null)} />
+      ) : null}
+      {dialog === 'deposit' && data ? (
+        <DepositDialog overview={data} onClose={() => setDialog(null)} />
+      ) : null}
+      {dialog === 'send' && data ? (
+        <SendToBranchDialog overview={data} onClose={() => setDialog(null)} />
+      ) : null}
       {transferOpen && data ? (
         <TransferDialog overview={data} onClose={() => setTransferOpen(false)} />
       ) : null}

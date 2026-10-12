@@ -807,3 +807,23 @@ ADR; supersede it.
 - **Consequences:** This is a cash custody ledger, not a general ledger. Amends ADR-0089: the
   cash method is no longer linked to an account; cash settles in the drawer. After deploy each
   treasury needs an opening count before it can pay out.
+
+## ADR-0091 — Cash custody phase B: expenses, supplier payments, deposits, branch transfers
+- **Date:** 2026-10-12 · **Status:** Accepted (owner approved the phased plan)
+- **Decision:**
+  - `cash_disbursements` (append-only, RLS) records expenses (fixed category list) and supplier
+    payments (supplier required, optional purchase order of the same supplier via a composite
+    FK). Each posts exactly one ledger entry of type `expense` / `supplier_payment` on its source
+    register or treasury (deferred trigger); a reversal is a new record mirroring the original
+    (`reverses_id`, one per record, checked by trigger).
+  - Bank deposits are `cash_transfers` (register/treasury → bank) with origin `pos_movement` or
+    `deposit` and an optional slip reference; new branch-scoped permission `cash.deposit`, also
+    required on top of `cash.move` for the POS reason.
+  - Branch-to-branch transfers use one company `in_transit` account and a
+    `cash_branch_transfers` header (`in_transit → received | cancelled`, forward-only trigger,
+    optimistic version). A received amount different from the sent one posts the difference on
+    in-transit (`branch_transfer_difference`) so in-transit returns to zero per transfer.
+  - The transfer direction trigger now allows register ↔ treasury (same branch), register or
+    treasury → bank, and treasury ↔ in-transit (branch transfers only).
+- **Consequences:** Company cash = treasuries + drawers + in transit. Supplier payments are listed
+  on the supplier (purchasing.read). Reports by category and the dashboard card follow in phase C.

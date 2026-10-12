@@ -84,6 +84,8 @@ export const purchaseOrders = pgTable(
   (t) => [
     unique('purchase_orders_merchant_id_id_key').on(t.merchantId, t.id),
     unique('purchase_orders_number_key').on(t.merchantId, t.number),
+    // Supplier payments may name a purchase order of the same supplier (ADR-0091).
+    unique('purchase_orders_merchant_id_id_supplier_key').on(t.merchantId, t.id, t.supplierId),
     foreignKey({
       columns: [t.merchantId, t.supplierId],
       foreignColumns: [suppliers.merchantId, suppliers.id],

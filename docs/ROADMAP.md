@@ -161,7 +161,7 @@ Acceptance criteria:
 - **Phase A ✅ (2026-10-12):** register and branch treasury balances, cutover, shift open/close
   counts, forced close with or without a count, manager counts, register ↔ treasury transfers,
   `cash.custody`, manager cash page.
-- **Phase B:** cash disbursements (expenses by category, supplier payments linked to a supplier,
+- **Phase B ✅ (2026-10-12):** cash disbursements (expenses by category, supplier payments linked to a supplier,
   reversals), `cash.deposit` and bank deposits, branch-to-branch transfers via in-transit with
   receipt confirmation, supplier payments on the supplier page.
 - **Phase C:** cash report categories, expenses and supplier payments reports, discrepancy report

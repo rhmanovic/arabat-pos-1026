@@ -1,4 +1,9 @@
-import { CASH_IN_REASONS, CASH_OUT_REASONS, type Shift } from '@arabat/contracts';
+import {
+  CASH_EXPENSE_CATEGORIES,
+  CASH_IN_REASONS,
+  CASH_OUT_REASONS,
+  type Shift,
+} from '@arabat/contracts';
 import { formatMoney } from '@arabat/i18n';
 import { Money, MoneyError } from '@arabat/money';
 import {
@@ -525,18 +530,42 @@ export function ShiftPage() {
 }
 
 function MovementDialog({ kind, onClose }: { kind: 'cash_in' | 'cash_out'; onClose: () => void }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const api = useApi();
   const notify = useNotify();
   const queryClient = useQueryClient();
-  const reasons = kind === 'cash_in' ? CASH_IN_REASONS : CASH_OUT_REASONS;
+  const { hasPermission } = useAuth();
+  // Bank deposits need their own permission (ADR-0091); hide the reason without it.
+  const reasons = (kind === 'cash_in' ? CASH_IN_REASONS : CASH_OUT_REASONS).filter(
+    (r) => r !== 'bank_deposit' || hasPermission('cash.deposit'),
+  );
   const [amount, setAmount] = useState('');
-  const [reason, setReason] = useState<string>(reasons[0]);
+  const [reason, setReason] = useState<string>(reasons[0]!);
   const [note, setNote] = useState('');
+  const [category, setCategory] = useState('');
+  const [supplierId, setSupplierId] = useState('');
+  const [bankAccountId, setBankAccountId] = useState('');
+  const [receipt, setReceipt] = useState('');
   const [key] = useState(() => crypto.randomUUID());
+  const suppliers = useQuery({
+    queryKey: ['pos', 'cash', 'suppliers'],
+    queryFn: () => api.cash.posSuppliers(),
+    enabled: reason === 'supplier_payment',
+  });
+  const banks = useQuery({
+    queryKey: ['pos', 'cash', 'banks'],
+    queryFn: () => api.cash.posBankAccounts(),
+    enabled: reason === 'bank_deposit',
+  });
   const amountMinor = minor(amount);
+  const needsNote = reason === 'other' || (reason === 'petty_expense' && category === 'other');
   const valid =
-    amountMinor !== null && amountMinor > 0n && (reason !== 'other' || Boolean(note.trim()));
+    amountMinor !== null &&
+    amountMinor > 0n &&
+    (!needsNote || Boolean(note.trim())) &&
+    (reason !== 'petty_expense' || Boolean(category)) &&
+    (reason !== 'supplier_payment' || Boolean(supplierId)) &&
+    (reason !== 'bank_deposit' || Boolean(bankAccountId));
   const save = useMutation({
     mutationFn: () =>
       api.shifts.cashMovement({
@@ -545,6 +574,12 @@ function MovementDialog({ kind, onClose }: { kind: 'cash_in' | 'cash_out'; onClo
         reason,
         note: note.trim() || null,
         idempotencyKey: key,
+        ...(reason === 'petty_expense' ? { category: category as never } : {}),
+        ...(reason === 'supplier_payment' ? { supplierId } : {}),
+        ...(reason === 'petty_expense' || reason === 'supplier_payment'
+          ? { receiptReference: receipt.trim() || null }
+          : {}),
+        ...(reason === 'bank_deposit' ? { bankAccountId } : {}),
       }),
     onSuccess: async (shift) => {
       queryClient.setQueryData(shiftKey, { shift });
@@ -598,12 +633,77 @@ function MovementDialog({ kind, onClose }: { kind: 'cash_in' | 'cash_out'; onClo
             </Select>
           )}
         </Field>
-        {['float_top_up', 'safe_drop', 'change_received'].includes(reason) ? (
+        {[
+          'float_top_up',
+          'safe_drop',
+          'change_received',
+          'petty_expense',
+          'supplier_payment',
+          'bank_deposit',
+        ].includes(reason) ? (
           <p className="text-sm text-fg-muted" data-testid="movement-hint">
             {t(`shift.movementHint_${reason}`)}
           </p>
         ) : null}
-        <Field label={t('shift.note')}>
+        {reason === 'petty_expense' ? (
+          <Field label={t('shift.category')}>
+            {(p) => (
+              <Select {...p} value={category} onChange={(e) => setCategory(e.target.value)}>
+                <option value="">{t('shift.choose')}</option>
+                {CASH_EXPENSE_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {t(`shift.category_${c}`)}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+        ) : null}
+        {reason === 'supplier_payment' ? (
+          <Field label={t('shift.supplier')}>
+            {(p) => (
+              <Select {...p} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+                <option value="">{t('shift.choose')}</option>
+                {(suppliers.data?.suppliers ?? []).map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {localizedName(s, i18n.language)}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+        ) : null}
+        {reason === 'bank_deposit' ? (
+          <Field label={t('shift.bankAccount')}>
+            {(p) => (
+              <Select
+                {...p}
+                value={bankAccountId}
+                onChange={(e) => setBankAccountId(e.target.value)}
+              >
+                <option value="">{t('shift.choose')}</option>
+                {(banks.data?.accounts ?? []).map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {localizedName(b, i18n.language)}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+        ) : null}
+        {reason === 'petty_expense' || reason === 'supplier_payment' ? (
+          <Field label={t('shift.receiptReference')}>
+            {(p) => (
+              <Input
+                {...p}
+                dir="ltr"
+                value={receipt}
+                onChange={(e) => setReceipt(e.target.value)}
+              />
+            )}
+          </Field>
+        ) : null}
+        <Field label={needsNote ? t('shift.description') : t('shift.note')}>
           {(p) => (
             <Textarea {...p} rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
           )}

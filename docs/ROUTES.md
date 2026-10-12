@@ -32,7 +32,7 @@ the permission.
 | `/restaurant` | Restaurant setup (module, floor, stations, modifiers, menu) | `restaurant.manage` |
 | `/online` | Online store: orders, settings, products online | `online.orders` / `online.manage` |
 | `/payments` | Payment methods and internal balances | `payments.settings` |
-| `/cash` | Cash custody: treasury and register balances per branch, counts, statements, transfers | `cash.custody` |
+| `/cash` | Cash custody: treasury and register balances per branch, counts, statements, transfers, expenses and supplier payments, bank deposits, transfers between branches | `cash.custody` (deposits: `cash.deposit`) |
 | `/registers` | Registers | `registers.manage` |
 | `/shifts`, `/shifts/:shiftId` | Shift history, X/Z summary | `shifts.view_all` |
 | `/branches` | Branches | `branches.read` |
@@ -145,6 +145,10 @@ per-branch breakdown, settings dialog), `/manager/inventory/adjustments`,
 | `GET /manager/shifts/discrepancies?branchId=&from=&to=` | `shifts.view_all` |
 | `POST /manager/shifts/:id/force-close` | `registers.manage` at the shift's branch (note required; optional `countedCash` — without it the shift closes `forced_uncounted`) |
 | `GET /manager/cash/overview`, `GET /manager/cash/accounts/:id/entries`, `POST /manager/cash/accounts/:id/counts`, `GET/POST /manager/cash/transfers` | `cash.custody` (branch-scoped; ADR-0090) |
+| `GET/POST /manager/cash/disbursements`, `POST /manager/cash/disbursements/:id/reverse`, `GET /manager/cash/suppliers`, `GET /manager/cash/suppliers/:id/orders`, `GET/POST /manager/cash/branch-transfers`, `POST …/:id/receive`, `POST …/:id/cancel` | `cash.custody` (branch-scoped; ADR-0091) |
+| `GET /manager/cash/bank-accounts`, `POST /manager/cash/deposits` | `cash.deposit` at the treasury's branch |
+| `GET /manager/suppliers/:id/payments` | `purchasing.read` (branch-scoped) |
+| `GET /pos/cash/suppliers` / `GET /pos/cash/bank-accounts` | POS `cash.move` / `cash.deposit` |
 | `GET /pos/payment-methods` | POS `sales.create` (active POS methods, no fees) |
 | `GET /pos/registers`, `GET /pos/shifts/current`, `POST /pos/shifts`, `POST /pos/shifts/current/close` | POS `shifts.operate` at the bound branch + register access |
 | `POST /pos/shifts/current/cash-movements` | POS `cash.move` (own open shift) |

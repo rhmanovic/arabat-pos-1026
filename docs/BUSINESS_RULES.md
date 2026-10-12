@@ -126,6 +126,22 @@ engineering defaults pending owner confirmation.
   count becomes the drawer balance; sales reports are unchanged. `cash.move` was removed from the
   cashier role, existing cashiers included (owner decision); supervisors keep it.
 
+- **BR-087** Expenses and supplier payments (ADR-0091) are real cash outflows, recorded in their
+  own register (number EX-/SP-), never as transfers, sales or revenue. An expense has a fixed
+  category (supplies, maintenance, transport, hospitality, utilities, cleaning, other — "other"
+  needs a description); a supplier payment names an active supplier and optionally one of its
+  submitted or later purchase orders. Paid from the drawer at the POS (`cash.move`) or from a
+  branch treasury in management (`cash.custody`). A mistake is corrected by a reversing record
+  (reason required) that returns the cash to where it was paid from; records are never edited.
+  Supplier payments are not operating expenses; no payable balance is kept yet.
+- **BR-088** Bank deposits move cash from a drawer (POS) or a branch treasury (management) into an
+  active bank account. They need `cash.deposit` in addition to the usual permission, are
+  transfers (not expenses), and reduce company cash.
+- **BR-089** Cash sent between branches leaves the sending treasury into "in transit" (still
+  company cash). The receiving branch confirms the amount it counted; a difference needs a note
+  and is booked on the transfer. The sender may cancel before receipt (the cash returns). A
+  transfer is received or cancelled once (`cash.custody` at the receiving / sending branch).
+
 - **BR-080** Pricing: line amount = price × quantity rounded half-up to the fils; item
   discounts (percent or amount, never more than the line); a sale discount on the
   remaining amount is shared across the items exactly; the total is the sum of the items.
@@ -341,7 +357,7 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
 | OQ-020 | Restaurant: service charge or tips? Courses/fire timing? Printing tickets on kitchen printers (vs. screen)? Table reservations? Not implemented. | Restaurant |
 | OQ-023 | Restaurant bills: charge the item price at ordering time or at payment time? Implemented: modifiers at ordering, item at payment (audit F3). | Restaurant |
 | OQ-024 | Discount limit: per discount (implemented: item and sale discounts checked separately, so 10 % + 10 % passes) or combined? | Sales |
-| OQ-026 | Actual processing fees per method (KNET, Visa/Mastercard, payment link, WAMD) and which bank account each settles into. Defaults: no fees; KNET, link and WAMD → bank 1, Visa/Mastercard → bank 2. Cash custody is decided (ADR-0090); expenses, supplier payments, bank deposits and branch-to-branch transfers come in phase B. | Payments |
+| OQ-026 | Actual processing fees per method (KNET, Visa/Mastercard, payment link, WAMD) and which bank account each settles into. Defaults: no fees; KNET, link and WAMD → bank 1, Visa/Mastercard → bank 2. Cash custody is decided (ADR-0090, ADR-0091). | Payments |
 | OQ-025 | Verify the owner's e-mail at self-registration (blocks squatting someone's address)? Not implemented. | Auth |
 | OQ-022 | Subscription pricing and billing: prices per plan, billing provider, invoices/VAT, what happens automatically when a subscription lapses (grace period, read-only, suspension), and data retention after closing? Implemented: no billing, lapse never blocks, closing keeps data. | Platform |
 | OQ-021 | Online store: which gateway(s) first and the merchant contracts/credentials; delivery zones and fees per area; shopper accounts, coupons, scheduled orders; cash on delivery; automatic gateway refunds? Not implemented. | Online store |

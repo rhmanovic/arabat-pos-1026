@@ -91,6 +91,11 @@ export const PERMISSIONS = {
     description:
       'Manage cash custody: treasury counts, transfers between registers and the treasury',
   },
+  'cash.deposit': {
+    scope: 'branch',
+    group: 'registers',
+    description: 'Deposit cash from a register or treasury into a bank account',
+  },
 
   // Catalog
   'catalog.read': {

@@ -27,13 +27,16 @@ import { isUniqueViolation } from '../auth/registration.service.js';
 import { versionConflict } from '../branches/branches.service.js';
 import { branches } from '../branches/branches.schema.js';
 import { merchants } from '../merchants/merchants.schema.js';
+import { suppliers } from '../purchasing/purchasing.schema.js';
 import {
   accountBalance,
+  activeBankAccount,
   assertCovers,
   assertTreasuryCounted,
   branchTreasury,
   ensureRegisterAccount,
   lockAccounts,
+  postDisbursement,
   postEntries,
   postTransfer,
   registerAccount,
@@ -529,7 +532,18 @@ export class ShiftsService {
           input.reason === 'float_top_up' || input.reason === 'safe_drop'
             ? await branchTreasury(tx, shift.branchId)
             : null;
-        await lockAccounts(tx, treasury ? [drawer.id, treasury.id] : [drawer.id]);
+        // Bank deposits need their own permission on top of cash.move (ADR-0091).
+        let bankId: string | null = null;
+        if (input.reason === 'bank_deposit') {
+          assertCan(actor, 'cash.deposit', branchId);
+          bankId = await activeBankAccount(tx, input.bankAccountId!);
+        }
+        if (input.reason === 'supplier_payment') await this.assertSupplier(tx, input.supplierId!);
+        await lockAccounts(tx, [
+          drawer.id,
+          ...(treasury ? [treasury.id] : []),
+          ...(bankId ? [bankId] : []),
+        ]);
         if (input.kind === 'cash_out')
           assertCovers(await this.drawerCash(tx, shift), amountMinor, 'register');
         if (input.reason === 'float_top_up') {
@@ -547,6 +561,7 @@ export class ShiftsService {
           amountMinor,
           reason: input.reason,
           note: input.note,
+          bankAccountId: bankId,
           idempotencyKey: input.idempotencyKey ?? null,
           createdByUserId: actor.userId,
         });
@@ -556,6 +571,10 @@ export class ShiftsService {
           reason: input.reason,
           amountMinor,
           note: input.note ?? null,
+          bankId,
+          category: input.category ?? null,
+          supplierId: input.supplierId ?? null,
+          receiptReference: input.receiptReference ?? null,
         });
         await this.record(tx, actor, `shift.${input.kind}`, 'shift', shift.id, ip, {
           movementId: id,
@@ -572,8 +591,10 @@ export class ShiftsService {
   }
 
   /**
-   * Books a drawer movement (ADR-0090): a drop to or top-up from the branch treasury is a
-   * transfer; exchanging notes for coins changes nothing; other reasons move only the drawer.
+   * Books a drawer movement (ADR-0090, ADR-0091): a drop to or top-up from the branch
+   * treasury and a bank deposit are transfers; an expense or a supplier payment is a real
+   * outflow (a disbursement); exchanging notes for coins changes nothing; corrections and
+   * other reasons move only the drawer.
    */
   private async postMovement(
     tx: Transaction,
@@ -581,9 +602,51 @@ export class ShiftsService {
     shift: ShiftRecord,
     drawerId: string,
     treasuryId: string | null,
-    m: { id: string; kind: string; reason: string; amountMinor: bigint; note: string | null },
+    m: {
+      id: string;
+      kind: string;
+      reason: string;
+      amountMinor: bigint;
+      note: string | null;
+      bankId: string | null;
+      category: string | null;
+      supplierId: string | null;
+      receiptReference: string | null;
+    },
   ) {
     if (m.reason === 'change_received') return;
+    if (m.reason === 'bank_deposit') {
+      await postTransfer(tx, {
+        merchantId: actor.merchantId,
+        fromAccountId: drawerId,
+        toAccountId: m.bankId!,
+        amountMinor: m.amountMinor,
+        origin: 'pos_movement',
+        cashMovementId: m.id,
+        note: m.note,
+        userId: actor.userId,
+        fromShiftId: shift.id,
+      });
+      return;
+    }
+    if (m.reason === 'petty_expense' || m.reason === 'supplier_payment') {
+      await postDisbursement(tx, {
+        merchantId: actor.merchantId,
+        branchId: shift.branchId,
+        sourceAccountId: drawerId,
+        shiftId: shift.id,
+        cashMovementId: m.id,
+        kind: m.reason === 'petty_expense' ? 'expense' : 'supplier_payment',
+        category: m.reason === 'petty_expense' ? m.category : null,
+        supplierId: m.reason === 'supplier_payment' ? m.supplierId : null,
+        purchaseOrderId: null,
+        amountMinor: m.amountMinor,
+        description: m.note,
+        receiptReference: m.receiptReference,
+        userId: actor.userId,
+      });
+      return;
+    }
     if (m.reason === 'float_top_up' || m.reason === 'safe_drop') {
       const toDrawer = m.reason === 'float_top_up';
       await postTransfer(tx, {
@@ -614,6 +677,16 @@ export class ShiftsService {
         shiftId: shift.id,
       },
     ]);
+  }
+
+  private async assertSupplier(tx: Transaction, supplierId: string) {
+    const [supplier] = await tx
+      .select({ status: suppliers.status })
+      .from(suppliers)
+      .where(eq(suppliers.id, supplierId));
+    if (!supplier) throw AppError.notFound('Supplier not found.');
+    if (supplier.status !== 'active')
+      throw new AppError(409, 'SUPPLIER_INACTIVE', 'This supplier is inactive.');
   }
 
   async closeOwnShift(actor: MerchantActor, input: CloseShiftInput, ip: string): Promise<Shift> {

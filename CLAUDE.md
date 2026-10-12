@@ -188,5 +188,6 @@ Online reservations (`stock_reservations`) are honoured by `StockLedgerService.a
 Stock consumption of sold items is expanded by `stockConsumption` (recipes, modifier ingredients).
 Stock balances change **only** through `StockLedgerService.apply` (inventory module).
 Cash balances (registers, treasuries) change **only** through `apps/api/src/modules/payments/cash-ledger.ts`
-(`postEntries` / `postTransfer`); a shift opens and closes with a count against the drawer balance (ADR-0090).
+(`postEntries` / `postTransfer` / `postDisbursement`); a shift opens and closes with a count against the
+drawer balance (ADR-0090). Expenses and supplier payments are `cash_disbursements`, never transfers (ADR-0091).
 See `docs/PROGRESS.md` for the current state and `docs/ROADMAP.md` for next steps.

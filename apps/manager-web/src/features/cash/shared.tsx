@@ -12,7 +12,7 @@ export function CashTabs({
   onChange: (key: string) => void;
 }) {
   return (
-    <div role="group" className="mb-6 flex gap-1 border-b border-border">
+    <div role="group" className="mb-6 flex gap-1 overflow-x-auto border-b border-border">
       {tabs.map((tab) => (
         <button
           key={tab.key}
@@ -20,7 +20,7 @@ export function CashTabs({
           aria-pressed={tab.key === active}
           onClick={() => onChange(tab.key)}
           className={cn(
-            '-mb-px border-b-2 px-3 py-2 text-sm font-medium',
+            '-mb-px shrink-0 border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap',
             tab.key === active
               ? 'border-primary text-primary'
               : 'border-transparent text-fg-muted hover:text-fg',

@@ -171,7 +171,7 @@ can(actor, permission, branchId?):
 | Access | `manager.access`, `pos.access` | branch |
 | Sales | `sales.create`, `sales.read`, `sales.discount`, `sales.discount.override_limit`, `sales.price_override`, `sales.void` | branch |
 | Refunds | `refunds.create`, `refunds.approve` | branch |
-| Registers | `registers.manage`, `shifts.operate`, `shifts.view_all`, `cash.move`, `cash.custody` | branch |
+| Registers | `registers.manage`, `shifts.operate`, `shifts.view_all`, `cash.move`, `cash.custody`, `cash.deposit` | branch |
 | Catalog | `catalog.read` (branch), `catalog.manage`, `catalog.prices.manage` (merchant) | mixed |
 | Inventory | `inventory.read`, `inventory.adjust`, `inventory.transfer`, `inventory.transfer.approve` | branch |
 | Purchasing | `purchasing.read`, `purchasing.manage`, `purchasing.approve`, `purchasing.receive` | branch |

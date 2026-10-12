@@ -159,6 +159,18 @@ export const CASH_OUT_REASONS = [
   'other',
 ] as const;
 
+/** Fixed expense categories for cash expenses (ADR-0091); `other` needs a description. */
+export const CASH_EXPENSE_CATEGORIES = [
+  'supplies',
+  'maintenance',
+  'transport',
+  'hospitality',
+  'utilities',
+  'cleaning',
+  'other',
+] as const;
+export type CashExpenseCategory = (typeof CASH_EXPENSE_CATEGORIES)[number];
+
 export const cashMovementSchema = z.object({
   id: z.string(),
   kind: z.enum(['cash_in', 'cash_out']),
@@ -292,6 +304,13 @@ export const recordCashMovementSchema = z
     reason: z.string().trim().min(1).max(40),
     note: text(500),
     idempotencyKey: z.uuid().optional(),
+    /** petty_expense: the expense category (ADR-0091). */
+    category: z.enum(CASH_EXPENSE_CATEGORIES).optional(),
+    /** supplier_payment: the supplier paid. */
+    supplierId: z.uuid().optional(),
+    receiptReference: text(80),
+    /** bank_deposit: the bank account the cash is deposited into. */
+    bankAccountId: z.uuid().optional(),
   })
   .refine(
     (m) =>
@@ -303,6 +322,22 @@ export const recordCashMovementSchema = z
   .refine((m) => m.reason !== 'other' || Boolean(m.note), {
     error: 'Add a note explaining the movement.',
     path: ['note'],
+  })
+  .refine((m) => m.reason !== 'petty_expense' || Boolean(m.category), {
+    error: 'Choose the expense category.',
+    path: ['category'],
+  })
+  .refine((m) => m.category !== 'other' || Boolean(m.note), {
+    error: 'Describe the expense.',
+    path: ['note'],
+  })
+  .refine((m) => m.reason !== 'supplier_payment' || Boolean(m.supplierId), {
+    error: 'Choose the supplier.',
+    path: ['supplierId'],
+  })
+  .refine((m) => m.reason !== 'bank_deposit' || Boolean(m.bankAccountId), {
+    error: 'Choose the bank account.',
+    path: ['bankAccountId'],
   });
 export type RecordCashMovement = z.input<typeof recordCashMovementSchema>;
 

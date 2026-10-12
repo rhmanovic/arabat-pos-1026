@@ -189,6 +189,8 @@ export const cashMovements = pgTable(
     amountMinor: bigint({ mode: 'bigint' }).notNull(),
     reason: text().notNull(),
     note: text(),
+    /** bank_deposit: the bank account the cash went to (ADR-0091). */
+    bankAccountId: uuid(),
     idempotencyKey: uuid(),
     createdByUserId: uuid()
       .notNull()

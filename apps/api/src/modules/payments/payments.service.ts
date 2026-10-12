@@ -144,7 +144,7 @@ export class PaymentsService {
             ]);
           const account = await this.findAccount(tx, input.financialAccountId);
           if (
-            ['register', 'treasury', 'cash'].includes(account.kind) ||
+            ['register', 'treasury', 'in_transit', 'cash'].includes(account.kind) ||
             account.status === 'archived'
           )
             throw AppError.validation([
@@ -223,7 +223,7 @@ export class PaymentsService {
                                 where e.account_id = a.id), 0)::text as balance
           from financial_accounts a
           -- Registers and treasuries are managed on the cash custody page (ADR-0090).
-          where a.kind not in ('register', 'treasury')
+          where a.kind not in ('register', 'treasury', 'in_transit')
           order by a.created_at`)
       ).rows as Record<string, unknown>[];
       return rows.map((r) => ({
@@ -260,7 +260,10 @@ export class PaymentsService {
             { path: 'version', code: 'required', message: 'version is required' },
           ]);
         const existing = await this.findAccount(tx, id);
-        if (['register', 'treasury'].includes(existing.kind) || existing.status === 'archived')
+        if (
+          ['register', 'treasury', 'in_transit'].includes(existing.kind) ||
+          existing.status === 'archived'
+        )
           throw AppError.conflict('This account is managed by the system.');
         const [row] = await tx
           .update(financialAccounts)

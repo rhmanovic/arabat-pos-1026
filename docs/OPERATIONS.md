@@ -157,3 +157,10 @@ has a treasury). After the deploy:
 3. A shift that was open at deploy closes the old way; its counted cash becomes the drawer
    balance. Other registers get their balance from the count at their next opening.
 4. Cashier roles no longer have `cash.move`; grant it per employee or role where needed.
+
+### Cash custody phase B (ADR-0091, migrations 0034–0035)
+
+Applied automatically. Each merchant gets one "Cash in transit" account. The owner has
+`cash.deposit` implicitly; grant it to other roles (it is in no template) before they deposit
+cash to a bank. Supplier payments and expenses already recorded at the POS before this release
+as plain cash-out movements stay as they are (cash movements, not disbursements).

@@ -120,3 +120,65 @@ describe('failed loading', () => {
     ).toBeInTheDocument();
   });
 });
+
+describe('cash custody payouts', () => {
+  const branchId = '0190a000-0000-7000-8000-000000000301';
+  const overview = {
+    branches: [
+      {
+        branchId,
+        nameEn: 'Main',
+        nameAr: null,
+        treasury: {
+          accountId: '0190a000-0000-7000-8000-000000000302',
+          nameEn: 'Main treasury',
+          nameAr: null,
+          balance: money('40.000'),
+          countedAt: '2026-10-12T08:00:00.000Z',
+        },
+        registers: [],
+        total: money('40.000'),
+      },
+    ],
+    treasuriesTotal: money('40.000'),
+    registersTotal: money('0.000'),
+    inTransitTotal: money('5.000'),
+    total: money('45.000'),
+  };
+
+  it('pays an expense from the treasury with its category, and shows cash in transit', async () => {
+    const posted: unknown[] = [];
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'cash.custody']),
+      routes: {
+        'GET /manager/cash/overview': () => ({ status: 200, body: overview }),
+        'POST /manager/cash/disbursements': (body) => {
+          posted.push(body);
+          return { status: 201, body: {} };
+        },
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/cash', fetch });
+    expect(await screen.findByText('In transit')).toBeInTheDocument();
+    // Without cash.deposit there is no deposit action.
+    expect(screen.queryByRole('button', { name: 'Deposit to bank' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Pay expense / supplier' }));
+    const dialog = await screen.findByRole('dialog');
+    const pay = within(dialog).getByRole('button', { name: 'Pay expense / supplier' });
+    await userEvent.type(within(dialog).getByLabelText('Amount'), '2.750');
+    expect(pay).toBeDisabled();
+    await userEvent.selectOptions(within(dialog).getByLabelText('Expense category'), 'other');
+    // "Other" needs a description.
+    expect(pay).toBeDisabled();
+    await userEvent.type(within(dialog).getByLabelText('Description'), 'Water bottles');
+    await userEvent.click(pay);
+    await vi.waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0]).toMatchObject({
+      branchId,
+      kind: 'expense',
+      category: 'other',
+      amount: '2.750',
+      description: 'Water bottles',
+    });
+  });
+});

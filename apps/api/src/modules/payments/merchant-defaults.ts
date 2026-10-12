@@ -3,7 +3,11 @@ import type { Transaction } from '../../database/database.service.js';
 import { newId } from '../../kernel/ids.js';
 import { branches } from '../branches/branches.schema.js';
 import { registers } from '../registers/registers.schema.js';
-import { ensureBranchTreasury, ensureRegisterAccount } from './cash-ledger.js';
+import {
+  ensureBranchTreasury,
+  ensureInTransitAccount,
+  ensureRegisterAccount,
+} from './cash-ledger.js';
 import { financialAccounts, paymentMethods } from './payments.schema.js';
 
 type AccountKey = 'bank1' | 'bank2';
@@ -78,7 +82,7 @@ export async function ensureDefaultPaymentSetup(tx: Transaction, merchantId: str
   // Registers and treasuries are custody accounts, created with their branch and register.
   const existing = await tx.execute(
     sql`select 1 from financial_accounts where merchant_id = ${merchantId}
-        and kind not in ('register', 'treasury') limit 1`,
+        and kind not in ('register', 'treasury', 'in_transit') limit 1`,
   );
   if (existing.rows.length > 0) return { accounts: 0, added: 0, linked: 0 };
   const ids = {} as Record<AccountKey, string | null>;
@@ -169,6 +173,7 @@ export async function ensureDefaultRegister(tx: Transaction, merchantId: string,
     .from(branches)
     .where(and(eq(branches.merchantId, merchantId), eq(branches.id, branchId)));
   if (branch) await ensureBranchTreasury(tx, merchantId, branch);
+  await ensureInTransitAccount(tx, merchantId);
   for (const r of await tx
     .select({
       id: registers.id,

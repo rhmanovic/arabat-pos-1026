@@ -25,6 +25,7 @@ export function SuppliersPage() {
   const api = useApi();
   const { can } = useSession();
   const [editing, setEditing] = useState<Supplier | 'new' | null>(null);
+  const [payments, setPayments] = useState<Supplier | null>(null);
   const list = useQuery({ queryKey: suppliersKey, queryFn: () => api.purchasing.suppliers() });
   return (
     <div>
@@ -100,6 +101,22 @@ export function SuppliersPage() {
             ),
           },
           {
+            key: 'payments',
+            header: <span className="sr-only">{t('purchasing.payments')}</span>,
+            cell: (s) => (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPayments(s);
+                }}
+              >
+                {t('purchasing.payments')}
+              </Button>
+            ),
+          },
+          {
             key: 'status',
             header: t('common.status'),
             cell: (s) => (
@@ -110,6 +127,9 @@ export function SuppliersPage() {
           },
         ]}
       />
+      {payments ? (
+        <SupplierPaymentsDialog supplier={payments} onClose={() => setPayments(null)} />
+      ) : null}
       {editing ? (
         <SupplierDialog
           supplier={editing === 'new' ? null : editing}
@@ -225,6 +245,91 @@ function SupplierDialog({ supplier, onClose }: { supplier: Supplier | null; onCl
           )}
         </Field>
       </div>
+    </Dialog>
+  );
+}
+
+/** Cash paid to the supplier (ADR-0091): payments from registers and treasuries. */
+function SupplierPaymentsDialog({
+  supplier,
+  onClose,
+}: {
+  supplier: Supplier;
+  onClose: () => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const api = useApi();
+  const payments = useQuery({
+    queryKey: [...suppliersKey, supplier.id, 'payments'],
+    queryFn: () => api.cash.supplierPayments(supplier.id),
+  });
+  return (
+    <Dialog
+      open
+      size="lg"
+      onOpenChange={(open) => !open && onClose()}
+      title={t('purchasing.paymentsTitle', { name: localizedName(supplier, i18n.language) })}
+    >
+      {payments.data ? (
+        <p className="mb-3 text-sm" data-testid="supplier-total-paid">
+          {t('purchasing.totalPaid')}{' '}
+          <span dir="ltr" className="font-semibold tabular-nums">
+            {formatAmount(payments.data.totalPaid, i18n.language)}
+          </span>
+        </p>
+      ) : null}
+      <DataTable
+        caption={t('purchasing.payments')}
+        loading={payments.isPending}
+        error={
+          payments.isError ? (
+            <ErrorState error={payments.error} onRetry={() => void payments.refetch()} />
+          ) : null
+        }
+        rows={payments.data?.payments}
+        rowKey={(p) => p.id}
+        empty={t('purchasing.noPayments')}
+        columns={[
+          {
+            key: 'when',
+            header: t('purchasing.date'),
+            cell: (p) => (
+              <span>
+                {new Date(p.createdAt).toLocaleDateString(i18n.language, {
+                  numberingSystem: 'latn',
+                })}
+                <span className="block text-xs text-fg-muted" dir="ltr">
+                  {p.number}
+                </span>
+              </span>
+            ),
+          },
+          {
+            key: 'detail',
+            header: t('purchasing.paymentDetail'),
+            cell: (p) =>
+              [
+                p.purchaseOrder?.number,
+                p.description,
+                p.receiptReference,
+                p.reversesId ? t('purchasing.paymentReversal') : null,
+                p.reversedById ? t('purchasing.paymentReversed') : null,
+              ]
+                .filter(Boolean)
+                .join(' · ') || '—',
+          },
+          {
+            key: 'amount',
+            header: t('purchasing.amount'),
+            cell: (p) => (
+              <span dir="ltr" className="tabular-nums">
+                {p.reversesId ? '−' : ''}
+                {formatAmount(p.amount, i18n.language)}
+              </span>
+            ),
+          },
+        ]}
+      />
     </Dialog>
   );
 }

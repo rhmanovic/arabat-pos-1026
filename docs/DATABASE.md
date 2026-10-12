@@ -1,6 +1,6 @@
 # Database
 
-Status: **Implemented** — 34 migrations (`0000`–`0033`, §8); RLS on every merchant table.
+Status: **Implemented** — 36 migrations (`0000`–`0035`, §8); RLS on every merchant table.
 The tenant is called **merchant** in the schema (`merchant_id`).
 
 ---
@@ -320,6 +320,9 @@ erDiagram
   the register with the shift id; `cash_transfers` move cash between a register and its branch
   treasury as one balanced pair. All cash postings go through `apps/api/src/modules/payments/cash-ledger.ts`
   and lock the shift row first, then the accounts in id order.
+- Phase B (ADR-0091): `cash_disbursements` are real outflows with one `expense` /
+  `supplier_payment` entry each; bank deposits and branch transfers are `cash_transfers`; cash
+  between branches sits in the merchant's single `in_transit` account.
 
 ### 6.4 Later modules (entities only; designed in detail when scheduled)
 | Module | Entities |
@@ -381,6 +384,8 @@ erDiagram
 | `apps/api/drizzle/0024_restaurant_rls.sql` | Forced RLS; no deletes of configuration, orders, items, tickets; modifier snapshots immutable; triggers: paid and cancelled items unchangeable, sent items keep product and quantity, final orders immutable; one open order per table; one default station per branch |
 | `apps/api/drizzle/0032_cash_custody.sql` | Cash custody (ADR-0090): `financial_accounts` gains `branch_id`, `register_id`, `counted_at`, kinds `register`/`treasury`, status `archived`, a shape check per kind and unique indexes (one account per register, one treasury per branch, one company treasury where `branch_id` is null); `financial_account_entries.shift_id`; `registers.needs_count` and unique `(merchant_id, id, branch_id)`; shift opening count columns (`opening_expected_minor`, `opening_discrepancy_minor`, `opening_is_initial`, `opening_follows_shift_id`, `opening_breakdown`), `legacy_open`, close type `forced_uncounted`; table `cash_transfers` |
 | `apps/api/drizzle/0033_cash_custody_rules.sql` | RLS and no UPDATE/DELETE on `cash_transfers`; trigger `financial_account_entries_guard` (no entries on archived accounts; register entries carry the register's open shift, other accounts none); `cash_transfers_direction` (register ↔ treasury of the same branch, both active); deferred `cash_transfers_balanced` (exactly two entries summing to 0); function `cash_custody_cutover(merchant)` run for every merchant (archives the old cash account, unlinks the cash method, creates treasuries and register accounts at 0, marks open shifts `legacy_open`, audit row); removes `cash.move` from cashier-template roles (audit row) |
+| `apps/api/drizzle/0034_cash_disbursements.sql` | Phase B (ADR-0091): `cash_disbursements` (expense / supplier payment, category, supplier, purchase order, source register or treasury, shift, reversal link), `cash_branch_transfers` (sent / received amounts, status, notes, version); `financial_accounts` kind `in_transit` (one per merchant); entry types `expense`, `supplier_payment`; `cash_transfers.branch_transfer_id`, `reference`, origins `deposit`, `branch_transfer`; `cash_movements.bank_account_id`; unique `purchase_orders (merchant_id, id, supplier_id)` |
+| `apps/api/drizzle/0035_cash_disbursements_rules.sql` | RLS; no UPDATE/DELETE on disbursements, no DELETE on branch transfers; `cash_branch_transfers_forward` (status only forward, sent fields immutable); `cash_transfers_direction` replaced (adds → bank and treasury ↔ in-transit); `cash_disbursements_guard` (source is a register/treasury of the branch; reversal mirrors the original); deferred `cash_disbursements_posted` (exactly one matching entry); creates the in-transit account of every merchant |
 
 Restaurant model (implemented, Prompt 15):
 - Configuration: `restaurant_settings` (switch, auto-send), per branch `dining_areas`,

@@ -124,11 +124,20 @@ export class CashService {
             : null,
         });
       }
+      // Cash sent between branches stays company cash until it is received (ADR-0091).
+      const transitScope = this.scope(actor, branchId, sql`t.from_branch_id`);
+      const [transit] = (
+        await tx.execute(sql`select coalesce(sum(t.amount_sent_minor), 0)::text as total
+          from cash_branch_transfers t
+          where t.status = 'in_transit' and ${transitScope ?? sql`true`}`)
+      ).rows as { total: string }[];
+      const inTransitTotal = BigInt(transit!.total);
       return {
         branches: [...branches.values()].map(({ totalMinor: _t, ...b }) => b),
         treasuriesTotal: money(treasuriesTotal),
         registersTotal: money(registersTotal),
-        total: money(treasuriesTotal + registersTotal),
+        inTransitTotal: money(inTransitTotal),
+        total: money(treasuriesTotal + registersTotal + inTransitTotal),
       };
     });
   }
@@ -182,19 +191,21 @@ export class CashService {
     });
   }
 
-  async listTransfers(actor: MerchantActor, query: TransferQuery) {
-    const scope = this.scope(actor, query.branchId, sql`f.branch_id`);
+  async listTransfers(actor: MerchantActor, query: TransferQuery, onlyId?: string) {
+    // Branch of a transfer: its register/treasury side (the in-transit account has none).
+    const scope = this.scope(actor, query.branchId, sql`coalesce(f.branch_id, d.branch_id)`);
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
-      const where = scope ?? sql`true`;
+      const where = sql`${scope ?? sql`true`} and ${onlyId ? sql`t.id = ${onlyId}` : sql`true`}`;
       const [count] = (
         await tx.execute(sql`select count(*)::int as n from cash_transfers t
-          join financial_accounts f on f.id = t.from_account_id where ${where}`)
+          join financial_accounts f on f.id = t.from_account_id
+          join financial_accounts d on d.id = t.to_account_id where ${where}`)
       ).rows as { n: number }[];
       const rows = (
         await tx.execute(sql`
-          select t.id, t.amount_minor::text as amount, t.origin, t.note, t.created_at,
+          select t.id, t.amount_minor::text as amount, t.origin, t.note, t.reference, t.created_at,
                  u.full_name, f.id as f_id, f.kind as f_kind, f.name_en as f_en, f.name_ar as f_ar,
-                 f.branch_id, d.id as d_id, d.kind as d_kind, d.name_en as d_en, d.name_ar as d_ar
+                 coalesce(f.branch_id, d.branch_id) as branch_id, d.id as d_id, d.kind as d_kind, d.name_en as d_en, d.name_ar as d_ar
           from cash_transfers t
           join financial_accounts f on f.id = t.from_account_id
           join financial_accounts d on d.id = t.to_account_id
@@ -222,6 +233,7 @@ export class CashService {
           amount: money(BigInt(r['amount'] as string)),
           origin: r['origin'] as CashTransfer['origin'],
           note: (r['note'] as string | null) ?? null,
+          reference: (r['reference'] as string | null) ?? null,
           createdBy: r['full_name'] as string,
           createdAt: iso(r['created_at'] as string)!,
         })),
@@ -442,16 +454,10 @@ export class CashService {
   }
 
   // ------------------------------------------------------------ helpers
-  private async transferById(actor: MerchantActor, id: string): Promise<CashTransfer> {
-    const list = await this.database.withMerchantTx(actor.merchantId, async (tx) => {
-      const [row] = await tx.select().from(cashTransfers).where(eq(cashTransfers.id, id));
-      return row;
-    });
-    if (!list) throw AppError.notFound();
-    const all = await this.listTransfers(actor, { page: 1, pageSize: 100 });
-    const found = all.transfers.find((t) => t.id === id);
-    if (!found) throw AppError.notFound();
-    return found;
+  async transferById(actor: MerchantActor, id: string): Promise<CashTransfer> {
+    const { transfers } = await this.listTransfers(actor, { page: 1, pageSize: 1 }, id);
+    if (!transfers[0]) throw AppError.notFound();
+    return transfers[0];
   }
 
   private async custodyAccount(tx: Transaction, id: string): Promise<AccountRow> {

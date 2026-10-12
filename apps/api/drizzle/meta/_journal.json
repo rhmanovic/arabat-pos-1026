@@ -239,6 +239,20 @@
       "when": 1791838306444,
       "tag": "0033_cash_custody_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1791841712912,
+      "tag": "0034_cash_disbursements",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1791841719286,
+      "tag": "0035_cash_disbursements_rules",
+      "breakpoints": true
     }
   ]
 }

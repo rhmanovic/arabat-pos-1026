@@ -2,7 +2,13 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { Transaction } from '../../database/database.service.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
-import { cashTransfers, financialAccountEntries, financialAccounts } from './payments.schema.js';
+import { nextDocumentNumber } from '../../database/schema/sequences.schema.js';
+import {
+  cashDisbursements,
+  cashTransfers,
+  financialAccountEntries,
+  financialAccounts,
+} from './payments.schema.js';
 
 /**
  * Cash custody ledger (ADR-0090): the only place that changes register and treasury
@@ -13,7 +19,15 @@ import { cashTransfers, financialAccountEntries, financialAccounts } from './pay
  * ({@link lockAccounts}), so concurrent writers never deadlock.
  */
 
-export type EntryType = 'payment' | 'fee' | 'refund' | 'cash_movement' | 'transfer' | 'adjustment';
+export type EntryType =
+  | 'payment'
+  | 'fee'
+  | 'refund'
+  | 'cash_movement'
+  | 'transfer'
+  | 'adjustment'
+  | 'expense'
+  | 'supplier_payment';
 
 export interface Entry {
   merchantId: string;
@@ -127,6 +141,29 @@ export async function ensureBranchTreasury(
     .onConflictDoNothing();
 }
 
+/** The company account holding cash sent between branches (ADR-0091). */
+export async function ensureInTransitAccount(tx: Transaction, merchantId: string): Promise<void> {
+  await tx
+    .insert(financialAccounts)
+    .values({
+      id: newId(),
+      merchantId,
+      kind: 'in_transit',
+      nameAr: 'نقد قيد النقل',
+      nameEn: 'Cash in transit',
+    })
+    .onConflictDoNothing();
+}
+
+export async function inTransitAccount(tx: Transaction, merchantId: string): Promise<string> {
+  await ensureInTransitAccount(tx, merchantId);
+  const [row] = await tx
+    .select({ id: financialAccounts.id })
+    .from(financialAccounts)
+    .where(eq(financialAccounts.kind, 'in_transit'));
+  return row!.id;
+}
+
 export async function ensureRegisterAccount(
   tx: Transaction,
   merchantId: string,
@@ -147,8 +184,8 @@ export async function ensureRegisterAccount(
 }
 
 /**
- * Moves cash between a register and its branch treasury: a transfer record and its two
- * ledger entries. The caller holds the locks and has checked the source balance.
+ * Moves cash between two custody accounts (register ↔ treasury, into a bank, or through the
+ * in-transit account): a transfer record and its two ledger entries. The caller holds the locks and has checked the source balance.
  */
 export async function postTransfer(
   tx: Transaction,
@@ -157,8 +194,10 @@ export async function postTransfer(
     fromAccountId: string;
     toAccountId: string;
     amountMinor: bigint;
-    origin: 'pos_movement' | 'manager';
+    origin: 'pos_movement' | 'manager' | 'deposit' | 'branch_transfer';
     cashMovementId?: string | null;
+    branchTransferId?: string | null;
+    reference?: string | null;
     note?: string | null;
     idempotencyKey?: string | null;
     userId: string;
@@ -176,6 +215,8 @@ export async function postTransfer(
     amountMinor: args.amountMinor,
     origin: args.origin,
     cashMovementId: args.cashMovementId ?? null,
+    branchTransferId: args.branchTransferId ?? null,
+    reference: args.reference ?? null,
     note: args.note ?? null,
     idempotencyKey: args.idempotencyKey ?? null,
     createdByUserId: args.userId,
@@ -226,4 +267,90 @@ export function assertCovers(balance: bigint, amount: bigint, kind: 'register' |
           'INSUFFICIENT_TREASURY_CASH',
           'The treasury does not hold this much cash.',
         );
+}
+
+/**
+ * Pays cash out of a register or treasury as a real outflow (ADR-0091): an expense or a
+ * supplier payment, with its single ledger entry. A reversal posts the same amount back.
+ * The caller holds the locks and has checked the balance (not needed for a reversal).
+ */
+export async function postDisbursement(
+  tx: Transaction,
+  args: {
+    merchantId: string;
+    branchId: string;
+    sourceAccountId: string;
+    shiftId: string | null;
+    cashMovementId?: string | null;
+    kind: 'expense' | 'supplier_payment';
+    category: string | null;
+    supplierId: string | null;
+    purchaseOrderId: string | null;
+    amountMinor: bigint;
+    description: string | null;
+    receiptReference: string | null;
+    reversesId?: string | null;
+    idempotencyKey?: string | null;
+    userId: string;
+  },
+): Promise<string> {
+  const id = newId();
+  const number = await nextDocumentNumber(
+    tx,
+    args.merchantId,
+    args.kind === 'expense' ? 'cash_expense' : 'supplier_payment',
+    args.kind === 'expense' ? 'EX' : 'SP',
+  );
+  await tx.insert(cashDisbursements).values({
+    id,
+    merchantId: args.merchantId,
+    number,
+    branchId: args.branchId,
+    sourceAccountId: args.sourceAccountId,
+    shiftId: args.shiftId,
+    cashMovementId: args.cashMovementId ?? null,
+    kind: args.kind,
+    category: args.category,
+    supplierId: args.supplierId,
+    purchaseOrderId: args.purchaseOrderId,
+    amountMinor: args.amountMinor,
+    description: args.description,
+    receiptReference: args.receiptReference,
+    reversesId: args.reversesId ?? null,
+    idempotencyKey: args.idempotencyKey ?? null,
+    createdByUserId: args.userId,
+  });
+  await postEntries(tx, [
+    {
+      merchantId: args.merchantId,
+      accountId: args.sourceAccountId,
+      amountMinor: args.reversesId ? args.amountMinor : -args.amountMinor,
+      entryType: args.kind,
+      sourceType: 'cash_disbursement',
+      sourceId: id,
+      description: args.description,
+      createdByUserId: args.userId,
+      shiftId: args.shiftId,
+    },
+  ]);
+  return id;
+}
+
+/** An active bank account of the merchant (deposit target). */
+export async function activeBankAccount(tx: Transaction, id: string): Promise<string> {
+  const [row] = await tx
+    .select({ id: financialAccounts.id })
+    .from(financialAccounts)
+    .where(
+      and(
+        eq(financialAccounts.id, id),
+        eq(financialAccounts.kind, 'bank'),
+        eq(financialAccounts.status, 'active'),
+      ),
+    );
+  if (!row)
+    throw new AppError(400, 'TRANSFER_NOT_ALLOWED', 'Choose an active bank account.', [
+      { path: 'bankAccountId', code: 'invalid', message: 'Choose an active bank account.' },
+    ]);
+  return row.id;
 }
