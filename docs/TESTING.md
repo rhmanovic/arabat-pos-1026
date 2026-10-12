@@ -66,6 +66,14 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after cash custody phase A (2026-10-12, local run)
+
+`pnpm verify` green (153 unit/web tests); `pnpm test:integration` 163 passed, including
+`cash.int.test.ts` (drawer across shifts, drops/top-ups, manager transfers and permissions,
+parallel transfers never overdraw, refund from another register, forced close with and without
+a count, cutover, database rules); `pnpm test:e2e` 34 passed (`shifts.spec` counts the
+treasury, runs a shift with a drop and a top-up and checks both balances).
+
 ### Results after Prompt 18 — final audit (2026-10-12, local run)
 - `pnpm verify` ✓ (150 unit/web), `pnpm test:integration` ✓ (153), `pnpm test:e2e` ✓ (33).
 - New regression tests, each verified to **fail** with the defect put back:
