@@ -306,7 +306,7 @@ describe('registers and shifts', () => {
       (await p.cash({ kind: 'cash_out', amount: '20.100', reason: 'safe_drop' })).statusCode,
     ).toBe(201);
     // Cannot take out more cash than the drawer holds.
-    const tooMuch = await p.cash({ kind: 'cash_out', amount: '40.156', reason: 'bank_deposit' });
+    const tooMuch = await p.cash({ kind: 'cash_out', amount: '40.156', reason: 'correction' });
     expect(tooMuch.json().code).toBe('INSUFFICIENT_CASH');
     // "other" needs a note; wrong reason for the direction is refused.
     expect((await p.cash({ kind: 'cash_out', amount: '1', reason: 'other' })).statusCode).toBe(400);

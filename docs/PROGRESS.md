@@ -25,7 +25,7 @@ must be labeled as such.
 | Reporting | Done | Sales (gross, discounts, net, refunds, by day/hour/branch/employee/product/category/method, trend, comparison, gross profit under policy), payments & cash (collections, fees, pay-outs, cash), shifts (reconciliation, discrepancies), inventory (valuation, stock, movements, adjustments, quantities), purchasing (suppliers, receipts, transfers); dashboard with KPIs, charts, filters and CSV export |
 | Restaurant | Done (optional module) | Module switch, areas/tables, stations with category routing, modifier groups (required/optional), recipes and modifier ingredients, table/takeaway/pickup orders, modifiers and notes, send to kitchen, kitchen display, cancel/waste, move/combine, split bills via the checkout engine, receipts with modifiers, restaurant sales in lists and reports |
 | Cash custody (phases A, B) | Done | Register drawers keep their balance between shifts, a treasury per branch, counts at open/close, forced close with or without a count, register ↔ treasury transfers, manager cash page with statements, cutover of the old cash account (ADR-0090). Phase B: expenses by category and supplier payments (POS drawer or treasury, reversals, supplier page), bank deposits with `cash.deposit`, branch-to-branch transfers through in-transit (ADR-0091). Phase C (reports, dashboard card) pending |
-| Automated tests | Passing | 153 unit/web, 163 integration, 34 E2E (local, 2026-10-12, cash custody phase A) |
+| Automated tests | Passing | 154 unit/web, 170 integration, 35 E2E (local, 2026-10-12, cash custody phase B) |
 | CI | Written, not yet run | `.github/workflows/ci.yml` |
 | Business modules | Not started | Begin in M1 |
 | Deployment | Not planned | Requires owner approval |
