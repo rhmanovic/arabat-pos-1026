@@ -1,8 +1,8 @@
 import type { PosCatalogItem } from '@arabat/contracts';
 import { formatMoney } from '@arabat/i18n';
 import { Money } from '@arabat/money';
-import { Badge, Button, cn } from '@arabat/ui';
-import { localizedName, useApi, useAuth } from '@arabat/web-core';
+import { Badge, Button, Spinner, cn } from '@arabat/ui';
+import { ErrorState, localizedName, useApi, useAuth } from '@arabat/web-core';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -217,6 +217,16 @@ export function SalePage() {
             className="grid min-h-0 flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3 lg:grid-cols-4"
             aria-label={t('register.catalogTitle')}
           >
+            {catalog.isPending ? (
+              <li className="col-span-full flex justify-center p-6 text-primary">
+                <Spinner label={t('common:status.loading')} />
+              </li>
+            ) : null}
+            {catalog.isError ? (
+              <li className="col-span-full p-2">
+                <ErrorState error={catalog.error} onRetry={() => void catalog.refetch()} />
+              </li>
+            ) : null}
             {visible.length === 0 && catalog.data ? (
               <li className="col-span-full p-6 text-center text-fg-muted">
                 {t('sale.noProducts')}

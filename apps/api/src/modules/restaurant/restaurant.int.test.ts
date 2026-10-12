@@ -739,6 +739,13 @@ describe('restaurant access and configuration', () => {
         )
       ).statusCode,
     ).toBe(403);
+    // Another merchant's item id cannot be referenced (foreign keys ignore RLS; audit fix).
+    const stranger = await setup();
+    const foreign = await s.req('POST', '/manager/restaurant/modifier-groups', {
+      nameEn: 'Foreign',
+      modifiers: [{ nameEn: 'x', componentVariantId: stranger.cola, componentQuantity: '1' }],
+    });
+    expect(foreign.statusCode).toBe(400);
     // A recipe on a stock-tracked item would deduct twice: refused.
     const colaProduct = (await s.ok('GET', `/manager/inventory/variants/${s.cola}`)).productId;
     const recipe = await s.req('PUT', `/manager/restaurant/menu/${colaProduct}`, {

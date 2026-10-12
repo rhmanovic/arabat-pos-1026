@@ -170,10 +170,14 @@ export class SubscriptionsService {
     limit: PlanLimit,
     adding = 1,
   ): Promise<void> {
-    // Unlimited plans take a shared lock (creations run in parallel, but a concurrent plan
-    // change waits for them and then counts them); limited plans serialise on the row.
-    if ((await this.current(tx, merchantId, { lock: 'share' })).plan[LIMIT_COLUMN[limit]] === null)
-      return;
+    // One lock per transaction (never share-then-update: concurrent upgrades deadlock).
+    // Unlimited plans take a shared lock: creations run in parallel, while a concurrent plan
+    // change waits for them and then counts them. Limited plans serialise on the row.
+    const unlocked = await this.current(tx, merchantId);
+    if (unlocked.plan[LIMIT_COLUMN[limit]] === null) {
+      const shared = await this.current(tx, merchantId, { lock: 'share' });
+      if (shared.plan[LIMIT_COLUMN[limit]] === null) return;
+    }
     const { plan } = await this.current(tx, merchantId, { lock: true });
     const max = plan[LIMIT_COLUMN[limit]] as number | null;
     if (max === null) return;

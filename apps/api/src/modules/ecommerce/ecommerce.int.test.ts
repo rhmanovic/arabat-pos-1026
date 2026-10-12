@@ -652,3 +652,84 @@ describe('online checkout and payments', () => {
     ).toBe(404);
   });
 });
+
+describe('audit regressions (Prompt 18)', () => {
+  const pickup = (s: S, key = newId()) =>
+    checkout(s, {
+      idempotencyKey: key,
+      lines: [{ variantId: s.tea, quantity: '1' }],
+      fulfillment: 'pickup',
+      deliveryAddress: null,
+      expectedTotal: '1.250',
+    });
+  const managed = async (s: S, number: string) =>
+    (await s.ok('GET', '/manager/online/orders')).orders.find(
+      (o: { number: string }) => o.number === number,
+    );
+  const succeeded = (ref: string, id: string) => ({
+    id,
+    reference: ref,
+    status: 'succeeded',
+    amount: '1250',
+    currency: 'KWD',
+    failureReason: null,
+  });
+
+  it('records a payment that succeeds after the order was cancelled or failed', async () => {
+    const s = await setup();
+    // Cancelled by the merchant while the customer was still paying.
+    const a = (await pickup(s)).json().order;
+    const order = await managed(s, a.number);
+    await s.ok('POST', `/manager/online/orders/${order.id}/action`, {
+      action: 'cancel',
+      version: order.version,
+    });
+    expect((await notify(s, succeeded(referenceOf(a), 'evt_late_1'))).json()).toMatchObject({
+      outcome: 'needs_attention',
+    });
+    const after = await s.ok('GET', `/manager/online/orders/${order.id}`);
+    expect(after).toMatchObject({ status: 'needs_attention', saleId: null });
+    expect(after.payments[0]).toMatchObject({ status: 'succeeded' });
+    // A failure reported first, then the money arrives anyway.
+    const b = (await pickup(s)).json().order;
+    await notify(s, { ...succeeded(referenceOf(b), 'evt_fail_1'), status: 'failed' });
+    expect((await managed(s, b.number)).status).toBe('payment_failed');
+    expect((await notify(s, succeeded(referenceOf(b), 'evt_late_2'))).json().outcome).toBe(
+      'needs_attention',
+    );
+    expect((await managed(s, b.number)).status).toBe('needs_attention');
+    // Neither became a sale (no stock was held any more); both are flagged for a refund.
+    expect(
+      await count(`select count(*) as n from sales where merchant_id = $1`, [s.c.merchantId]),
+    ).toBe(0);
+  });
+
+  it('runs POS sales and online payments for the same item concurrently without errors', async () => {
+    const s = await setup();
+    const pos = await till(s);
+    const orders = [];
+    for (let i = 0; i < 3; i += 1) orders.push((await pickup(s)).json().order);
+    // 5 on hand, 3 reserved: 2 left for the till; all five finish at the same time.
+    const results = await Promise.all([
+      ...orders.map((o, i) => notify(s, succeeded(referenceOf(o), `evt_race_${i}`))),
+      ...[0, 1].map(() =>
+        s.req(
+          'POST',
+          '/pos/sales',
+          {
+            idempotencyKey: newId(),
+            lines: [{ variantId: s.tea, quantity: '1' }],
+            payments: [{ methodId: s.cash, amount: '1.250' }],
+            expectedTotal: '1.250',
+          },
+          pos,
+        ),
+      ),
+    ]);
+    expect(results.map((r) => r.statusCode).sort()).toEqual([200, 200, 200, 201, 201]);
+    expect(await onHand(s, s.tea)).toBe('0.000');
+    expect(
+      await count(`select count(*) as n from sales where merchant_id = $1`, [s.c.merchantId]),
+    ).toBe(5);
+  });
+});

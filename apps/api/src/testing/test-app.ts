@@ -35,7 +35,7 @@ export class InMemoryMailer extends Mailer {
 export function testEnv(overrides: Record<string, string> = {}): Env {
   return loadEnv({
     NODE_ENV: 'test',
-    LOG_LEVEL: 'silent',
+    LOG_LEVEL: process.env['TEST_LOG_LEVEL'] ?? 'silent',
     // Port 1 is never listening: database calls fail fast unless a real URL is given.
     DATABASE_URL: 'postgres://nobody:nothing@127.0.0.1:1/none',
     MFA_ENCRYPTION_KEY: TEST_MFA_KEY,

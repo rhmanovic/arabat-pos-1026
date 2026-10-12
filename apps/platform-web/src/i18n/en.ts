@@ -53,6 +53,8 @@ export const platformEn = {
     lastSale: 'Last sale',
     created: 'Created',
     status: 'Status',
+    previous: 'Previous page',
+    next: 'Next page',
   },
   status: { active: 'Active', suspended: 'Suspended', closed: 'Closed' },
   sub: {

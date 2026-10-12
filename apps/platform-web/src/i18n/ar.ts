@@ -55,6 +55,8 @@ export const platformAr: PlatformResources = {
     lastSale: 'آخر عملية بيع',
     created: 'تاريخ الإنشاء',
     status: 'الحالة',
+    previous: 'الصفحة السابقة',
+    next: 'الصفحة التالية',
   },
   status: { active: 'نشطة', suspended: 'موقوفة', closed: 'مغلقة' },
   sub: {

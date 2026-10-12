@@ -12,11 +12,26 @@ const REDACT_PATHS = [
   '*.token',
 ];
 
+/** Bearer-like secrets in URLs (order tracking tokens, reset links) never reach the logs. */
+export function redactUrl(url: string): string {
+  return url
+    .replace(/(\/orders\/)[0-9a-f]{16,}/gi, '$1[redacted]')
+    .replace(/([?&]token=)[^&]*/gi, '$1[redacted]');
+}
+
 export function createLoggerOptions(env: Env): LoggerOptions {
   return {
     level: env.LOG_LEVEL,
     base: { service: 'arabat-api', version: env.APP_VERSION },
     redact: { paths: REDACT_PATHS, censor: '[redacted]' },
+    serializers: {
+      req: (req: { method?: string; url?: string; hostname?: string; ip?: string }) => ({
+        method: req.method,
+        url: req.url ? redactUrl(req.url) : req.url,
+        host: req.hostname,
+        remoteAddress: req.ip,
+      }),
+    },
     timestamp: pino.stdTimeFunctions.isoTime,
     ...(env.LOG_PRETTY
       ? { transport: { target: 'pino-pretty', options: { translateTime: 'SYS:HH:MM:ss.l' } } }

@@ -93,8 +93,8 @@ export class DatabaseService implements OnModuleDestroy {
     const inviteHash = context.inviteHash ? context.inviteHash.toString('hex') : '';
     return this.retrying(() =>
       this.db.transaction(async (tx) => {
-      await tx.execute(
-        sql`select set_config('app.merchant_id', ${merchantId}, true), set_config('app.user_id', ${userId}, true),
+        await tx.execute(
+          sql`select set_config('app.merchant_id', ${merchantId}, true), set_config('app.user_id', ${userId}, true),
                    set_config('app.invite_hash', ${inviteHash}, true)`,
         );
         return work(tx);

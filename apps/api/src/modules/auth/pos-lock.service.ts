@@ -46,7 +46,8 @@ export class PosLockService {
       .select({ passwordHash: users.passwordHash, status: users.status })
       .from(users)
       .where(eq(users.id, session.userId!));
-    const ok = user?.status === 'active' && (await this.passwords.verify(user.passwordHash, password));
+    const ok =
+      user?.status === 'active' && (await this.passwords.verify(user.passwordHash, password));
     if (!ok) {
       await this.limiter.hit(failures, AUTH_LIMITS.unlockFailuresPerSession);
       try {

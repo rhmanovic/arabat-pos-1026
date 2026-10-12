@@ -164,9 +164,8 @@ export class PlatformService {
         left join platform_operators op on op.id = e.operator_id
         where e.merchant_id = ${merchantId} order by e.created_at desc, e.id desc limit 50`)
     ).rows as Row[];
-    const audit = (
-      await this.database.db.execute(sql`select * from platform_audit(${merchantId}, null, 20, 0)`)
-    ).rows as Row[];
+    const audit = (await tx.execute(sql`select * from platform_audit(${merchantId}, null, 20, 0)`))
+      .rows as Row[];
     return {
       id: m.id,
       nameEn: m.displayNameEn,

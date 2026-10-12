@@ -29,7 +29,7 @@ function useClock(): Date {
  * merely without requests: the screen polls in the background). The server enforces it.
  */
 function useIdleLock(lock: () => void, enabled: boolean) {
-  const last = useRef(Date.now());
+  const last = useRef(0);
   useEffect(() => {
     if (!enabled) return;
     last.current = Date.now();

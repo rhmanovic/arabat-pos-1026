@@ -147,6 +147,7 @@ export function MerchantsPage() {
             variant="secondary"
             size="sm"
             disabled={page <= 1}
+            aria-label={t('merchants.previous')}
             onClick={() => setPage(page - 1)}
           >
             ‹
@@ -158,6 +159,7 @@ export function MerchantsPage() {
             variant="secondary"
             size="sm"
             disabled={page * PAGE >= total}
+            aria-label={t('merchants.next')}
             onClick={() => setPage(page + 1)}
           >
             ›
