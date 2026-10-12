@@ -8,3 +8,5 @@ export * from '../../modules/merchants/merchants.schema.js';
 export * from '../../modules/platform-admin/platform.schema.js';
 export * from '../../modules/catalog/catalog.schema.js';
 export * from '../../modules/inventory/inventory.schema.js';
+export * from '../../modules/payments/payments.schema.js';
+export * from '../../modules/registers/registers.schema.js';

@@ -445,6 +445,9 @@ importers:
       '@arabat/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
+      '@arabat/money':
+        specifier: workspace:*
+        version: link:../../packages/money
       '@arabat/ui':
         specifier: workspace:*
         version: link:../../packages/ui

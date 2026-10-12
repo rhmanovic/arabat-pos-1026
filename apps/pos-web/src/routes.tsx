@@ -13,6 +13,7 @@ import {
   AcceptInvitePage,
 } from './pages/LoginPage.js';
 import { RegisterPage } from './pages/RegisterPage.js';
+import { RequireShift, ShiftPage } from './pages/ShiftPages.js';
 
 /** Route tree of /pos (relative to the /pos basename). See docs/ROUTES.md. */
 export const routes: RouteObject[] = [
@@ -41,7 +42,15 @@ export const routes: RouteObject[] = [
       </RequireAuth>
     ),
     children: [
-      { index: true, element: <RegisterPage /> },
+      {
+        index: true,
+        element: (
+          <RequireShift>
+            <RegisterPage />
+          </RequireShift>
+        ),
+      },
+      { path: 'shift', element: <ShiftPage /> },
       { path: '*', element: <NotFound /> },
     ],
   },

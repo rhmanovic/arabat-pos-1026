@@ -88,6 +88,21 @@ engineering defaults pending owner confirmation.
 - **BR-066** Costs and stock values are visible only to users with price-management or
   inventory-report rights; cashiers see quantities only.
 
+- **BR-070** Each merchant configures its own payment methods (cash, card, bank transfer,
+  custom), each enabled/disabled and available at the POS and/or (later) online. New
+  merchants start with Cash, Card (KNET) and Bank transfer without fees.
+- **BR-071** Processing fee per payment: none, fixed, percentage, or fixed + percentage;
+  rounded half-up to the fils; never more than the payment.
+- **BR-072** Registers belong to a branch; open to everyone allowed to work shifts at the
+  branch, or restricted to listed employees. Every branch starts with one register.
+- **BR-073** Shift policy: one employee per register at a time; one open shift per
+  employee; only the owner of the shift uses it; managers may force-close with a note.
+- **BR-074** Closing a shift records expected cash, counted cash (optionally by notes and
+  coins) and the difference (counted − expected). Differences within the register's
+  tolerance are "balanced"; otherwise "over" or "short". Closed shifts never change.
+- **BR-075** Cash in/out needs a reason ("other" requires a note) and cannot take out more
+  cash than the drawer is expected to hold.
+
 ## 4. Money — Confirmed
 
 - **BR-030** Default currency is **KWD** with **3 decimal places** (1 KWD = 1000 fils).
@@ -120,4 +135,5 @@ engineering defaults pending owner confirmation.
 | OQ-011 | Hosting provider, region and data residency (Kuwait / GCC requirements?) — affects cost | Deployment |
 | OQ-012 | Number display: Latin digits (0-9) or Arabic-Indic (٠-٩) by default? (engineering default: Latin, configurable) | M0 UI |
 | OQ-014 | Costing method: weighted average (implemented default) or FIFO required for accounting? | Reports / accounting |
+| OQ-015 | Blind closing: should cashiers count the drawer without seeing the expected amount first? (implemented: expected is shown) | POS shifts |
 | OQ-013 | Card payments: manual entry of card amount only, or integrated card terminals (e.g. KNET)? | M4 / later |

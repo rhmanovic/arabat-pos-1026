@@ -7,6 +7,8 @@ import { MailModule } from './kernel/mail/mail.module.js';
 import { StorageModule } from './kernel/storage/storage.module.js';
 import { CatalogModule } from './modules/catalog/catalog.module.js';
 import { InventoryModule } from './modules/inventory/inventory.module.js';
+import { PaymentsModule } from './modules/payments/payments.module.js';
+import { RegistersModule } from './modules/registers/registers.module.js';
 import { AuditModule } from './modules/audit/audit.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { BranchesModule } from './modules/branches/branches.module.js';
@@ -34,6 +36,8 @@ export class AppModule {
         IamModule,
         CatalogModule,
         InventoryModule,
+        PaymentsModule,
+        RegistersModule,
       ],
     };
   }

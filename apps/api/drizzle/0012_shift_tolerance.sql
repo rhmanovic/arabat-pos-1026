@@ -1,0 +1,1 @@
+ALTER TABLE "shifts" ADD COLUMN "discrepancy_tolerance_minor" bigint;

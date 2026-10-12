@@ -9,6 +9,10 @@ import { newId } from '../../kernel/ids.js';
 import { AuditService } from '../audit/audit.service.js';
 import { branches } from '../branches/branches.schema.js';
 import { memberships, rolePermissions, roles, users } from '../iam/iam.schema.js';
+import {
+  ensureDefaultPaymentMethods,
+  ensureDefaultRegister,
+} from '../payments/merchant-defaults.js';
 import { merchants } from '../merchants/merchants.schema.js';
 import type { LoginOutcome } from './login.service.js';
 import { PasswordService } from './password.service.js';
@@ -89,6 +93,8 @@ export class RegistrationService {
         await tx
           .insert(memberships)
           .values({ id: membershipId, merchantId, userId, isOwner: true, status: 'active' });
+        await ensureDefaultPaymentMethods(tx, merchantId);
+        await ensureDefaultRegister(tx, merchantId, branchId);
 
         for (const [templateKey, template] of Object.entries(ROLE_TEMPLATES)) {
           const roleId = newId();

@@ -172,6 +172,6 @@ Before reporting work as done, run `pnpm verify`, `pnpm test:integration` and
 ## 10. Repository status
 
 Implemented: foundation, authentication, branches/employees/RBAC, manager dashboard,
-product catalog and inventory engine (see `docs/PROGRESS.md`).
+product catalog, inventory engine, payments/registers/shifts (see `docs/PROGRESS.md`).
 Stock balances change **only** through `StockLedgerService.apply` (inventory module).
 See `docs/PROGRESS.md` for the current state and `docs/ROADMAP.md` for next steps.

@@ -12,6 +12,9 @@ import { BranchesPage } from './features/branches/BranchesPage.js';
 import { CategoriesPage } from './features/catalog/CategoriesPage.js';
 import { ProductEditorPage } from './features/catalog/ProductEditorPage.js';
 import { ProductsPage } from './features/catalog/ProductsPage.js';
+import { PaymentsPage } from './features/cash/PaymentsPage.js';
+import { RegistersPage } from './features/cash/RegistersPage.js';
+import { ShiftDetailPage, ShiftsPage } from './features/cash/ShiftsPage.js';
 import { CompanySettingsPage } from './features/company/CompanySettingsPage.js';
 import { DashboardPage } from './features/dashboard/DashboardPage.js';
 import { EmployeeDetailPage } from './features/employees/EmployeeDetailPage.js';
@@ -81,6 +84,10 @@ export const routes: RouteObject[] = [
         element: guard('inventory.read', <AdjustmentDetailPage />),
       },
       { path: 'inventory/movements', element: guard('inventory.read', <MovementsPage />) },
+      { path: 'payments', element: guard('payments.settings', <PaymentsPage />) },
+      { path: 'registers', element: guard('registers.manage', <RegistersPage />) },
+      { path: 'shifts', element: guard('shifts.view_all', <ShiftsPage />) },
+      { path: 'shifts/:shiftId', element: guard('shifts.view_all', <ShiftDetailPage />) },
       { path: 'branches', element: guard('branches.read', <BranchesPage />) },
       { path: 'employees', element: guard('employees.read', <EmployeesPage />) },
       { path: 'employees/:membershipId', element: guard('employees.read', <EmployeeDetailPage />) },

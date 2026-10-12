@@ -12,6 +12,7 @@ import { AuditService } from '../audit/audit.service.js';
 import { isUniqueViolation } from '../auth/registration.service.js';
 import { roleAssignments } from '../iam/iam.schema.js';
 import { branches } from './branches.schema.js';
+import { ensureDefaultRegister } from '../payments/merchant-defaults.js';
 
 type CreateInput = z.output<typeof createBranchSchema>;
 type UpdateInput = z.output<typeof updateBranchSchema>;
@@ -59,6 +60,7 @@ export class BranchesService {
           .insert(branches)
           .values({ id, merchantId: actor.merchantId, ...input, isMain: false })
           .returning();
+        await ensureDefaultRegister(tx, actor.merchantId, id);
         await this.record(tx, actor, 'branch.created', id, ip, { code: input.code });
         return toDetail(row!, 0);
       });

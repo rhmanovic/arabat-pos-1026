@@ -346,3 +346,40 @@ ADR; supersede it.
 - **Decision:** Quantities have 3 decimals, `numeric(14,3)` in PostgreSQL and bigint
   thousandths in code; inputs with more decimals are rejected, never rounded.
 
+## ADR-0046 — Shift policy: one employee per register
+- **Date:** 2026-10-12 · **Status:** Accepted (BR-073)
+- **Decision:** At most one open shift per register and one per employee (partial unique
+  indexes, so concurrent opens cannot both succeed). Only the shift owner records cash
+  movements, sells (Prompt 10) and closes; another cashier cannot use an occupied
+  register. A manager with `registers.manage` may force-close an abandoned shift with a
+  mandatory note (audited as `shift.force_closed`). Closed shifts are immutable (DB
+  trigger).
+- **Why:** per-person accountability for drawer cash is the basis of reconciliation.
+
+## ADR-0047 — Expected cash is always derived
+- **Date:** 2026-10-12 · **Status:** Accepted
+- **Decision:** Expected cash = opening float + cash in − cash out + cash sales − cash
+  refunds, computed from records at closing and stored with the counted amount and the
+  register tolerance in force (snapshot). Cash out larger than the expected drawer cash is
+  refused (`INSUFFICIENT_CASH`) under the shift row lock. Cash sales/refunds read the
+  payment records added in Prompts 10/11.
+
+## ADR-0048 — Processing fees per payment
+- **Date:** 2026-10-12 · **Status:** Accepted (BR-071)
+- **Decision:** A method's fee rule is none, fixed, percentage or fixed + percentage.
+  `processingFee()` (`@arabat/money`) computes fixed + round-half-up(amount × percent) in
+  fils, never negative, capped at the amount. The fee is calculated and stored on each
+  payment at payment time (Prompt 10), so later rule changes never alter history.
+
+## ADR-0049 — Gateways: configuration placeholder only
+- **Date:** 2026-10-12 · **Status:** Accepted
+- **Decision:** Methods may name a future provider (tap, upayments, hesabe, bookeey) but
+  `gatewayLive` is always false and `gateway_config` never stores secrets. Integration
+  (Prompt 16) uses a sandbox/mock adapter; live activation needs owner approval.
+
+## ADR-0050 — Money.parse reports all invalid input as MoneyError
+- **Date:** 2026-10-12 · **Status:** Accepted
+- **Decision:** `Money.parse('')` used to throw the internal `InvalidDecimalError`, which
+  callers did not expect (a web test caught a crash on an empty amount field). It now
+  throws `MoneyError` for every invalid amount.
+

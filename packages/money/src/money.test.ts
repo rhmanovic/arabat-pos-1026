@@ -130,3 +130,11 @@ describe('divideHalfUp', () => {
     expect(() => divideHalfUp(1n, 0n)).toThrow(RangeError);
   });
 });
+
+describe('Money.parse input errors', () => {
+  it('reports every invalid amount as a MoneyError', () => {
+    for (const bad of ['', ' ', 'abc', '1,5', '1e3', '.5']) {
+      expect(() => Money.parse(bad, 'KWD'), bad).toThrow(MoneyError);
+    }
+  });
+});

@@ -3,7 +3,7 @@
 Only record what has actually been done and verified. Mocked or partial work
 must be labeled as such.
 
-## Current state (2026-10-11, after Prompt 8 — inventory engine)
+## Current state (2026-10-12, after Prompt 9 — payments, registers and shifts)
 
 | Area | Status | Notes |
 |---|---|---|
@@ -17,7 +17,8 @@ must be labeled as such.
 | Manager app | Done for implemented modules | Layout (role-aware sidebar, top bar with merchant/branch context, user menu), dashboard (real counts + onboarding), company profile, branches, employees, invitations, role assignments, roles & permission matrix |
 | Product catalog | Done | Categories, products, variants, SKU/barcodes, prices (fils), costs (permission), branch availability, images, archive; manager screens; POS catalog API |
 | Inventory | Done | Per-branch balances, append-only ledger, opening/increase/decrease/count documents with reasons, idempotency, row-locked concurrency, no-oversell policy, thresholds, weighted-average valuation, history, manager screens, POS availability API, reusable engine for sales/refunds/transfers |
-| Automated tests | Passing | 97 unit/web, 78 integration, 24 E2E (local) |
+| Payments, registers, shifts | Done | Per-merchant payment methods with exact fees, internal balances (entries ledger), gateway placeholder (not live), registers with access control, shifts with cash in/out, expected vs counted cash, discrepancy, force close, manager monitoring and report, POS shift screens |
+| Automated tests | Passing | 106 unit/web, 88 integration, 25 E2E (local) |
 | CI | Written, not yet run | `.github/workflows/ci.yml` |
 | Business modules | Not started | Begin in M1 |
 | Deployment | Not planned | Requires owner approval |
@@ -177,5 +178,19 @@ Not done yet (by design, later prompts): sales deduct stock in Prompt 10, refund
 restock in 11, transfers and purchase receipts in 12 — all through the same engine.
 Open question for the owner: OQ-014 (weighted average vs FIFO).
 
+### 2026-10-12 — Prompt 9: Payments, registers and shifts
+Implemented: `processingFee()` in `@arabat/money`; migrations 0010–0012; payments module
+(methods, internal balances, defaults for new merchants/branches, seed for existing
+ones); registers module (`ShiftsService`: registers, access, open/close, cash movements,
+monitoring, discrepancy report, force close); manager screens (payment methods with fee
+preview, internal balances, registers, shifts, shift detail, discrepancy report); POS
+(shift gate, open shift, shift strip, cash in/out, close with coin count, result).
+Verified: see TESTING.md; Arabic RTL tablet screenshots checked.
+Found and fixed: `Money.parse('')` threw an unexpected error type that crashed amount
+fields (ADR-0050).
+Not done yet (by design): cash sales/refunds feed expected cash from Prompts 10/11;
+fees are stored per payment in Prompt 10; no gateway is connected (Prompt 16, sandbox).
+Open question: OQ-015 (blind closing).
+
 ## Next step
-Prompt 9 — payment methods, registers and shifts.
+Prompt 10 — employee POS interface and checkout engine.

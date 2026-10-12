@@ -19,6 +19,26 @@ import {
   invitationPreviewSchema,
   type CreateBranch,
   type ProductListQuery,
+  type CloseShift,
+  type DiscrepancyReportQuery,
+  type OpenShift,
+  type RecordCashMovement,
+  type SaveFinancialAccount,
+  type SavePaymentMethod,
+  type SaveRegister,
+  type ShiftListQuery,
+  currentShiftSchema,
+  discrepancyReportSchema,
+  financialAccountListSchema,
+  financialAccountSchema,
+  paymentMethodListSchema,
+  paymentMethodSchema,
+  posPaymentMethodListSchema,
+  posRegisterListSchema,
+  registerListSchema,
+  registerSchema,
+  shiftListSchema,
+  shiftSchema,
   type AdjustmentListQuery,
   type CreateAdjustment,
   type MovementQuery,
@@ -297,6 +317,58 @@ export function createApiClient(options: ApiClientOptions = {}) {
           `/pos/inventory/availability?${toParams({ variantIds: variantIds?.join(',') })}`,
           { schema: posAvailabilitySchema },
         ),
+    },
+    payments: {
+      methods: () =>
+        request('GET', '/manager/payment-methods', { schema: paymentMethodListSchema }),
+      createMethod: (body: SavePaymentMethod) =>
+        request('POST', '/manager/payment-methods', { body, schema: paymentMethodSchema }),
+      updateMethod: (id: string, body: SavePaymentMethod) =>
+        request('PATCH', `/manager/payment-methods/${id}`, { body, schema: paymentMethodSchema }),
+      accounts: () =>
+        request('GET', '/manager/financial-accounts', { schema: financialAccountListSchema }),
+      createAccount: (body: SaveFinancialAccount) =>
+        request('POST', '/manager/financial-accounts', { body, schema: financialAccountSchema }),
+      updateAccount: (id: string, body: SaveFinancialAccount) =>
+        request('PATCH', `/manager/financial-accounts/${id}`, {
+          body,
+          schema: financialAccountSchema,
+        }),
+      posMethods: () =>
+        request('GET', '/pos/payment-methods', { schema: posPaymentMethodListSchema }),
+    },
+    registers: {
+      list: (branchId?: string | null) =>
+        request('GET', `/manager/registers?${toParams({ branchId })}`, {
+          schema: registerListSchema,
+        }),
+      create: (body: SaveRegister) =>
+        request('POST', '/manager/registers', { body, schema: registerSchema }),
+      update: (id: string, body: SaveRegister) =>
+        request('PATCH', `/manager/registers/${id}`, { body, schema: registerSchema }),
+      setStatus: (id: string, status: 'active' | 'inactive') =>
+        request('POST', `/manager/registers/${id}/status`, {
+          body: { status },
+          schema: registerSchema,
+        }),
+    },
+    shifts: {
+      list: (query: ShiftListQuery = {}) =>
+        request('GET', `/manager/shifts?${toParams(query)}`, { schema: shiftListSchema }),
+      get: (id: string) => request('GET', `/manager/shifts/${id}`, { schema: shiftSchema }),
+      discrepancies: (query: DiscrepancyReportQuery = {}) =>
+        request('GET', `/manager/shifts/discrepancies?${toParams(query)}`, {
+          schema: discrepancyReportSchema,
+        }),
+      forceClose: (id: string, body: CloseShift) =>
+        request('POST', `/manager/shifts/${id}/force-close`, { body, schema: shiftSchema }),
+      posRegisters: () => request('GET', '/pos/registers', { schema: posRegisterListSchema }),
+      current: () => request('GET', '/pos/shifts/current', { schema: currentShiftSchema }),
+      open: (body: OpenShift) => request('POST', '/pos/shifts', { body, schema: shiftSchema }),
+      cashMovement: (body: RecordCashMovement) =>
+        request('POST', '/pos/shifts/current/cash-movements', { body, schema: shiftSchema }),
+      close: (body: CloseShift) =>
+        request('POST', '/pos/shifts/current/close', { body, schema: shiftSchema }),
     },
     employees: {
       list: () => request('GET', '/manager/employees', { schema: employeeListSchema }),

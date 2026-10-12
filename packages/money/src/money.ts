@@ -1,5 +1,12 @@
 import { type CurrencyCode, currencyExponent, isCurrencyCode } from './currency.js';
-import { divideHalfUp, formatScaled, parseDecimal, pow10 } from './decimal.js';
+import {
+  InvalidDecimalError,
+  type ScaledDecimal,
+  divideHalfUp,
+  formatScaled,
+  parseDecimal,
+  pow10,
+} from './decimal.js';
 
 export class MoneyError extends Error {
   constructor(message: string) {
@@ -44,7 +51,14 @@ export class Money {
     if (!isCurrencyCode(currency))
       throw new MoneyError(`Unsupported currency: ${String(currency)}`);
     const exponent = currencyExponent(currency);
-    const { units, scale } = parseDecimal(amount);
+    let parsed: ScaledDecimal;
+    try {
+      parsed = parseDecimal(amount);
+    } catch (error) {
+      if (error instanceof InvalidDecimalError) throw new MoneyError(`Invalid amount: "${amount}"`);
+      throw error;
+    }
+    const { units, scale } = parsed;
     if (scale > exponent) {
       throw new MoneyError(
         `Amount "${amount}" has more than ${exponent} decimal places for ${currency}`,

@@ -66,6 +66,23 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after Prompt 9 (2026-10-12, local run)
+- `pnpm verify` ✓ (106 unit/web), `pnpm test:integration` ✓ (88), `pnpm test:e2e` ✓ (25).
+- `fees.test.ts`: none/fixed/percentage/combined fees, half-up rounding at the fils, cap.
+- `shifts.int.test.ts` (10): per-merchant default methods and isolation; exact fee storage
+  and validation; one cash method; linked balances only within the merchant (balance =
+  sum of entries); permissions (branch manager lacks `payments.settings`, cashier sees
+  POS methods without fees); full shift with exact reconciliation (−0.155 short),
+  denomination check, audit trail, DB-level immutability of closed shifts and cash
+  movements; manager list and discrepancy report; **concurrent opens** of one register
+  (one wins, REGISTER_BUSY) and one shift per employee; **concurrent cash-outs** (8 × 3.000
+  on 10.000 → exactly 3 succeed), idempotent retries; restricted registers and branch
+  binding; force close (note required, branch-scoped, no double close); tolerance snapshot.
+- The cash-out concurrency test was verified to fail without the shift row lock.
+- Web: POS shift gate + open shift, coin-count closing; manager fee preview.
+- `e2e/shifts.spec.ts`: fee setup with preview, owner opens a POS shift, cash in/out,
+  refused over-withdrawal, close short by 0.250, manager list/detail/report.
+
 ### Results after Prompt 8 (2026-10-11, local run)
 - `pnpm verify` ✓ (97 unit/web tests), `pnpm test:integration` ✓ (78), `pnpm test:e2e` ✓ (24).
 - `quantity.test.ts`: exact parsing/formatting, value rounding, weighted average edge cases.

@@ -351,6 +351,40 @@ erDiagram
 | `apps/api/drizzle/0008_inventory.sql` | `inventory_settings`, `stock_levels`, `stock_adjustments`, `stock_adjustment_lines`, `stock_movements` (generated) |
 | `apps/api/drizzle/0009_inventory_rls.sql` | Forced RLS on all inventory tables; `UPDATE/DELETE` revoked on the ledger and adjustment documents; `DELETE` revoked on `stock_levels` |
 
+| `apps/api/drizzle/0010_payments_registers.sql` | `financial_accounts`, `financial_account_entries`, `payment_methods`, `registers`, `register_members`, `shifts`, `cash_movements` (generated) |
+| `apps/api/drizzle/0011_payments_registers_rls.sql` | Forced RLS; append-only grants on entries and cash movements; no deletes of configuration; trigger making closed shifts immutable; trigger allowing cash movements only on open shifts |
+| `apps/api/drizzle/0012_shift_tolerance.sql` | `shifts.discrepancy_tolerance_minor` (tolerance snapshot at closing) |
+
+Payments, registers and shifts (implemented, Prompt 9):
+- `payment_methods`: per merchant; `kind` cash | card | bank_transfer | custom (exactly one
+  cash method, partial unique index); `status`, `available_in_pos`, `available_online`;
+  fee `fee_type` none | fixed | percentage | fixed_plus_percentage with
+  `fee_fixed_minor` (bigint fils) and `fee_percent` numeric(6,3); optional
+  `financial_account_id`; `gateway_provider` + `gateway_config` jsonb (placeholder only,
+  no secrets, never live).
+- `financial_accounts` + `financial_account_entries`: internal balances; the balance is the
+  sum of signed append-only entries (written by payments/fees/refunds from Prompt 10).
+- `registers` (branch, code unique per branch, `access_mode` branch | restricted,
+  default opening float, discrepancy tolerance) + `register_members`.
+- `shifts`: one open shift per register and per membership (partial unique indexes);
+  closing stores expected, counted, `discrepancy = counted − expected` (check
+  constraint), close type normal | forced, optional denomination breakdown; a trigger
+  rejects any update of a closed shift.
+- `cash_movements`: cash_in | cash_out with reason, note, author, optional idempotency key.
+
+Financial model separation (Prompt 9 requirement) — each figure has its own record and is
+never derived from another by subtraction:
+
+| Concept | Record | Introduced |
+|---|---|---|
+| Order value | `orders` / `order_lines` (mutable intent) | Prompt 10 |
+| Sales revenue | `sales` / `sale_lines` (immutable, net of discounts) | Prompt 10 |
+| Customer payments | `payments` (method, amount, shift) | Prompt 10 |
+| Processing fees | `payments.fee_minor`, computed with `processingFee()` from the method's rule at payment time | Prompt 10 (rule: Prompt 9) |
+| Refunds | `refunds` / `refund_payments` | Prompt 11 |
+| Cash movements | `cash_movements` (non-sale drawer cash) | Prompt 9 |
+| Internal balances | `financial_accounts` + `financial_account_entries` | Prompt 9 |
+
 Inventory model notes (implemented, Prompt 8):
 - Quantities are `numeric(14,3)` (exact thousandths, e.g. kg); the API exchanges them as
   decimal strings and the code computes with bigint milli-units (`@arabat/money` quantity

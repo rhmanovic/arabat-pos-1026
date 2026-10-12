@@ -33,11 +33,25 @@ export const NAV: readonly NavItem[] = [
   },
   { key: 'sales', to: '/sales', anyOf: ['sales.read'], available: false, section: 'operations' },
   {
+    key: 'shifts',
+    to: '/shifts',
+    anyOf: ['shifts.view_all'],
+    available: true,
+    section: 'operations',
+  },
+  {
+    key: 'registers',
+    to: '/registers',
+    anyOf: ['registers.manage'],
+    available: true,
+    section: 'organization',
+  },
+  {
     key: 'payments',
     to: '/payments',
-    anyOf: ['payments.settings', 'shifts.view_all'],
-    available: false,
-    section: 'operations',
+    anyOf: ['payments.settings'],
+    available: true,
+    section: 'organization',
   },
   {
     key: 'purchasing',

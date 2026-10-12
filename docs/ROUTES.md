@@ -156,6 +156,26 @@ per-branch breakdown, settings dialog), `/manager/inventory/adjustments`,
 `/manager/inventory/adjustments/new`, `/manager/inventory/adjustments/:id`,
 `/manager/inventory/movements`.
 
+### Payments, registers and shifts API (Prompt 9)
+
+| Method & path | Permission |
+|---|---|
+| `GET/POST /manager/payment-methods`, `PATCH /manager/payment-methods/:id` | `payments.settings` |
+| `GET/POST /manager/financial-accounts`, `PATCH /manager/financial-accounts/:id` | `payments.settings` |
+| `GET /manager/registers?branchId=`, `POST /manager/registers`, `PATCH /manager/registers/:id`, `POST …/:id/status` | `registers.manage` at the branch |
+| `GET /manager/shifts?branchId=&status=&outcome=&from=&to=`, `GET /manager/shifts/:id` | `shifts.view_all` (branch-scoped) |
+| `GET /manager/shifts/discrepancies?branchId=&from=&to=` | `shifts.view_all` |
+| `POST /manager/shifts/:id/force-close` | `registers.manage` at the shift's branch (note required) |
+| `GET /pos/payment-methods` | POS `sales.create` (active POS methods, no fees) |
+| `GET /pos/registers`, `GET /pos/shifts/current`, `POST /pos/shifts`, `POST /pos/shifts/current/close` | POS `shifts.operate` at the bound branch + register access |
+| `POST /pos/shifts/current/cash-movements` | POS `cash.move` (own open shift) |
+
+Screens: `/manager/payments` (methods + internal balances, fee preview),
+`/manager/registers`, `/manager/shifts` (monitoring + discrepancy report tab),
+`/manager/shifts/:id` (detail, force close); POS `/pos/` shows "Open a shift" until a
+shift is open, then the sale screen with a shift strip; `/pos/shift` (expected cash,
+cash in/out, close with optional note/coin count, closing result).
+
 ## 5. API namespaces (backend)
 
 | Prefix | Consumers | Notes |
