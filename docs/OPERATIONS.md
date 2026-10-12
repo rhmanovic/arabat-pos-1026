@@ -142,4 +142,5 @@ Current staging deployment (2026-10-12): Railway project `arabat-pos`, environme
 `production`, services `Postgres` + `web`, URL `https://web-production-bf628.up.railway.app`
 (deploys on push to the connected branch). Verified after deploy: `/api/v1/health/ready` ok
 (database ok), `/manager`, `/pos` and `/platform` load and report the server connected. No
-volume, no SMTP and no platform operator have been created yet.
+volume and no SMTP yet. First platform operator created by the bootstrap (credentials only
+in the deploy log of 2026-10-12 14:42 UTC).
