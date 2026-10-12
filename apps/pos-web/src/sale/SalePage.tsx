@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { ShiftStrip } from '../pages/ShiftPages.js';
 import { type CartLine, priceLines, useCart } from './cart.js';
+import { CustomerBar } from './customer.js';
 import {
   HeldSalesDialog,
   LineDialog,
@@ -242,6 +243,7 @@ export function SalePage() {
           <h2 id="cart-title" className="mb-2 text-lg font-semibold">
             {t('sale.cart')}
           </h2>
+          <CustomerBar />
           {cart.state.lines.length === 0 ? (
             <p className="flex-1 text-fg-muted">{t('sale.empty')}</p>
           ) : (

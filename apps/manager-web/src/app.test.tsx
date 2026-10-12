@@ -125,6 +125,7 @@ describe('manager app', () => {
       'registers.manage',
       'payments.settings',
       'customers.read',
+      'reports.sales',
     ];
     const fetch = fakeApiFetch({
       session: makeSession('manager', permissions),
@@ -147,13 +148,14 @@ describe('manager app', () => {
       'Shifts',
       'Registers',
       'Payment methods',
+      'Customers',
     ]) {
       expect(within(nav).getByRole('link', { name })).toBeInTheDocument();
     }
     expect(within(nav).getByRole('link', { name: 'Sales' })).toBeInTheDocument();
-    // Unfinished modules (customers) are visible but not links.
-    expect(within(nav).queryByRole('link', { name: /Customers/ })).not.toBeInTheDocument();
-    expect(within(nav).getByText('Customers').closest('[aria-disabled="true"]')).not.toBeNull();
+    // Unfinished modules (reports) are visible but not links.
+    expect(within(nav).queryByRole('link', { name: /Reports/ })).not.toBeInTheDocument();
+    expect(within(nav).getByText('Reports').closest('[aria-disabled="true"]')).not.toBeNull();
   });
 
   it('denies a management page without its permission even when typed in the address bar', async () => {

@@ -66,6 +66,24 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after Prompt 13 (2026-10-12, local run)
+- `pnpm verify` ✓ (118 unit/web), `pnpm test:integration` ✓ (123), `pnpm test:e2e` ✓ (29).
+- `customers.int.test.ts` (5): profile create/normalise/duplicate phone in another
+  format/search by name, phone digits, code/wildcards escaped/edit with version/stale
+  version/deactivate/notes newest first; audit log without personal data; notes and
+  customers cannot be updated/deleted by the runtime role; POS: create basic profile,
+  basic fields only, search, sale with customer (sale + receipt), walk-in, held cart
+  keeps the customer, inactive customer refused with nothing sold; till permissions
+  (no search/create/attach without the permission; walk-in still works) — verified to
+  fail when the till permission check is removed; history: 3 sales across two branches,
+  one refund → exact totals, net 1.750, average 0.667 (half-up), exchange stays with the
+  customer, second-branch manager sees only that branch; tenant isolation (API and RLS).
+- Web: manager customer detail (stats, history, add note; read-only hides edits); POS
+  create-at-till → checkout carries `customerId` → receipt shows the customer.
+- `e2e/customers.spec.ts`: manager creates a profile with a note; invited cashier sells to
+  her by phone search, sells to a walk-in, registers a new customer at the till; manager
+  list, search, detail totals and sales list reflect it exactly.
+
 ### Results after Prompt 12 (2026-10-12, local run)
 - `pnpm verify` ✓ (115 unit/web), `pnpm test:integration` ✓ (118), `pnpm test:e2e` ✓ (28).
 - `purchasing.int.test.ts` (8): suppliers (unique code, inactive refused on new orders,

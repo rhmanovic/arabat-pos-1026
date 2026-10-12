@@ -86,7 +86,7 @@ export const NAV: readonly NavItem[] = [
     key: 'customers',
     to: '/customers',
     anyOf: ['customers.read'],
-    available: false,
+    available: true,
     section: 'people',
   },
   {

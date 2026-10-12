@@ -17,6 +17,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { createdAt, id, merchantId, updatedAt } from '../../database/schema/columns.js';
 import { branches } from '../branches/branches.schema.js';
+import { customers } from '../customers/customers.schema.js';
 import { users } from '../iam/iam.schema.js';
 import { merchants } from '../merchants/merchants.schema.js';
 import { registers, shifts } from '../registers/registers.schema.js';
@@ -77,6 +78,8 @@ export const orders = pgTable(
       .references(() => users.id),
     status: text().notNull(),
     label: text(),
+    /** Null for walk-in sales. */
+    customerId: uuid(),
     orderDiscountType: text(),
     orderDiscountValue: text(),
     /** Checkout idempotency key (client-generated per cart). */
@@ -109,6 +112,10 @@ export const orders = pgTable(
       sql`${t.orderDiscountType} is null or ${t.orderDiscountType} in ('percent', 'amount')`,
     ),
     index('orders_branch_status_idx').on(t.merchantId, t.branchId, t.status),
+    foreignKey({
+      columns: [t.merchantId, t.customerId],
+      foreignColumns: [customers.merchantId, customers.id],
+    }),
   ],
 );
 
@@ -149,6 +156,8 @@ export const sales = pgTable(
       .notNull()
       .references(() => users.id),
     receiptNumber: text().notNull(),
+    /** Null for walk-in sales; fixed when the sale is completed. */
+    customerId: uuid(),
     currency: char({ length: 3 }).notNull().default('KWD'),
     subtotalMinor: minor().notNull(),
     lineDiscountsMinor: minor().notNull(),
@@ -180,6 +189,11 @@ export const sales = pgTable(
     ),
     index('sales_branch_time_idx').on(t.merchantId, t.branchId, t.createdAt),
     index('sales_shift_idx').on(t.merchantId, t.shiftId),
+    index('sales_customer_idx').on(t.merchantId, t.customerId, t.createdAt),
+    foreignKey({
+      columns: [t.merchantId, t.customerId],
+      foreignColumns: [customers.merchantId, customers.id],
+    }),
   ],
 );
 

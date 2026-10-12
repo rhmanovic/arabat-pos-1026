@@ -110,6 +110,15 @@ import {
   merchantListResponseSchema,
   merchantProfileSchema,
   readyResponseSchema,
+  type CreateCustomer,
+  type CustomerListQuery,
+  type SaveCustomer,
+  customerListSchema,
+  customerNoteListSchema,
+  customerRefundListSchema,
+  customerSchema,
+  posCustomerListSchema,
+  posCustomerSchema,
 } from '@arabat/contracts';
 import { z } from 'zod';
 import { ApiError, ContractError, NetworkError, toApiError } from './errors.js';
@@ -495,6 +504,32 @@ export function createApiClient(options: ApiClientOptions = {}) {
           body,
           schema: purchaseOrderSchema,
         }),
+    },
+    customers: {
+      list: (query: CustomerListQuery = {}) =>
+        request('GET', `/manager/customers?${toParams(query)}`, { schema: customerListSchema }),
+      get: (id: string) => request('GET', `/manager/customers/${id}`, { schema: customerSchema }),
+      create: (body: SaveCustomer) =>
+        request('POST', '/manager/customers', { body, schema: customerSchema }),
+      update: (id: string, body: SaveCustomer) =>
+        request('PATCH', `/manager/customers/${id}`, { body, schema: customerSchema }),
+      sales: (id: string, query: { page?: number; pageSize?: number } = {}) =>
+        request('GET', `/manager/customers/${id}/sales?${toParams(query)}`, {
+          schema: saleListSchema,
+        }),
+      refunds: (id: string) =>
+        request('GET', `/manager/customers/${id}/refunds`, { schema: customerRefundListSchema }),
+      notes: (id: string) =>
+        request('GET', `/manager/customers/${id}/notes`, { schema: customerNoteListSchema }),
+      addNote: (id: string, body: string) =>
+        request('POST', `/manager/customers/${id}/notes`, {
+          body: { body },
+          schema: customerNoteListSchema,
+        }),
+      posSearch: (q: string) =>
+        request('GET', `/pos/customers?${toParams({ q })}`, { schema: posCustomerListSchema }),
+      posCreate: (body: CreateCustomer) =>
+        request('POST', '/pos/customers', { body, schema: posCustomerSchema }),
     },
     transfers: {
       list: (query: TransferListQuery = {}) =>

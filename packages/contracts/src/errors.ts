@@ -67,6 +67,8 @@ export const ERROR_CODES = [
   'INVALID_STATE',
   'RECEIVE_EXCEEDS_ORDER',
   'SUPPLIER_INACTIVE',
+  'CUSTOMER_INACTIVE',
+  'DUPLICATE_PHONE',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

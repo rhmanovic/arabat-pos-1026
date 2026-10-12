@@ -1,4 +1,4 @@
-import type { DiscountInput, PosCatalogItem } from '@arabat/contracts';
+import type { DiscountInput, PosCatalogItem, SaleCustomer } from '@arabat/contracts';
 import {
   type Discount,
   Money,
@@ -25,9 +25,11 @@ interface CartState {
   orderDiscount: DiscountInput | null;
   /** Set when a suspended order was resumed: checkout completes it. */
   orderId: string | null;
+  /** Registered customer, or null for a walk-in sale. */
+  customer: SaleCustomer | null;
 }
 
-const EMPTY: CartState = { lines: [], orderDiscount: null, orderId: null };
+const EMPTY: CartState = { lines: [], orderDiscount: null, orderId: null, customer: null };
 
 function toMinor(value: string): bigint {
   return Money.parse(value, 'KWD').minor;
@@ -115,6 +117,9 @@ function useCartState() {
       },
       setOrderDiscount(orderDiscount: DiscountInput | null) {
         setState((s) => ({ ...s, orderDiscount }));
+      },
+      setCustomer(customer: SaleCustomer | null) {
+        setState((s) => ({ ...s, customer }));
       },
       load(next: CartState) {
         setState(next);

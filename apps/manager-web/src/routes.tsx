@@ -17,6 +17,7 @@ import { RegistersPage } from './features/cash/RegistersPage.js';
 import { ShiftDetailPage, ShiftsPage } from './features/cash/ShiftsPage.js';
 import { SaleDetailPage, SalesPage } from './features/sales/SalesPage.js';
 import { RefundsPage } from './features/refunds/RefundsPage.js';
+import { CustomerDetailPage, CustomersPage } from './features/customers/CustomersPage.js';
 import { PurchaseOrderPage, PurchaseOrdersPage } from './features/purchasing/PurchaseOrdersPage.js';
 import { SuppliersPage } from './features/purchasing/SuppliersPage.js';
 import {
@@ -96,6 +97,8 @@ export const routes: RouteObject[] = [
       { path: 'sales', element: guard('sales.read', <SalesPage />) },
       { path: 'sales/:saleId', element: guard('sales.read', <SaleDetailPage />) },
       { path: 'refunds', element: guard('sales.read', <RefundsPage />) },
+      { path: 'customers', element: guard('customers.read', <CustomersPage />) },
+      { path: 'customers/:customerId', element: guard('customers.read', <CustomerDetailPage />) },
       { path: 'suppliers', element: guard('purchasing.read', <SuppliersPage />) },
       { path: 'purchasing', element: guard('purchasing.read', <PurchaseOrdersPage />) },
       { path: 'purchasing/new', element: guard('purchasing.manage', <PurchaseOrderPage />) },

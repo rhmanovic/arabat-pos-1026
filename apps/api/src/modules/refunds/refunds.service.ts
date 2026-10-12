@@ -51,6 +51,7 @@ interface SaleState {
   id: string;
   branchId: string;
   shiftId: string;
+  customerId: string | null;
   receiptNumber: string;
   createdAt: Date;
   totalMinor: bigint;
@@ -149,6 +150,7 @@ export class RefundsService {
       id: saleId,
       branchId: s['branch_id'] as string,
       shiftId: s['shift_id'] as string,
+      customerId: (s['customer_id'] as string | null) ?? null,
       receiptNumber: s['receipt_number'] as string,
       createdAt: new Date(s['created_at'] as string),
       totalMinor: BigInt(s['total_minor'] as string),
@@ -630,6 +632,7 @@ export class RefundsService {
           orderId: null,
           idempotency: null,
           exchange: { refundId, creditMinor: creditApplied },
+          customer: { id: state.customerId, inherited: true },
           ip,
         });
         await this.execute(tx, actor, refundId, ip);

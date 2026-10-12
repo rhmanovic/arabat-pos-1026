@@ -15,8 +15,7 @@ Legend: 🔓 public · 🔑 permission required · 🧩 feature-gated · ⏳ lat
 Implemented screens (Prompt 6): `/` dashboard, `/settings` company profile,
 `/branches`, `/employees`, `/employees/:membershipId`, `/roles`, plus
 `/login`, `/register`, `/forgot-password`, `/reset-password`, `/accept-invite`.
-Modules not built yet (products, inventory, sales, payments, purchasing, suppliers,
-reports, customers) appear in the sidebar **disabled with "Not available yet"**,
+Modules not built yet (currently reports) appear in the sidebar **disabled with "Not available yet"**,
 never as working pages. Sidebar items are hidden without the required permission;
 every page is additionally wrapped in `RequirePermission` and every API call is
 enforced server-side.
@@ -45,7 +44,7 @@ Planned table (status per milestone):
 | `/manager/sales`, `/manager/sales/:id` | Sales history & receipt | `sales.read` | M4 |
 | `/manager/orders`, `/manager/orders/:id` | Orders (held/online/table) | `orders.manage` | M4 |
 | `/manager/refunds`, `/manager/refunds/:id` | Refunds | `sales.read` | M5 |
-| `/manager/customers`, `/manager/customers/:id` | Customers | `customers.read` | M5 |
+| `/manager/customers`, `/manager/customers/:id` | Customers, profile, history, notes | `customers.read` | M5 ✓ |
 | `/manager/suppliers` | Suppliers | `purchasing.read` | M6 ✓ |
 | `/manager/purchasing`, `/new`, `/:id` | Purchase orders, receiving | `purchasing.read` | M6 ✓ |
 | `/manager/purchasing/receipts/:id` | Goods receipt | `goods.receive` | M6 |
@@ -77,7 +76,7 @@ switcher, language toggle, user menu.
 | `/pos/orders` | Held carts / open orders | `orders.create` | M4 |
 | `/pos/sales` | This shift's sales | `sales.create` | M4 |
 | `/pos/refund` | Find sale → select lines → refund | `refunds.create` or override | M5 |
-| `/pos/customers` | Quick customer lookup/create | `customers.read` | M5 |
+| (sale screen) | Customer picker on the cart: search, choose, create, walk-in | `customers.read` / `customers.create` | M5 ✓ |
 | `/pos/cash` | Cash in / cash out | `cash.move` | M4 |
 | `/pos/shift/close` | Count drawer, close shift, Z summary | `shifts.close` | M4 |
 | `/pos/tables` | 🧩 Floor plan / open tabs | `orders.create` | M9 |
@@ -209,6 +208,19 @@ items and difference / cancel sale, printable refund receipt). Manager `/manager
 (history with filters, waiting-for-approval with approve/reject, unusual activity per
 employee); sale detail shows refunded amount; selling policy has return window and
 approval limit.
+
+### Customers API (Prompt 13)
+
+| Method & path | Permission |
+|---|---|
+| `GET /manager/customers?q=&status=&sort=` | `customers.read` (any branch); stats scoped to the viewer's branches |
+| `GET /manager/customers/:id`, `/:id/sales`, `/:id/refunds`, `/:id/notes` | `customers.read` |
+| `POST /manager/customers` | `customers.create` |
+| `PATCH /manager/customers/:id` (incl. status) | `customers.manage` |
+| `POST /manager/customers/:id/notes` | `customers.manage` |
+| `GET /pos/customers?q=` | POS `customers.read` at the branch (active only, basic fields) |
+| `POST /pos/customers` | POS `customers.create` at the branch |
+| `POST /pos/sales`, `POST /pos/orders` | optional `customerId` (needs `customers.read`) |
 
 ### Purchasing and transfers API (Prompt 12)
 

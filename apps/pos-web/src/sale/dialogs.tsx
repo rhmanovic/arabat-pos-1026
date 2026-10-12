@@ -319,6 +319,7 @@ export function PaymentDialog({
           discount: l.discount,
         })),
         orderDiscount: cart.state.orderDiscount,
+        customerId: cart.state.customer?.id ?? null,
         payments: planned,
         expectedTotal: Money.ofMinor(totalMinor, 'KWD').toDecimalString(),
       }),
@@ -499,6 +500,7 @@ export function SuspendDialog({ onClose }: { onClose: () => void }) {
           discount: l.discount,
         })),
         orderDiscount: cart.state.orderDiscount,
+        customerId: cart.state.customer?.id ?? null,
         label: label.trim() || null,
       }),
     onSuccess: async () => {
@@ -560,6 +562,7 @@ export function HeldSalesDialog({ onClose }: { onClose: () => void }) {
                 {o.label ?? t('sale.items', { count: o.lineCount })}
               </span>
               <span className="block text-sm text-fg-muted">
+                {o.customer ? `${o.customer.fullName} · ` : ''}
                 {o.cashierName} ·{' '}
                 {new Date(o.createdAt).toLocaleTimeString(i18n.language, {
                   hour: '2-digit',
@@ -575,6 +578,7 @@ export function HeldSalesDialog({ onClose }: { onClose: () => void }) {
                   cart.load({
                     orderId: o.id,
                     orderDiscount: o.orderDiscount,
+                    customer: o.customer,
                     lines: o.lines.map((l) => ({
                       key: crypto.randomUUID(),
                       variantId: l.variantId,
@@ -718,6 +722,12 @@ export function ReceiptView({ receipt }: { receipt: Receipt }) {
           <dt>{t('sale.cashier')}</dt>
           <dd>{s.cashierName}</dd>
         </div>
+        {s.customer ? (
+          <div className="flex justify-between">
+            <dt>{t('customer.label')}</dt>
+            <dd data-testid="receipt-customer">{s.customer.fullName}</dd>
+          </div>
+        ) : null}
         <div className="flex justify-between">
           <dt>{t('sale.register')}</dt>
           <dd>{localizedName(receipt.register, i18n.language) || receipt.register.code}</dd>

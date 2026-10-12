@@ -29,7 +29,20 @@ export type CartLineInput = z.input<typeof cartLineInputSchema>;
 const cartFields = {
   lines: z.array(cartLineInputSchema).min(1).max(200),
   orderDiscount: discountInputSchema.nullish().transform((v) => v ?? null),
+  /** Registered customer; omitted or null for a walk-in sale. */
+  customerId: z
+    .uuid()
+    .nullish()
+    .transform((v) => v ?? null),
 };
+
+/** Customer shown on a sale or held order. */
+export const saleCustomerSchema = z.object({
+  id: z.string(),
+  code: z.string(),
+  fullName: z.string(),
+});
+export type SaleCustomer = z.infer<typeof saleCustomerSchema>;
 
 export const paymentInputSchema = z.object({
   methodId: z.uuid(),
@@ -130,6 +143,7 @@ export const saleSchema = z.object({
   cost: moneySchema.nullable().optional(),
   /** Completed refunds against this sale. */
   refunded: moneySchema,
+  customer: saleCustomerSchema.nullable(),
 });
 export type Sale = z.infer<typeof saleSchema>;
 
@@ -143,6 +157,7 @@ export const saleSummarySchema = z.object({
   itemCount: z.string(),
   paymentKinds: z.array(z.string()),
   refunded: moneySchema,
+  customerName: z.string().nullable(),
 });
 export type SaleSummary = z.infer<typeof saleSummarySchema>;
 export const saleListSchema = z.object({
@@ -161,6 +176,7 @@ const isoDate = z.iso.date();
 export const saleListQuerySchema = z.object({
   branchId: z.uuid().optional(),
   shiftId: z.uuid().optional(),
+  customerId: z.uuid().optional(),
   q: z.string().trim().max(40).optional(),
   from: isoDate.optional(),
   to: isoDate.optional(),
@@ -203,6 +219,7 @@ export const suspendedOrderSchema = z.object({
     }),
   ),
   orderDiscount: discountInputSchema.nullable(),
+  customer: saleCustomerSchema.nullable(),
   version: z.number().int(),
 });
 export type SuspendedOrder = z.infer<typeof suspendedOrderSchema>;

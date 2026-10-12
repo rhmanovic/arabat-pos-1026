@@ -425,7 +425,7 @@ function ExchangePanel({
   const [methodId, setMethodId] = useState<string>('');
   const [key] = useState(() => crypto.randomUUID());
   const pricing = lines.length
-    ? priceLines({ lines, orderDiscount: null, orderId: null }, items)
+    ? priceLines({ lines, orderDiscount: null, orderId: null, customer: null }, items)
     : null;
   const newTotal = pricing?.ok ? pricing.cart.totalMinor : 0n;
   const due = newTotal - creditMinor;

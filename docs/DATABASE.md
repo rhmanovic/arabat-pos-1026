@@ -199,6 +199,7 @@ erDiagram
   stock_adjustments ||--o{ stock_movements : produces
   stock_transfers ||--o{ stock_movements : produces
   merchants ||--o{ customers : has
+  customers ||--o{ customer_notes : ""
 
   products {
     uuid id PK
@@ -364,6 +365,17 @@ erDiagram
 
 | `apps/api/drizzle/0018_purchasing_transfers.sql` | `document_sequences`, `suppliers`, `purchase_orders`, `purchase_order_lines`, `purchase_receipts`, `purchase_receipt_lines`, `stock_transfers`, `stock_transfer_lines` (generated) |
 | `apps/api/drizzle/0019_purchasing_transfers_rls.sql` | Forced RLS; no deletes; receipts append-only; triggers: order lines editable only while draft, final order/transfer states immutable, transfer line quantities set once |
+| `apps/api/drizzle/0020_customers.sql` | `customers`, `customer_notes`; `orders.customer_id`, `sales.customer_id` with composite merchant FKs and `sales_customer_idx` (generated) |
+| `apps/api/drizzle/0021_customers_rls.sql` | Forced RLS; `DELETE` revoked on customers; notes append-only; trigram indexes on name and phone |
+
+Customer model (implemented, Prompt 13):
+- `customers`: `code` (C-…, document sequence), `full_name`, canonical `phone` (unique per
+  merchant when present), `email`, `address`, `preferred_language`, `status`
+  active | inactive, creator and creating branch, version. Merchant-wide.
+- `customer_notes`: append-only (author, time).
+- `sales.customer_id` / `orders.customer_id`: nullable (walk-in). Stats are derived.
+- Future (not built): `customer_loyalty_entries`, `customer_credit_entries` as append-only
+  ledgers keyed by customer, when OQ-019 is decided.
 
 Purchasing and transfer model (implemented, Prompt 12):
 - `suppliers`: names ar/en, unique `lower(code)` per merchant, contact, tax number,

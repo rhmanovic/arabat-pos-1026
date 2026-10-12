@@ -145,6 +145,12 @@ export function SalesPage() {
             cell: (s) => s.cashierName,
           },
           {
+            key: 'customer',
+            header: t('sales.customer'),
+            hideBelow: 'lg',
+            cell: (s) => s.customerName ?? t('sales.walkIn'),
+          },
+          {
             key: 'items',
             header: t('sales.items'),
             hideBelow: 'lg',
@@ -275,6 +281,7 @@ export function SaleDetailPage() {
   const api = useApi();
   const { saleId } = useParams();
   const branchName = useBranchName();
+  const { can } = useSession();
   const sale = useQuery({
     queryKey: [...salesKey, 'detail', saleId],
     queryFn: () => api.sales.get(saleId!),
@@ -297,6 +304,20 @@ export function SaleDetailPage() {
       />
       {s ? (
         <div className="grid gap-6">
+          <p className="text-sm" data-testid="sale-customer">
+            {t('sales.customer')}:{' '}
+            {s.customer ? (
+              can('customers.read') ? (
+                <Link className="text-primary" to={`/customers/${s.customer.id}`}>
+                  {s.customer.fullName} <span dir="ltr">({s.customer.code})</span>
+                </Link>
+              ) : (
+                s.customer.fullName
+              )
+            ) : (
+              t('sales.walkIn')
+            )}
+          </p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label={t('sales.total')} value={<Amount value={s.total} />} />
             <StatCard

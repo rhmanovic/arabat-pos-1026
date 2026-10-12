@@ -490,3 +490,31 @@ ADR; supersede it.
   (it never returns to the source automatically). Request at either branch, approve at
   the source (`inventory.transfer.approve`), dispatch at the source, receive at the
   destination (`inventory.transfer` at each).
+
+## ADR-0065 — Customers are merchant-wide; history is derived
+- **Date:** 2026-10-12 · **Status:** Accepted (BR-110, BR-112)
+- **Decision:** A customer belongs to the merchant, not to a branch, so any branch can
+  serve them. Sales (and held orders) carry a nullable `customer_id` fixed when the sale is
+  completed; refunds reach the customer through their sale. Purchase counts, totals,
+  refunds, net spend and averages are always computed from the immutable sales and
+  refunds, never stored on the customer. Totals shown to a viewer include only branches
+  where they hold `customers.read`; the profile itself is visible with `customers.read`
+  at any branch.
+
+## ADR-0066 — Phone normalisation and uniqueness
+- **Date:** 2026-10-12 · **Status:** Accepted (BR-111)
+- **Decision:** Phones are stored as `+<digits>`: spaces, dashes, dots and brackets are
+  removed, `00` becomes `+`, and a local 8-digit number gets `+965`. The canonical
+  number is unique per merchant (partial unique index), so the same customer cannot be
+  registered twice by typing the number differently. E-mails are lower-cased, not unique
+  (families share addresses).
+
+## ADR-0067 — Customer privacy at the till and in the audit log
+- **Date:** 2026-10-12 · **Status:** Accepted (BR-113, BR-114)
+- **Decision:** The POS API returns only id, code, name, phone and status, and only for
+  active customers. E-mail, address, notes and spending stay in `/manager`. Audit entries
+  for customers record the id, code and the names of changed fields, never personal
+  values. Notes are append-only. Customers are never deleted (sales point at them);
+  deactivation stops new sales from using them. Loyalty, store credit and promotions are
+  left for later: they will be separate append-only ledgers keyed by `customer_id` once
+  their rules are confirmed (OQ-019).

@@ -3,7 +3,7 @@
 Only record what has actually been done and verified. Mocked or partial work
 must be labeled as such.
 
-## Current state (2026-10-12, after Prompt 12 — suppliers, purchasing and transfers)
+## Current state (2026-10-12, after Prompt 13 — customer management)
 
 | Area | Status | Notes |
 |---|---|---|
@@ -21,7 +21,8 @@ must be labeled as such.
 | POS & checkout | Done | Sale screen (search/scan, categories, cart, discounts, price override by permission, split payments, change, receipt + print, hold/resume, recent sales), atomic idempotent checkout, receipt numbers, manager sales history |
 | Returns & refunds | Done | Full/partial/quantity returns, exchanges, voids, reasons, eligibility (window, limit), supervisor/manager approval, conditional restock, per-tender pay-back, gateway-safe states, history, unusual-activity report, refund receipts |
 | Purchasing & transfers | Done | Suppliers, purchase orders with approval and separation of duties, partial/full idempotent receiving into stock at cost, close/cancel rules, branch transfers (request, approve, dispatch/in transit, receive with discrepancy), manager screens |
-| Automated tests | Passing | 115 unit/web, 118 integration, 28 E2E (local) |
+| Customers | Done | Profiles (C-numbers, normalised unique phone), search/filter/sort, edit, activate/deactivate, append-only notes, purchase and refund history, exact spending summary scoped by branch, POS search/create/select, walk-in sales, customer on receipts, held sales and exchanges |
+| Automated tests | Passing | 118 unit/web, 123 integration, 29 E2E (local) |
 | CI | Written, not yet run | `.github/workflows/ci.yml` |
 | Business modules | Not started | Begin in M1 |
 | Deployment | Not planned | Requires owner approval |
@@ -227,5 +228,15 @@ Not done yet / open: supplier invoices, payments and balances (accounts payable)
 purchase returns to suppliers are not implemented (OQ-018); landed costs are not
 allocated; transfer discrepancies are not reported separately yet (Prompt 14).
 
+### 2026-10-12 — Prompt 13: Customer management
+Implemented: migrations 0020–0021; customers module (manager and POS APIs, notes,
+history and spending); `customer_id` on orders and sales (checkout, held sales,
+exchanges); manager customer list/detail; POS customer picker and receipt line; sales
+list/detail show the customer.
+Verified: see TESTING.md.
+Not done yet / open: loyalty, store credit and promotions (OQ-019, by design not built);
+personal-data erasure (OQ-019); attaching a customer to a sale after it was completed is
+not possible (sales are immutable).
+
 ## Next step
-Prompt 13 — customer management.
+Prompt 14 — financial reporting and analytics.

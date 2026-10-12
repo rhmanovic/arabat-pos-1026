@@ -190,6 +190,7 @@ describe('pos app', () => {
       paid: money('0.999'),
       change: money('4.001'),
       refunded: money('0.000'),
+      customer: null,
       lines: [],
       payments: [],
     };
@@ -269,6 +270,128 @@ describe('pos app', () => {
       expectedTotal: '0.999',
     });
     expect((call.body as { idempotencyKey: string }).idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('creates a customer at the till, links it to the sale and prints it on the receipt', async () => {
+    const item = {
+      variantId: '0190a000-0000-7000-8000-000000000a02',
+      productId: '0190a000-0000-7000-8000-000000000b02',
+      categoryId: null,
+      nameEn: 'Juice',
+      nameAr: null,
+      variantNameEn: null,
+      variantNameAr: null,
+      sku: 'JUICE',
+      barcodes: [],
+      price: money('0.250'),
+      trackInventory: false,
+      imageUrl: null,
+    };
+    const noura = {
+      id: '0190a000-0000-7000-8000-000000000e01',
+      code: 'C-000007',
+      fullName: 'Noura',
+      phone: '+96599990000',
+      status: 'active',
+    };
+    const sale = {
+      id: '0190a000-0000-7000-8000-000000000c02',
+      orderId: 'o',
+      receiptNumber: 'MAIN-000002',
+      branchId: SHIFT.branchId,
+      registerId: SHIFT.registerId,
+      shiftId: SHIFT.id,
+      cashierName: 'Cashier',
+      createdAt: '2026-10-12T06:00:00.000Z',
+      subtotal: money('0.250'),
+      lineDiscounts: money('0.000'),
+      orderDiscount: money('0.000'),
+      total: money('0.250'),
+      paid: money('0.250'),
+      change: money('0.000'),
+      refunded: money('0.000'),
+      customer: { id: noura.id, code: noura.code, fullName: noura.fullName },
+      lines: [],
+      payments: [],
+    };
+    const fetch = fakeApiFetch({
+      session: makeSession('pos', [
+        'pos.access',
+        'shifts.operate',
+        'sales.create',
+        'customers.read',
+        'customers.create',
+      ]),
+      routes: {
+        'GET /pos/shifts/current': () => ({ status: 200, body: { shift: SHIFT } }),
+        'GET /pos/catalog': () => ({
+          status: 200,
+          body: { branchId: SHIFT.branchId, categories: [], items: [item], version: 'v1' },
+        }),
+        'GET /pos/inventory/availability': () => ({
+          status: 200,
+          body: { branchId: SHIFT.branchId, allowNegativeStock: false, items: [] },
+        }),
+        'GET /pos/payment-methods': () => ({
+          status: 200,
+          body: {
+            methods: [
+              {
+                id: '0190a000-0000-7000-8000-000000000d01',
+                kind: 'cash',
+                nameEn: 'Cash',
+                nameAr: null,
+                sortOrder: 0,
+              },
+            ],
+          },
+        }),
+        'GET /pos/customers': () => ({ status: 200, body: { customers: [] } }),
+        'POST /pos/customers': () => ({ status: 201, body: noura }),
+        'POST /pos/sales': () => ({ status: 201, body: sale }),
+        [`GET /pos/sales/${sale.id}/receipt`]: () => ({
+          status: 200,
+          body: {
+            sale,
+            merchant: { nameEn: 'Demo', nameAr: null },
+            branch: {
+              nameEn: 'Main',
+              nameAr: null,
+              phone: null,
+              address: null,
+              receiptHeader: null,
+              receiptFooter: null,
+            },
+            register: { code: 'R1', nameEn: 'Register 1', nameAr: null },
+          },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'pos', i18n, fetch });
+    await screen.findByText('Juice');
+    await userEvent.click(screen.getByTestId('product-tile'));
+    expect(screen.getByTestId('cart-customer')).toHaveTextContent('Walk-in');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Choose customer' }));
+    let dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText('Name, phone or code'), '99990000');
+    expect(await within(dialog).findByText('No customer found.')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'New customer' }));
+    expect(within(dialog).getByLabelText('Phone')).toHaveValue('99990000');
+    await userEvent.type(within(dialog).getByLabelText('Full name'), 'Noura');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save and use' }));
+    expect(await screen.findByTestId('cart-customer')).toHaveTextContent('Noura');
+
+    await userEvent.click(screen.getByRole('button', { name: /Pay/ }));
+    dialog = await screen.findByRole('dialog');
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Cash' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add payment' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Complete sale' }));
+    expect((await screen.findAllByTestId('receipt-customer'))[0]).toHaveTextContent('Noura');
+    const created = fetch.calls.find((c) => c.method === 'POST' && c.path === '/pos/customers')!;
+    expect(created.body).toEqual({ fullName: 'Noura', phone: '99990000' });
+    const checkout = fetch.calls.find((c) => c.method === 'POST' && c.path === '/pos/sales')!;
+    expect(checkout.body).toMatchObject({ customerId: noura.id, expectedTotal: '0.250' });
   });
 
   it('defines the same translation keys in Arabic and English', () => {

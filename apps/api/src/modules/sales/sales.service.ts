@@ -49,6 +49,36 @@ type ListQuery = z.output<typeof saleListQuerySchema>;
 const CURRENCY = 'KWD' as const;
 const money = (minor: bigint | string) => Money.ofMinor(BigInt(minor), CURRENCY).toJSON();
 const iso = (v: unknown) => new Date(v as string).toISOString();
+const customerOf = (r: Record<string, unknown>) =>
+  r['customer_id']
+    ? {
+        id: r['customer_id'] as string,
+        code: r['customer_code'] as string,
+        fullName: r['customer_name'] as string,
+      }
+    : null;
+
+/**
+ * Customer for a sale or held order: must exist and be active, and the cashier needs
+ * `customers.read` at the branch to pick one (BR-110). `inherited` (exchanges) skips both
+ * checks: the new sale belongs to the original sale's customer.
+ */
+export async function resolveSaleCustomer(
+  tx: Transaction,
+  actor: MerchantActor,
+  branchId: string,
+  customerId: string | null,
+  inherited = false,
+): Promise<string | null> {
+  if (!customerId) return null;
+  if (!inherited) assertCan(actor, 'customers.read', branchId);
+  const [row] = (await tx.execute(sql`select status from customers where id = ${customerId}`))
+    .rows as { status: string }[];
+  if (!row) throw AppError.notFound('Customer not found.');
+  if (!inherited && row.status !== 'active')
+    throw new AppError(409, 'CUSTOMER_INACTIVE', 'This customer record is inactive.');
+  return customerId;
+}
 
 interface ParsedLine {
   variantId: string;
@@ -253,6 +283,7 @@ export class SalesService {
           orderId: input.orderId ?? null,
           idempotency: { key: input.idempotencyKey, hash: requestHash },
           exchange: null,
+          customer: { id: input.customerId, inherited: false },
           ip,
         });
       });
@@ -286,11 +317,19 @@ export class SalesService {
       orderId: string | null;
       idempotency: { key: string; hash: string } | null;
       exchange: { refundId: string; creditMinor: bigint } | null;
+      customer: { id: string | null; inherited: boolean };
       ip: string;
     },
   ): Promise<{ totalMinor: bigint; receiptNumber: string }> {
     const { saleId, lines, orderDiscount, ip } = args;
     const branchId = shift.branchId;
+    const customerId = await resolveSaleCustomer(
+      tx,
+      actor,
+      branchId,
+      args.customer.id,
+      args.customer.inherited,
+    );
     // 2. Authoritative prices and availability from the catalog.
     const items = await this.loadItems(
       tx,
@@ -369,7 +408,7 @@ export class SalesService {
     const paid = await this.preparePayments(tx, args.payments, priced.totalMinor - creditMinor);
 
     // 6. The order: complete a suspended one, or create it completed.
-    const orderId = await this.completeOrder(tx, actor, shift, args);
+    const orderId = await this.completeOrder(tx, actor, shift, { ...args, customerId });
 
     // 7. Receipt number (gap-free per branch, atomic increment).
     const receiptNumber = await this.nextReceiptNumber(tx, actor.merchantId, branchId);
@@ -439,6 +478,7 @@ export class SalesService {
       membershipId: actor.membershipId,
       userId: actor.userId,
       receiptNumber,
+      customerId,
       subtotalMinor: priced.subtotalMinor,
       lineDiscountsMinor: priced.lineDiscountsMinor,
       orderDiscountMinor: priced.orderDiscountMinor,
@@ -521,6 +561,7 @@ export class SalesService {
       details: {
         receiptNumber,
         total: Money.ofMinor(priced.totalMinor, CURRENCY).toDecimalString(),
+        customerId,
         shiftId: shift.id,
         registerId: shift.registerId,
         priceOverrides: lineRows
@@ -698,6 +739,7 @@ export class SalesService {
       orderDiscountInput: DiscountInput | null;
       orderId: string | null;
       idempotency: { key: string; hash: string } | null;
+      customerId: string | null;
     },
   ): Promise<string> {
     const { lines } = args;
@@ -731,6 +773,7 @@ export class SalesService {
         .update(orders)
         .set({
           status: 'completed',
+          customerId: args.customerId,
           idempotencyKey: args.idempotency?.key ?? null,
           requestHash: args.idempotency?.hash ?? null,
           orderDiscountType: args.orderDiscountInput?.type ?? null,
@@ -752,6 +795,7 @@ export class SalesService {
       membershipId: actor.membershipId,
       userId: actor.userId,
       status: 'completed',
+      customerId: args.customerId,
       orderDiscountType: args.orderDiscountInput?.type ?? null,
       orderDiscountValue: args.orderDiscountInput?.value ?? null,
       idempotencyKey: args.idempotency?.key ?? null,
@@ -792,6 +836,7 @@ export class SalesService {
       );
       if (lines.some((l) => !items.has(l.variantId)))
         throw new AppError(409, 'ITEM_UNAVAILABLE', 'Some items are not available at this branch.');
+      const customerId = await resolveSaleCustomer(tx, actor, branchId, input.customerId);
       await tx.insert(orders).values({
         id,
         merchantId: actor.merchantId,
@@ -802,6 +847,7 @@ export class SalesService {
         userId: actor.userId,
         status: 'suspended',
         label: input.label,
+        customerId,
         orderDiscountType: input.orderDiscount?.type ?? null,
         orderDiscountValue: input.orderDiscount?.value ?? null,
       });
@@ -837,7 +883,8 @@ export class SalesService {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const rows = (
         await tx.execute(sql`
-          select o.*, u.full_name from orders o join users u on u.id = o.user_id
+          select o.*, u.full_name, c.code as customer_code, c.full_name as customer_name
+          from orders o join users u on u.id = o.user_id left join customers c on c.id = o.customer_id
           where o.branch_id = ${branchId} and o.status = 'suspended' order by o.created_at`)
       ).rows as Record<string, unknown>[];
       const result: SuspendedOrder[] = [];
@@ -863,6 +910,7 @@ export class SalesService {
             o['order_discount_type'] as string | null,
             o['order_discount_value'] as string | null,
           ),
+          customer: customerOf(o),
           version: o['version'] as number,
         });
       }
@@ -911,8 +959,10 @@ export class SalesService {
         await tx.execute(
           sql`select s.*, u.full_name,
                      (select coalesce(sum(r.total_minor), 0) from refunds r
-                      where r.sale_id = s.id and r.status = 'completed')::text as refunded
-              from sales s join users u on u.id = s.user_id where s.id = ${id}`,
+                      where r.sale_id = s.id and r.status = 'completed')::text as refunded,
+                     c.code as customer_code, c.full_name as customer_name
+              from sales s join users u on u.id = s.user_id left join customers c on c.id = s.customer_id
+              where s.id = ${id}`,
         )
       ).rows as Record<string, unknown>[];
       if (!s) throw AppError.notFound();
@@ -946,6 +996,7 @@ export class SalesService {
         paid: money(s['paid_minor'] as string),
         change: money(s['change_minor'] as string),
         refunded: money(s['refunded'] as string),
+        customer: customerOf(s),
         lines: ls.map((l) => ({
           position: l.position,
           variantId: l.variantId,
@@ -1044,13 +1095,21 @@ export class SalesService {
     });
   }
 
-  async list(actor: MerchantActor, query: ListQuery) {
+  /**
+   * Sales history. `permission` decides the visible branches: `sales.read` for the sales
+   * pages, `customers.read` for a customer's purchase history.
+   */
+  async list(
+    actor: MerchantActor,
+    query: ListQuery,
+    permission: 'sales.read' | 'customers.read' = 'sales.read',
+  ) {
     let scope: SQL | undefined;
     if (query.branchId) {
-      assertCan(actor, 'sales.read', query.branchId);
+      assertCan(actor, permission, query.branchId);
       scope = sql`s.branch_id = ${query.branchId}`;
     } else {
-      const s = permissionBranchScope(actor.access, 'sales.read');
+      const s = permissionBranchScope(actor.access, permission);
       if (!s.all) {
         if (s.branchIds.length === 0) throw AppError.forbidden();
         scope = sql`s.branch_id in (${sql.join(
@@ -1066,6 +1125,7 @@ export class SalesService {
       const tz = m?.timezone ?? 'Asia/Kuwait';
       const conditions: SQL[] = [scope ?? sql`true`];
       if (query.shiftId) conditions.push(sql`s.shift_id = ${query.shiftId}`);
+      if (query.customerId) conditions.push(sql`s.customer_id = ${query.customerId}`);
       if (query.q)
         conditions.push(
           sql`s.receipt_number ilike ${`%${query.q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`}`,
@@ -1118,8 +1178,9 @@ export class SalesService {
                (select coalesce(sum(l.quantity), 0)::text from sale_lines l where l.sale_id = s.id) as items,
                (select coalesce(array_agg(distinct p.method_kind), '{}') from payments p where p.sale_id = s.id) as kinds,
                (select coalesce(sum(r.total_minor), 0) from refunds r
-                where r.sale_id = s.id and r.status = 'completed')::text as refunded
-        from sales s join users u on u.id = s.user_id
+                where r.sale_id = s.id and r.status = 'completed')::text as refunded,
+               c.full_name as customer_name
+        from sales s join users u on u.id = s.user_id left join customers c on c.id = s.customer_id
         where ${where}
         order by s.created_at desc, s.id desc limit ${limit} offset ${offset}`)
     ).rows as Record<string, unknown>[];
@@ -1133,6 +1194,7 @@ export class SalesService {
       itemCount: formatQuantity(parseQuantity(r['items'] as string)),
       paymentKinds: r['kinds'] as string[],
       refunded: money(r['refunded'] as string),
+      customerName: (r['customer_name'] as string | null) ?? null,
     }));
   }
 }

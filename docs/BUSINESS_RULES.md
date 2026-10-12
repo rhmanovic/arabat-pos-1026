@@ -144,6 +144,20 @@ engineering defaults pending owner confirmation.
 - **BR-104** If less arrives than was sent, the receiver must explain it; the missing
   quantity is recorded as a discrepancy and written off.
 
+- **BR-110** A sale may name a registered, active customer or be a walk-in sale (no
+  customer). Choosing a customer at the till needs `customers.read`; creating a basic
+  profile there (name, phone, e-mail) needs `customers.create`. An exchange keeps the
+  original sale's customer.
+- **BR-111** Customers get a number `C-000001…`. A phone number can belong to only one
+  customer per merchant; local 8-digit numbers are treated as Kuwaiti (+965).
+- **BR-112** A customer's purchases, refunds, total spent, net spend (spent − refunded) and
+  average sale come from their sales and refunds; a manager sees the totals of the
+  branches they are allowed to view.
+- **BR-113** Cashiers see only the customer's name, number and phone. E-mail, address,
+  notes and spending are management information.
+- **BR-114** Customers are deactivated, never deleted; inactive customers cannot be used
+  for new sales. Notes cannot be edited or removed.
+
 ## 4. Money — Confirmed
 
 - **BR-030** Default currency is **KWD** with **3 decimal places** (1 KWD = 1000 fils).
@@ -179,5 +193,6 @@ engineering defaults pending owner confirmation.
 | OQ-015 | Blind closing: should cashiers count the drawer without seeing the expected amount first? (implemented: expected is shown) | POS shifts |
 | OQ-016 | Should card processing fees be reversed on refunds (depends on the acquirer contract)? Implemented: not reversed. | Refunds / reports |
 | OQ-017 | Returns without a receipt or at another branch: allowed? Implemented: receipt required, same branch. | Refunds |
+| OQ-019 | Loyalty points, store credit and promotions: rules (earning rate, expiry, use as payment)? Also: should customers be able to request erasure of their personal data (anonymisation while keeping sales)? Not implemented. | Customers |
 | OQ-018 | Supplier invoices, payments and balances (accounts payable) and returns to suppliers: needed, and with which payment terms? Not implemented yet. | Purchasing |
 | OQ-013 | Card payments: manual entry of card amount only, or integrated card terminals (e.g. KNET)? | M4 / later |
