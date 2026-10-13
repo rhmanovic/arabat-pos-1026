@@ -175,17 +175,21 @@ cash in/out, close with optional note/coin count, closing result).
 
 | Method & path | Permission |
 |---|---|
-| `POST /pos/sales` (checkout, idempotency key) | POS `sales.create`, own open shift; `sales.discount`, `sales.discount.override_limit`, `sales.price_override` as needed |
+| `POST /pos/sales` (checkout, idempotency key, optional `overrideId`, `zeroTotalReason`) | POS `sales.create`, own open shift; `sales.discount`, `sales.discount.override_limit`, `sales.price_override`, `sales.zero_total` as needed, held by the cashier or lent by a supervisor override (BR-177) |
+| `POST /pos/overrides` (supervisor e-mail + password on the cashier's till → single-use grant) | POS `sales.create`, own open shift; the approver must hold overridable rights the cashier lacks |
 | `GET /pos/sales/recent`, `GET /pos/sales/:id/receipt`, `GET /pos/sales/settings` | POS `sales.create` (session branch only) |
 | `POST /pos/orders` (hold), `GET /pos/orders/suspended`, `POST /pos/orders/:id/cancel` | POS `sales.create` |
-| `GET /manager/sales?branchId=&q=&from=&to=`, `GET /manager/sales/:id`, `GET …/:id/receipt` | `sales.read` (branch-scoped) |
+| `GET /manager/sales?branchId=&q=&from=&to=&flag=` (`flag`: zero_total, above_limit, price_override, supervised), `GET /manager/sales/:id`, `GET …/:id/receipt` | `sales.read` (branch-scoped) |
 | `GET/PUT /manager/sales-settings` | `merchant.settings.read` / `merchant.settings.update` |
 
 Screens: POS `/pos/` is the sale screen (search/scan box with Enter, category chips,
-product tiles with stock badges, cart with line editing — quantity, discount, price
-override by permission — order discount, hold/resume, recent sales, payment dialog with
-split payments, cash tendered/change, receipt with 80 mm printing).
-Manager `/manager/sales` (list, filters, totals, selling policy) and `/manager/sales/:id`.
+product tiles with stock badges, cart with line editing — quantity, discount, price change
+with reason — order discount, hold/resume, recent sales, payment dialog with split payments,
+cash tendered/change, supervisor panel for exceptions beyond the cashier's rights, zero-total
+reason, receipt with 80 mm printing).
+Manager `/manager/sales` (list, filters incl. unusual sales, flags, totals, selling policy with
+price-change bounds) and `/manager/sales/:id` (exceptions block: above limit, free-sale reason,
+supervisor override).
 
 ### Returns API (Prompt 11)
 

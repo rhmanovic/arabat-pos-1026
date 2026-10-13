@@ -1,4 +1,4 @@
-import type { SaleListQuery } from '@arabat/contracts';
+import { SALE_FLAGS, type SaleFlag, type SaleListQuery } from '@arabat/contracts';
 import {
   Badge,
   Button,
@@ -47,11 +47,12 @@ export function SalesPage() {
   const [to, setTo] = useState('');
   const [policy, setPolicy] = useState(false);
   const [channel, setChannel] = useState<'' | 'pos' | 'online'>('');
+  const [flag, setFlag] = useState<'' | SaleFlag>('');
   useEffect(() => {
     const id = setTimeout(() => setQ(search.trim()), 300);
     return () => clearTimeout(id);
   }, [search]);
-  const filterKey = JSON.stringify([q, from, to, branchId, channel]);
+  const filterKey = JSON.stringify([q, from, to, branchId, channel, flag]);
   const [paging, setPaging] = useState({ key: filterKey, page: 1 });
   const page = paging.key === filterKey ? paging.page : 1;
   const query: SaleListQuery = {
@@ -62,6 +63,7 @@ export function SalesPage() {
     ...(DATE.test(to) ? { to } : {}),
     ...(branchId ? { branchId } : {}),
     ...(channel ? { channel } : {}),
+    ...(flag ? { flag } : {}),
   };
   const list = useQuery({
     queryKey: [...salesKey, query],
@@ -112,6 +114,19 @@ export function SalesPage() {
           <option value="">{t('sales.channelAll')}</option>
           <option value="pos">{t('sales.channel_pos')}</option>
           <option value="online">{t('sales.channel_online')}</option>
+        </Select>
+        <Select
+          className="w-48"
+          aria-label={t('sales.flagFilter')}
+          value={flag}
+          onChange={(e) => setFlag(e.target.value as '' | SaleFlag)}
+        >
+          <option value="">{t('sales.flagAll')}</option>
+          {SALE_FLAGS.map((f) => (
+            <option key={f} value={f}>
+              {t(`sales.flag_${f}`)}
+            </option>
+          ))}
         </Select>
       </div>
       {list.data ? (
@@ -197,6 +212,19 @@ export function SalesPage() {
             ),
           },
           { key: 'total', header: t('sales.total'), cell: (s) => <Amount value={s.total} /> },
+          {
+            key: 'flags',
+            header: t('sales.flags'),
+            cell: (s) => (
+              <span className="flex flex-wrap gap-1" data-testid="sale-flags">
+                {s.flags.map((f) => (
+                  <Badge key={f} tone="warning">
+                    {t(`sales.flag_${f}`)}
+                  </Badge>
+                ))}
+              </span>
+            ),
+          },
         ]}
       />
       <Pager
@@ -241,6 +269,15 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
   const [blindStock, setBlindStock] = useState<boolean | null>(null);
   const adjustmentApprovalLimit = adjLimit ?? settings.data?.adjustmentApprovalLimit.amount ?? '';
   const blindStockCount = blindStock ?? settings.data?.blindStockCount ?? true;
+  // Price-change bounds (BR-178): empty = no bound.
+  const [floorText, setFloorText] = useState<string | null>(null);
+  const [ceilingText, setCeilingText] = useState<string | null>(null);
+  const [belowCost, setBelowCost] = useState<boolean | null>(null);
+  const floor = floorText ?? settings.data?.priceOverrideFloorPercent ?? '';
+  const ceiling = ceilingText ?? settings.data?.priceOverrideCeilingPercent ?? '';
+  const priceOverrideBelowCost = belowCost ?? settings.data?.priceOverrideBelowCost ?? false;
+  const BOUND = /^\d{1,3}(\.\d{1,2})?$/;
+  const boundOk = (v: string) => v.trim() === '' || BOUND.test(v.trim());
   const AMOUNT = /^\d{1,10}(\.\d{1,3})?$/;
   const current = value ?? settings.data?.maxDiscountPercent ?? '';
   const windowDays = days ?? String(settings.data?.refundWindowDays ?? '');
@@ -254,7 +291,10 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
     AMOUNT.test(maxRegisterTolerance.trim()) &&
     AMOUNT.test(expenseApprovalLimit.trim()) &&
     AMOUNT.test(supplierPaymentApprovalLimit.trim()) &&
-    AMOUNT.test(adjustmentApprovalLimit.trim());
+    AMOUNT.test(adjustmentApprovalLimit.trim()) &&
+    boundOk(floor) &&
+    boundOk(ceiling) &&
+    (floor.trim() === '' || ceiling.trim() === '' || Number(floor) <= Number(ceiling));
   const save = useMutation({
     mutationFn: () =>
       api.sales.updateSettings({
@@ -269,6 +309,9 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
         supplierPaymentApprovalLimit: supplierPaymentApprovalLimit.trim(),
         adjustmentApprovalLimit: adjustmentApprovalLimit.trim(),
         blindStockCount,
+        priceOverrideFloorPercent: floor.trim() === '' ? null : floor.trim(),
+        priceOverrideCeilingPercent: ceiling.trim() === '' ? null : ceiling.trim(),
+        priceOverrideBelowCost,
         version: settings.data!.version,
       }),
     onSuccess: async () => {
@@ -410,6 +453,34 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
           checked={blindStockCount}
           onChange={(e) => setBlindStock(e.target.checked)}
         />
+        <Field label={t('sales.priceFloor')} hint={t('sales.priceBoundsHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="decimal"
+              value={floor}
+              onChange={(e) => setFloorText(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('sales.priceCeiling')} hint={t('sales.priceBoundsHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="decimal"
+              value={ceiling}
+              onChange={(e) => setCeilingText(e.target.value)}
+            />
+          )}
+        </Field>
+        <Checkbox
+          label={t('sales.priceBelowCost')}
+          description={t('sales.priceBelowCostHint')}
+          checked={priceOverrideBelowCost}
+          onChange={(e) => setBelowCost(e.target.checked)}
+        />
       </div>
     </Dialog>
   );
@@ -443,6 +514,31 @@ export function SaleDetailPage() {
       />
       {s ? (
         <div className="grid gap-6">
+          {s.aboveLimit || s.zeroTotalReason !== null || s.override ? (
+            <div
+              className="grid gap-1 rounded-lg border border-warning/50 bg-warning/10 p-3 text-sm"
+              data-testid="sale-exceptions"
+            >
+              <p className="font-semibold">{t('sales.exceptions')}</p>
+              {s.aboveLimit ? (
+                <p>{t('sales.aboveLimitNote', { limit: s.discountLimitPercent ?? '' })}</p>
+              ) : null}
+              {s.zeroTotalReason !== null ? (
+                <p>
+                  {t('sales.flag_zero_total')}: {s.zeroTotalReason}
+                </p>
+              ) : null}
+              {s.override ? (
+                <p>
+                  {t('sales.supervisedBy', { name: s.override.approverName })}
+                  {s.override.kinds.length
+                    ? ` (${s.override.kinds.map((k) => t(`perm.${k}`, { defaultValue: k })).join(', ')})`
+                    : ''}
+                  {s.override.note ? ` — ${s.override.note}` : ''}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <p className="text-sm" data-testid="sale-customer">
             {t('sales.customer')}:{' '}
             {s.customer ? (
@@ -501,7 +597,10 @@ export function SaleDetailPage() {
                         : ''}
                     </span>
                     {l.priceOverridden ? (
-                      <Badge tone="warning">{t('sales.overridden')}</Badge>
+                      <Badge tone="warning">
+                        {t('sales.overridden')}
+                        {l.priceOverrideReason ? `: ${l.priceOverrideReason}` : ''}
+                      </Badge>
                     ) : null}
                   </span>
                 ),

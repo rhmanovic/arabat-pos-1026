@@ -47,6 +47,8 @@ import {
   refundSchema,
   refundableSaleSchema,
   type Checkout,
+  type RequestOverride,
+  saleOverrideGrantSchema,
   type SaleListQuery,
   type SuspendOrder,
   receiptSchema,
@@ -713,6 +715,8 @@ export function createApiClient(options: ApiClientOptions = {}) {
     sales: {
       settings: () => request('GET', '/pos/sales/settings', { schema: salesSettingsSchema }),
       checkout: (body: Checkout) => request('POST', '/pos/sales', { body, schema: saleSchema }),
+      requestOverride: (body: RequestOverride) =>
+        request('POST', '/pos/overrides', { body, schema: saleOverrideGrantSchema }),
       recent: () =>
         request('GET', '/pos/sales/recent', {
           schema: z.object({ sales: z.array(saleSummarySchema) }),
@@ -743,6 +747,9 @@ export function createApiClient(options: ApiClientOptions = {}) {
         supplierPaymentApprovalLimit: string;
         adjustmentApprovalLimit?: string;
         blindStockCount?: boolean;
+        priceOverrideFloorPercent?: string | null;
+        priceOverrideCeilingPercent?: string | null;
+        priceOverrideBelowCost?: boolean;
         version: number;
       }) => request('PUT', '/manager/sales-settings', { body, schema: salesSettingsSchema }),
     },

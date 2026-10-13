@@ -74,9 +74,68 @@ export const salesSettings = pgTable('sales_settings', {
     .default(sql`50000`),
   /** Count sheets hide the expected quantity (BR-170). */
   blindStockCount: boolean().notNull().default(true),
+  /**
+   * Price-change bounds (BR-178, remediation R3.2): a changed price must stay between the
+   * floor and the ceiling, as a % of the list price (null = no bound), and may go below the
+   * item's cost only when allowed. Hard limits for everyone, supervisors included.
+   */
+  priceOverrideFloorPercent: numeric({ precision: 5, scale: 2 }).default('50'),
+  priceOverrideCeilingPercent: numeric({ precision: 5, scale: 2 }).default('200'),
+  priceOverrideBelowCost: boolean().notNull().default(false),
   version: integer().notNull().default(1),
   updatedAt: updatedAt(),
 });
+
+/**
+ * Supervisor override on a cashier's till (BR-177, remediation R3.1): a second person proves
+ * their identity on the cashier's screen and lends, once and for a few minutes, the overridable
+ * selling rights they hold at the branch. The sale stays on the cashier's shift; the grant
+ * records who authorised what, and is consumed by exactly one sale (column-level grant and
+ * trigger `sale_overrides_use`, migration 0043).
+ */
+export const saleOverrides = pgTable(
+  'sale_overrides',
+  {
+    id: id(),
+    merchantId: merchantId(),
+    branchId: uuid().notNull(),
+    shiftId: uuid().notNull(),
+    cashierMembershipId: uuid().notNull(),
+    cashierUserId: uuid()
+      .notNull()
+      .references(() => users.id),
+    approverMembershipId: uuid().notNull(),
+    approverUserId: uuid()
+      .notNull()
+      .references(() => users.id),
+    /** Overridable rights the approver holds at the branch and the cashier lacks. */
+    permissions: text().array().notNull(),
+    note: text(),
+    status: text().notNull().default('granted'),
+    /** Rights actually supplied to the sale that used the grant. */
+    kinds: text().array(),
+    expiresAt: timestamp({ withTimezone: true }).notNull(),
+    usedAt: timestamp({ withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('sale_overrides_merchant_id_id_key').on(t.merchantId, t.id),
+    foreignKey({
+      columns: [t.merchantId, t.branchId],
+      foreignColumns: [branches.merchantId, branches.id],
+    }),
+    foreignKey({
+      columns: [t.merchantId, t.shiftId],
+      foreignColumns: [shifts.merchantId, shifts.id],
+    }),
+    check('sale_overrides_status_valid', sql`${t.status} in ('granted', 'used')`),
+    check(
+      'sale_overrides_used_consistent',
+      sql`(${t.status} = 'used') = (${t.usedAt} is not null) and (${t.status} = 'used') = (${t.kinds} is not null)`,
+    ),
+    index('sale_overrides_cashier_idx').on(t.merchantId, t.cashierMembershipId, t.status),
+  ],
+);
 
 /** Gap-free receipt counter per branch, incremented under a row lock at checkout. */
 export const receiptSequences = pgTable(
@@ -164,6 +223,8 @@ export const orderLines = pgTable(
     variantId: uuid().notNull(),
     quantity: quantity().notNull(),
     priceOverrideMinor: minor(),
+    /** Kept with a held cart so the reason survives a resume (BR-178). */
+    priceOverrideReason: text(),
     discountType: text(),
     discountValue: text(),
   },
@@ -208,11 +269,28 @@ export const sales = pgTable(
     feesMinor: minor().notNull(),
     /** Cost of goods at weighted-average cost; null when some cost was unknown. */
     costMinor: minor(),
+    /** A discount or price change beyond the limit in force was allowed (BR-178). */
+    aboveLimit: boolean().notNull().default(false),
+    /** The company discount limit when the sale was made; null for online sales. */
+    discountLimitPercent: numeric({ precision: 5, scale: 2 }),
+    /** Required on every sale whose total is zero (BR-179). */
+    zeroTotalReason: text(),
+    /** Supervisor override used for this sale (BR-177). */
+    overrideId: uuid(),
     createdAt: createdAt(),
   },
   (t) => [
     unique('sales_merchant_id_id_key').on(t.merchantId, t.id),
     unique('sales_order_key').on(t.orderId),
+    unique('sales_override_key').on(t.merchantId, t.overrideId),
+    foreignKey({
+      columns: [t.merchantId, t.overrideId],
+      foreignColumns: [saleOverrides.merchantId, saleOverrides.id],
+    }),
+    check(
+      'sales_zero_total_reason',
+      sql`${t.channel} <> 'pos' or ${t.totalMinor} > 0 or ${t.zeroTotalReason} is not null`,
+    ),
     unique('sales_receipt_number_key').on(t.merchantId, t.receiptNumber),
     foreignKey({
       columns: [t.merchantId, t.orderId],
@@ -267,6 +345,8 @@ export const saleLines = pgTable(
     listUnitPriceMinor: minor().notNull(),
     unitPriceMinor: minor().notNull(),
     priceOverridden: boolean().notNull().default(false),
+    /** Why the price was changed (BR-178); set whenever `price_overridden`. */
+    priceOverrideReason: text(),
     grossMinor: minor().notNull(),
     discountType: text(),
     discountValue: text(),

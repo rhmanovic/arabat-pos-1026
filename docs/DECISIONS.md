@@ -1068,3 +1068,43 @@ ADR; supersede it.
 - **Consequences:** FND-512, FND-213, FND-203, FND-204, FND-205, FND-216, FND-223, FND-507,
   FND-508 and FND-212 close. Gross profit with a costless item (FND-513) stays with R4.3. The
   plan's reference to FND-219 under R2.6 matches no finding in the register.
+
+## ADR-0100 — Remediation session 8: supervisor overrides on the till, price-change bounds, zero-total sales
+- **Date:** 2026-10-13 · **Status:** Accepted (remediation plan R3.1 / R3.2 / R3.3)
+- **Context:** Phase 1 found no override step on another cashier's till (FND-301): every check was
+  a permission of the person completing the sale, so exceptions migrated to the supervisor's shift
+  and drawer or to permanent cashier rights. Price changes were unbounded, needed no reason and
+  bypassed the discount limit (FND-302); above-limit sales were not flagged and the limit in force
+  was not kept (FND-303); a 100 % discount produced a free sale with no reason, right or report
+  (FND-312).
+- **Decision:**
+  - `sale_overrides` (migration 0043; RLS, append-only, granted → used once through a column-level
+    grant and trigger `sale_overrides_use`): `POST /pos/overrides` takes the supervisor's e-mail
+    and password on the cashier's session, verifies them with the sign-in throttles, loads the
+    supervisor's access for the merchant and issues a ten-minute, single-use grant listing the
+    overridable rights they hold at the branch and the cashier lacks (`OVERRIDE_SELF`,
+    `OVERRIDE_NOT_ALLOWED`, refused attempts audited). Checkout takes `overrideId`; rights are
+    checked inside the sale transaction against the cashier's access first and the grant second,
+    the grant is spent with the `kinds` it supplied, and `sales.override_id` links the sale. The
+    sale keeps the cashier's shift, register and attribution; the supervisor never needs a shift.
+    Rights are therefore checked at completion (`completeSaleInTx`), no longer when parsing the
+    cart, so holding a cart with a discount needs no right.
+  - Price changes (`sales_settings.price_override_floor_percent`, `…_ceiling_percent`,
+    `…_below_cost`): reason required (`REASON_REQUIRED`), bounds enforced for everyone
+    (`PRICE_OUT_OF_BOUNDS`), list-minus-price gap added to the line discount for the limit check
+    on the list gross, zero price always above the limit. `sales.above_limit`,
+    `sales.discount_limit_percent`, `sale_lines.price_override_reason` and
+    `order_lines.price_override_reason` (held carts) are stored.
+  - Zero totals: new permission `sales.zero_total` (supervisor template), `ZERO_TOTAL_DENIED`,
+    `zeroTotalReason` required and stored (`sales.zero_total_reason`, check constraint for POS
+    sales, `NOT VALID` so older rows stay). Flags `zero_total`, `above_limit`,
+    `price_override`, `supervised` on sale summaries, `GET /manager/sales?flag=`, and per-employee
+    counts in the sales report.
+  - POS: discount and price fields are always offered; what exceeds the cashier's rights is
+    shown as "needs a supervisor" and the payment dialog carries the supervisor panel (e-mail,
+    password, note) and the zero-total reason; the server's refusal codes also open the panel.
+- **Consequences:** FND-301, FND-302, FND-303 and FND-312 close. Refund and void approvals keep
+  their own flow until R3.4; the override grant is generic enough to carry them later. The owner
+  decides the bounds in the selling policy; defaults (50 % / 200 %, not below cost) apply to
+  existing companies.
+

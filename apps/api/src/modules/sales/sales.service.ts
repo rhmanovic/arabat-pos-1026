@@ -1,7 +1,9 @@
 import type {
   DiscountInput,
+  OverridablePermission,
   Receipt,
   Sale,
+  SaleFlag,
   SaleSummary,
   SalesSettings,
   SuspendedOrder,
@@ -14,6 +16,9 @@ import {
   type Discount,
   Money,
   PricingError,
+  abovePercentOf,
+  belowPercentOf,
+  divideHalfUp,
   exceedsDiscountLimit,
   formatQuantity,
   parseQuantity,
@@ -39,6 +44,7 @@ import { postEntries, registerAccount } from '../payments/cash-ledger.js';
 import { financialAccountEntries } from '../payments/payments.schema.js';
 import { parseAmount } from '../payments/payments.service.js';
 import { ShiftsService } from '../registers/shifts.service.js';
+import { OverridesService } from './overrides.service.js';
 import {
   orderLines,
   orders,
@@ -113,6 +119,18 @@ function trimDecimal(value: string): string {
   return value.includes('.') ? value.replace(/\.?0+$/, '') : value;
 }
 
+/** Sales listed as unusual (BR-179): flagged by what was allowed on them, computed in SQL. */
+const flagSql: Record<SaleFlag, SQL> = {
+  zero_total: sql`(s.channel = 'pos' and s.total_minor = 0)`,
+  above_limit: sql`s.above_limit`,
+  price_override: sql`exists (select 1 from sale_lines fl where fl.sale_id = s.id and fl.price_overridden)`,
+  supervised: sql`s.override_id is not null`,
+};
+const flagsSql = sql`array_remove(array[${sql.join(
+  (Object.keys(flagSql) as SaleFlag[]).map((f) => sql`case when ${flagSql[f]} then ${f} end`),
+  sql`, `,
+)}], null)`;
+
 function fromStored(type: string | null, value: string | null): DiscountInput | null {
   if (!type || value === null) return null;
   return { type: type as 'percent' | 'amount', value };
@@ -134,6 +152,7 @@ export class SalesService {
     private readonly audit: AuditService,
     private readonly ledger: StockLedgerService,
     private readonly shifts: ShiftsService,
+    private readonly overrides: OverridesService,
   ) {}
 
   // ------------------------------------------------------------ settings
@@ -160,6 +179,17 @@ export class SalesService {
       supplierPaymentApprovalLimit: money(row?.supplierPaymentApprovalLimitMinor ?? 100000n),
       adjustmentApprovalLimit: money(row?.adjustmentApprovalLimitMinor ?? 50000n),
       blindStockCount: row?.blindStockCount ?? true,
+      priceOverrideFloorPercent: row
+        ? row.priceOverrideFloorPercent === null
+          ? null
+          : trimDecimal(row.priceOverrideFloorPercent)
+        : '50',
+      priceOverrideCeilingPercent: row
+        ? row.priceOverrideCeilingPercent === null
+          ? null
+          : trimDecimal(row.priceOverrideCeilingPercent)
+        : '200',
+      priceOverrideBelowCost: row?.priceOverrideBelowCost ?? false,
       version: row?.version ?? 1,
     };
   }
@@ -199,6 +229,36 @@ export class SalesService {
             : parseAmount(input.adjustmentApprovalLimit, 'adjustmentApprovalLimit'),
         blindStockCount: input.blindStockCount ?? row?.blindStockCount ?? true,
       };
+      // Price-change bounds (BR-178): unchanged when omitted, null = no bound.
+      const priceBounds = {
+        priceOverrideFloorPercent:
+          input.priceOverrideFloorPercent === undefined
+            ? row
+              ? row.priceOverrideFloorPercent
+              : '50'
+            : input.priceOverrideFloorPercent,
+        priceOverrideCeilingPercent:
+          input.priceOverrideCeilingPercent === undefined
+            ? row
+              ? row.priceOverrideCeilingPercent
+              : '200'
+            : input.priceOverrideCeilingPercent,
+        priceOverrideBelowCost:
+          input.priceOverrideBelowCost ?? row?.priceOverrideBelowCost ?? false,
+      };
+      if (
+        priceBounds.priceOverrideFloorPercent !== null &&
+        priceBounds.priceOverrideCeilingPercent !== null &&
+        Number(priceBounds.priceOverrideFloorPercent) >
+          Number(priceBounds.priceOverrideCeilingPercent)
+      )
+        throw new AppError(400, 'VALIDATION_FAILED', 'The price floor is above the ceiling.', [
+          {
+            path: 'priceOverrideFloorPercent',
+            code: 'invalid',
+            message: 'The floor must not exceed the ceiling.',
+          },
+        ]);
       if (row) {
         await tx
           .update(salesSettings)
@@ -209,6 +269,7 @@ export class SalesService {
             blindCashCount: input.blindCashCount,
             ...cashLimits,
             ...stockPolicy,
+            ...priceBounds,
             version: sql`${salesSettings.version} + 1`,
             updatedAt: sql`now()`,
           })
@@ -222,6 +283,7 @@ export class SalesService {
           blindCashCount: input.blindCashCount,
           ...cashLimits,
           ...stockPolicy,
+          ...priceBounds,
           version: 2,
         });
       }
@@ -269,6 +331,18 @@ export class SalesService {
             to: stockPolicy.adjustmentApprovalLimitMinor.toString(),
           },
           blindStockCount: { from: row?.blindStockCount ?? true, to: stockPolicy.blindStockCount },
+          priceOverrideFloorPercent: {
+            from: row ? row.priceOverrideFloorPercent : '50',
+            to: priceBounds.priceOverrideFloorPercent,
+          },
+          priceOverrideCeilingPercent: {
+            from: row ? row.priceOverrideCeilingPercent : '200',
+            to: priceBounds.priceOverrideCeilingPercent,
+          },
+          priceOverrideBelowCost: {
+            from: row?.priceOverrideBelowCost ?? false,
+            to: priceBounds.priceOverrideBelowCost,
+          },
         },
       });
       return this.settings(tx, actor.merchantId);
@@ -287,7 +361,10 @@ export class SalesService {
     };
   }
 
-  /** Parses and permission-checks cart lines (shared with exchanges). */
+  /**
+   * Parses cart lines (shared with exchanges and restaurant bills). Rights are checked when
+   * the sale is completed, where a supervisor override may supply them (BR-177).
+   */
   parseCart(
     actor: MerchantActor,
     input: { lines: CartLine[]; orderDiscount: DiscountInput | null },
@@ -297,10 +374,9 @@ export class SalesService {
 
   // ------------------------------------------------------------ checkout
   private parseLines(
-    actor: MerchantActor,
+    _actor: MerchantActor,
     input: { lines: CartLine[]; orderDiscount: DiscountInput | null },
   ) {
-    const branchId = actor.boundBranchId!;
     const lines: ParsedLine[] = input.lines.map((l, i) => ({
       variantId: l.variantId,
       quantityMilli: parseQuantity(l.quantity),
@@ -317,16 +393,6 @@ export class SalesService {
           { path: `lines.${i}.quantity`, code: 'too_small', message: 'Quantity must be positive.' },
         ]);
     });
-    if (
-      (orderDiscount || lines.some((l) => l.discount)) &&
-      !can(actor.access, 'sales.discount', branchId)
-    )
-      throw new AppError(403, 'DISCOUNT_LIMIT_EXCEEDED', 'You are not allowed to give discounts.');
-    if (
-      lines.some((l) => l.priceOverrideMinor !== null) &&
-      !can(actor.access, 'sales.price_override', branchId)
-    )
-      throw new AppError(403, 'PRICE_OVERRIDE_DENIED', 'You are not allowed to change prices.');
     return { lines, orderDiscount };
   }
 
@@ -359,6 +425,8 @@ export class SalesService {
           idempotency: { key: input.idempotencyKey, hash: requestHash },
           exchange: null,
           customer: { id: input.customerId, inherited: false },
+          overrideId: input.overrideId,
+          zeroTotalReason: input.zeroTotalReason,
           ip,
         });
       });
@@ -395,6 +463,10 @@ export class SalesService {
       customer: { id: string | null; inherited: boolean };
       /** Restaurant bill: the order it pays and its service type. */
       restaurant?: { orderId: string; serviceType: string } | null;
+      /** Supervisor override obtained on this till (BR-177). */
+      overrideId?: string | null;
+      /** Required when the total is zero (BR-179). */
+      zeroTotalReason?: string | null;
       ip: string;
     },
   ): Promise<{ totalMinor: bigint; receiptNumber: string }> {
@@ -407,6 +479,24 @@ export class SalesService {
       args.customer.id,
       args.customer.inherited,
     );
+    // Rights come from the cashier, or from a supervisor's single-use grant (BR-177); the
+    // grant records which rights it actually supplied.
+    const override = args.overrideId
+      ? await this.overrides.authority(tx, actor, args.overrideId, branchId)
+      : null;
+    const supplied = new Set<OverridablePermission>();
+    const allowed = (permission: OverridablePermission) => {
+      if (can(actor.access, permission, branchId)) return true;
+      if (override?.permissions.includes(permission)) {
+        supplied.add(permission);
+        return true;
+      }
+      return false;
+    };
+    if ((orderDiscount || lines.some((l) => l.discount)) && !allowed('sales.discount'))
+      throw new AppError(403, 'DISCOUNT_LIMIT_EXCEEDED', 'You are not allowed to give discounts.');
+    if (lines.some((l) => l.priceOverrideMinor !== null) && !allowed('sales.price_override'))
+      throw new AppError(403, 'PRICE_OVERRIDE_DENIED', 'You are not allowed to change prices.');
     // 2. Authoritative prices and availability from the catalog.
     const items = await this.loadItems(
       tx,
@@ -454,21 +544,69 @@ export class SalesService {
       throw error;
     }
 
-    // 3. Discount limit (exact comparison) unless the cashier may exceed it.
-    const { maxDiscountPercent } = await this.settings(tx, actor.merchantId);
-    if (!can(actor.access, 'sales.discount.override_limit', branchId)) {
-      const overLine = priced.lines.findIndex((p) =>
-        exceedsDiscountLimit(p.lineDiscountMinor, p.grossMinor, maxDiscountPercent),
+    // 3a. Price changes (BR-178): a reason, and the company's floor, ceiling and cost bounds.
+    const policy = await this.settings(tx, actor.merchantId);
+    const { maxDiscountPercent } = policy;
+    const changed = (l: ParsedLine) =>
+      l.priceOverrideMinor !== null && l.priceOverrideMinor !== items.get(l.variantId)!.priceMinor;
+    lines.forEach((l, i) => {
+      if (!changed(l)) return;
+      const item = items.get(l.variantId)!;
+      const price = l.priceOverrideMinor!;
+      if (!l.input.priceOverrideReason)
+        throw new AppError(400, 'REASON_REQUIRED', 'Give a reason for the price change.', [
+          { path: `lines.${i}.priceOverrideReason`, code: 'required', message: 'Required.' },
+        ]);
+      const outOfBounds =
+        (policy.priceOverrideFloorPercent !== null &&
+          belowPercentOf(price, item.priceMinor, policy.priceOverrideFloorPercent)) ||
+        (policy.priceOverrideCeilingPercent !== null &&
+          abovePercentOf(price, item.priceMinor, policy.priceOverrideCeilingPercent)) ||
+        (!policy.priceOverrideBelowCost && item.costMinor !== null && price < item.costMinor);
+      if (outOfBounds)
+        throw new AppError(
+          400,
+          'PRICE_OUT_OF_BOUNDS',
+          'This price is outside the limits set for price changes.',
+          [{ path: `lines.${i}.priceOverride`, code: 'out_of_bounds', message: 'Out of bounds.' }],
+        );
+    });
+
+    // 3b. Discount limit (exact comparison). The gap between the list price and a lowered
+    // price counts as a discount; a zero price always counts as above the limit (BR-178).
+    const overLine = priced.lines.findIndex((p, i) => {
+      const l = lines[i]!;
+      const list = items.get(l.variantId)!.priceMinor + extraOf(l);
+      const listGross = divideHalfUp(list * l.quantityMilli, 1000n);
+      const gap = listGross > p.grossMinor ? listGross - p.grossMinor : 0n;
+      if (changed(l) && l.priceOverrideMinor === 0n) return true;
+      return exceedsDiscountLimit(p.lineDiscountMinor + gap, listGross, maxDiscountPercent);
+    });
+    const orderBase = priced.subtotalMinor - priced.lineDiscountsMinor;
+    const aboveLimit =
+      overLine >= 0 ||
+      exceedsDiscountLimit(priced.orderDiscountMinor, orderBase, maxDiscountPercent);
+    if (aboveLimit && !allowed('sales.discount.override_limit'))
+      throw new AppError(
+        403,
+        'DISCOUNT_LIMIT_EXCEEDED',
+        `Discounts above ${maxDiscountPercent}% need a manager.`,
       );
-      const orderBase = priced.subtotalMinor - priced.lineDiscountsMinor;
-      if (
-        overLine >= 0 ||
-        exceedsDiscountLimit(priced.orderDiscountMinor, orderBase, maxDiscountPercent)
-      )
+
+    // 3c. Nothing to pay (BR-179): a dedicated right and a reason.
+    if (priced.totalMinor === 0n) {
+      if (!allowed('sales.zero_total'))
         throw new AppError(
           403,
-          'DISCOUNT_LIMIT_EXCEEDED',
-          `Discounts above ${maxDiscountPercent}% need a manager.`,
+          'ZERO_TOTAL_DENIED',
+          'A sale with nothing to pay needs a supervisor.',
+        );
+      if (!args.zeroTotalReason)
+        throw new AppError(
+          400,
+          'REASON_REQUIRED',
+          'Give a reason for a sale with nothing to pay.',
+          [{ path: 'zeroTotalReason', code: 'required', message: 'Required.' }],
         );
     }
 
@@ -552,7 +690,8 @@ export class SalesService {
         quantity: formatQuantity(l.quantityMilli),
         listUnitPriceMinor: item.priceMinor + extra,
         unitPriceMinor: (l.priceOverrideMinor ?? item.priceMinor) + extra,
-        priceOverridden: l.priceOverrideMinor !== null && l.priceOverrideMinor !== item.priceMinor,
+        priceOverridden: changed(l),
+        priceOverrideReason: changed(l) ? l.input.priceOverrideReason : null,
         grossMinor: p.grossMinor,
         discountType: l.input.discount?.type ?? null,
         discountValue: l.input.discount?.value ?? null,
@@ -588,7 +727,13 @@ export class SalesService {
       changeMinor: totals.change,
       feesMinor: totals.fees,
       costMinor,
+      aboveLimit,
+      discountLimitPercent: maxDiscountPercent,
+      zeroTotalReason: priced.totalMinor === 0n ? (args.zeroTotalReason ?? null) : null,
+      overrideId: override?.id ?? null,
     });
+    // The grant is spent by this sale alone, with the rights it actually supplied.
+    if (override) await this.overrides.spend(tx, override.id, [...supplied]);
     await tx.insert(saleLines).values(lineRows);
     const modifierRows = lines.flatMap((l, position) =>
       l.modifiers.map((m) => ({
@@ -691,11 +836,25 @@ export class SalesService {
             variantId: l.variantId,
             from: Money.ofMinor(l.listUnitPriceMinor, CURRENCY).toDecimalString(),
             to: Money.ofMinor(l.unitPriceMinor, CURRENCY).toDecimalString(),
+            reason: l.priceOverrideReason,
           })),
         discounts: Money.ofMinor(
           priced.lineDiscountsMinor + priced.orderDiscountMinor,
           CURRENCY,
         ).toDecimalString(),
+        aboveLimit,
+        discountLimitPercent: maxDiscountPercent,
+        ...(priced.totalMinor === 0n ? { zeroTotalReason: args.zeroTotalReason ?? null } : {}),
+        ...(override
+          ? {
+              override: {
+                id: override.id,
+                approverUserId: override.approverUserId,
+                approverMembershipId: override.approverMembershipId,
+                kinds: [...supplied],
+              },
+            }
+          : {}),
       },
     });
     return { totalMinor: priced.totalMinor, receiptNumber };
@@ -1085,6 +1244,7 @@ export class SalesService {
         variantId: l.variantId,
         quantity: formatQuantity(l.quantityMilli),
         priceOverrideMinor: l.priceOverrideMinor,
+        priceOverrideReason: l.priceOverrideMinor === null ? null : l.input.priceOverrideReason,
         discountType: l.input.discount?.type ?? null,
         discountValue: l.input.discount?.value ?? null,
       }));
@@ -1193,6 +1353,7 @@ export class SalesService {
           variantId: l.variantId,
           quantity: formatQuantity(l.quantityMilli),
           priceOverrideMinor: l.priceOverrideMinor,
+          priceOverrideReason: l.priceOverrideMinor === null ? null : l.input.priceOverrideReason,
           discountType: l.input.discount?.type ?? null,
           discountValue: l.input.discount?.value ?? null,
         })),
@@ -1238,6 +1399,7 @@ export class SalesService {
             variantId: l.variantId,
             quantity: l.quantity,
             priceOverride: l.priceOverrideMinor === null ? null : money(l.priceOverrideMinor),
+            priceOverrideReason: l.priceOverrideReason,
             discount: fromStored(l.discountType, l.discountValue),
           })),
           orderDiscount: fromStored(
@@ -1294,8 +1456,10 @@ export class SalesService {
           sql`select s.*, u.full_name,
                      (select coalesce(sum(r.total_minor), 0) from refunds r
                       where r.sale_id = s.id and r.status = 'completed')::text as refunded,
-                     c.code as customer_code, c.full_name as customer_name
+                     c.code as customer_code, c.full_name as customer_name,
+                     o.kinds as override_kinds, o.note as override_note, a.full_name as approver_name
               from sales s left join users u on u.id = s.user_id left join customers c on c.id = s.customer_id
+              left join sale_overrides o on o.id = s.override_id left join users a on a.id = o.approver_user_id
               where s.id = ${id}`,
         )
       ).rows as Record<string, unknown>[];
@@ -1339,6 +1503,20 @@ export class SalesService {
         customer: customerOf(s),
         serviceType: (s['service_type'] as Sale['serviceType']) ?? null,
         restaurantOrderId: (s['restaurant_order_id'] as string | null) ?? null,
+        aboveLimit: s['above_limit'] as boolean,
+        discountLimitPercent:
+          s['discount_limit_percent'] === null
+            ? null
+            : trimDecimal(s['discount_limit_percent'] as string),
+        zeroTotalReason: (s['zero_total_reason'] as string | null) ?? null,
+        override: s['override_id']
+          ? {
+              id: s['override_id'] as string,
+              approverName: (s['approver_name'] as string | null) ?? '',
+              kinds: (s['override_kinds'] as string[] | null) ?? [],
+              note: (s['override_note'] as string | null) ?? null,
+            }
+          : null,
         lines: ls.map((l) => ({
           position: l.position,
           variantId: l.variantId,
@@ -1352,6 +1530,7 @@ export class SalesService {
           listUnitPrice: money(l.listUnitPriceMinor),
           unitPrice: money(l.unitPriceMinor),
           priceOverridden: l.priceOverridden,
+          priceOverrideReason: l.priceOverrideReason,
           gross: money(l.grossMinor),
           discount: fromStored(l.discountType, l.discountValue),
           lineDiscount: money(l.lineDiscountMinor),
@@ -1472,6 +1651,7 @@ export class SalesService {
       if (query.shiftId) conditions.push(sql`s.shift_id = ${query.shiftId}`);
       if (query.customerId) conditions.push(sql`s.customer_id = ${query.customerId}`);
       if (query.channel) conditions.push(sql`s.channel = ${query.channel}`);
+      if (query.flag) conditions.push(flagSql[query.flag]);
       if (query.serviceType)
         conditions.push(
           query.serviceType === 'retail'
@@ -1532,7 +1712,7 @@ export class SalesService {
                (select coalesce(array_agg(distinct p.method_kind), '{}') from payments p where p.sale_id = s.id) as kinds,
                (select coalesce(sum(r.total_minor), 0) from refunds r
                 where r.sale_id = s.id and r.status = 'completed')::text as refunded,
-               c.full_name as customer_name
+               c.full_name as customer_name, ${flagsSql} as flags
         from sales s left join users u on u.id = s.user_id left join customers c on c.id = s.customer_id
         where ${where}
         order by s.created_at desc, s.id desc limit ${limit} offset ${offset}`)
@@ -1550,6 +1730,7 @@ export class SalesService {
       customerName: (r['customer_name'] as string | null) ?? null,
       serviceType: (r['service_type'] as SaleSummary['serviceType']) ?? null,
       channel: r['channel'] as SaleSummary['channel'],
+      flags: r['flags'] as SaleFlag[],
     }));
   }
 }

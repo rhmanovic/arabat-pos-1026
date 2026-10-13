@@ -398,6 +398,20 @@ function SalesTab({
             value: (x) => x.netSales.amount,
           },
           { key: 'ref', header: t('reports.refunds'), money: true, value: (x) => x.refunds.amount },
+          {
+            key: 'exceptions',
+            header: t('reports.exceptions'),
+            hideBelow: 'md',
+            value: (x) =>
+              [
+                x.aboveLimitSales ? `${t('sales.flag_above_limit')} ${x.aboveLimitSales}` : null,
+                x.priceOverrides ? `${t('sales.flag_price_override')} ${x.priceOverrides}` : null,
+                x.zeroTotalSales ? `${t('sales.flag_zero_total')} ${x.zeroTotalSales}` : null,
+                x.supervisedSales ? `${t('sales.flag_supervised')} ${x.supervisedSales}` : null,
+              ]
+                .filter(Boolean)
+                .join(' · '),
+          },
         ]}
       />
       <ReportTable

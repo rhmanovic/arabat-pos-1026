@@ -453,7 +453,14 @@ function ExchangePanel({
         );
       return [
         ...ls,
-        { key: crypto.randomUUID(), variantId, quantity: '1', priceOverride: null, discount: null },
+        {
+          key: crypto.randomUUID(),
+          variantId,
+          quantity: '1',
+          priceOverride: null,
+          priceOverrideReason: null,
+          discount: null,
+        },
       ];
     });
     setSearch('');

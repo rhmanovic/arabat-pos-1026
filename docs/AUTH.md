@@ -169,7 +169,7 @@ can(actor, permission, branchId?):
 | Group | Keys | Scope |
 |---|---|---|
 | Access | `manager.access`, `pos.access` | branch |
-| Sales | `sales.create`, `sales.read`, `sales.discount`, `sales.discount.override_limit`, `sales.price_override`, `sales.void` | branch |
+| Sales | `sales.create`, `sales.read`, `sales.discount`, `sales.discount.override_limit`, `sales.price_override`, `sales.void`, `sales.zero_total` | branch |
 | Refunds | `refunds.create`, `refunds.approve` | branch |
 | Registers | `registers.manage`, `shifts.operate`, `shifts.view_all`, `cash.move`, `cash.custody`, `cash.deposit` | branch |
 | Catalog | `catalog.read` (branch), `catalog.manage`, `catalog.prices.manage` (merchant) | mixed |
@@ -280,15 +280,20 @@ the boot if any route lacks a permission/public declaration.
    the user.
 
 ## 7. Manager override on POS
-For an action the cashier is not permitted to perform (e.g. void, refund,
-discount above limit), the POS asks a second user to approve on the same
-device:
-- Approver authenticates (password; PIN if OQ-006 adopts PINs).
-- Backend checks `can(approver, permission, branch)`.
-- Issues a single-use **approval token** bound to (action, target document,
-  amount, branch, expiry 2 min).
-- The action endpoint consumes the token; the audit log records cashier,
-  approver, action and amounts.
+Implemented for selling exceptions (BR-177, ADR-0100): when a cart needs a
+right the cashier lacks (discount, discount above the limit, price change,
+free sale), the POS asks a second user to approve on the same device:
+- Approver authenticates with their own e-mail and password
+  (`POST /pos/overrides`, throttled like a sign-in; the cashier cannot approve
+  for themself).
+- Backend loads the approver's access and keeps only the overridable rights
+  they hold at the branch and the cashier lacks.
+- Issues a single-use **grant** (`sale_overrides`) bound to the cashier's
+  membership, shift and branch, expiring after 10 minutes.
+- Checkout consumes the grant (`overrideId`); the sale stays on the cashier's
+  shift and records the approver and the rights supplied; the audit log records
+  the grant and the sale. Refund and void approvals keep their own flow until
+  R3.4.
 
 ---
 

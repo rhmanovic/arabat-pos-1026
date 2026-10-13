@@ -111,6 +111,11 @@ export const salesReportSchema = z.object({
       discounts: moneySchema,
       netSales: moneySchema,
       refunds: moneySchema,
+      /** Unusual sales by this employee (BR-179): counts of flagged sales. */
+      priceOverrides: z.number().int().default(0),
+      aboveLimitSales: z.number().int().default(0),
+      zeroTotalSales: z.number().int().default(0),
+      supervisedSales: z.number().int().default(0),
     }),
   ),
   /** Amounts applied to the period's sales per tender (incl. exchange credit). */

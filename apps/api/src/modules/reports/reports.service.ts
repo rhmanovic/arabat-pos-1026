@@ -317,7 +317,12 @@ export class ReportsService {
         tx,
         sql`select s.membership_id, max(u.full_name) as name, count(*)::int as n,
                    sum(s.line_discounts_minor + s.order_discount_minor)::text as disc,
-                   sum(s.total_minor)::text as net
+                   sum(s.total_minor)::text as net,
+                   count(*) filter (where exists (select 1 from sale_lines fl
+                     where fl.sale_id = s.id and fl.price_overridden))::int as price_overrides,
+                   count(*) filter (where s.above_limit)::int as above_limit,
+                   count(*) filter (where s.total_minor = 0)::int as zero_total,
+                   count(*) filter (where s.override_id is not null)::int as supervised
             from sales s join users u on u.id = s.user_id where ${saleWhere} and s.channel = 'pos' group by 1`,
       );
       const empRefunds = await this.rows(
@@ -340,6 +345,11 @@ export class ReportsService {
             discounts: money(big(s?.['disc'])),
             netSales: money(big(s?.['net'])),
             refunds: money(big(r?.['total'])),
+            // Unusual sales (BR-179): what was allowed on this employee's sales.
+            priceOverrides: int(s?.['price_overrides']),
+            aboveLimitSales: int(s?.['above_limit']),
+            zeroTotalSales: int(s?.['zero_total']),
+            supervisedSales: int(s?.['supervised']),
           };
         })
         .sort((a, b) => desc(minorOf(a.netSales), minorOf(b.netSales)));

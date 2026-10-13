@@ -198,4 +198,7 @@ Transfer shortages are explicit `stock_transfer_losses` documents (approved at t
 stock is computed from transfer lines, never stored, and a transfer in transit can be recalled (ADR-0098).
 The moving average is carried in `avg_cost_micro` (fils × 1000); `avg_cost_minor` is display only (ADR-0099).
 Non-restocked refund lines become `damaged_returns` custody records (held → disposed once).
+Selling rights are checked in `completeSaleInTx`, where a single-use `sale_overrides` grant from a supervisor
+(`POST /pos/overrides`) may supply what the cashier lacks; price changes need a reason and stay within the
+company bounds; free sales need `sales.zero_total` and a reason (ADR-0100).
 See `docs/PROGRESS.md` for the current state and `docs/ROADMAP.md` for next steps.

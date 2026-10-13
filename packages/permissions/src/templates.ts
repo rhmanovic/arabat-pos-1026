@@ -107,6 +107,7 @@ export const ROLE_TEMPLATES = {
       'sales.discount.override_limit',
       'sales.price_override',
       'sales.void',
+      'sales.zero_total',
       'refunds.create',
       'refunds.approve',
       'shifts.view_all',

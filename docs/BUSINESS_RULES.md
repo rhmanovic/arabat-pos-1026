@@ -63,6 +63,9 @@ engineering defaults pending owner confirmation.
 - **BR-025** A user can never grant a permission they do not hold.
 - **BR-026** Actions beyond a cashier's permissions (void, refund, discount
   above limit, price override) require a manager override, which is audited.
+  Implemented for selling exceptions by BR-177 (supervisor override on the
+  cashier's till); refunds and voids still follow the approval flows of BR-09x
+  until R3.4.
 - **BR-027** One open shift per register; sales require an open shift.
 
 - **BR-049** Products are never deleted, only archived; archived products are hidden
@@ -147,8 +150,9 @@ engineering defaults pending owner confirmation.
   remaining amount is shared across the items exactly; the total is the sum of the items.
 - **BR-081** Discounts need `sales.discount`; above the merchant's limit (default 10 %,
   per item and per sale) they need `sales.discount.override_limit` (supervisor).
-- **BR-082** Price changes at the till need `sales.price_override`; the original price
-  and the change are kept on the sale and in the audit log.
+- **BR-082** Price changes at the till need `sales.price_override`; the original price,
+  the change and its reason are kept on the sale and in the audit log, within the company
+  bounds of BR-178.
 - **BR-083** A sale is completed only when the payments equal the total exactly; only
   cash may be over-tendered (the difference is change). Split payments are allowed.
 - **BR-084** Selling requires the cashier's own open shift; every sale records merchant,
@@ -354,6 +358,30 @@ Remediation session 3 (2026-10-13, owner decision D2):
   in total. A roll-forward shows opening value, each movement type's quantity and value in the
   period, the rounding of averages and the closing value, and must agree with the valuation.
   Quantities held for unpaid online orders are shown per item and in total.
+- **BR-177** Supervisor override on the cashier's till. When a cart needs a selling right the
+  cashier lacks (`sales.discount`, `sales.discount.override_limit`, `sales.price_override`,
+  `sales.zero_total`), a second person proves their identity on the cashier's screen with their
+  own e-mail and password. If they hold, at that branch, overridable rights the cashier lacks,
+  a single-use grant valid for ten minutes is issued (`sale_overrides`), bound to the cashier's
+  membership, shift and branch. The sale that spends it stays on the cashier's shift and drawer
+  and is attributed to the cashier; it records the grant and the rights it actually supplied;
+  both the grant and the sale are audited (`sale.override_granted`, `sale.completed` with
+  `override`); refused attempts are audited and throttled like sign-ins. Nobody can override
+  for themselves; the owner may authorise like any supervisor. Bounds that the owner sets
+  (BR-178) are not overridable by anyone.
+- **BR-178** Price-change bounds and the limit in force. A changed price needs a reason, stays
+  between the company floor and ceiling as a percentage of the list price (defaults 50 % and
+  200 %; either may be switched off) and may not go below the item's cost unless the owner
+  allows it; these are hard limits for everyone. The gap between the list price and a lower
+  changed price counts as a discount for the discount limit (so a price change cannot hide a
+  discount the person may not give), and a zero price always counts as above the limit. Every
+  POS sale stores the discount limit in force and whether a discount or price change above it
+  was allowed (`above_limit`); the audit entry carries the same.
+- **BR-179** Zero-total sales. A sale with nothing to pay needs the dedicated right
+  `sales.zero_total` (supervisor by default; a cashier obtains it through BR-177) and a stored
+  reason; the database refuses a free POS sale without one. Unusual sales (free, above the
+  limit, with a changed price, or completed with a supervisor override) are flagged in the
+  sales history, filterable, and counted per employee in the sales report.
 
 Platform and subscriptions (Prompt 17):
 - **BR-150** Every merchant has exactly one subscription to a plan. New merchants start on

@@ -486,6 +486,26 @@ Verified: see `TESTING.md` (results after remediation session 7). Not done (next
 till overrides (R3.1), price bounds (R3.2), zero-total sales (R3.3), custody-right split
 (FND-422), gross profit with a costless item (R4.3).
 
+### 2026-10-13 — Remediation session 8 (R3.1 till overrides, R3.2 price bounds, R3.3 zero-total sales)
+Implemented (ADR-0100, BR-177 to BR-179):
+- **Supervisor override on the cashier's till**: a supervisor (or the owner) enters their own
+  e-mail and password in the POS payment dialog; a single-use ten-minute grant lends the
+  overridable rights the cashier lacks; the sale stays on the cashier's shift and drawer and
+  records who authorised what; grants, uses and refusals are audited; the manager sees the
+  override on the sale, can filter "supervisor override" sales and sees counts per employee.
+  Discount and price fields are always offered at the till; what exceeds the cashier's rights
+  says so and waits for the supervisor.
+- **Price-change bounds**: reason required; owner-set floor and ceiling (% of list price,
+  defaults 50 / 200, each switchable off) and "not below cost" (default) enforced for everyone;
+  the gap under the list price counts as a discount for the limit, a zero price is always above
+  it; every POS sale stores the limit in force and the above-limit flag.
+- **Zero-total sales**: new right `sales.zero_total` (supervisor template), reason required and
+  stored, database check for POS sales; unusual-sales filter (free, above limit, price changed,
+  supervised) in the sales history and counts in the sales-by-employee report.
+Verified: see `TESTING.md` (results after remediation session 8). Not done (next sessions):
+refund segregation (R3.4), tender hygiene (R3.5), held sales (R3.6), combined discount limit
+(R3.7, D4), custody-right split (FND-422), gross profit with a costless item (R4.3).
+
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025
 before any production launch.

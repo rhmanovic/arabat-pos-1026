@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ShiftMoreMenu, ShiftStrip, type StripAction } from '../pages/ShiftPages.js';
 import { useRestaurantEnabled } from '../restaurant/RestaurantPages.js';
-import { type CartLine, formatQty, priceLines, useCart } from './cart.js';
+import { type CartLine, formatQty, priceLines, requiredRights, useCart } from './cart.js';
 import { CustomerBar } from './customer.js';
 import {
   HeldSalesDialog,
@@ -117,6 +117,19 @@ export function SalePage() {
   });
   const linesReady = cart.state.lines.every((l) => items.has(l.variantId));
   const pricing = linesReady && cart.state.lines.length > 0 ? priceLines(cart.state, items) : null;
+  // Selling policy: the discount limit decides which exceptions need a supervisor (BR-177).
+  const policy = useQuery({
+    queryKey: ['pos', 'sales', 'settings'],
+    queryFn: () => api.sales.settings(),
+    staleTime: 60_000,
+  });
+  const required = useMemo(
+    () =>
+      pricing?.ok
+        ? requiredRights(cart.state, items, pricing.cart, policy.data?.maxDiscountPercent ?? null)
+        : [],
+    [cart.state, items, pricing, policy.data],
+  );
 
   // Barcode scanners type quickly and end with Enter; keep the search box focused.
   useEffect(() => {
@@ -153,8 +166,6 @@ export function SalePage() {
       ? [{ key: 'returns', label: t('returns.open'), to: '/returns' }]
       : []),
   ];
-  const canDiscount = hasPermission('sales.discount');
-
   // Desktop shortcuts: F2 search, F4 customer, F8 hold, F12 pay, Esc clears the search box.
   const ready = cart.state.lines.length > 0 && pricing?.ok === true;
   const busy = dialog !== null || editing !== null || receiptId !== null;
@@ -437,7 +448,7 @@ export function SalePage() {
             </Button>
             <Button
               variant="secondary"
-              disabled={!canDiscount || cart.state.lines.length === 0}
+              disabled={cart.state.lines.length === 0}
               onClick={() => setDialog('discount')}
               aria-label={t('sale.orderDiscount')}
             >
@@ -495,6 +506,7 @@ export function SalePage() {
       {dialog === 'pay' && pricing?.ok ? (
         <PaymentDialog
           totalMinor={pricing.cart.totalMinor}
+          required={required}
           onClose={() => setDialog(null)}
           onCompleted={(saleId) => {
             setDialog(null);

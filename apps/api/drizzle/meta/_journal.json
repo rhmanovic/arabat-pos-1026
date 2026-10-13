@@ -302,6 +302,13 @@
       "when": 1791871079842,
       "tag": "0042_cost_precision_damaged_returns",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1791873051338,
+      "tag": "0043_sale_overrides_price_bounds",
+      "breakpoints": true
     }
   ]
 }

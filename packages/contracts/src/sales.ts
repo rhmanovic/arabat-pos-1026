@@ -17,14 +17,55 @@ export const discountInputSchema = z.discriminatedUnion('type', [
 ]);
 export type DiscountInput = z.infer<typeof discountInputSchema>;
 
+const reason = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .nullish()
+    .transform((v) => (v == null || v === '' ? null : v));
+
 export const cartLineInputSchema = z.object({
   variantId: z.uuid(),
   quantity: quantitySchema,
-  /** New unit price; requires `sales.price_override`. */
+  /** New unit price; requires `sales.price_override` and stays within the company bounds (BR-178). */
   priceOverride: moneyAmountSchema.nullish().transform((v) => v ?? null),
+  /** Why the price was changed; required whenever the price differs from the list price. */
+  priceOverrideReason: reason(120),
   discount: discountInputSchema.nullish().transform((v) => v ?? null),
 });
 export type CartLineInput = z.input<typeof cartLineInputSchema>;
+
+/** Exceptions a supervisor may authorise on a cashier's till (BR-177). */
+export const OVERRIDABLE_PERMISSIONS = [
+  'sales.discount',
+  'sales.discount.override_limit',
+  'sales.price_override',
+  'sales.zero_total',
+] as const;
+export type OverridablePermission = (typeof OVERRIDABLE_PERMISSIONS)[number];
+
+/** A supervisor enters their own credentials on the cashier's screen. */
+export const requestOverrideSchema = z.object({
+  email: z.email().trim().toLowerCase().max(254),
+  password: z.string().min(1).max(200),
+  note: reason(160),
+});
+export type RequestOverride = z.input<typeof requestOverrideSchema>;
+
+/** A short-lived, single-use authorisation bound to the cashier's session branch. */
+export const saleOverrideGrantSchema = z.object({
+  id: z.string(),
+  approverName: z.string(),
+  /** Overridable rights the approver holds at the branch and the cashier lacks. */
+  permissions: z.array(z.enum(OVERRIDABLE_PERMISSIONS)),
+  expiresAt: z.string(),
+});
+export type SaleOverrideGrant = z.infer<typeof saleOverrideGrantSchema>;
+
+/** Why a sale is listed as unusual (BR-179). */
+export const SALE_FLAGS = ['zero_total', 'above_limit', 'price_override', 'supervised'] as const;
+export type SaleFlag = (typeof SALE_FLAGS)[number];
 
 const cartFields = {
   lines: z.array(cartLineInputSchema).min(1).max(200),
@@ -70,6 +111,13 @@ export const checkoutSchema = z.object({
   payments: z.array(paymentInputSchema).max(10),
   /** The total the cashier saw; the server refuses the sale if its own total differs. */
   expectedTotal: moneyAmountSchema,
+  /** Supervisor authorisation obtained with `POST /pos/overrides` (BR-177). */
+  overrideId: z
+    .uuid()
+    .nullish()
+    .transform((v) => v ?? null),
+  /** Required when the total is zero (BR-179). */
+  zeroTotalReason: reason(160),
 });
 export type Checkout = z.input<typeof checkoutSchema>;
 
@@ -97,6 +145,7 @@ export const saleLineSchema = z.object({
   listUnitPrice: moneySchema,
   unitPrice: moneySchema,
   priceOverridden: z.boolean(),
+  priceOverrideReason: z.string().nullable().default(null),
   gross: moneySchema,
   discount: discountInputSchema.nullable(),
   lineDiscount: moneySchema,
@@ -160,6 +209,23 @@ export const saleSchema = z.object({
   restaurantOrderId: z.string().nullable().default(null),
   /** pos | online (Prompt 16). */
   channel: z.enum(['pos', 'online']).default('pos'),
+  /** A discount or price change beyond the limit in force was allowed (BR-178). */
+  aboveLimit: z.boolean().default(false),
+  /** The company discount limit when the sale was made; null for online sales. */
+  discountLimitPercent: z.string().nullable().default(null),
+  /** Set on every sale whose total is zero (BR-179). */
+  zeroTotalReason: z.string().nullable().default(null),
+  /** Supervisor override used on the cashier's till (BR-177). */
+  override: z
+    .object({
+      id: z.string(),
+      approverName: z.string(),
+      /** Rights the supervisor supplied that the cashier lacked. */
+      kinds: z.array(z.string()),
+      note: z.string().nullable(),
+    })
+    .nullable()
+    .default(null),
 });
 export type Sale = z.infer<typeof saleSchema>;
 
@@ -176,6 +242,7 @@ export const saleSummarySchema = z.object({
   customerName: z.string().nullable(),
   serviceType: z.enum(['dine_in', 'takeaway', 'pickup']).nullable().default(null),
   channel: z.enum(['pos', 'online']).default('pos'),
+  flags: z.array(z.enum(SALE_FLAGS)).default([]),
 });
 export type SaleSummary = z.infer<typeof saleSummarySchema>;
 export const saleListSchema = z.object({
@@ -198,6 +265,8 @@ export const saleListQuerySchema = z.object({
   /** retail = no restaurant service type. */
   serviceType: z.enum(['retail', 'dine_in', 'takeaway', 'pickup']).optional(),
   channel: z.enum(['pos', 'online']).optional(),
+  /** Unusual sales only (BR-179). */
+  flag: z.enum(SALE_FLAGS).optional(),
   q: z.string().trim().max(40).optional(),
   from: isoDate.optional(),
   to: isoDate.optional(),
@@ -236,6 +305,7 @@ export const suspendedOrderSchema = z.object({
       variantId: z.string(),
       quantity: z.string(),
       priceOverride: moneySchema.nullable(),
+      priceOverrideReason: z.string().nullable().default(null),
       discount: discountInputSchema.nullable(),
     }),
   ),
@@ -266,9 +336,20 @@ export const salesSettingsSchema = z.object({
   adjustmentApprovalLimit: moneySchema,
   /** Count sheets hide the expected quantity (BR-170). */
   blindStockCount: z.boolean(),
+  /** Lowest price change as a % of the list price; null = no floor (BR-178). */
+  priceOverrideFloorPercent: z.string().nullable(),
+  /** Highest price change as a % of the list price; null = no ceiling (BR-178). */
+  priceOverrideCeilingPercent: z.string().nullable(),
+  /** Whether a price change may go below the item's cost (BR-178). */
+  priceOverrideBelowCost: z.boolean(),
   version: z.number().int(),
 });
 export type SalesSettings = z.infer<typeof salesSettingsSchema>;
+
+const boundPercent = z
+  .string()
+  .trim()
+  .regex(/^\d{1,3}(\.\d{1,2})?$/, { error: 'Percent: 0–999, up to 2 decimals.' });
 export const updateSalesSettingsSchema = z.object({
   maxDiscountPercent: z
     .string()
@@ -285,5 +366,9 @@ export const updateSalesSettingsSchema = z.object({
   /** Omitted = unchanged. */
   adjustmentApprovalLimit: moneyAmountSchema.optional(),
   blindStockCount: z.boolean().optional(),
+  /** Omitted = unchanged; null = no bound. */
+  priceOverrideFloorPercent: boundPercent.nullable().optional(),
+  priceOverrideCeilingPercent: boundPercent.nullable().optional(),
+  priceOverrideBelowCost: z.boolean().optional(),
   version: z.number().int().positive(),
 });

@@ -1,8 +1,10 @@
 import {
   type Receipt,
   type Sale,
+  type SaleOverrideGrant,
   type SalesSettings,
   checkoutSchema,
+  requestOverrideSchema,
   saleListQuerySchema,
   suspendOrderSchema,
   updateSalesSettingsSchema,
@@ -25,6 +27,7 @@ import { RequirePermission } from '../../kernel/access/access.decorators.js';
 import { CurrentMerchantActor } from '../../kernel/access/current-actor.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { ZodPipe } from '../../kernel/validation/zod.pipe.js';
+import { OverridesService } from './overrides.service.js';
 import { SalesService } from './sales.service.js';
 
 const uuid = new ParseUUIDPipe();
@@ -32,12 +35,26 @@ const uuid = new ParseUUIDPipe();
 /** POS checkout at the session's branch, on the cashier's open shift. */
 @Controller('pos')
 export class PosSalesController {
-  constructor(private readonly sales: SalesService) {}
+  constructor(
+    private readonly sales: SalesService,
+    private readonly overrides: OverridesService,
+  ) {}
 
   @RequirePermission('pos', 'sales.create')
   @Get('sales/settings')
   settings(@CurrentMerchantActor() actor: MerchantActor): Promise<SalesSettings> {
     return this.sales.getSettings(actor);
+  }
+
+  /** A supervisor authorises an exception on this till with their own credentials (BR-177). */
+  @RequirePermission('pos', 'sales.create')
+  @Post('overrides')
+  requestOverride(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Body(new ZodPipe(requestOverrideSchema)) body: z.output<typeof requestOverrideSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<SaleOverrideGrant> {
+    return this.overrides.request(actor, body, req.ip);
   }
 
   @RequirePermission('pos', 'sales.create')

@@ -243,6 +243,9 @@ describe('pos app', () => {
             supplierPaymentApprovalLimit: money('100.000'),
             adjustmentApprovalLimit: money('50.000'),
             blindStockCount: true,
+            priceOverrideFloorPercent: '50',
+            priceOverrideCeilingPercent: '200',
+            priceOverrideBelowCost: false,
             version: 1,
           },
         }),
@@ -430,8 +433,9 @@ describe('pos app', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Clear' }));
     expect(screen.getAllByTestId('cart-line')).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Confirm clear' })).toBeInTheDocument();
-    // Cashiers without the permission get no discount button.
-    expect(screen.getByRole('button', { name: 'Discount on sale' })).toBeDisabled();
+    // Cashiers without the permission may still enter a discount: a supervisor authorises it
+    // at payment (BR-177).
+    expect(screen.getByRole('button', { name: 'Discount on sale' })).toBeEnabled();
     await userEvent.type(search, 'nothing{Enter}');
     expect(screen.getByRole('alert')).toHaveTextContent('No product found');
 
@@ -452,6 +456,153 @@ describe('pos app', () => {
       expectedTotal: '0.999',
     });
     expect((call.body as { idempotencyKey: string }).idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('lets a supervisor authorise a discount beyond the cashier’s rights on the cashier’s till (BR-177)', async () => {
+    const item = {
+      variantId: '0190a000-0000-7000-8000-000000000a03',
+      productId: '0190a000-0000-7000-8000-000000000b03',
+      categoryId: null,
+      nameEn: 'Oud oil',
+      nameAr: null,
+      variantNameEn: null,
+      variantNameAr: null,
+      sku: 'OUD',
+      barcodes: [],
+      price: money('10.000'),
+      trackInventory: false,
+      imageUrl: null,
+    };
+    const sale = {
+      id: '0190a000-0000-7000-8000-000000000c03',
+      orderId: 'o',
+      receiptNumber: 'MAIN-000003',
+      branchId: SHIFT.branchId,
+      registerId: SHIFT.registerId,
+      shiftId: SHIFT.id,
+      cashierName: 'Cashier',
+      createdAt: '2026-10-12T06:00:00.000Z',
+      subtotal: money('10.000'),
+      lineDiscounts: money('0.000'),
+      orderDiscount: money('1.500'),
+      total: money('8.500'),
+      paid: money('8.500'),
+      change: money('0.000'),
+      refunded: money('0.000'),
+      customer: null,
+      lines: [],
+      payments: [],
+    };
+    const fetch = fakeApiFetch({
+      // No discount right at all: the cashier needs a supervisor for any discount.
+      session: makeSession('pos', ['pos.access', 'shifts.operate', 'sales.create']),
+      routes: {
+        'GET /pos/shifts/current': () => ({ status: 200, body: { shift: SHIFT } }),
+        'GET /pos/catalog': () => ({
+          status: 200,
+          body: { branchId: SHIFT.branchId, categories: [], items: [item], version: 'v1' },
+        }),
+        'GET /pos/inventory/availability': () => ({
+          status: 200,
+          body: { branchId: SHIFT.branchId, allowNegativeStock: false, items: [] },
+        }),
+        'GET /pos/sales/settings': () => ({
+          status: 200,
+          body: {
+            maxDiscountPercent: '10',
+            refundWindowDays: 30,
+            refundApprovalLimit: money('20.000'),
+            blindCashCount: true,
+            cashOutOtherLimit: money('20.000'),
+            cashOutOtherShiftLimit: money('50.000'),
+            maxRegisterTolerance: money('1.000'),
+            expenseApprovalLimit: money('20.000'),
+            supplierPaymentApprovalLimit: money('100.000'),
+            adjustmentApprovalLimit: money('50.000'),
+            blindStockCount: true,
+            priceOverrideFloorPercent: '50',
+            priceOverrideCeilingPercent: '200',
+            priceOverrideBelowCost: false,
+            version: 1,
+          },
+        }),
+        'GET /pos/payment-methods': () => ({
+          status: 200,
+          body: {
+            methods: [
+              {
+                id: '0190a000-0000-7000-8000-000000000d01',
+                kind: 'cash',
+                nameEn: 'Cash',
+                nameAr: null,
+                sortOrder: 0,
+              },
+            ],
+          },
+        }),
+        'POST /pos/overrides': () => ({
+          status: 201,
+          body: {
+            id: '0190a000-0000-7000-8000-000000000f01',
+            approverName: 'Sara Supervisor',
+            permissions: ['sales.discount', 'sales.discount.override_limit'],
+            expiresAt: '2030-01-01T00:00:00.000Z',
+          },
+        }),
+        'POST /pos/sales': () => ({ status: 201, body: sale }),
+        'GET /pos/sales/0190a000-0000-7000-8000-000000000c03/receipt': () => ({
+          status: 200,
+          body: {
+            sale,
+            merchant: { nameEn: 'Demo', nameAr: null },
+            branch: {
+              nameEn: 'Main',
+              nameAr: null,
+              phone: null,
+              address: null,
+              receiptHeader: null,
+              receiptFooter: null,
+            },
+            register: { code: 'R1', nameEn: 'Register 1', nameAr: null },
+          },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'pos', i18n, fetch });
+    await userEvent.click(await screen.findByTestId('product-tile'));
+    // A 15 % sale discount: above the 10 % limit, and the cashier may not discount at all.
+    await userEvent.click(screen.getByRole('button', { name: 'Discount on sale' }));
+    const discount = await screen.findByRole('dialog');
+    await userEvent.selectOptions(within(discount).getByLabelText('Discount'), 'percent');
+    await userEvent.type(within(discount).getByLabelText('Percent (%)'), '15');
+    await userEvent.click(within(discount).getByRole('button', { name: 'Done' }));
+    expect(screen.getByTestId('cart-total')).toHaveTextContent('KWD 8.500');
+    await userEvent.click(screen.getByRole('button', { name: /^Pay/ }));
+    const pay = await screen.findByRole('dialog');
+    const panel = within(pay).getByTestId('supervisor-panel');
+    expect(panel).toHaveTextContent('discount · discount above the limit');
+    await userEvent.click(within(pay).getByRole('button', { name: 'Cash' }));
+    await userEvent.click(within(pay).getByRole('button', { name: 'Add payment' }));
+    // Paid in full, but still blocked until a supervisor authorises it.
+    expect(within(pay).getByRole('button', { name: 'Complete sale' })).toBeDisabled();
+    await userEvent.type(within(panel).getByLabelText('Supervisor e-mail'), 'sara@shop.test');
+    await userEvent.type(within(panel).getByLabelText('Supervisor password'), 'Sara-Pass-2026');
+    await userEvent.click(within(panel).getByRole('button', { name: 'Authorise' }));
+    expect(await within(pay).findByTestId('supervisor-granted')).toHaveTextContent(
+      'Authorised by Sara Supervisor.',
+    );
+    expect(
+      fetch.calls.find((c) => c.method === 'POST' && c.path === '/pos/overrides')?.body,
+    ).toEqual({ email: 'sara@shop.test', password: 'Sara-Pass-2026', note: null });
+    await userEvent.click(within(pay).getByRole('button', { name: 'Complete sale' }));
+    expect(await screen.findAllByTestId('receipt-number')).not.toHaveLength(0);
+    expect(
+      fetch.calls.find((c) => c.method === 'POST' && c.path === '/pos/sales')?.body,
+    ).toMatchObject({
+      orderDiscount: { type: 'percent', value: '15' },
+      overrideId: '0190a000-0000-7000-8000-000000000f01',
+      expectedTotal: '8.500',
+    });
   });
 
   it('creates a customer at the till, links it to the sale and prints it on the receipt', async () => {

@@ -6,7 +6,7 @@ not yet re-verified by the audit), **Tested** (fixed and covered by automated te
 **Deferred** (outside the current retail scope or waiting for an owner decision). Update this file
 in the same session as the code.
 
-Last update: 2026-10-13 (remediation session 7). Totals: Deferred 49, Fixed 6, In Progress 3, Open 89, Tested 33.
+Last update: 2026-10-13 (remediation session 8). Totals: Deferred 49, Fixed 6, In Progress 3, Open 85, Tested 37.
 
 | Id | Finding | Severity | Ch. | Package | Status | Note |
 |---|---|---|---|---|---|---|
@@ -48,11 +48,11 @@ Last update: 2026-10-13 (remediation session 7). Totals: Deferred 49, Fixed 6, I
 | FND-211 | Transfer shortfalls leave the ledger without a write-off movement (shared with the Transfers chapter) | Medium | B | R2.3 | Tested | Session 6: the shortfall is an explicit loss document closing the in-transit quantity and listed as `transfer_loss` in the inventory report; ADR-0098 records why no synthetic ledger row is written (`transfers-controls.int.test.ts`) |
 | FND-212 | "Customer return (outside POS)" lets stock re-enter outside the refund controls | Medium | B | R2.8 | Tested | Session 7: reason removed from the increase reasons; returns re-enter stock only through a refund (`inventory-valuation.int.test.ts`) |
 | FND-213 | No point-in-time valuation, roll-forward or reserved-quantity visibility | Medium | B | R2.6 | Tested | Session 7: as-at valuation, roll-forward with a rounding line, reserved per item and in total (`inventory-valuation.int.test.ts`) |
-| FND-301 | No supervisory override on another cashier's till | Medium | C | R3.1 | Open |  |
-| FND-302 | Price override is not bounded and bypasses the discount limit | Medium | C | R3.2 | Open |  |
+| FND-301 | No supervisory override on another cashier's till | Medium | C | R3.1 | Tested | Session 8: supervisor credentials on the cashier's till issue a single-use grant; the sale stays on the cashier's shift and records approver and rights supplied; audited and reported (`sales-overrides.int.test.ts`, `app.test.tsx`) |
+| FND-302 | Price override is not bounded and bypasses the discount limit | Medium | C | R3.2 | Tested | Session 8: reason required, owner-set floor / ceiling / not-below-cost bounds for everyone, list-price gap counted as a discount for the limit, zero price always above the limit (`sales-overrides.int.test.ts`) |
 | FND-304 | Non-cash payments can settle nowhere; cash fees are stored but never posted | Medium | C | R3.5 | Open |  |
 | FND-305 | Card and transfer payments are self-declared ("manual" verification) | Medium | C | R3.5 | Open |  |
-| FND-312 | Zero-total sales complete without a payment or a reason | Medium | C | R3.3 | Open |  |
+| FND-312 | Zero-total sales complete without a payment or a reason | Medium | C | R3.3 | Tested | Session 8: `sales.zero_total` right and a stored reason (database check), flagged and filterable in the history, counted per employee (`sales-overrides.int.test.ts`, `sales.test.tsx`) |
 | FND-317 | "Net" in the sales history differs from "net after refunds" in the reports | Medium | C | R4.1 | Open |  |
 | FND-401 | Closing is not blind | Medium | D | R1.5 | Tested | Session 1: blind counts by default (`shifts.int.test.ts`, `app.test.tsx`, `checkout.spec.ts`) |
 | FND-402 | No explanation required for a closing shortage of any size | Medium | D | R1.1 | Tested | Session 2: note required on a visible closing difference beyond the tolerance |
@@ -120,7 +120,7 @@ Last update: 2026-10-13 (remediation session 7). Totals: Deferred 49, Fixed 6, I
 | FND-220 | Adjustment documents have no human-readable document number | Low | B | R2.1 | Tested | Session 5: ADJ-000001 per merchant, back-filled (`inventory-controls.int.test.ts`) |
 | FND-222 | Price and cost history exists only in the audit log | Low | B | R5.3 | Open |  |
 | FND-223 | Two cost concepts (catalog standard cost vs moving average) are not explained to users | Low | B | R2.7 | Fixed | Session 7: explained under the cost field of the product editor (BR-174) |
-| FND-303 | Above-limit discounts are not flagged and the limit in force is not kept | Low | C | R3.2 | Open |  |
+| FND-303 | Above-limit discounts are not flagged and the limit in force is not kept | Low | C | R3.2 | Tested | Session 8: `above_limit` and `discount_limit_percent` stored on every POS sale and in the audit entry; `flag=above_limit` filter and per-employee counts (`sales-overrides.int.test.ts`) |
 | FND-306 | Cut-off follows a fixed merchant time zone; branch time zone is unused | Low | C | R4.1 | Open |  |
 | FND-307 | Staff can attach their own or a colleague's customer profile | Low | C | — | Open |  |
 | FND-308 | Receipt contents are not fixed against a legal or commercial requirement | Low | C | — | Open |  |
