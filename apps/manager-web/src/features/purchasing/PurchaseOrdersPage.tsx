@@ -553,7 +553,11 @@ function OrderView({ order }: { order: PurchaseOrder | null }) {
             </ul>
             <p className="mt-2 text-sm">
               {t('purchasing.received')}: <Amount value={order.receivedValue} /> ·{' '}
-              {branchName(order.branchId)}
+              {t('purchasing.paidToDate')}:{' '}
+              <span data-testid="paid-to-date">
+                <Amount value={order.paidToDate} />
+              </span>{' '}
+              · {branchName(order.branchId)}
             </p>
           </Section>
         ) : null}

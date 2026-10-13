@@ -315,7 +315,14 @@ describe('expenses and supplier payments', () => {
     ).toBe('SUPPLIER_INACTIVE');
     // Treasury cannot pay more than it holds.
     expect(
-      (await pay({ kind: 'expense', category: 'supplies', amount: '90.001' })).json().code,
+      (
+        await pay({
+          kind: 'expense',
+          category: 'supplies',
+          amount: '90.001',
+          receiptReference: 'R-big',
+        })
+      ).json().code,
     ).toBe('INSUFFICIENT_TREASURY_CASH');
   });
 
@@ -582,5 +589,203 @@ describe('branch-to-branch transfers', () => {
         [s.c.merchantId, rows[0].treasury, rows[0].transit, s.c.userId],
       ),
     ).rejects.toThrow(/not allowed/);
+  });
+});
+
+describe('disbursement approvals (BR-166)', () => {
+  async function treasurers(s: Company) {
+    const roles = (
+      await s.c.client.request('GET', '/manager/roles', { cookies: s.c.cookies })
+    ).json().roles as { id: string; templateKey: string | null }[];
+    const role = roles.find((r) => r.templateKey === 'treasurer')!.id;
+    const a = await s.c.hire([{ roleId: role, branchId: s.c.main }], 'manager');
+    const b = await s.c.hire([{ roleId: role, branchId: s.c.main }], 'manager');
+    return { a: a.cookies, b: b.cookies };
+  }
+  const audit = async (s: Company, action: string) =>
+    (await call(s, 'GET', `/manager/audit?action=${action}`)).json().entries as {
+      details: Record<string, unknown>;
+    }[];
+
+  it('holds treasury payments above the limit for a second custody holder; the owner pays with a recorded exception', async () => {
+    const s = await company();
+    await s.c.countTreasury(s.c.main, '300.000');
+    const { a, b } = await treasurers(s);
+    const expense = (amount: string, extra: Record<string, unknown> = {}) => ({
+      branchId: s.c.main,
+      kind: 'expense',
+      category: 'maintenance',
+      amount,
+      idempotencyKey: newId(),
+      ...extra,
+    });
+    // Within the limit (20.000): paid at once by a treasurer.
+    expect(
+      (await call(s, 'POST', '/manager/cash/disbursements', expense('15.000'), a)).statusCode,
+    ).toBe(201);
+    // Above it: a receipt reference is required, and a non-owner cannot pay directly.
+    expect(
+      (await call(s, 'POST', '/manager/cash/disbursements', expense('25.000'), a)).statusCode,
+    ).toBe(400);
+    expect(
+      (
+        await call(
+          s,
+          'POST',
+          '/manager/cash/disbursements',
+          expense('25.000', { receiptReference: 'R-1' }),
+          a,
+        )
+      ).json().code,
+    ).toBe('APPROVAL_REQUIRED');
+    const req = await call(
+      s,
+      'POST',
+      '/manager/cash/payout-requests',
+      expense('25.000', { receiptReference: 'R-1', description: 'AC repair' }),
+      a,
+    );
+    expect(req.statusCode).toBe(201);
+    expect(req.json()).toMatchObject({ status: 'pending', amount: { amount: '25.000' } });
+    expect((await treasury(s, s.c.main)).balance.amount).toBe('285.000');
+    const pending = (
+      await call(s, 'GET', `/manager/cash/payout-requests?branchId=${s.c.main}`, undefined, b)
+    ).json();
+    expect(pending.requests.map((r: { id: string }) => r.id)).toContain(req.json().id);
+    // Nobody approves their own request; rejecting needs a reason; another treasurer approves.
+    const decide = (id: string, body: Record<string, unknown>, cookies: Cookies) =>
+      call(s, 'POST', `/manager/cash/payout-requests/${id}/decision`, body, cookies);
+    expect((await decide(req.json().id, { decision: 'approve' }, a)).statusCode).toBe(403);
+    expect((await decide(req.json().id, { decision: 'reject' }, b)).statusCode).toBe(400);
+    const approved = await decide(
+      req.json().id,
+      { decision: 'approve', note: 'seen the invoice' },
+      b,
+    );
+    expect(approved.statusCode).toBe(201);
+    expect(approved.json()).toMatchObject({ status: 'approved', decisionNote: 'seen the invoice' });
+    expect(approved.json().disbursementId).toBeTruthy();
+    expect((await treasury(s, s.c.main)).balance.amount).toBe('260.000');
+    expect((await audit(s, 'payout_request.approved'))[0]!.details).toMatchObject({
+      amount: '25.000',
+    });
+    expect((await decide(req.json().id, { decision: 'approve' }, b)).json().code).toBe(
+      'MOVEMENT_DECIDED',
+    );
+    // Withdrawal by the requester only; rejection with a reason.
+    const second = (
+      await call(
+        s,
+        'POST',
+        '/manager/cash/payout-requests',
+        expense('22.000', { receiptReference: 'R-2' }),
+        a,
+      )
+    ).json();
+    expect(
+      (await call(s, 'POST', `/manager/cash/payout-requests/${second.id}/withdraw`, {}, b))
+        .statusCode,
+    ).toBe(403);
+    expect(
+      (await call(s, 'POST', `/manager/cash/payout-requests/${second.id}/withdraw`, {}, a)).json()
+        .status,
+    ).toBe('withdrawn');
+    const third = (
+      await call(
+        s,
+        'POST',
+        '/manager/cash/payout-requests',
+        expense('30.000', { receiptReference: 'R-3' }),
+        a,
+      )
+    ).json();
+    expect(
+      (await decide(third.id, { decision: 'reject', note: 'not ours' }, b)).json().status,
+    ).toBe('rejected');
+    expect((await treasury(s, s.c.main)).balance.amount).toBe('260.000');
+    // The owner pays directly: flagged in the audit log as an override.
+    const own = await call(
+      s,
+      'POST',
+      '/manager/cash/disbursements',
+      expense('40.000', { receiptReference: 'R-4' }),
+    );
+    expect(own.statusCode).toBe(201);
+    expect((await audit(s, 'cash.disbursement.created'))[0]!.details).toMatchObject({
+      limitExceeded: true,
+      ownerOverride: true,
+    });
+    // The dashboard checklist counts what still waits.
+    const fourth = await call(
+      s,
+      'POST',
+      '/manager/cash/payout-requests',
+      expense('21.000', { receiptReference: 'R-5' }),
+      a,
+    );
+    expect(fourth.statusCode).toBe(201);
+    expect((await call(s, 'GET', '/manager/merchant/controls')).json().pendingPayoutRequests).toBe(
+      1,
+    );
+  });
+
+  it('refuses paying a purchase order beyond its value unless the owner confirms it, and shows paid to date', async () => {
+    const s = await company();
+    await s.c.countTreasury(s.c.main, '100.000');
+    const { b } = await treasurers(s);
+    const product = (
+      await call(s, 'POST', '/manager/products', {
+        nameEn: 'Sugar',
+        variants: [{ sku: `S-${newId().slice(-6)}`, price: '1.000', cost: '0.500', barcodes: [] }],
+      })
+    ).json();
+    const order = (
+      await call(s, 'POST', '/manager/purchase-orders', {
+        supplierId: s.supplier,
+        branchId: s.c.main,
+        lines: [{ variantId: product.variants[0].id, quantity: '10', unitCost: '0.500' }],
+      })
+    ).json();
+    await call(s, 'POST', `/manager/purchase-orders/${order.id}/submit`, {
+      version: order.version,
+    });
+    const pay = (amount: string, extra: Record<string, unknown> = {}, cookies?: Cookies) =>
+      call(
+        s,
+        'POST',
+        '/manager/cash/disbursements',
+        {
+          branchId: s.c.main,
+          kind: 'supplier_payment',
+          supplierId: s.supplier,
+          purchaseOrderId: order.id,
+          amount,
+          idempotencyKey: newId(),
+          ...extra,
+        },
+        cookies,
+      );
+    expect((await pay('4.000')).statusCode).toBe(201);
+    // Order value 5.000, paid 4.000: 2.000 more would overpay.
+    expect((await pay('2.000')).json().code).toBe('ORDER_OVERPAID');
+    expect((await pay('2.000', { confirmOverpayment: true }, b)).json().code).toBe(
+      'ORDER_OVERPAID',
+    );
+    const confirmed = await pay('2.000', { confirmOverpayment: true });
+    expect(confirmed.statusCode).toBe(201);
+    expect((await audit(s, 'cash.disbursement.created'))[0]!.details).toMatchObject({
+      overpaymentConfirmed: true,
+    });
+    const detail = (await call(s, 'GET', `/manager/purchase-orders/${order.id}`)).json();
+    expect(detail.total.amount).toBe('5.000');
+    expect(detail.paidToDate.amount).toBe('6.000');
+    // A reversal reduces paid to date.
+    await call(s, 'POST', `/manager/cash/disbursements/${confirmed.json().id}/reverse`, {
+      reason: 'paid twice',
+      idempotencyKey: newId(),
+    });
+    expect(
+      (await call(s, 'GET', `/manager/purchase-orders/${order.id}`)).json().paidToDate.amount,
+    ).toBe('4.000');
   });
 });

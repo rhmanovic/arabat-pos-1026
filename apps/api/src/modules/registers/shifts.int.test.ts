@@ -574,6 +574,8 @@ describe('blind cash counts (BR-162)', () => {
         cashOutOtherLimit: current.cashOutOtherLimit.amount,
         cashOutOtherShiftLimit: current.cashOutOtherShiftLimit.amount,
         maxRegisterTolerance: current.maxRegisterTolerance.amount,
+        expenseApprovalLimit: current.expenseApprovalLimit.amount,
+        supplierPaymentApprovalLimit: current.supplierPaymentApprovalLimit.amount,
         version: current.version,
       },
     });
@@ -703,6 +705,8 @@ describe('cash-out controls (BR-164)', () => {
         cashOutOtherLimit: current.cashOutOtherLimit.amount,
         cashOutOtherShiftLimit: current.cashOutOtherShiftLimit.amount,
         maxRegisterTolerance: current.maxRegisterTolerance.amount,
+        expenseApprovalLimit: current.expenseApprovalLimit.amount,
+        supplierPaymentApprovalLimit: current.supplierPaymentApprovalLimit.amount,
         version: current.version,
         ...patch,
       },
@@ -948,5 +952,60 @@ describe('cash-out controls (BR-164)', () => {
     expect(
       (await sup.close({ countedCash: '29.600', version: opened.json().version })).json().outcome,
     ).toBe('balanced');
+  });
+});
+
+describe('disbursement approvals at the till (BR-166)', () => {
+  it('holds an expense above the limit with its details until a manager approves it', async () => {
+    const c = await company();
+    const [register] = await registersAt(c, c.main);
+    const sup = pos(
+      c,
+      (await c.hire([{ roleId: c.roles.supervisor, branchId: c.main }], 'pos')).cookies,
+    );
+    const opened = await sup.open(register!.id, '100.000');
+    // Above 20.000 the receipt reference is required and the payment waits.
+    expect(
+      (
+        await sup.cash({
+          kind: 'cash_out',
+          amount: '25.000',
+          reason: 'petty_expense',
+          category: 'supplies',
+        })
+      ).statusCode,
+    ).toBe(400);
+    const held = await sup.cash({
+      kind: 'cash_out',
+      amount: '25.000',
+      reason: 'petty_expense',
+      category: 'supplies',
+      receiptReference: 'R-77',
+      note: 'shelves',
+    });
+    expect(held.statusCode).toBe(201);
+    const m = held.json().movements.at(-1);
+    expect(m).toMatchObject({ status: 'pending', limitExceeded: true });
+    expect(held.json().summary.expectedCash.amount).toBe('100.000');
+    // Approval posts the expense with the category and reference that were kept.
+    const approved = await c.client.request(
+      'POST',
+      `/manager/shifts/${opened.json().id}/movements/${m.id}/decision`,
+      { cookies: c.cookies, body: { decision: 'approve', note: 'ok' } },
+    );
+    expect(approved.statusCode).toBe(201);
+    expect(approved.json().summary.expectedCash.amount).toBe('75.000');
+    const list = (
+      await c.client.request('GET', `/manager/cash/disbursements?branchId=${c.main}`, {
+        cookies: c.cookies,
+      })
+    ).json();
+    expect(list.disbursements[0]).toMatchObject({
+      kind: 'expense',
+      category: 'supplies',
+      receiptReference: 'R-77',
+      amount: { amount: '25.000' },
+      source: { kind: 'register' },
+    });
   });
 });

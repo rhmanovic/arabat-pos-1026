@@ -156,6 +156,8 @@ export class SalesService {
       cashOutOtherLimit: money(row?.cashOutOtherLimitMinor ?? 20000n),
       cashOutOtherShiftLimit: money(row?.cashOutOtherShiftLimitMinor ?? 50000n),
       maxRegisterTolerance: money(row?.maxRegisterToleranceMinor ?? 1000n),
+      expenseApprovalLimit: money(row?.expenseApprovalLimitMinor ?? 20000n),
+      supplierPaymentApprovalLimit: money(row?.supplierPaymentApprovalLimitMinor ?? 100000n),
       version: row?.version ?? 1,
     };
   }
@@ -174,6 +176,11 @@ export class SalesService {
         'cashOutOtherShiftLimit',
       ),
       maxRegisterToleranceMinor: parseAmount(input.maxRegisterTolerance, 'maxRegisterTolerance'),
+      expenseApprovalLimitMinor: parseAmount(input.expenseApprovalLimit, 'expenseApprovalLimit'),
+      supplierPaymentApprovalLimitMinor: parseAmount(
+        input.supplierPaymentApprovalLimit,
+        'supplierPaymentApprovalLimit',
+      ),
     };
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const [row] = await tx
@@ -236,6 +243,14 @@ export class SalesService {
           maxRegisterTolerance: {
             from: (row?.maxRegisterToleranceMinor ?? 1000n).toString(),
             to: cashLimits.maxRegisterToleranceMinor.toString(),
+          },
+          expenseApprovalLimit: {
+            from: (row?.expenseApprovalLimitMinor ?? 20000n).toString(),
+            to: cashLimits.expenseApprovalLimitMinor.toString(),
+          },
+          supplierPaymentApprovalLimit: {
+            from: (row?.supplierPaymentApprovalLimitMinor ?? 100000n).toString(),
+            to: cashLimits.supplierPaymentApprovalLimitMinor.toString(),
           },
         },
       });

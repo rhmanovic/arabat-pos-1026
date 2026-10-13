@@ -55,6 +55,14 @@ import {
   posShiftSchema,
   type DecideCashMovement,
   controlsChecklistSchema,
+  type CashPayoutRequestQuery,
+  type CashVarianceQuery,
+  type DecidePayoutRequest,
+  type ResolveVariance,
+  cashPayoutRequestListSchema,
+  cashPayoutRequestSchema,
+  cashVarianceListSchema,
+  cashVarianceSchema,
   suspendedOrderListSchema,
   suspendedOrderSchema,
   type CloseShift,
@@ -572,6 +580,34 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('GET', `/manager/suppliers/${supplierId}/payments`, {
           schema: supplierPaymentsSchema,
         }),
+      payoutRequests: (query: CashPayoutRequestQuery = {}) =>
+        request('GET', `/manager/cash/payout-requests?${toParams(query)}`, {
+          schema: cashPayoutRequestListSchema,
+        }),
+      requestPayout: (body: CreateCashDisbursement) =>
+        request('POST', '/manager/cash/payout-requests', {
+          body,
+          schema: cashPayoutRequestSchema,
+        }),
+      decidePayoutRequest: (id: string, body: DecidePayoutRequest) =>
+        request('POST', `/manager/cash/payout-requests/${id}/decision`, {
+          body,
+          schema: cashPayoutRequestSchema,
+        }),
+      withdrawPayoutRequest: (id: string) =>
+        request('POST', `/manager/cash/payout-requests/${id}/withdraw`, {
+          body: {},
+          schema: cashPayoutRequestSchema,
+        }),
+      variances: (query: CashVarianceQuery = {}) =>
+        request('GET', `/manager/cash/variances?${toParams(query)}`, {
+          schema: cashVarianceListSchema,
+        }),
+      resolveVariance: (sourceType: string, sourceId: string, body: ResolveVariance) =>
+        request('POST', `/manager/cash/variances/${sourceType}/${sourceId}/followup`, {
+          body,
+          schema: cashVarianceSchema,
+        }),
       posBankAccounts: () =>
         request('GET', '/pos/cash/bank-accounts', { schema: bankAccountOptionsSchema }),
       posSuppliers: () => request('GET', '/pos/cash/suppliers', { schema: supplierOptionsSchema }),
@@ -652,6 +688,8 @@ export function createApiClient(options: ApiClientOptions = {}) {
         cashOutOtherLimit: string;
         cashOutOtherShiftLimit: string;
         maxRegisterTolerance: string;
+        expenseApprovalLimit: string;
+        supplierPaymentApprovalLimit: string;
         version: number;
       }) => request('PUT', '/manager/sales-settings', { body, schema: salesSettingsSchema }),
     },

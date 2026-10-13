@@ -55,6 +55,26 @@ export function DashboardPage() {
               },
             ]
           : []),
+        ...(controls.data.pendingPayoutRequests > 0
+          ? [
+              {
+                key: 'payouts',
+                to: '/cash',
+                text: t('dashboard.controlPendingPayouts', {
+                  count: controls.data.pendingPayoutRequests,
+                }),
+              },
+            ]
+          : []),
+        ...(controls.data.openVariances > 0
+          ? [
+              {
+                key: 'variances',
+                to: '/shifts',
+                text: t('dashboard.controlOpenVariances', { count: controls.data.openVariances }),
+              },
+            ]
+          : []),
         ...(controls.data.membersWithoutRoles.length > 0
           ? [
               {

@@ -258,6 +258,10 @@ export const salesSettingsSchema = z.object({
   cashOutOtherShiftLimit: moneySchema,
   /** Largest discrepancy tolerance a register may be given (BR-164). */
   maxRegisterTolerance: moneySchema,
+  /** Expenses above this amount wait for a second person (BR-166). */
+  expenseApprovalLimit: moneySchema,
+  /** Supplier payments above this amount wait for a second person (BR-166). */
+  supplierPaymentApprovalLimit: moneySchema,
   version: z.number().int(),
 });
 export type SalesSettings = z.infer<typeof salesSettingsSchema>;
@@ -272,5 +276,7 @@ export const updateSalesSettingsSchema = z.object({
   cashOutOtherLimit: moneyAmountSchema,
   cashOutOtherShiftLimit: moneyAmountSchema,
   maxRegisterTolerance: moneyAmountSchema,
+  expenseApprovalLimit: moneyAmountSchema,
+  supplierPaymentApprovalLimit: moneyAmountSchema,
   version: z.number().int().positive(),
 });

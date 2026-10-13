@@ -22,5 +22,9 @@ export const controlsChecklistSchema = z.object({
   ),
   /** Cash-outs waiting for a manager's decision on open shifts. */
   pendingCashMovements: z.number().int(),
+  /** Treasury expenses and supplier payments waiting for approval (BR-166). */
+  pendingPayoutRequests: z.number().int(),
+  /** Cash differences with no follow-up yet (BR-167). */
+  openVariances: z.number().int(),
 });
 export type ControlsChecklist = z.infer<typeof controlsChecklistSchema>;

@@ -239,6 +239,8 @@ describe('pos app', () => {
             cashOutOtherLimit: money('20.000'),
             cashOutOtherShiftLimit: money('50.000'),
             maxRegisterTolerance: money('1.000'),
+            expenseApprovalLimit: money('20.000'),
+            supplierPaymentApprovalLimit: money('100.000'),
             version: 1,
           },
         }),

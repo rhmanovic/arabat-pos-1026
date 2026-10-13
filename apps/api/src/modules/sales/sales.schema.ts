@@ -58,6 +58,16 @@ export const salesSettings = pgTable('sales_settings', {
   maxRegisterToleranceMinor: bigint({ mode: 'bigint' })
     .notNull()
     .default(sql`1000`),
+  /**
+   * Disbursement approvals (BR-166, remediation R1.2, owner decision D2): an expense or a
+   * supplier payment above these amounts waits for a second person unless the owner records it.
+   */
+  expenseApprovalLimitMinor: bigint({ mode: 'bigint' })
+    .notNull()
+    .default(sql`20000`),
+  supplierPaymentApprovalLimitMinor: bigint({ mode: 'bigint' })
+    .notNull()
+    .default(sql`100000`),
   version: integer().notNull().default(1),
   updatedAt: updatedAt(),
 });

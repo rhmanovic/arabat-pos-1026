@@ -4,6 +4,7 @@ import { Injectable } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { DatabaseService } from '../../database/database.service.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
+import { countOpenVariances } from '../cash/cash-controls.service.js';
 
 type Row = Record<string, unknown>;
 
@@ -53,7 +54,15 @@ export class ControlsService {
           select count(*)::int as n from cash_movements m join shifts s on s.id = m.shift_id
           where m.merchant_id = ${actor.merchantId} and m.status = 'pending' and s.status = 'open'`)
       ).rows as { n: number }[];
+      const [payouts] = (
+        await tx.execute(sql`
+          select count(*)::int as n from cash_payout_requests
+          where merchant_id = ${actor.merchantId} and status = 'pending'`)
+      ).rows as { n: number }[];
+      const openVariances = await countOpenVariances(tx, actor.merchantId);
       return {
+        pendingPayoutRequests: Number(payouts?.n ?? 0),
+        openVariances,
         treasurerAssigned: Boolean(treasurer?.assigned),
         membersWithoutRoles: withoutRoles.map((r) => ({
           membershipId: r['id'] as string,

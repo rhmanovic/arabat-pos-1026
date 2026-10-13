@@ -279,6 +279,8 @@ describe('dashboard controls checklist (BR-165)', () => {
             membersWithoutRoles: [{ membershipId: 'm1', fullName: 'Ali' }],
             registersAboveTolerance: [],
             pendingCashMovements: 2,
+            pendingPayoutRequests: 0,
+            openVariances: 0,
           },
         }),
       },
@@ -288,6 +290,119 @@ describe('dashboard controls checklist (BR-165)', () => {
     expect(section).toHaveTextContent('Assign the Treasurer role');
     expect(section).toHaveTextContent('2 cash-outs are waiting');
     expect(section).toHaveTextContent('Ali');
+  });
+});
+
+describe('treasury payments awaiting approval (BR-166)', () => {
+  const request = {
+    id: '0190a000-0000-7000-8000-000000000701',
+    kind: 'expense',
+    category: 'maintenance',
+    supplier: null,
+    purchaseOrder: null,
+    branch: { id: '0190a000-0000-7000-8000-000000000301', nameEn: 'Main', nameAr: null },
+    amount: money('25.000'),
+    description: 'AC repair',
+    receiptReference: 'R-1',
+    status: 'pending',
+    requestedBy: 'Tariq Treasurer',
+    requestedByUserId: 'u-treasurer',
+    createdAt: '2026-10-12T07:00:00.000Z',
+    decidedBy: null,
+    decidedAt: null,
+    decisionNote: null,
+    disbursementId: null,
+  };
+  const overview = {
+    branches: [],
+    treasuriesTotal: money('0.000'),
+    registersTotal: money('0.000'),
+    inTransitTotal: money('0.000'),
+    total: money('0.000'),
+  };
+
+  it('lets another custody holder approve a pending payment', async () => {
+    const decisions: unknown[] = [];
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'cash.custody']),
+      routes: {
+        'GET /manager/cash/overview': () => ({ status: 200, body: overview }),
+        'GET /manager/cash/payout-requests': () => ({ status: 200, body: { requests: [request] } }),
+        'GET /manager/cash/disbursements': () => ({
+          status: 200,
+          body: { disbursements: [], netTotal: money('0.000'), total: 0, page: 1, pageSize: 100 },
+        }),
+        [`POST /manager/cash/payout-requests/${request.id}/decision`]: (body) => {
+          decisions.push(body);
+          return { status: 201, body: { ...request, status: 'approved', decidedBy: 'Test User' } };
+        },
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/cash', fetch });
+    await userEvent.click(await screen.findByRole('button', { name: 'Expenses & payments' }));
+    const section = await screen.findByTestId('payout-requests');
+    expect(section).toHaveTextContent('Tariq Treasurer');
+    expect(section).toHaveTextContent('KWD 25.000');
+    await userEvent.click(within(section).getByTestId('decide-payout'));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('button', { name: 'Reject' })).toBeDisabled();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve' }));
+    await vi.waitFor(() => expect(decisions).toHaveLength(1));
+    expect(decisions[0]).toMatchObject({ decision: 'approve' });
+  });
+});
+
+describe('follow-up of cash differences (BR-167)', () => {
+  it('lists open differences and records a follow-up', async () => {
+    const followups: unknown[] = [];
+    const variance = {
+      sourceType: 'shift_close',
+      sourceId: '0190a000-0000-7000-8000-000000000501',
+      branchId: '0190a000-0000-7000-8000-000000000301',
+      place: { kind: 'register', nameEn: 'Register 1', nameAr: null },
+      amount: money('-2.000'),
+      occurredAt: '2026-10-12T20:00:00.000Z',
+      accountable: 'Sara Cashier',
+      sourceNote: 'coins missing',
+      followup: null,
+    };
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'shifts.view_all', 'cash.custody']),
+      routes: {
+        'GET /manager/branches': () => ({ status: 200, body: { branches: [] } }),
+        'GET /manager/cash/variances': () => ({
+          status: 200,
+          body: { variances: [variance], openCount: 1 },
+        }),
+        [`POST /manager/cash/variances/shift_close/${variance.sourceId}/followup`]: (body) => {
+          followups.push(body);
+          return {
+            status: 201,
+            body: {
+              ...variance,
+              followup: {
+                status: 'explained',
+                note: 'wrong change',
+                resolvedBy: 'Test User',
+                resolvedAt: '2026-10-13T08:00:00.000Z',
+              },
+            },
+          };
+        },
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/shifts', fetch });
+    await userEvent.click(await screen.findByRole('button', { name: 'Follow-up of differences' }));
+    expect(await screen.findByTestId('variances-open')).toHaveTextContent(
+      '1 differences without follow-up',
+    );
+    expect(screen.getByText('Sara Cashier')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('resolve-variance'));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText('Note'), 'wrong change');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await vi.waitFor(() => expect(followups).toHaveLength(1));
+    expect(followups[0]).toMatchObject({ status: 'explained', note: 'wrong change' });
   });
 });
 

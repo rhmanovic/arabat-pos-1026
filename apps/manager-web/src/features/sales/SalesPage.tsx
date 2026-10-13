@@ -232,6 +232,11 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
   const cashOutOtherShiftLimit =
     cashShiftLimit ?? settings.data?.cashOutOtherShiftLimit.amount ?? '';
   const maxRegisterTolerance = maxTolerance ?? settings.data?.maxRegisterTolerance.amount ?? '';
+  const [expLimit, setExpLimit] = useState<string | null>(null);
+  const [supLimit, setSupLimit] = useState<string | null>(null);
+  const expenseApprovalLimit = expLimit ?? settings.data?.expenseApprovalLimit.amount ?? '';
+  const supplierPaymentApprovalLimit =
+    supLimit ?? settings.data?.supplierPaymentApprovalLimit.amount ?? '';
   const AMOUNT = /^\d{1,10}(\.\d{1,3})?$/;
   const current = value ?? settings.data?.maxDiscountPercent ?? '';
   const windowDays = days ?? String(settings.data?.refundWindowDays ?? '');
@@ -242,7 +247,9 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
     AMOUNT.test(approvalLimit.trim()) &&
     AMOUNT.test(cashOutOtherLimit.trim()) &&
     AMOUNT.test(cashOutOtherShiftLimit.trim()) &&
-    AMOUNT.test(maxRegisterTolerance.trim());
+    AMOUNT.test(maxRegisterTolerance.trim()) &&
+    AMOUNT.test(expenseApprovalLimit.trim()) &&
+    AMOUNT.test(supplierPaymentApprovalLimit.trim());
   const save = useMutation({
     mutationFn: () =>
       api.sales.updateSettings({
@@ -253,6 +260,8 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
         cashOutOtherLimit: cashOutOtherLimit.trim(),
         cashOutOtherShiftLimit: cashOutOtherShiftLimit.trim(),
         maxRegisterTolerance: maxRegisterTolerance.trim(),
+        expenseApprovalLimit: expenseApprovalLimit.trim(),
+        supplierPaymentApprovalLimit: supplierPaymentApprovalLimit.trim(),
         version: settings.data!.version,
       }),
     onSuccess: async () => {
@@ -352,6 +361,28 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
               inputMode="decimal"
               value={maxRegisterTolerance}
               onChange={(e) => setMaxTolerance(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('sales.expenseLimit')} hint={t('sales.approvalLimitHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="decimal"
+              value={expenseApprovalLimit}
+              onChange={(e) => setExpLimit(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('sales.supplierPaymentLimit')} hint={t('sales.approvalLimitHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="decimal"
+              value={supplierPaymentApprovalLimit}
+              onChange={(e) => setSupLimit(e.target.value)}
             />
           )}
         </Field>

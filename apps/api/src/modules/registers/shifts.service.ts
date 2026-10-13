@@ -31,6 +31,7 @@ import { branches } from '../branches/branches.schema.js';
 import { merchants } from '../merchants/merchants.schema.js';
 import { suppliers } from '../purchasing/purchasing.schema.js';
 import { salesSettings } from '../sales/sales.schema.js';
+import { assertReceiptReference, exceedsApprovalLimit } from '../cash/approval-limits.js';
 import {
   accountBalance,
   activeBankAccount,
@@ -639,7 +640,17 @@ export class ShiftsService {
         const limitExceeded =
           input.kind === 'cash_out' && input.reason === 'other'
             ? await this.exceedsOtherLimit(tx, shift, amountMinor)
-            : false;
+            : input.reason === 'petty_expense' || input.reason === 'supplier_payment'
+              ? await exceedsApprovalLimit(
+                  tx,
+                  actor.merchantId,
+                  input.reason === 'petty_expense' ? 'expense' : 'supplier_payment',
+                  amountMinor,
+                )
+              : false;
+        // Above the approval limit a disbursement needs its receipt or invoice reference.
+        if (limitExceeded && input.reason !== 'other')
+          assertReceiptReference(input.receiptReference);
         const pending = limitExceeded && !actor.access.isOwner;
         const id = newId();
         await tx.insert(cashMovements).values({
@@ -659,9 +670,13 @@ export class ShiftsService {
           correctsMovementId: input.reason === 'correction' ? input.correctsMovementId! : null,
           limitExceeded,
           ownerOverride: limitExceeded && actor.access.isOwner,
+          expenseCategory: input.reason === 'petty_expense' ? (input.category ?? null) : null,
+          supplierId: input.reason === 'supplier_payment' ? (input.supplierId ?? null) : null,
+          receiptReference: input.receiptReference ?? null,
         });
         if (pending) {
           await this.record(tx, actor, 'shift.cash_out_requested', 'shift', shift.id, ip, {
+            kind: input.reason,
             movementId: id,
             amount: Money.ofMinor(amountMinor, CURRENCY).toDecimalString(),
             reason: input.reason,
@@ -769,6 +784,7 @@ export class ShiftsService {
         const drawer = await registerAccount(tx, shift.registerId);
         await lockAccounts(tx, [drawer.id]);
         assertCovers(await this.drawerCash(tx, shift), m.amountMinor, 'register');
+        if (m.reason === 'supplier_payment') await this.assertSupplier(tx, m.supplierId!);
         await this.postMovement(tx, actor, shift, drawer.id, null, {
           id: m.id,
           kind: m.kind,
@@ -776,9 +792,9 @@ export class ShiftsService {
           amountMinor: m.amountMinor,
           note: m.note,
           bankId: null,
-          category: null,
-          supplierId: null,
-          receiptReference: null,
+          category: m.expenseCategory,
+          supplierId: m.supplierId,
+          receiptReference: m.receiptReference,
         });
       }
       await tx

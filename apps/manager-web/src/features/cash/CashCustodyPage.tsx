@@ -25,6 +25,7 @@ import {
   DisbursementDialog,
   DisbursementList,
   SendToBranchDialog,
+  PayoutRequestList,
 } from './CashPayouts.js';
 import { CashTabs } from './shared.js';
 
@@ -209,7 +210,10 @@ export function CashCustodyPage() {
       ) : tab === 'transfers' ? (
         <TransferList />
       ) : tab === 'payouts' ? (
-        <DisbursementList />
+        <div className="grid gap-4">
+          <PayoutRequestList />
+          <DisbursementList />
+        </div>
       ) : (
         <BranchTransferList />
       )}

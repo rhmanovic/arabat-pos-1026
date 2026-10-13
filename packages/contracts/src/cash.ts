@@ -193,6 +193,8 @@ export const createCashDisbursementSchema = z
     description: note(500),
     receiptReference: note(80),
     idempotencyKey: z.uuid(),
+    /** Owner only: pay more than the order's value on purpose (audited, BR-166). */
+    confirmOverpayment: z.boolean().optional(),
   })
   .refine((d) => d.kind !== 'expense' || Boolean(d.category), {
     error: 'Choose the expense category.',
@@ -212,6 +214,95 @@ export const reverseCashDisbursementSchema = z.object({
   idempotencyKey: z.uuid(),
 });
 export type ReverseCashDisbursement = z.input<typeof reverseCashDisbursementSchema>;
+
+// ---------------------------------------------------------------- payout requests (BR-166)
+export const PAYOUT_REQUEST_STATUSES = ['pending', 'approved', 'rejected', 'withdrawn'] as const;
+export const cashPayoutRequestSchema = z.object({
+  id: z.string(),
+  kind: z.enum(['expense', 'supplier_payment']),
+  category: z.enum(CASH_EXPENSE_CATEGORIES).nullable(),
+  supplier: ref.nullable(),
+  purchaseOrder: z.object({ id: z.string(), number: z.string() }).nullable(),
+  branch: ref,
+  amount: moneySchema,
+  description: z.string().nullable(),
+  receiptReference: z.string().nullable(),
+  status: z.enum(PAYOUT_REQUEST_STATUSES),
+  requestedBy: z.string(),
+  requestedByUserId: z.string(),
+  createdAt: z.string(),
+  decidedBy: z.string().nullable(),
+  decidedAt: z.string().nullable(),
+  decisionNote: z.string().nullable(),
+  disbursementId: z.string().nullable(),
+});
+export type CashPayoutRequest = z.infer<typeof cashPayoutRequestSchema>;
+export const cashPayoutRequestListSchema = z.object({ requests: z.array(cashPayoutRequestSchema) });
+export const cashPayoutRequestQuerySchema = z.object({
+  branchId: z.uuid().optional(),
+  status: z.enum(['pending', 'all']).default('pending'),
+});
+export type CashPayoutRequestQuery = z.input<typeof cashPayoutRequestQuerySchema>;
+export const decidePayoutRequestSchema = z
+  .object({ decision: z.enum(['approve', 'reject']), note: note(500) })
+  .refine((d) => d.decision !== 'reject' || Boolean(d.note), {
+    error: 'Explain why the payment is rejected.',
+    path: ['note'],
+  });
+export type DecidePayoutRequest = z.input<typeof decidePayoutRequestSchema>;
+
+// ---------------------------------------------------------------- variance follow-up (BR-167)
+export const VARIANCE_SOURCES = [
+  'shift_close',
+  'shift_opening',
+  'account_count',
+  'branch_transfer',
+] as const;
+export const VARIANCE_STATUSES = ['explained', 'settled', 'written_off'] as const;
+export const cashVarianceSchema = z.object({
+  sourceType: z.enum(VARIANCE_SOURCES),
+  sourceId: z.string(),
+  branchId: z.string(),
+  /** Register, treasury or transfer the difference belongs to. */
+  place: z.object({ ...names, kind: z.enum(['register', 'treasury', 'transfer']) }),
+  /** counted − expected (or received − sent). */
+  amount: moneySchema,
+  occurredAt: z.string(),
+  /** Who is answerable: the cashier of the shift, the counter, or null when between shifts. */
+  accountable: z.string().nullable(),
+  sourceNote: z.string().nullable(),
+  followup: z
+    .object({
+      status: z.enum(VARIANCE_STATUSES),
+      note: z.string(),
+      resolvedBy: z.string(),
+      resolvedAt: z.string(),
+    })
+    .nullable(),
+});
+export type CashVariance = z.infer<typeof cashVarianceSchema>;
+export const cashVarianceListSchema = z.object({
+  variances: z.array(cashVarianceSchema),
+  openCount: z.number().int(),
+});
+export const cashVarianceQuerySchema = z.object({
+  branchId: z.uuid().optional(),
+  status: z.enum(['open', 'resolved', 'all']).default('open'),
+  from: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  to: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+});
+export type CashVarianceQuery = z.input<typeof cashVarianceQuerySchema>;
+export const resolveVarianceSchema = z.object({
+  status: z.enum(VARIANCE_STATUSES),
+  note: z.string().trim().min(1).max(1000),
+});
+export type ResolveVariance = z.input<typeof resolveVarianceSchema>;
 
 /** Supplier page: what was paid to one supplier in cash. */
 export const supplierPaymentsSchema = z.object({

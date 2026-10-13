@@ -23,6 +23,7 @@ import { useBranchContext, useBranchName, useSession } from '../../app/context.j
 import { formatAmount } from '../catalog/ProductsPage.js';
 import { formatDateTime } from '../inventory/AdjustmentsPage.js';
 import { Pager } from '../inventory/shared.js';
+import { VariancesTab } from './Variances.js';
 import { CashTabs, OutcomeBadge } from './shared.js';
 
 export const shiftsKey = ['manager', 'shifts'] as const;
@@ -39,7 +40,7 @@ function Amount({ value }: { value: { amount: string; currency: string } | null 
 
 export function ShiftsPage() {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<'shifts' | 'report'>('shifts');
+  const [tab, setTab] = useState<'shifts' | 'report' | 'variances'>('shifts');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   return (
@@ -49,6 +50,7 @@ export function ShiftsPage() {
         tabs={[
           { key: 'shifts', label: t('cash.tabShifts') },
           { key: 'report', label: t('cash.tabDiscrepancies') },
+          { key: 'variances', label: t('cash.tabVariances') },
         ]}
         active={tab}
         onChange={(k) => setTab(k as typeof tab)}
@@ -70,6 +72,11 @@ export function ShiftsPage() {
       </div>
       {tab === 'shifts' ? (
         <ShiftList from={DATE.test(from) ? from : undefined} to={DATE.test(to) ? to : undefined} />
+      ) : tab === 'variances' ? (
+        <VariancesTab
+          from={DATE.test(from) ? from : undefined}
+          to={DATE.test(to) ? to : undefined}
+        />
       ) : (
         <Report from={DATE.test(from) ? from : undefined} to={DATE.test(to) ? to : undefined} />
       )}

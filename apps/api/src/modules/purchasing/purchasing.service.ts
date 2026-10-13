@@ -604,6 +604,13 @@ export class PurchasingService {
       .innerJoin(purchaseReceipts, eq(purchaseReceipts.id, purchaseReceiptLines.receiptId))
       .where(eq(purchaseReceipts.purchaseOrderId, id))
       .orderBy(asc(purchaseReceiptLines.orderPosition));
+    // Supplier payments recorded against this order, net of reversals (BR-166; read-only
+    // cross-module SQL, ADR-0083).
+    const [paid] = (
+      await tx.execute(sql`
+        select coalesce(sum(case when d.reverses_id is null then d.amount_minor else -d.amount_minor end), 0)::text as paid
+        from cash_disbursements d where d.purchase_order_id = ${id}`)
+    ).rows as { paid: string }[];
     let total = 0n;
     let received = 0n;
     const lines = state.map((l) => {
@@ -640,6 +647,7 @@ export class PurchasingService {
       note: (o['note'] as string | null) ?? null,
       total: money(total),
       receivedValue: money(received),
+      paidToDate: money(BigInt(paid!.paid)),
       createdBy: o['created_by'] as string,
       approvedBy: (o['approved_by'] as string | null) ?? null,
       closeReason: (o['close_reason'] as string | null) ?? null,

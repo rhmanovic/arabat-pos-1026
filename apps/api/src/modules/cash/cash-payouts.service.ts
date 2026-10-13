@@ -50,6 +50,11 @@ import {
 import { parseAmount } from '../payments/payments.service.js';
 import { purchaseOrders, suppliers } from '../purchasing/purchasing.schema.js';
 import { shifts } from '../registers/registers.schema.js';
+import {
+  assertNotOverpaid,
+  assertReceiptReference,
+  exceedsApprovalLimit,
+} from './approval-limits.js';
 import { CashService } from './cash.service.js';
 
 type DisbursementInput = z.output<typeof createCashDisbursementSchema>;
@@ -156,6 +161,33 @@ export class CashPayoutsService {
         if (done) return done.id;
         if (input.kind === 'supplier_payment')
           await assertPayable(tx, input.supplierId!, input.purchaseOrderId ?? null);
+        // Above the company's approval limit a second custody holder must approve (BR-166);
+        // the owner pays directly and the exception is recorded.
+        const limitExceeded = await exceedsApprovalLimit(
+          tx,
+          actor.merchantId,
+          input.kind,
+          amountMinor,
+        );
+        if (limitExceeded) {
+          assertReceiptReference(input.receiptReference);
+          if (!actor.access.isOwner)
+            throw new AppError(
+              409,
+              'APPROVAL_REQUIRED',
+              'This amount is above the approval limit: record it as a request for a second person to approve.',
+            );
+        }
+        const overpaid =
+          input.kind === 'supplier_payment' && input.purchaseOrderId
+            ? await assertNotOverpaid(
+                tx,
+                actor,
+                input.purchaseOrderId,
+                amountMinor,
+                input.confirmOverpayment,
+              )
+            : false;
         const treasury = await branchTreasury(tx, input.branchId);
         await lockAccounts(tx, [treasury.id]);
         assertTreasuryCounted(treasury);
@@ -181,6 +213,8 @@ export class CashPayoutsService {
           amount: decimal(amountMinor),
           branchId: input.branchId,
           source: 'treasury',
+          ...(limitExceeded ? { limitExceeded: true, ownerOverride: true } : {}),
+          ...(overpaid ? { overpaymentConfirmed: true } : {}),
         });
         return disbursementId;
       });

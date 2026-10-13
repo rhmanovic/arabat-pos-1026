@@ -6,7 +6,7 @@ not yet re-verified by the audit), **Tested** (fixed and covered by automated te
 **Deferred** (outside the current retail scope or waiting for an owner decision). Update this file
 in the same session as the code.
 
-Last update: 2026-10-13 (remediation session 2). Totals: Deferred 49, Fixed 2, In Progress 1, Open 122, Tested 6.
+Last update: 2026-10-13 (remediation session 3). Totals: Deferred 49, Fixed 4, In Progress 2, Open 115, Tested 10.
 
 | Id | Finding | Severity | Ch. | Package | Status | Note |
 |---|---|---|---|---|---|---|
@@ -17,11 +17,11 @@ Last update: 2026-10-13 (remediation session 2). Totals: Deferred 49, Fixed 2, I
 | FND-207 | Switching off stock tracking (or changing goods to service) hides existing balances from valuation without a movement | High | B | R2.5 | Open |  |
 | FND-406 | Bank account balances are never reconciled; deposits are credited on the depositor's word | High | D | R1.3 | Open |  |
 | FND-407 | Cash out "correction" / "other" removes cash from custody with no destination and no approval | High | D | R1.1 | Tested | Session 2: corrections bound to a movement; "other" cash-outs capped and pending above the limit (`shifts.int.test.ts`, `app.test.tsx`) |
-| FND-408 | Disbursements have no limits, no approval and no link to what is owed | High | D | R1.2 | Open |  |
+| FND-408 | Disbursements have no limits, no approval and no link to what is owed | High | D | R1.2 | Tested | Session 3: approval limits per company, pending till movements and treasury payout requests with a second custody holder, owner override audited (`cash-payouts.int.test.ts`, `shifts.int.test.ts`) |
 | FND-501 | Gateway refunds can never be confirmed; stock is restocked while revenue stays unreduced | High | E | R7.2 | Open |  |
 | FND-512 | Inventory valuation is only available "as of now"; no closing stock at period end | High | E | R2.6 | Open |  |
 | FND-601 | No supplier invoice and no three-way match; delivery price cannot differ from the order | High | F | R6.1 | Deferred | Supplier invoices and payables deferred (D5) |
-| FND-602 | Supplier payments are unbounded and unmatched: overpayment, duplicate and prepayment risk | High | F | R1.2, R6.2 | Open |  |
+| FND-602 | Supplier payments are unbounded and unmatched: overpayment, duplicate and prepayment risk | High | F | R1.2, R6.2 | Tested | Session 3: payment above the order value refused unless the owner confirms; paid to date on the order; payables themselves deferred (D5) |
 | FND-603 | Transfer discrepancy write-off is self-approved and never posted | High | F | R2.3 | Open |  |
 | FND-604 | Stock in transit is not valued, not aged and cannot be recalled | High | F | R2.4 | Open |  |
 | FND-702 | Gateway refunds can never complete inside the system | High | G | R7.2 | Deferred | Online store: R7 only after a gateway is approved (D7) |
@@ -57,10 +57,10 @@ Last update: 2026-10-13 (remediation session 2). Totals: Deferred 49, Fixed 2, I
 | FND-401 | Closing is not blind | Medium | D | R1.5 | Tested | Session 1: blind counts by default (`shifts.int.test.ts`, `app.test.tsx`, `checkout.spec.ts`) |
 | FND-402 | No explanation required for a closing shortage of any size | Medium | D | R1.1 | Tested | Session 2: note required on a visible closing difference beyond the tolerance |
 | FND-403 | Tolerance is unlimited, set by the monitoring manager, and silently reclassifies differences as "balanced" | Medium | D | R1.1 | Tested | Session 2: owner-set maximum tolerance enforced on register save; checklist lists registers above it |
-| FND-404 | No follow-up or settlement process for shift and count differences | Medium | D | R1.4 | Open |  |
+| FND-404 | No follow-up or settlement process for shift and count differences | Medium | D | R1.4 | Tested | Session 3: follow-up of every recorded difference (explained / settled / written off), audited, counted on the dashboard (`cash-variances.int.test.ts`) |
 | FND-405 | Opening balances by count are created without source, note or second person | Medium | D | — | Open |  |
 | FND-409 | Book balances of a drawer can change under a cashier without their count or a movement on their shift | Medium | D | — | Open |  |
-| FND-410 | Differences on branch transfers are absorbed by the company without an accountable party | Medium | D | R1.4 | Open |  |
+| FND-410 | Differences on branch transfers are absorbed by the company without an accountable party | Medium | D | R1.4 | Fixed | Session 3: branch-transfer differences listed with the receiver as accountable and followed up; not yet charged to a branch automatically |
 | FND-411 | Period cut-off is inconsistent across lists and reports, and statements have no period | Medium | D | R4.1 | Open |  |
 | FND-413 | Processing fees are configured estimates, not settled amounts, and are not reconciled to the acquirer | Medium | D | R1.3 | Open |  |
 | FND-416 | Weak segregation of duties around the register | Medium | D | R1.6 | In Progress | Session 2: approvals above the limit need a second person; custody split (FND-422) still open |
@@ -74,7 +74,7 @@ Last update: 2026-10-13 (remediation session 2). Totals: Deferred 49, Fixed 2, I
 | FND-511 | Three different date bases for refunds and no period-based refund register | Medium | E | R4.1 | Open |  |
 | FND-513 | One item without a cost hides gross profit for the whole period | Medium | E | R4.3 | Open |  |
 | FND-521 | Refunding an online order requires a POS session with an open shift at the branch | Medium | E | R7.3 | Open |  |
-| FND-525 | No supplier balances or payables view; purchases received and supplier payments live in different reports | Medium | E | R4.5, R6.2 | Open |  |
+| FND-525 | No supplier balances or payables view; purchases received and supplier payments live in different reports | Medium | E | R4.5, R6.2 | In Progress | Session 3: paid to date per order; supplier statement (R4.5) still open |
 | FND-605 | No segregation of duties on transfers | Medium | F | — | Open |  |
 | FND-606 | Only approval is segregated on purchase orders; creator or approver may receive | Medium | F | — | Open |  |
 | FND-607 | Receiving dialogs prefill the full expected quantity (no blind receiving) | Medium | F | — | Open |  |
@@ -138,8 +138,8 @@ Last update: 2026-10-13 (remediation session 2). Totals: Deferred 49, Fixed 2, I
 | FND-417 | Treasury of a deactivated branch keeps cash with no restriction | Low | D | — | Open |  |
 | FND-418 | Management counts have no denomination breakdown in the screen | Low | D | R1.5 | Open |  |
 | FND-419 | Manager cash moves during a shift need no cashier acknowledgement | Low | D | R1.1 | Open |  |
-| FND-420 | Expense evidence is a free-text reference; categories are fixed | Low | D | R1.2 | Open |  |
-| FND-421 | Idle-drawer count adjustments carry a generated reference, not a document | Low | D | R1.4 | Open |  |
+| FND-420 | Expense evidence is a free-text reference; categories are fixed | Low | D | R1.2 | Tested | Session 3: receipt / invoice reference mandatory above the approval limit; categories still fixed |
+| FND-421 | Idle-drawer count adjustments carry a generated reference, not a document | Low | D | R1.4 | Fixed | Session 3: idle-drawer and treasury count differences appear in the follow-up list with the counter; still no document number |
 | FND-506 | Pay-backs to a tender without a financial account leave no money trace | Low | E | R3.5 | Open |  |
 | FND-509 | A pending request is bound to the requester's shift; once that shift closes it can only be rejected | Low | E | R3.4 | Open |  |
 | FND-510 | Withdrawal of a pending request is documented but not offered on any screen | Low | E | — | Open |  |

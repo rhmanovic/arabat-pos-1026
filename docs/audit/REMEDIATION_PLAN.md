@@ -64,7 +64,7 @@ not a commitment).
   shown as their own line in the shift detail, the shift report and the discrepancy report.
 - Depends on: nothing. Decision: D2 (cap value).
 
-### R1.2 Approval of expenses and supplier payments — **M**
+### R1.2 Approval of expenses and supplier payments — **M** — *done in session 3*
 - Closes: FND-408, FND-602 (payment side), FND-420
 - Build: per-merchant thresholds (defaults D2: expenses KWD 20, supplier payments KWD 100) editable by the owner; above the threshold a disbursement is created as *pending*
   (no cash leaves) and must be approved by a different person with the approve right before it
@@ -83,7 +83,7 @@ not a commitment).
   be deactivated.
 - Depends on: nothing. Decision: none.
 
-### R1.4 Variance follow-up — **S/M**
+### R1.4 Variance follow-up — **S/M** — *done in session 3*
 - Closes: FND-404, FND-410, FND-421
 - Build: every count difference (shift close, between shifts, treasury, idle register, branch cash
   transfer) gets a status *open → explained → settled / written off*, an owner-visible note, the
@@ -319,8 +319,8 @@ records without money.
 |---|---|---|
 | 1 | R1.0 audit log, R1.5 blind counts, R7.5 test-gateway guard | **Done 2026-10-13** |
 | 2 | R1.1 cash-out corrections and limits, R1.6 custody roles and set-up checklist | **Done 2026-10-13** |
-| 3 | R1.2 disbursement approvals (per-merchant thresholds, owner override), R1.4 variance follow-up | Next |
-| 4 | R1.3 deposits in transit and bank reconciliation | |
+| 3 | R1.2 disbursement approvals (per-merchant thresholds, owner override), R1.4 variance follow-up | **Done 2026-10-13** |
+| 4 | R1.3 deposits in transit and bank reconciliation | Next |
 | 5 | R2.1 adjustment approvals, R2.2 blind counts with sign-off, R2.5 master-data guards | |
 | 6 | R2.3 transfer losses, R2.4 in-transit location | |
 | 7 | R2.6 valuation as at date, R2.7 cost edge cases, R2.8 damaged returns | |

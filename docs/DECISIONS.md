@@ -902,3 +902,32 @@ ADR; supersede it.
   FND-422) and the cashier acknowledgement of manager cash moves (FND-419) stay open. Variance
   follow-up (R1.4) and disbursement approvals (R1.2) reuse the pending/decision pattern.
 
+## ADR-0095 — Remediation session 3: disbursement approvals, payout requests, variance follow-up
+- **Date:** 2026-10-13 · **Status:** Accepted (owner decision D2 on the remediation plan)
+- **Context:** Phase 1 found expenses and supplier payments with no limit, approver or link to
+  what is owed (FND-408, FND-602, FND-420) and cash differences with no follow-up or settlement
+  (FND-404, FND-410, FND-421).
+- **Decision:**
+  - Approval limits per company on `sales_settings` (`expense_approval_limit_minor`,
+    `supplier_payment_approval_limit_minor`), owner-editable with the owner's defaults.
+  - At the till the existing pending-movement pattern (ADR-0094) carries expenses and supplier
+    payments above the limit; `cash_movements` keeps `expense_category`, `supplier_id` and
+    `receipt_reference` so approval posts the real disbursement.
+  - From a treasury, `POST /manager/cash/disbursements` answers `APPROVAL_REQUIRED` for a
+    non-owner above the limit; `cash_payout_requests` (migration 0038) holds the request until
+    another custody holder decides it (`…/payout-requests/:id/decision`, approver ≠ requester,
+    owner excepted and flagged); approval calls the ordinary `postDisbursement`. Requests never
+    touch the ledger; a trigger lets a pending row change once, into a final state, and an
+    approved row must point at its disbursement.
+  - Overpayment guard: `ORDER_OVERPAID` when paid-to-date plus the payment exceeds the order's
+    value (Σ quantity × unit cost, net of reversals); the owner may pass `confirmOverpayment`
+    (audited). Purchase orders expose `paidToDate` (read-only cross-module SQL, ADR-0083).
+  - `variance_followups` annotates differences that stay in their source documents; the list
+    `GET /manager/cash/variances` is a union over shifts (close and opening), count entries and
+    branch transfers, joined to the follow-up; `explained` needs `shifts.view_all`, `settled` /
+    `written_off` need `cash.custody`; follow-ups may be revised (audited) but never deleted.
+  - The pure limit helpers live in `cash/approval-limits.ts` so the registers and cash modules
+    share them without a module cycle.
+- **Consequences:** Deposits in transit and bank reconciliation (R1.3) follow; the dashboard
+  checklist now counts pending payout requests and open variances.
+

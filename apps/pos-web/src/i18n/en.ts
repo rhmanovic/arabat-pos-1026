@@ -293,6 +293,8 @@ export const posEn = {
     supplier: 'Supplier',
     bankAccount: 'Bank account',
     receiptReference: 'Receipt / invoice number (optional)',
+    receiptReferenceRequired: 'Receipt / invoice number',
+    receiptNeeded: 'Above the approval limit the receipt or invoice number is required.',
     description: 'Description',
     choose: 'Choose…',
     category_supplies: 'Supplies',
@@ -313,9 +315,9 @@ export const posEn = {
     movementHint_correction:
       'Reverses part or all of an earlier "other" movement of this shift. Drops, top-ups, deposits and payments are reversed with their own opposite record.',
     corrects: 'Movement to correct',
-    limitHint: 'Cash out "other" above {{amount}} needs a manager’s approval.',
+    limitHint: 'Above {{amount}} this payment needs a manager’s approval.',
     aboveLimit:
-      'Above {{amount}}: this cash-out will wait for a manager’s approval. Do not hand out the cash before it is approved.',
+      'Above {{amount}}: this payment will wait for a manager’s approval. Do not hand out the cash before it is approved.',
     sentForApproval:
       'Sent to a manager for approval. The cash stays in the drawer until it is approved.',
     status_pending: 'Awaiting approval',

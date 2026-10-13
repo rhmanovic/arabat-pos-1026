@@ -403,6 +403,22 @@ disbursement approvals with per-merchant thresholds and owner override (R1.2), v
 follow-up (R1.4), deposits in transit and bank reconciliation (R1.3), custody-right split
 (FND-422), cashier acknowledgement of manager cash moves (FND-419).
 
+### 2026-10-13 — Remediation session 3 (R1.2 disbursement approvals, R1.4 variance follow-up)
+Implemented (ADR-0095, BR-166, BR-167):
+- **Approval limits** for expenses and supplier payments (owner-set, defaults 20.000 / 100.000
+  KWD) with a mandatory receipt reference above them. At the till the payment waits as a pending
+  movement with its category, supplier and reference; from a treasury it becomes a **payout
+  request** decided by another custody holder (approve pays then, reject needs a reason,
+  withdraw by the requester); the owner pays directly with an audited override.
+- **Overpayment guard** on supplier payments naming a purchase order, owner-confirmable;
+  purchase orders show **paid to date** net of reversals.
+- **Follow-up of cash differences**: a Shifts tab lists shift-close, between-shift, count and
+  branch-transfer differences with the accountable person; explained / settled / written off
+  with a note, audited; dashboard checklist counts pending payout requests and open differences.
+Verified: see `TESTING.md` (results after remediation session 3). Not done (next sessions):
+deposits in transit and bank reconciliation (R1.3), custody-right split (FND-422), approval
+of stock adjustments (R2.1).
+
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025
 before any production launch.

@@ -211,6 +211,10 @@ export const cashMovements = pgTable(
     decidedByUserId: uuid().references(() => users.id),
     decidedAt: timestamp({ withTimezone: true }),
     decisionNote: text(),
+    /** Expense / supplier payment details kept while the movement waits for approval (BR-166). */
+    expenseCategory: text(),
+    supplierId: uuid(),
+    receiptReference: text(),
   },
   (t) => [
     foreignKey({

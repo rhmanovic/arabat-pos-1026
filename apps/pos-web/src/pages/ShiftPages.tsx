@@ -647,18 +647,27 @@ function MovementDialog({ kind, onClose }: { kind: 'cash_in' | 'cash_out'; onClo
     reason === 'other' ||
     reason === 'correction' ||
     (reason === 'petty_expense' && category === 'other');
-  const limitMinor = policy.data ? minor(policy.data.cashOutOtherLimit.amount) : null;
-  const aboveLimit =
-    kind === 'cash_out' &&
-    reason === 'other' &&
-    amountMinor !== null &&
-    limitMinor !== null &&
-    amountMinor > limitMinor;
+  const limitFor = (r: string) =>
+    !policy.data
+      ? null
+      : r === 'other'
+        ? policy.data.cashOutOtherLimit
+        : r === 'petty_expense'
+          ? policy.data.expenseApprovalLimit
+          : r === 'supplier_payment'
+            ? policy.data.supplierPaymentApprovalLimit
+            : null;
+  const limit = kind === 'cash_out' ? limitFor(reason) : null;
+  const limitMinor = limit ? minor(limit.amount) : null;
+  const aboveLimit = amountMinor !== null && limitMinor !== null && amountMinor > limitMinor;
+  // Above the approval limit a disbursement must carry its receipt or invoice reference.
+  const receiptRequired = aboveLimit && reason !== 'other';
   const valid =
     amountMinor !== null &&
     amountMinor > 0n &&
     (!needsNote || Boolean(note.trim())) &&
     (reason !== 'correction' || Boolean(corrects)) &&
+    (!receiptRequired || Boolean(receipt.trim())) &&
     (reason !== 'petty_expense' || Boolean(category)) &&
     (reason !== 'supplier_payment' || Boolean(supplierId)) &&
     (reason !== 'bank_deposit' || Boolean(bankAccountId));
@@ -744,12 +753,10 @@ function MovementDialog({ kind, onClose }: { kind: 'cash_in' | 'cash_out'; onClo
             {t(`shift.movementHint_${reason}`)}
           </p>
         ) : null}
-        {kind === 'cash_out' && reason === 'other' && policy.data ? (
+        {limit ? (
           <Alert tone={aboveLimit ? 'warning' : 'info'}>
             <span data-testid="cash-out-limit">
-              {t(aboveLimit ? 'shift.aboveLimit' : 'shift.limitHint', {
-                amount: fmt(policy.data.cashOutOtherLimit),
-              })}
+              {t(aboveLimit ? 'shift.aboveLimit' : 'shift.limitHint', { amount: fmt(limit) })}
             </span>
           </Alert>
         ) : null}
@@ -815,7 +822,12 @@ function MovementDialog({ kind, onClose }: { kind: 'cash_in' | 'cash_out'; onClo
           </Field>
         ) : null}
         {reason === 'petty_expense' || reason === 'supplier_payment' ? (
-          <Field label={t('shift.receiptReference')}>
+          <Field
+            label={
+              receiptRequired ? t('shift.receiptReferenceRequired') : t('shift.receiptReference')
+            }
+            error={receiptRequired && !receipt.trim() ? t('shift.receiptNeeded') : undefined}
+          >
             {(p) => (
               <Input
                 {...p}

@@ -85,6 +85,8 @@ export const purchaseOrderSchema = z.object({
   note: z.string().nullable(),
   total: moneySchema,
   receivedValue: moneySchema,
+  /** Supplier payments recorded against this order, net of reversals (BR-166). */
+  paidToDate: moneySchema,
   createdBy: z.string(),
   approvedBy: z.string().nullable(),
   closeReason: z.string().nullable(),

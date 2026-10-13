@@ -266,6 +266,24 @@ Remediation session 2 (2026-10-13, owner decisions D2 and D3):
   the owner, active employees without any role, registers above the tolerance maximum, and
   cash-outs awaiting approval.
 
+Remediation session 3 (2026-10-13, owner decision D2):
+- **BR-166** Disbursement approvals. An expense above the company's expense limit, or a supplier
+  payment above the supplier-payment limit (owner-set in the selling policy; defaults 20.000 and
+  100.000 KWD), must carry a receipt or invoice reference and waits for a second person: at the
+  till it is a pending drawer movement decided by a holder of `shifts.view_all`; from a treasury
+  it is a **payout request** decided by another holder of `cash.custody` at the branch, and the
+  disbursement is created only on approval. Nobody decides their own request; rejecting needs a
+  reason; the requester may withdraw. The owner pays directly and the exception is recorded. A
+  supplier payment that names a purchase order may not take the order's payments beyond its
+  value unless the owner confirms the overpayment on purpose (audited); the order shows its
+  **paid to date** net of reversals.
+- **BR-167** Follow-up of cash differences. Every recorded difference — a shift closed beyond
+  its tolerance, an opening difference between shifts, a count of a drawer or treasury, a branch
+  transfer received short or over — is listed from its source document with the accountable
+  person, until management records a follow-up: *explained* (anyone who monitors shifts),
+  *settled* or *written off* (cash custody at the branch). Follow-ups are audited; the dashboard
+  counts the differences still open.
+
 Platform and subscriptions (Prompt 17):
 - **BR-150** Every merchant has exactly one subscription to a plan. New merchants start on
   the default plan (trial when the plan has trial days). Plans can be archived, never

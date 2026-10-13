@@ -48,6 +48,8 @@ async function changeSettings(c: Co, blindCashCount: boolean) {
       cashOutOtherLimit: current.cashOutOtherLimit.amount,
       cashOutOtherShiftLimit: current.cashOutOtherShiftLimit.amount,
       maxRegisterTolerance: current.maxRegisterTolerance.amount,
+      expenseApprovalLimit: current.expenseApprovalLimit.amount,
+      supplierPaymentApprovalLimit: current.supplierPaymentApprovalLimit.amount,
       version: current.version,
     },
   });

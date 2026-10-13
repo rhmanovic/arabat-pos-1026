@@ -104,6 +104,8 @@ describe('internal controls checklist', () => {
             cashOutOtherLimit: settings.cashOutOtherLimit.amount,
             cashOutOtherShiftLimit: settings.cashOutOtherShiftLimit.amount,
             maxRegisterTolerance: '0.250',
+            expenseApprovalLimit: settings.expenseApprovalLimit.amount,
+            supplierPaymentApprovalLimit: settings.supplierPaymentApprovalLimit.amount,
             version: settings.version,
           },
         })

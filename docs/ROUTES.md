@@ -34,7 +34,7 @@ the permission.
 | `/payments` | Payment methods and internal balances | `payments.settings` |
 | `/cash` | Cash custody: treasury and register balances per branch, counts, statements, transfers, expenses and supplier payments, bank deposits, transfers between branches | `cash.custody` (deposits: `cash.deposit`) |
 | `/registers` | Registers | `registers.manage` |
-| `/shifts`, `/shifts/:shiftId` | Shift history, X/Z summary | `shifts.view_all` |
+| `/shifts`, `/shifts/:shiftId` | Shift history, X/Z summary, cash discrepancies, follow-up of differences; pending cash-out decisions | `shifts.view_all` |
 | `/branches` | Branches | `branches.read` |
 | `/employees`, `/employees/:membershipId` | Employees, invitations, role assignments | `employees.read` |
 | `/roles` | Roles and permissions | `employees.read` |
@@ -157,6 +157,8 @@ per-branch breakdown, settings dialog), `/manager/inventory/adjustments`,
 | `POST /manager/shifts/:id/movements/:movementId/decision` | `shifts.view_all` at the branch; approver ≠ requester (owner excepted, flagged; ADR-0094) |
 | `POST /pos/shifts/current/cash-movements/:movementId/withdraw` | POS `cash.move` (own open shift) |
 | `GET /manager/merchant/controls` | `merchant.settings.read` (internal-control checklist, BR-165) |
+| `GET /manager/cash/payout-requests?branchId=&status=`, `POST /manager/cash/payout-requests`, `POST …/:id/decision`, `POST …/:id/withdraw` | `cash.custody` at the branch; decision by someone other than the requester (owner excepted, flagged; ADR-0095) |
+| `GET /manager/cash/variances?branchId=&status=&from=&to=`, `POST /manager/cash/variances/:sourceType/:sourceId/followup` | `shifts.view_all` (branch-scoped); settled / written off need `cash.custody` (BR-167) |
 | `POST /pos/shifts/current/cash-movements` | POS `cash.move` (own open shift) |
 
 Screens: `/manager/payments` (methods + internal balances, fee preview),

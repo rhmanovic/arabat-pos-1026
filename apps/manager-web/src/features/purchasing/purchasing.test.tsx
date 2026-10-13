@@ -64,6 +64,7 @@ const order = (overrides: Record<string, unknown> = {}) => ({
   note: null,
   total: money('37.500'),
   receivedValue: money('0.000'),
+  paidToDate: money('0.000'),
   createdBy: 'Rana',
   approvedBy: 'Owner',
   closeReason: null,

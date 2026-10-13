@@ -402,3 +402,96 @@ export const cashDisbursements = pgTable(
     index('cash_disbursements_supplier_idx').on(t.merchantId, t.supplierId, t.createdAt),
   ],
 );
+
+/**
+ * A treasury expense or supplier payment above the company's approval limit (BR-166): it waits
+ * here, untouched by the ledger, until a second custody holder approves it; approval creates the
+ * real disbursement. Pending rows change once, into a final state.
+ */
+export const cashPayoutRequests = pgTable(
+  'cash_payout_requests',
+  {
+    id: id(),
+    merchantId: merchantId(),
+    branchId: uuid().notNull(),
+    /** expense | supplier_payment */
+    kind: text().notNull(),
+    category: text(),
+    supplierId: uuid(),
+    purchaseOrderId: uuid(),
+    amountMinor: bigint({ mode: 'bigint' }).notNull(),
+    description: text(),
+    receiptReference: text(),
+    /** pending | approved | rejected | withdrawn */
+    status: text().notNull().default('pending'),
+    requestedByUserId: uuid()
+      .notNull()
+      .references(() => users.id),
+    decidedByUserId: uuid().references(() => users.id),
+    decidedAt: timestamp({ withTimezone: true }),
+    decisionNote: text(),
+    /** The disbursement created on approval. */
+    disbursementId: uuid(),
+    idempotencyKey: uuid(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('cash_payout_requests_idempotency_key').on(t.merchantId, t.idempotencyKey),
+    foreignKey({
+      columns: [t.merchantId, t.branchId],
+      foreignColumns: [branches.merchantId, branches.id],
+    }),
+    foreignKey({
+      columns: [t.merchantId, t.supplierId],
+      foreignColumns: [suppliers.merchantId, suppliers.id],
+    }),
+    foreignKey({
+      columns: [t.merchantId, t.disbursementId],
+      foreignColumns: [cashDisbursements.merchantId, cashDisbursements.id],
+    }),
+    check('cash_payout_requests_kind_valid', sql`${t.kind} in ('expense', 'supplier_payment')`),
+    check(
+      'cash_payout_requests_status_valid',
+      sql`${t.status} in ('pending', 'approved', 'rejected', 'withdrawn')`,
+    ),
+    check('cash_payout_requests_amount_positive', sql`${t.amountMinor} > 0`),
+    index('cash_payout_requests_branch_idx').on(t.merchantId, t.branchId, t.status),
+  ],
+);
+
+/**
+ * Management follow-up of a cash difference (BR-167, remediation R1.4): a shift closing or
+ * opening difference, a count difference on a drawer or treasury, or a branch transfer
+ * difference. The difference itself lives in its source document; this row records what was
+ * decided about it. One row per difference.
+ */
+export const varianceFollowups = pgTable(
+  'variance_followups',
+  {
+    id: id(),
+    merchantId: merchantId(),
+    /** shift_close | shift_opening | account_count | branch_transfer */
+    sourceType: text().notNull(),
+    sourceId: uuid().notNull(),
+    /** explained | settled | written_off */
+    status: text().notNull(),
+    note: text().notNull(),
+    resolvedByUserId: uuid()
+      .notNull()
+      .references(() => users.id),
+    resolvedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    unique('variance_followups_source_key').on(t.merchantId, t.sourceType, t.sourceId),
+    check(
+      'variance_followups_source_valid',
+      sql`${t.sourceType} in ('shift_close', 'shift_opening', 'account_count', 'branch_transfer')`,
+    ),
+    check(
+      'variance_followups_status_valid',
+      sql`${t.status} in ('explained', 'settled', 'written_off')`,
+    ),
+  ],
+);
