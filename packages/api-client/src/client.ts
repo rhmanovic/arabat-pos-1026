@@ -180,6 +180,9 @@ import {
   purchasingReportSchema,
   salesReportSchema,
   todaySummarySchema,
+  periodListSchema,
+  periodPackSchema,
+  type ClosePeriod,
   type ReportExport,
   shiftsReportSchema,
   expensesReportSchema,
@@ -1043,6 +1046,13 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('GET', `/manager/reports/purchasing?${toParams(query)}`, {
           schema: purchasingReportSchema,
         }),
+    },
+    periods: {
+      list: () => request('GET', '/manager/periods', { schema: periodListSchema }),
+      get: (period: string) =>
+        request('GET', `/manager/periods/${period}`, { schema: periodPackSchema }),
+      close: (period: string, body: ClosePeriod) =>
+        request('POST', `/manager/periods/${period}/close`, { body, schema: periodPackSchema }),
     },
     customers: {
       list: (query: CustomerListQuery = {}) =>

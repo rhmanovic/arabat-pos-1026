@@ -440,6 +440,22 @@ Remediation session 3 (2026-10-13, owner decision D2):
   date order with the running "received − paid" (positive = still owed to the supplier),
   with a period and the balance brought forward; limited to the branches the viewer may
   read purchasing for.
+- **BR-189** Period close (R4.2). A calendar month of the merchant's time zone is closed once,
+  in order (the registration month first, then each following month), only after it has
+  ended, by a holder of `periods.close` who also holds every report right company-wide. The
+  close stores the month-end pack as computed at that moment (net sales, discounts, refunds,
+  gross profit with the uncosted share, collections and fees by tender, unreferenced tenders,
+  cash by place at month end, closing stock value, refunds owed, open items, supplier balance,
+  document counts) and is audited (`period.closed`). A closed month is never reopened or
+  edited; it accepts no document dated inside it (`PERIOD_CLOSED`). An open month shows the
+  same pack computed live. Reading packs needs `reports.financial`.
+- **BR-190** Document dates (R4.2, FND-619). Purchase orders carry a document date and
+  deliveries a delivery date, set at entry to today in the merchant's zone unless the user
+  gives a date at most 7 days back and never ahead; a backdated date is written to the audit
+  entry. The posting time stays the ledger time and the basis of the stock and purchasing
+  reports; the business date is what the period lock checks. Sales, refunds, cash and stock
+  movements are stamped at posting and cannot be backdated, so the lock does not apply to
+  them.
 
 Platform and subscriptions (Prompt 17):
 - **BR-150** Every merchant has exactly one subscription to a plan. New merchants start on

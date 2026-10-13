@@ -323,6 +323,13 @@
       "when": 1791886079458,
       "tag": "0045_period_cutoff_dashboard",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1791887979894,
+      "tag": "0046_period_close",
+      "breakpoints": true
     }
   ]
 }

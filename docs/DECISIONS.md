@@ -1202,3 +1202,28 @@ ADR; supersede it.
   shows `grossProfit 0.000` with `marginPercent null` instead of nulls everywhere, and the
   refunds list carries `totals`.
 
+## ADR-0103 — Remediation session 11: period close pack and the lock on document dates
+- **Status:** Accepted (2026-10-13). Remediation plan R4.2 (BP-525, FND-619).
+- **Context:** An external accountant could not close a month from the reports alone and nothing
+  stopped a late delivery or order from landing in a month already reported (BP-525, FND-619).
+- **Decision:**
+  - `period_closes` (migration 0046): one row per merchant and month ('YYYY-MM'), with the local
+    day bounds, the time zone, the closer, an optional note and the pack as JSONB; RLS; no
+    update or delete for the application role (a close is final, BR-189).
+  - `PeriodsService` (`apps/api/src/modules/periods`): `list` (months since registration with
+    status closed / closable / open / current), `get` (stored pack or live preview), `close`
+    (sequential, ended months only, `PERIOD_NOT_CLOSABLE` otherwise, audited `period.closed`).
+    The pack is assembled from `ReportsService.sales / payments / inventory` for the month plus
+    direct ledger queries (cash by place as at the cut-off, refunds owed, open items, supplier
+    received − paid, document counts). Reading needs `reports.financial`; closing the new
+    merchant-scoped permission `periods.close` (owner implicit, Company Manager template) and
+    every report right company-wide, so a pack is never partial.
+  - `assertPeriodOpen(tx, merchantId, date)` is the lock; `purchase_orders.document_date` and
+    `purchase_receipts.received_on` (BR-190, defaulted and bounded in `businessDate`) are the
+    dates it checks. Posting times stay the ledger times.
+  - Manager: `/periods` page (list, pack, close dialog with a warning and a note); purchase
+    order form and receive dialog take the business dates.
+- **Consequences:** FND-619 closes; BP-525's gap (no period lock or sign-off) closes for the
+  retail scope. Not built: reopening a month (by design), server-rendered pack export (the
+  page is the pack), business dates on other document types (they are posted at entry).
+

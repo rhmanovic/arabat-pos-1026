@@ -18,11 +18,13 @@ import { assertCan } from '../../kernel/access/assert.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
+import { addDays, merchantTimezone, todayIn } from '../../kernel/time/period.js';
 import { AuditService } from '../audit/audit.service.js';
 import { isUniqueViolation } from '../auth/registration.service.js';
 import { versionConflict } from '../branches/branches.service.js';
 import { StockLedgerService } from '../inventory/stock-ledger.service.js';
 import { parseAmount } from '../payments/payments.service.js';
+import { assertPeriodOpen } from '../periods/periods.service.js';
 import {
   purchaseOrderLines,
   purchaseOrders,
@@ -239,6 +241,12 @@ export class PurchasingService {
         lines.map((l) => l.variantId),
       );
       const number = await nextDocumentNumber(tx, actor.merchantId, 'purchase_order', 'PO');
+      const documentDate = await businessDate(
+        tx,
+        actor.merchantId,
+        input.documentDate,
+        'documentDate',
+      );
       await tx.insert(purchaseOrders).values({
         id,
         merchantId: actor.merchantId,
@@ -246,11 +254,15 @@ export class PurchasingService {
         supplierId: input.supplierId,
         branchId: input.branchId,
         expectedDate: input.expectedDate,
+        documentDate: documentDate.date,
         note: input.note,
         createdByUserId: actor.userId,
       });
       await this.insertLines(tx, actor.merchantId, id, lines);
-      await this.record(tx, actor, 'purchase_order.created', 'purchase_order', id, ip, { number });
+      await this.record(tx, actor, 'purchase_order.created', 'purchase_order', id, ip, {
+        number,
+        ...(documentDate.backdated ? { documentDate: documentDate.date } : {}),
+      });
     });
     return this.getOrder(actor, id);
   }
@@ -275,18 +287,25 @@ export class PurchasingService {
       );
       await tx.delete(purchaseOrderLines).where(eq(purchaseOrderLines.purchaseOrderId, id));
       await this.insertLines(tx, actor.merchantId, id, lines);
+      const documentDate =
+        input.documentDate === undefined
+          ? null
+          : await businessDate(tx, actor.merchantId, input.documentDate, 'documentDate');
       await tx
         .update(purchaseOrders)
         .set({
           supplierId: input.supplierId,
           branchId: input.branchId,
           expectedDate: input.expectedDate,
+          ...(documentDate ? { documentDate: documentDate.date } : {}),
           note: input.note,
           version: sql`${purchaseOrders.version} + 1`,
           updatedAt: sql`now()`,
         })
         .where(eq(purchaseOrders.id, id));
-      await this.record(tx, actor, 'purchase_order.updated', 'purchase_order', id, ip);
+      await this.record(tx, actor, 'purchase_order.updated', 'purchase_order', id, ip, {
+        ...(documentDate?.backdated ? { documentDate: documentDate.date } : {}),
+      });
     });
     return this.getOrder(actor, id);
   }
@@ -415,6 +434,8 @@ export class PurchasingService {
           ]);
         const receiptId = newId();
         const number = await nextDocumentNumber(tx, actor.merchantId, 'purchase_receipt', 'GR');
+        // Delivery date (BR-190): a few days back at most, never inside a closed month.
+        const receivedOn = await businessDate(tx, actor.merchantId, input.receivedOn, 'receivedOn');
         await tx.insert(purchaseReceipts).values({
           id: receiptId,
           merchantId: actor.merchantId,
@@ -423,6 +444,7 @@ export class PurchasingService {
           branchId: order.branchId,
           note: input.note,
           supplierReference: input.supplierReference,
+          receivedOn: receivedOn.date,
           idempotencyKey: input.idempotencyKey,
           requestHash: hash,
           receivedByUserId: actor.userId,
@@ -468,6 +490,7 @@ export class PurchasingService {
           .where(eq(purchaseOrders.id, id));
         await this.record(tx, actor, 'purchase_order.received', 'purchase_order', id, ip, {
           receipt: number,
+          ...(receivedOn.backdated ? { receivedOn: receivedOn.date } : {}),
           lines: lines.map((l) => ({
             position: l.position,
             quantity: formatQuantity(l.quantityMilli),
@@ -594,7 +617,7 @@ export class PurchasingService {
     const byPos = new Map(info.map((r) => [r['position'] as number, r]));
     const receipts = (
       await tx.execute(sql`
-        select r.id, r.number, r.created_at, r.supplier_reference, r.note, u.full_name
+        select r.id, r.number, r.created_at, r.received_on, r.supplier_reference, r.note, u.full_name
         from purchase_receipts r join users u on u.id = r.received_by_user_id
         where r.purchase_order_id = ${id} order by r.created_at, r.id`)
     ).rows as Record<string, unknown>[];
@@ -644,6 +667,7 @@ export class PurchasingService {
       branchId: o['branch_id'] as string,
       status: o['status'] as PurchaseOrder['status'],
       expectedDate: o['expected_date'] ? String(o['expected_date']).slice(0, 10) : null,
+      documentDate: dateOnly(o['document_date']),
       note: (o['note'] as string | null) ?? null,
       total: money(total),
       receivedValue: money(received),
@@ -658,6 +682,7 @@ export class PurchasingService {
         number: r['number'] as string,
         receivedBy: r['full_name'] as string,
         createdAt: iso(r['created_at'])!,
+        receivedOn: dateOnly(r['received_on']),
         supplierReference: (r['supplier_reference'] as string | null) ?? null,
         note: (r['note'] as string | null) ?? null,
         lines: receiptLines
@@ -691,4 +716,32 @@ export class PurchasingService {
       details,
     });
   }
+}
+
+/** A `date` column as 'YYYY-MM-DD' whatever the driver returns. */
+function dateOnly(v: unknown): string {
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  return String(v ?? '').slice(0, 10);
+}
+
+/**
+ * Business date of a purchasing document (BR-190): today in the merchant's zone unless given;
+ * a given date may be at most 7 days back and never ahead; a date in a closed month is refused
+ * (BR-189). `backdated` tells the caller to put the date in the audit entry.
+ */
+async function businessDate(
+  tx: Transaction,
+  merchantId: string,
+  given: string | undefined,
+  path: string,
+): Promise<{ date: string; backdated: boolean }> {
+  const tz = await merchantTimezone(tx, merchantId);
+  const today = todayIn(tz);
+  const date = given ?? today;
+  if (date > today || date < addDays(today, -7))
+    throw AppError.validation([
+      { path, code: 'out_of_range', message: 'At most 7 days back and never in the future.' },
+    ]);
+  await assertPeriodOpen(tx, merchantId, date);
+  return { date, backdated: date !== today };
 }

@@ -166,6 +166,9 @@ export const commonEn = {
     ADJUSTMENT_DECIDED: 'This adjustment was already decided.',
     STOCK_MOVED_SINCE_COUNT:
       'Stock moved while you were counting. Review the movements and confirm the count.',
+    PERIOD_CLOSED: 'This date falls in a closed period. Closed periods accept no new documents.',
+    PERIOD_NOT_CLOSABLE:
+      'This month cannot be closed yet: it has not ended, or an earlier month is still open.',
     STOCK_ON_HAND:
       'This item still has stock on hand. Write it off or transfer it before archiving it or switching tracking off.',
     BRANCH_IN_USE:

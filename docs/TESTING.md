@@ -66,6 +66,29 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after remediation session 11 (2026-10-13, local run)
+
+`pnpm verify` green (180 unit/web tests, including the new `periods.test.tsx` (months listed
+with their status and the closer's note, the first non-current month's pack shown by default
+with net after refunds, margin, closing stock, the unreferenced-tender line, the collections
+table, open items and the supplier balance; the close dialog warns, takes a note and posts it,
+the list then shows the month closed and no further close button; no close button without
+`periods.close`)); `pnpm test:integration` 210 passed, including the three new cases in
+`periods.int.test.ts` (a company three months old with one sale rung up in the middle of last
+month: the list shows current / open / closable in order, the live pack of last month carries
+that sale, its cash collection and its gross profit while cash and stock as at month end are
+zero; closing last month before the one before it is refused, the current month is refused, the
+registration month closes with a note, then last month closes with the owner named and the
+stored pack is returned unchanged afterwards, a second close is refused, `period.closed` is
+audited twice, and the application role can neither delete nor update the row; a branch
+manager without financial reports gets no list, no pack and no close while a company manager
+closes; purchase orders default to today's business date, keep a date three days back and
+audit it, refuse a future date and ten days back, deliveries carry a delivery date and refuse a
+future one, and with the current month closed directly in the database both an order and a
+delivery are refused with `PERIOD_CLOSED` while a sale still posts); `pnpm test:e2e` 35 passed
+after migration 0046's backfill was made to pass over final orders (the `purchase_orders_final`
+trigger is disabled for that one statement; the first dev-database migration had failed on it).
+
 ### Results after remediation session 10 (2026-10-13, local run)
 
 `pnpm verify` green (178 unit/web tests, including the new manager cases in `reports.test.tsx`

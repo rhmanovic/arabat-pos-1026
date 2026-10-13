@@ -206,5 +206,6 @@ non-cash methods need a settlement account and card / transfer tenders a referen
 reprints and cleared carts are logged (ADR-0101). The discount limit is combined per line (D4).
 Periods are cut only through `apps/api/src/kernel/time/period.ts` in the merchant's single time zone (BR-184);
 refunds count on their completion day; report views and exports are audited; the supplier statement is
-received at order cost vs. cash paid (ADR-0102).
+received at order cost vs. cash paid (ADR-0102). Months close in order through `PeriodsService` with a stored
+pack; `assertPeriodOpen` refuses purchasing documents dated in a closed month (ADR-0103, BR-189/190).
 See `docs/PROGRESS.md` for the current state and `docs/ROADMAP.md` for next steps.

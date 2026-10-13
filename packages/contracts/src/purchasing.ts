@@ -82,6 +82,8 @@ export const purchaseOrderSchema = z.object({
   branchId: z.string(),
   status: z.enum(PO_STATUSES),
   expectedDate: z.string().nullable(),
+  /** Business date of the order (BR-190): the merchant's local day unless set, never in a closed period. */
+  documentDate: z.string().default(''),
   note: z.string().nullable(),
   total: moneySchema,
   receivedValue: moneySchema,
@@ -108,6 +110,8 @@ export const purchaseOrderSchema = z.object({
       number: z.string(),
       receivedBy: z.string(),
       createdAt: z.string(),
+      /** Delivery date (BR-190); the posting time stays `createdAt`. */
+      receivedOn: z.string().default(''),
       supplierReference: z.string().nullable(),
       note: z.string().nullable(),
       lines: z.array(z.object({ position: z.number().int(), quantity: z.string() })),
@@ -135,6 +139,8 @@ export const savePurchaseOrderSchema = z.object({
   supplierId: z.uuid(),
   branchId: z.uuid(),
   expectedDate: isoDate.nullish().transform((v) => v ?? null),
+  /** Omitted = today in the merchant's zone; at most 7 days back, never ahead (BR-190). */
+  documentDate: isoDate.optional(),
   note: text(1000),
   lines: z
     .array(z.object({ variantId: z.uuid(), quantity: quantitySchema, unitCost: moneyAmountSchema }))
@@ -151,6 +157,8 @@ export const purchaseOrderActionSchema = z.object({
 
 export const receivePurchaseSchema = z.object({
   idempotencyKey: z.uuid(),
+  /** Delivery date; omitted = today in the merchant's zone; at most 7 days back (BR-190). */
+  receivedOn: isoDate.optional(),
   supplierReference: text(80),
   note: text(500),
   lines: z

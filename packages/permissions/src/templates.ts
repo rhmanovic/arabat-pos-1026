@@ -53,6 +53,7 @@ export const ROLE_TEMPLATES = {
       'reports.sales',
       'reports.financial',
       'reports.inventory',
+      'periods.close',
       'payments.settings',
       'employees.read',
       'employees.manage',

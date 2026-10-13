@@ -18,3 +18,4 @@ export * from './ecommerce.js';
 export * from './platform.js';
 export * from './audit.js';
 export * from './controls.js';
+export * from './periods.js';

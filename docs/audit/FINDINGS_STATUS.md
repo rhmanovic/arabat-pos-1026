@@ -6,7 +6,7 @@ not yet re-verified by the audit), **Tested** (fixed and covered by automated te
 **Deferred** (outside the current retail scope or waiting for an owner decision). Update this file
 in the same session as the code.
 
-Last update: 2026-10-13 (remediation session 10). Totals: Deferred 49, Fixed 6, In Progress 2, Open 61, Tested 62.
+Last update: 2026-10-13 (remediation session 11). Totals: Deferred 49, Fixed 6, In Progress 2, Open 60, Tested 63. BP-525 (period close) is covered by `period_closes` (ADR-0103).
 
 | Id | Finding | Severity | Ch. | Package | Status | Note |
 |---|---|---|---|---|---|---|
@@ -160,7 +160,7 @@ Last update: 2026-10-13 (remediation session 10). Totals: Deferred 49, Fixed 6, 
 | FND-613 | Documentation does not match behaviour on write-off and on schema | Low | F | R2.3 | Fixed | Session 6: BR-104 corrected, BR-172 / BR-173 and ADR-0098 describe the write-off and the schema as built |
 | FND-617 | Zero unit cost and duplicate item lines accepted on purchase orders | Low | F | R6.1 | Deferred | Supplier invoices and payables deferred (D5) |
 | FND-618 | Partial dispatch needs no explanation; notes are dropped | Low | F | — | Open |  |
-| FND-619 | No document dates; cut-off depends on timely entry | Low | F | R4.2 | Open |  |
+| FND-619 | No document dates; cut-off depends on timely entry | Low | F | R4.2 | Tested | Session 11: document date on orders, delivery date on receipts, bounded and audited; period lock (`periods.int.test.ts`) |
 | FND-620 | Thin audit detail for master-data and draft edits | Low | F | R5.3 | Open |  |
 | FND-621 | Purchasing report counts closed orders at full ordered value; open value is "as of now" | Low | F | — | Open |  |
 | FND-622 | Surplus arriving on a transfer cannot be recorded on it | Low | F | R2.3 | Tested | Session 6: surplus received with a mandatory note, signed discrepancy reported (`transfers-controls.int.test.ts`) |

@@ -539,9 +539,24 @@ Implemented (ADR-0102, BR-184 to BR-188):
   merchant's zone; the unusual-activity threshold and window are company policy.
 - **Supplier statement**: received at order cost vs. cash paid (and reversals) with the running
   difference, period filter and balance brought forward, on the suppliers page.
-Verified: see `TESTING.md` (results after remediation session 10). Not done (next sessions):
-period close (R4.2), access and continuity (R5.x); server-rendered exports and a supplier
-ledger with invoices (R6) are not built; acquirer-statement reconciliation remains manual.
+Verified: see `TESTING.md` (results after remediation session 10).
+
+### 2026-10-13 — Remediation session 11 (R4.2 period close pack)
+Implemented (ADR-0103, BR-189, BR-190):
+- **Period close**: months since registration listed with their status; the month-end pack
+  (sales, profit, collections by tender, unreferenced tenders, cash by place at month end,
+  closing stock, refunds owed, open items, supplier balance, document counts) computed live for
+  an open month and stored at close; months close in order, once, after they end, by
+  `periods.close` holders with company-wide report rights; audited; never reopened.
+- **Lock and document dates**: purchase orders and deliveries carry a business date (today
+  unless set, at most 7 days back, audited when backdated); a date inside a closed month is
+  refused; posting times stay the ledger basis.
+- **Manager**: `/periods` page with the pack and a close dialog; date fields on the purchase
+  order form and the receive dialog.
+Verified: see `TESTING.md` (results after remediation session 11). Not done (next session):
+access and continuity (R5.2 ownership transfer / freeze, R5.3 audit detail and price history,
+R5.4 account hygiene); server-rendered exports, a supplier ledger with invoices (R6) and
+acquirer-statement reconciliation remain outside the plan.
 
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025

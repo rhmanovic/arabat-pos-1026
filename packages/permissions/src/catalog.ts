@@ -214,6 +214,11 @@ export const PERMISSIONS = {
     group: 'reports',
     description: 'Inventory reports and valuation',
   },
+  'periods.close': {
+    scope: 'merchant',
+    group: 'reports',
+    description: 'Close accounting periods (month-end pack and lock)',
+  },
 
   // Payment settings
   'payments.settings': {

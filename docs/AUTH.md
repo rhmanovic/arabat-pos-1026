@@ -177,6 +177,7 @@ can(actor, permission, branchId?):
 | Purchasing | `purchasing.read`, `purchasing.manage`, `purchasing.approve`, `purchasing.receive` | branch |
 | Customers | `customers.read`, `customers.create`, `customers.manage` | branch |
 | Reports | `reports.sales`, `reports.financial`, `reports.inventory` | branch |
+| Period close | `periods.close` (close a month and lock it; BR-189) | merchant |
 | Payments | `payments.settings` | merchant |
 | Employees | `employees.read`, `employees.manage` (branch); `roles.manage` (merchant) | mixed |
 | Branches | `branches.read`, `branches.update` (branch); `branches.manage` (merchant) | mixed |

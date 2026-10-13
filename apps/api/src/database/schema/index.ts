@@ -4,6 +4,7 @@ export * from '../../modules/audit/audit.schema.js';
 export * from '../../modules/auth/auth.schema.js';
 export * from '../../modules/branches/branches.schema.js';
 export * from '../../modules/iam/iam.schema.js';
+export * from '../../modules/periods/periods.schema.js';
 export * from '../../modules/merchants/merchants.schema.js';
 export * from '../../modules/platform-admin/platform.schema.js';
 export * from '../../modules/catalog/catalog.schema.js';
