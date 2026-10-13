@@ -66,6 +66,30 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after remediation session 8 (2026-10-13, local run)
+
+`pnpm verify` green (175 unit/web tests, including the new POS case in `app.test.tsx` (a cashier
+without any discount right enters a 15 % sale discount, pays, is blocked until a supervisor
+authorises it in the payment dialog with their own credentials, the checkout then carries the
+grant) and the new manager `sales.test.tsx` (unusual-sales filter, flags on the row, the
+exceptions block of a sale: above-limit note, free-sale reason, supervisor override with the
+rights supplied, price-change reason)); `pnpm test:integration` 197 passed, including the four
+new cases in `sales-overrides.int.test.ts` (override refused for a wrong password, for the
+cashier themself and for a colleague with nothing more to lend; grant issued by a supervisor
+without a shift, unusable by another cashier, spent by one sale that stays on the cashier's
+shift and drawer with `aboveLimit`, the limit in force and the approver recorded, single use,
+audit of grant / sale / refusals, `flag=supervised` filter and per-employee counts; grant expiry
+and the owner as approver; price change without a reason refused, floor / ceiling / cost bounds,
+a 5 % change not flagged and a 40 % change flagged, a price-only role unable to hide a discount
+in a price, relaxed bounds, floor above ceiling refused, bounds visible to the POS,
+`flag=price_override` and `flag=above_limit`; a free sale refused without `sales.zero_total`,
+a zero price refused by the floor, reason required, free sale by a supervisor and by a cashier
+through an override naming both rights, `flag=zero_total`, report counts, and the database
+check refusing a free POS sale without a reason); `pnpm test:e2e` 35 passed on the first full run. Existing
+checkout tests adapted: the 100 % discount case now gives a reason and checks the flags, the
+price-override case gives a reason and expects the above-limit flag and the reason in the audit
+entry.
+
 ### Results after remediation session 7 (2026-10-13, local run)
 
 `pnpm verify` green (173 unit/web tests, including the micro-precision average cases in
