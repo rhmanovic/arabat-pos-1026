@@ -166,6 +166,11 @@ export const commonEn = {
     ADJUSTMENT_DECIDED: 'This adjustment was already decided.',
     STOCK_MOVED_SINCE_COUNT:
       'Stock moved while you were counting. Review the movements and confirm the count.',
+    OWNER_FROZEN: 'The owner account of this company is frozen by the platform. Contact support.',
+    TRANSFER_INVALID:
+      'This ownership transfer is invalid, expired, cancelled or already completed.',
+    GRANTS_NEED_CONFIRMATION:
+      'Dormant role assignments at this branch would come back into force. Confirm keeping or clearing them.',
     PERIOD_CLOSED: 'This date falls in a closed period. Closed periods accept no new documents.',
     PERIOD_NOT_CLOSABLE:
       'This month cannot be closed yet: it has not ended, or an earlier month is still open.',

@@ -1227,3 +1227,38 @@ ADR; supersede it.
   retail scope. Not built: reopening a month (by design), server-rendered pack export (the
   page is the pack), business dates on other document types (they are posted at entry).
 
+## ADR-0104 — Remediation session 12: ownership transfer and freeze, audit detail and price history, account hygiene
+- **Status:** Accepted (2026-10-13). Remediation plan R5.2, R5.3, R5.4.
+- **Context:** BR-020 promised an audited ownership transfer that did not exist (FND-102); no
+  self-service password change or session overview (FND-103); invitation grants authorised at
+  invitation time only (FND-108); anyone could lock an account by guessing an e-mail with no
+  notice to its holder (FND-110); branch reactivation silently revived grants (FND-116); profile,
+  branch, employee, role, catalog, supplier and draft-order edits were audited without values
+  (FND-105, FND-208, FND-620); price history lived only in the audit log (FND-222).
+- **Decision:**
+  - `ownership_transfers` (migration 0047, RLS, status moves once out of `pending`) and
+    `OwnershipService` (`start` / `cancel` / `accept` for the owner flow with an e-mailed token;
+    `transfer()` shared with the platform). `merchants.owner_frozen_at / _reason` with
+    `POST /platform/merchants/:id/owner-freeze|owner-release` (support, super admin) and
+    `POST /platform/merchants/:id/ownership-transfer` (super admin). The session resolver and
+    the login flow refuse a frozen owner (`OWNER_FROZEN`), reading the merchant row inside the
+    merchant context (RLS).
+  - `diffFields` (`apps/api/src/kernel/audit-diff.ts`) gives `{ field: { from, to } }` for the
+    changed fields; `price_history` (RLS, insert-only) is written from `saveVariants` and read
+    through `GET /manager/products/:id/price-history`.
+  - `AccountService` (`POST /auth/manager/password`, `GET /auth/manager/sessions`,
+    `DELETE /auth/manager/sessions/:id`, `POST /auth/manager/sessions/revoke-others`); the
+    password change relies on `users.password_changed_at` to end other sessions and re-issues
+    the current one. Manager actions `POST /manager/employees/:id/sessions/revoke` and
+    `/unlock`. `InvitationAcceptanceService` re-evaluates each grant with `canGrant` against the
+    inviter's current access. `branchStatusSchema.dormantGrants` (`keep` | `clear`) with
+    `GRANTS_NEED_CONFIRMATION`. `LoginService` e-mails the account holder when the failure
+    counter reaches the limit (`RateLimiterService.hitAndCheck`).
+  - Manager: `/account` page (password, devices), ownership section on the company settings
+    page, employee actions, dormant-grants dialog on the branches page, price history on the
+    product page. Platform: owner freeze / release / transfer dialogs on the merchant page.
+- **Consequences:** FND-102, FND-103, FND-105, FND-108, FND-110, FND-116, FND-208, FND-222 and
+  FND-620 close. Not built: scheduled or effective-dated prices, progressive delays instead of
+  the hard lock (the lock stays at 10 wrong passwords / 15 minutes; the holder is told and a
+  manager can clear it), e-mail verification at self-registration (FND-104, owner decision).
+

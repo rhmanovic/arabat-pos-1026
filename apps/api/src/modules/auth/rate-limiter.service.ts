@@ -64,6 +64,16 @@ export class RateLimiterService {
     await this.increment(key, rule);
   }
 
+  /** Counts a failure and says whether this one reached the limit (the lock just started). */
+  async hitAndCheck(key: string, rule: RateLimit): Promise<{ count: number; justLocked: boolean }> {
+    const { count } = await this.increment(key, rule);
+    return { count, justLocked: count === this.scaled(rule) };
+  }
+
+  windowMinutes(rule: RateLimit): number {
+    return Math.round(rule.windowSeconds / 60);
+  }
+
   async reset(key: string): Promise<void> {
     await this.database.db.delete(rateLimitBuckets).where(eq(rateLimitBuckets.key, key));
   }

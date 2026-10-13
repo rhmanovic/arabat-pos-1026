@@ -330,6 +330,13 @@
       "when": 1791887979894,
       "tag": "0046_period_close",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1791889192890,
+      "tag": "0047_ownership_hygiene_history",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,9 @@
-import type { BranchDetail, createBranchSchema, updateBranchSchema } from '@arabat/contracts';
+import type {
+  BranchDetail,
+  branchStatusSchema,
+  createBranchSchema,
+  updateBranchSchema,
+} from '@arabat/contracts';
 import { accessibleBranches, permissionBranchScope } from '@arabat/permissions';
 import { Injectable } from '@nestjs/common';
 import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
@@ -7,10 +12,11 @@ import { DatabaseService, type Transaction } from '../../database/database.servi
 import { assertCan } from '../../kernel/access/assert.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
+import { diffFields } from '../../kernel/audit-diff.js';
 import { newId } from '../../kernel/ids.js';
 import { AuditService } from '../audit/audit.service.js';
 import { isUniqueViolation } from '../auth/registration.service.js';
-import { roleAssignments } from '../iam/iam.schema.js';
+import { memberships, roleAssignments, roles, users } from '../iam/iam.schema.js';
 import { branches } from './branches.schema.js';
 import { ensureDefaultRegister } from '../payments/merchant-defaults.js';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
@@ -84,14 +90,16 @@ export class BranchesService {
     const { version, ...fields } = input;
     try {
       return await this.database.withMerchantTx(actor.merchantId, async (tx) => {
-        await this.find(tx, branchId);
+        const before = await this.find(tx, branchId);
         const [row] = await tx
           .update(branches)
           .set({ ...fields, version: sql`${branches.version} + 1`, updatedAt: sql`now()` })
           .where(and(eq(branches.id, branchId), eq(branches.version, version)))
           .returning();
         if (!row) throw versionConflict();
-        await this.record(tx, actor, 'branch.updated', branchId, ip);
+        await this.record(tx, actor, 'branch.updated', branchId, ip, {
+          changes: diffFields(before, fields, Object.keys(fields) as (keyof typeof fields)[]),
+        });
         return toDetail(row, (await this.employeeCounts(tx)).get(row.id) ?? 0);
       });
     } catch (error) {
@@ -103,12 +111,56 @@ export class BranchesService {
   async setStatus(
     actor: MerchantActor,
     branchId: string,
-    status: 'active' | 'inactive',
+    input: z.output<typeof branchStatusSchema>,
     ip: string,
   ): Promise<BranchDetail> {
+    const status = input.status;
     assertCan(actor, 'branches.manage', null);
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const branch = await this.find(tx, branchId);
+      // Dormant grants at a branch come back into force on reactivation: the manager must say
+      // whether to keep or clear them (BR-192, FND-116); either way they go into the audit entry.
+      let grantsDetail: Record<string, unknown> = {};
+      if (status === 'active' && branch.status !== 'active') {
+        const dormant = await tx
+          .select({
+            id: roleAssignments.id,
+            membershipId: roleAssignments.membershipId,
+            fullName: users.fullName,
+            roleEn: roles.nameEn,
+            roleAr: roles.nameAr,
+          })
+          .from(roleAssignments)
+          .innerJoin(memberships, eq(memberships.id, roleAssignments.membershipId))
+          .innerJoin(users, eq(users.id, memberships.userId))
+          .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
+          .where(and(eq(roleAssignments.branchId, branchId), eq(memberships.status, 'active')));
+        if (dormant.length && !input.dormantGrants)
+          throw new AppError(
+            409,
+            'GRANTS_NEED_CONFIRMATION',
+            'Dormant role assignments at this branch would come back into force.',
+            dormant.map((g) => ({
+              path: 'dormantGrants',
+              code: 'confirm',
+              message: `${g.fullName} — ${g.roleEn ?? g.roleAr ?? ''}`,
+            })),
+          );
+        const list = dormant.map((g) => ({
+          membershipId: g.membershipId,
+          name: g.fullName,
+          role: g.roleEn ?? g.roleAr,
+        }));
+        if (dormant.length && input.dormantGrants === 'clear') {
+          await tx.delete(roleAssignments).where(
+            inArray(
+              roleAssignments.id,
+              dormant.map((g) => g.id),
+            ),
+          );
+          grantsDetail = { clearedGrants: list };
+        } else if (dormant.length) grantsDetail = { revivedGrants: list };
+      }
       if (status === 'inactive' && branch.isMain) {
         throw AppError.conflict('The main branch cannot be deactivated.');
       }
@@ -128,6 +180,7 @@ export class BranchesService {
         status === 'active' ? 'branch.activated' : 'branch.deactivated',
         branchId,
         ip,
+        grantsDetail,
       );
       return toDetail(row!, (await this.employeeCounts(tx)).get(branchId) ?? 0);
     });

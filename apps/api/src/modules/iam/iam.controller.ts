@@ -178,6 +178,30 @@ export class IamController {
     return this.employees.setAssignments(actor, membershipId, body.assignments, req.ip);
   }
 
+  /** Ends every session of the member (stolen cookie, shared till) without deactivating them. */
+  @RequirePermission('manager', 'employees.manage')
+  @Post('employees/:membershipId/sessions/revoke')
+  @HttpCode(200)
+  async revokeSessions(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('membershipId', uuid) membershipId: string,
+    @Req() req: FastifyRequest,
+  ): Promise<{ ended: number }> {
+    return { ended: await this.employees.revokeSessions(actor, membershipId, req.ip) };
+  }
+
+  /** Clears a sign-in lock caused by wrong passwords (BR-193). */
+  @RequirePermission('manager', 'employees.manage')
+  @Post('employees/:membershipId/unlock')
+  @HttpCode(204)
+  async unlock(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('membershipId', uuid) membershipId: string,
+    @Req() req: FastifyRequest,
+  ): Promise<void> {
+    await this.employees.unlock(actor, membershipId, req.ip);
+  }
+
   @RequirePermission('manager', 'employees.manage')
   @Post('employees/:membershipId/password-reset')
   @HttpCode(202)

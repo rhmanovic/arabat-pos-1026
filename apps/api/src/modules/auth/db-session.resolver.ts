@@ -8,6 +8,7 @@ import { AppError } from '../../kernel/errors/app-error.js';
 import { type Actor, SessionResolver } from '../../kernel/access/session-resolver.js';
 import { AccessRepository, eligibleBranches } from '../iam/access.repository.js';
 import { users } from '../iam/iam.schema.js';
+import { merchants } from '../merchants/merchants.schema.js';
 import { platformOperators } from '../platform-admin/platform.schema.js';
 import { SessionService } from './session.service.js';
 
@@ -68,6 +69,16 @@ export class DbSessionResolver extends SessionResolver {
     };
   }
 
+  private async ownerFrozen(merchantId: string): Promise<boolean> {
+    const [m] = await this.database.withMerchantTx(merchantId, (tx) =>
+      tx
+        .select({ frozen: merchants.ownerFrozenAt })
+        .from(merchants)
+        .where(eq(merchants.id, merchantId)),
+    );
+    return Boolean(m?.frozen);
+  }
+
   private async merchantActor(session: {
     id: string;
     interface: string;
@@ -93,6 +104,8 @@ export class DbSessionResolver extends SessionResolver {
     );
     if (!membership || membership.userId !== userId) return null;
     if (!membership.access.membershipActive || !membership.access.merchantActive) return null;
+    // An owner frozen by the platform (BR-020) is out until released.
+    if (membership.access.isOwner && (await this.ownerFrozen(merchantId))) return null;
     // The interface permission must still hold: revoking `manager.access` or `pos.access`
     // (or deactivating the bound branch) ends the session on its next request.
     const allowed = eligibleBranches(membership, session.interface as 'manager' | 'pos');

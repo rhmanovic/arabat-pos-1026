@@ -6,13 +6,13 @@ not yet re-verified by the audit), **Tested** (fixed and covered by automated te
 **Deferred** (outside the current retail scope or waiting for an owner decision). Update this file
 in the same session as the code.
 
-Last update: 2026-10-13 (remediation session 11). Totals: Deferred 49, Fixed 6, In Progress 2, Open 60, Tested 63. BP-525 (period close) is covered by `period_closes` (ADR-0103).
+Last update: 2026-10-13 (remediation session 12, last of the plan). Totals: Deferred 49, Fixed 6, In Progress 2, Open 51, Tested 72. BP-525 (period close) is covered by `period_closes` (ADR-0103).
 
 | Id | Finding | Severity | Ch. | Package | Status | Note |
 |---|---|---|---|---|---|---|
 | FND-701 | Money collected for "needs attention" cases exists in no ledger | Critical | G | R7.1 | Deferred | Online store: R7 only after a gateway is approved (D7) |
 | FND-101 | Merchant audit trail is written but cannot be read by the merchant | High | A | R1.0 | Tested | Session 1: `/manager/audit` + API (`audit.int.test.ts`, `audit.test.tsx`) |
-| FND-102 | Ownership transfer and owner succession are not implemented although documented | High | A | R5.2 | Open |  |
+| FND-102 | Ownership transfer and owner succession are not implemented although documented | High | A | R5.2 | Tested | Session 12: owner-initiated transfer with password and e-mailed code, platform transfer with reason, owner freeze / release (`ownership.int.test.ts`) |
 | FND-201 | Stock adjustments have no approval, value limit or segregation of duties | High | B | R2.1 | Tested | Session 5: value at cost on every document, pending above the company limit until a second person decides, owner override audited (`inventory-controls.int.test.ts`, `inventory.test.tsx`) |
 | FND-207 | Switching off stock tracking (or changing goods to service) hides existing balances from valuation without a movement | High | B | R2.5 | Tested | Session 5: `STOCK_ON_HAND` names the branches and quantities to write off or transfer first (`inventory-controls.int.test.ts`) |
 | FND-406 | Bank account balances are never reconciled; deposits are credited on the depositor's word | High | D | R1.3 | Tested | Session 4: deposits wait in transit with a mandatory slip number until a second person confirms them; manual bank reconciliation per account (`bank.int.test.ts`, `cash.test.tsx`, `cash-payouts.spec.ts`) |
@@ -33,12 +33,12 @@ Last update: 2026-10-13 (remediation session 11). Totals: Deferred 49, Fixed 6, 
 | FND-808 | Complimentary or served-then-voided items leave no stock or revenue trace and have no second control | High | H | — | Deferred | Restaurant out of the retail scope |
 | FND-901 | No billing, invoicing, receivables or collection process for subscriptions | High | I | — | Deferred | Operator billing / retention: with the pricing decision (OQ-022) |
 | FND-904 | Suspension and closing ignore open shifts, cash balances, stock and pending documents | High | I | — | Open |  |
-| FND-103 | No self-service password change and no session overview | Medium | A | R5.4 | Open |  |
+| FND-103 | No self-service password change and no session overview | Medium | A | R5.4 | Tested | Session 12: `/account` page: password change, device list, sign out elsewhere (`account-hygiene.int.test.ts`, `account.test.tsx`) |
 | FND-104 | Owner e-mail is never verified at self-registration | Medium | A | — | Open |  |
-| FND-105 | Audit entries for profile-type edits record the fact but not the values | Medium | A | R5.3 | Open |  |
-| FND-108 | Invitation grants are authorised at invitation time, not at acceptance | Medium | A | R5.4 | Open |  |
+| FND-105 | Audit entries for profile-type edits record the fact but not the values | Medium | A | R5.3 | Tested | Session 12: before / after values on profile, branch, employee and role deletion (`audit-detail.int.test.ts`, `account-hygiene.int.test.ts`) |
+| FND-108 | Invitation grants are authorised at invitation time, not at acceptance | Medium | A | R5.4 | Tested | Session 12: grants re-checked against the inviter's current authority at acceptance; inviter deactivation revokes pending invitations (`account-hygiene.int.test.ts`) |
 | FND-109 | Branch deactivation has no operational pre-conditions | Medium | A | R2.5 | Tested | Session 5: `BRANCH_IN_USE` lists stock, open shifts, cash, open purchase orders, open stock transfers and cash in transit to settle first (`inventory-controls.int.test.ts`) |
-| FND-110 | Account lock-out by failed attempts can be triggered by anyone who knows an e-mail | Medium | A | R5.4 | Open |  |
+| FND-110 | Account lock-out by failed attempts can be triggered by anyone who knows an e-mail | Medium | A | R5.4 | Tested | Session 12: lock-out e-mailed to the account holder; manager "clear sign-in lock" (`account-hygiene.int.test.ts`) |
 | FND-113 | Default templates concentrate cash custody in the owner and leave segregation choices implicit | Medium | A | R1.6 | Tested | Session 2: Treasurer template + dashboard warning when only the owner holds custody (`controls.int.test.ts`) |
 | FND-202 | Stock counts are not blind, overwrite intervening movements and have no variance sign-off | Medium | B | R2.2 | Tested | Session 5: blind count sheet (policy), movements since the sheet started must be acknowledged, count differences above the limit wait for approval (`inventory-controls.int.test.ts`, `inventory.test.tsx`) |
 | FND-203 | Average unit cost is limited to whole fils, distorting costs of low-value units | Medium | B | R2.7 | Tested | Session 7: average carried at thousandths of a fils, rounded only for display (`quantity.test.ts`, `inventory-valuation.int.test.ts`) |
@@ -109,16 +109,16 @@ Last update: 2026-10-13 (remediation session 11). Totals: Deferred 49, Fixed 6, 
 | FND-112 | POS inactivity lock is detected in the browser, not by the server | Low | A | — | Open |  |
 | FND-114 | Failed sign-in audit rows store attempted e-mails without a company and are unreviewable | Low | A | R1.0 | Open |  |
 | FND-115 | Operator lifecycle beyond creation is manual | Low | A | — | Open |  |
-| FND-116 | Reactivating a branch silently restores all dormant grants | Low | A | R5.4 | Open |  |
+| FND-116 | Reactivating a branch silently restores all dormant grants | Low | A | R5.4 | Tested | Session 12: dormant grants listed and kept or cleared on reactivation, recorded in the audit entry (`account-hygiene.int.test.ts`, `account.test.tsx`) |
 | FND-117 | Members with no role assignments remain active, invisible to branch managers, and count against plan capacity | Low | A | R1.6 | Fixed | Session 2: members without roles listed in the controls checklist; plan-capacity counting unchanged |
 | FND-205 | Valuation can drift from the sum of movement values because the average is rounded | Low | B | R2.7 | Tested | Session 7: micro-precision average and the rounding line of the roll-forward (`inventory-valuation.int.test.ts`) |
-| FND-208 | Catalog audit entries do not record most attribute changes | Low | B | R5.3 | Open |  |
+| FND-208 | Catalog audit entries do not record most attribute changes | Low | B | R5.3 | Tested | Session 12: field-level diff on product and category updates (`audit-detail.int.test.ts`) |
 | FND-209 | The "sale void" movement type exists in the schema and the screen filter but is never produced | Low | B | — | Open |  |
 | FND-214 | Balance-equals-ledger integrity relies on code discipline only | Low | B | — | Open |  |
 | FND-216 | Items can be stocked with no cost at all; the gap is reported only as "unvalued" | Low | B | R2.7 | Tested | Session 7: unvalued items listed on the inventory report with what to do; missing cost flagged on the product screen (`inventory-valuation.int.test.ts`) |
 | FND-218 | Increases by users without the price right are valued at a cost that may not be actual | Low | B | R2.1 | Tested | Session 5: valued at the current average (typed costs refused without the price right), above the limit the document waits for approval (`inventory-controls.int.test.ts`) |
 | FND-220 | Adjustment documents have no human-readable document number | Low | B | R2.1 | Tested | Session 5: ADJ-000001 per merchant, back-filled (`inventory-controls.int.test.ts`) |
-| FND-222 | Price and cost history exists only in the audit log | Low | B | R5.3 | Open |  |
+| FND-222 | Price and cost history exists only in the audit log | Low | B | R5.3 | Tested | Session 12: `price_history` table and the history tab on the product (`audit-detail.int.test.ts`) |
 | FND-223 | Two cost concepts (catalog standard cost vs moving average) are not explained to users | Low | B | R2.7 | Fixed | Session 7: explained under the cost field of the product editor (BR-174) |
 | FND-303 | Above-limit discounts are not flagged and the limit in force is not kept | Low | C | R3.2 | Tested | Session 8: `above_limit` and `discount_limit_percent` stored on every POS sale and in the audit entry; `flag=above_limit` filter and per-employee counts (`sales-overrides.int.test.ts`) |
 | FND-306 | Cut-off follows a fixed merchant time zone; branch time zone is unused | Low | C | R4.1 | Tested | Session 10: decided — one company, one clock; the branch zone is unused (ADR-0102) |
@@ -161,7 +161,7 @@ Last update: 2026-10-13 (remediation session 11). Totals: Deferred 49, Fixed 6, 
 | FND-617 | Zero unit cost and duplicate item lines accepted on purchase orders | Low | F | R6.1 | Deferred | Supplier invoices and payables deferred (D5) |
 | FND-618 | Partial dispatch needs no explanation; notes are dropped | Low | F | — | Open |  |
 | FND-619 | No document dates; cut-off depends on timely entry | Low | F | R4.2 | Tested | Session 11: document date on orders, delivery date on receipts, bounded and audited; period lock (`periods.int.test.ts`) |
-| FND-620 | Thin audit detail for master-data and draft edits | Low | F | R5.3 | Open |  |
+| FND-620 | Thin audit detail for master-data and draft edits | Low | F | R5.3 | Tested | Session 12: supplier field diff and draft-order header / line before-after (`audit-detail.int.test.ts`) |
 | FND-621 | Purchasing report counts closed orders at full ordered value; open value is "as of now" | Low | F | — | Open |  |
 | FND-622 | Surplus arriving on a transfer cannot be recorded on it | Low | F | R2.3 | Tested | Session 6: surplus received with a mandatory note, signed discrepancy reported (`transfers-controls.int.test.ts`) |
 | FND-623 | Unknown dispatch cost leaves transfers and losses unvalued | Low | F | R2.3 | Tested | Session 6: `COST_UNKNOWN` refuses dispatching an item with neither an average nor a catalog cost (`transfers-controls.int.test.ts`) |

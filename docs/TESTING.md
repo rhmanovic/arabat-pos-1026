@@ -66,6 +66,36 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after remediation session 12 (2026-10-13, local run)
+
+`pnpm verify` green (184 unit/web tests, including the new manager `account.test.tsx` (devices
+listed with "this device", one signed out by id, the password form disabled until the current
+password and a matching new one are typed, the request body; the dormant-roles dialog on branch
+reactivation after the API's `GRANTS_NEED_CONFIRMATION`, listing the grants and re-posting with
+`clear`; the owner's hand-over form posting the member and password and then showing the pending
+transfer, and the named member's acceptance box posting the code) and the platform case
+(support sees "Freeze owner" but not "Transfer ownership", freezes with a reason and version,
+then sees "Release owner" and the reason)); `pnpm test:integration` 218 passed, including the
+three new cases in `ownership.int.test.ts` (start refused for a non-owner and for a wrong
+password; the named member sees the transfer as theirs, a wrong code and another member are
+refused, acceptance makes them owner, ends the old owner's session and leaves them a plain
+member who can no longer sign in to the management app, two audit entries and three e-mails;
+a second transfer replaces the first, cancellation, no second cancellation; support freezes the
+owner (session gone, `OWNER_FROZEN` at sign-in, employees unaffected, no double freeze),
+releases them, cannot transfer, and a super administrator transfers with a reason, both
+notified), the four in `account-hygiene.int.test.ts` (sessions listed and ended by id, wrong
+current password and an unchanged password refused, a change ends every other session and
+re-issues the current one, "sign out everywhere else"; a manager ends a cashier's sessions and
+clears the lock after ten wrong passwords that e-mailed the holder once; invitation grants
+dropped when the inviter lost authority at that branch, recorded in the audit entry, and an
+inviter's deactivation revokes their pending invitations; dormant grants listed on reactivation
+and cleared or kept with the audit entry naming them, plus branch edits with before / after
+values) and the one in `audit-detail.int.test.ts` (profile, category, product attributes and
+variant price / cost diffs, the price history with creation and manual rows and cost rows
+hidden without the price right, supplier and draft-order header and line diffs, employee
+profile diff, role deletion with its permissions); `pnpm test:e2e` 35 passed on the first full
+run. Migration 0047 applied on the dev database without incident.
+
 ### Results after remediation session 11 (2026-10-13, local run)
 
 `pnpm verify` green (180 unit/web tests, including the new `periods.test.tsx` (months listed

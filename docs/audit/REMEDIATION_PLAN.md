@@ -328,7 +328,7 @@ records without money.
 | 9 | R3.4 refund segregation, R3.5 tender hygiene (fee reversal per method, D6), R3.6 held sales, R3.7 combined limit (D4) | **Done 2026-10-13** |
 | 10 | R4.1 one cut-off rule, R4.3 profit with uncosted share, R4.4 report access log and dashboard, R4.5 supplier statement | **Done 2026-10-13** |
 | 11 | R4.2 period close pack (sequential monthly close, stored pack, lock on document dates) | **Done 2026-10-13** |
-| 12 | R5.2 ownership transfer, R5.3 audit detail, R5.4 account hygiene | Next |
+| 12 | R5.2 ownership transfer and freeze, R5.3 audit detail and price history, R5.4 account hygiene | **Done 2026-10-13** |
 | 13+ | R6 supplier side (after D5), R7 online go-live (after D7), platform items | |
 
 After each session: update `docs/BUSINESS_RULES.md`, `docs/DECISIONS.md` and the finding status in

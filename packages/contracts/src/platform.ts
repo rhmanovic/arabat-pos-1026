@@ -270,6 +270,20 @@ export const platformMerchantDetailSchema = z.object({
       lastLoginAt: z.string().nullable(),
     })
     .nullable(),
+  /** Emergency freeze of the owner's access (BR-020, R5.2). */
+  ownerFrozenAt: z.string().nullable().default(null),
+  ownerFrozenReason: z.string().nullable().default(null),
+  /** Active members an operator may name as the new owner. */
+  members: z
+    .array(
+      z.object({
+        membershipId: z.string(),
+        fullName: z.string(),
+        email: z.string(),
+        isOwner: z.boolean(),
+      }),
+    )
+    .default([]),
   subscription: subscriptionViewSchema,
   /** Onboarding progress (oversight only; no business documents). */
   onboarding: z.object({
@@ -323,6 +337,19 @@ export const merchantStatusChangeSchema = z.object({
   reason: z.string().trim().min(3).max(500),
   version: z.number().int().positive(),
 });
+/** Freeze or release the owner's access (R5.2). */
+export const ownerFreezeSchema = z.object({
+  reason: z.string().trim().min(3).max(500),
+  version: z.number().int().positive(),
+});
+export type OwnerFreeze = z.input<typeof ownerFreezeSchema>;
+/** Operator-initiated ownership transfer (R5.2): recorded reason, both parties notified. */
+export const platformOwnershipTransferSchema = z.object({
+  toMembershipId: z.uuid(),
+  reason: z.string().trim().min(3).max(500),
+  version: z.number().int().positive(),
+});
+export type PlatformOwnershipTransfer = z.input<typeof platformOwnershipTransferSchema>;
 
 export const platformOverviewSchema = z.object({
   merchants: z.object({

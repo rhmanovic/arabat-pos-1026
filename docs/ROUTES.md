@@ -158,6 +158,13 @@ per-branch breakdown, settings dialog), `/manager/inventory/adjustments`,
 | `GET /manager/audit?from=&to=&action=&targetType=&actorId=&page=&pageSize=` | `audit.read` (company-wide; ADR-0093) |
 | `GET /manager/periods`, `GET /manager/periods/:period` | `reports.financial` (the pack needs every report right company-wide; BR-189) |
 | `POST /manager/periods/:period/close` | `periods.close` (merchant-wide; sequential, ended months only; ADR-0103) |
+| `POST /manager/merchant/ownership-transfers`, `DELETE /manager/merchant/ownership-transfers` | authenticated manager session; the service requires the owner (BR-020, R5.2) |
+| `POST /manager/merchant/ownership-transfers/accept` | authenticated manager session of the named member, with the e-mailed code |
+| `POST /auth/manager/password`, `GET /auth/manager/sessions`, `DELETE /auth/manager/sessions/:id`, `POST /auth/manager/sessions/revoke-others` | authenticated manager session (own account only; BR-193) |
+| `POST /manager/employees/:id/sessions/revoke`, `POST /manager/employees/:id/unlock` | `employees.manage` (members the actor may manage; BR-193) |
+| `GET /manager/products/:id/price-history` | `catalog.read` (cost rows only with `catalog.prices.manage`; BR-191) |
+| `POST /platform/merchants/:id/owner-freeze`, `POST /platform/merchants/:id/owner-release` | platform support or super admin (BR-020) |
+| `POST /platform/merchants/:id/ownership-transfer` | platform super admin only (BR-020) |
 | `POST /manager/shifts/:id/movements/:movementId/decision` | `shifts.view_all` at the branch; approver ≠ requester (owner excepted, flagged; ADR-0094) |
 | `POST /pos/shifts/current/cash-movements/:movementId/withdraw` | POS `cash.move` (own open shift) |
 | `GET /manager/merchant/controls` | `merchant.settings.read` (internal-control checklist, BR-165) |

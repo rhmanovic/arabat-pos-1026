@@ -10,6 +10,7 @@ export interface NavItem {
 
 export const NAV: readonly NavItem[] = [
   { key: 'dashboard', to: '/', anyOf: ['manager.access'], available: true, section: 'main' },
+  { key: 'account', to: '/account', anyOf: ['manager.access'], available: true, section: 'main' },
   {
     key: 'products',
     to: '/products',

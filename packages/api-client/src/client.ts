@@ -229,6 +229,14 @@ import {
   platformMerchantListSchema,
   platformOverviewSchema,
   subscriptionViewSchema,
+  type StartOwnershipTransfer,
+  type AcceptOwnershipTransfer,
+  type BranchStatus,
+  type ChangePassword,
+  sessionListSchema,
+  type OwnerFreeze,
+  type PlatformOwnershipTransfer,
+  priceHistorySchema,
 } from '@arabat/contracts';
 import { z } from 'zod';
 import { ApiError, ContractError, NetworkError, toApiError } from './errors.js';
@@ -332,6 +340,15 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('POST', '/auth/password/reset', { body }),
       logout: (appInterface: AppInterface) =>
         request('POST', `/auth/${appInterface}/logout`, { body: {} }),
+      /** Account hygiene (BR-193): own password and sessions. */
+      changePassword: (body: ChangePassword) => request('POST', '/auth/manager/password', { body }),
+      sessions: () => request('GET', '/auth/manager/sessions', { schema: sessionListSchema }),
+      revokeSession: (id: string) => request('DELETE', `/auth/manager/sessions/${id}`),
+      revokeOtherSessions: () =>
+        request('POST', '/auth/manager/sessions/revoke-others', {
+          body: {},
+          schema: z.object({ ended: z.number().int() }),
+        }),
       /** POS screen lock (server-enforced until the password is entered again). */
       posLock: () => request('POST', '/auth/pos/lock', { body: {} }),
       posUnlock: (password: string) => request('POST', '/auth/pos/unlock', { body: { password } }),
@@ -387,6 +404,21 @@ export function createApiClient(options: ApiClientOptions = {}) {
           body,
           schema: platformMerchantDetailSchema,
         }),
+      freezeOwner: (id: string, body: OwnerFreeze) =>
+        request('POST', `/platform/merchants/${id}/owner-freeze`, {
+          body,
+          schema: platformMerchantDetailSchema,
+        }),
+      releaseOwner: (id: string, body: OwnerFreeze) =>
+        request('POST', `/platform/merchants/${id}/owner-release`, {
+          body,
+          schema: platformMerchantDetailSchema,
+        }),
+      transferOwnership: (id: string, body: PlatformOwnershipTransfer) =>
+        request('POST', `/platform/merchants/${id}/ownership-transfer`, {
+          body,
+          schema: platformMerchantDetailSchema,
+        }),
       planCheck: (id: string, planId: string) =>
         request('GET', `/platform/merchants/${id}/plan-check?${toParams({ planId })}`, {
           schema: planCheckSchema,
@@ -411,6 +443,18 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('GET', '/manager/merchant/controls', { schema: controlsChecklistSchema }),
       update: (body: UpdateMerchantProfile) =>
         request('PATCH', '/manager/merchant', { body, schema: merchantProfileSchema }),
+      /** Ownership transfer (BR-020): the owner starts or cancels, the named member accepts. */
+      startOwnershipTransfer: (body: StartOwnershipTransfer) =>
+        request('POST', '/manager/merchant/ownership-transfers', {
+          body,
+          schema: merchantProfileSchema,
+        }),
+      cancelOwnershipTransfer: () =>
+        request('DELETE', '/manager/merchant/ownership-transfers', {
+          schema: merchantProfileSchema,
+        }),
+      acceptOwnershipTransfer: (body: AcceptOwnershipTransfer) =>
+        request('POST', '/manager/merchant/ownership-transfers/accept', { body }),
     },
     branches: {
       list: () => request('GET', '/manager/branches', { schema: branchDetailListSchema }),
@@ -420,11 +464,8 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('POST', '/manager/branches', { body, schema: branchDetailSchema }),
       update: (id: string, body: UpdateBranch) =>
         request('PATCH', `/manager/branches/${id}`, { body, schema: branchDetailSchema }),
-      setStatus: (id: string, status: 'active' | 'inactive') =>
-        request('POST', `/manager/branches/${id}/status`, {
-          body: { status },
-          schema: branchDetailSchema,
-        }),
+      setStatus: (id: string, body: BranchStatus) =>
+        request('POST', `/manager/branches/${id}/status`, { body, schema: branchDetailSchema }),
     },
     roles: {
       catalog: () => request('GET', '/manager/permissions', { schema: permissionCatalogSchema }),
@@ -454,6 +495,8 @@ export function createApiClient(options: ApiClientOptions = {}) {
         });
       },
       product: (id: string) => request('GET', `/manager/products/${id}`, { schema: productSchema }),
+      priceHistory: (id: string) =>
+        request('GET', `/manager/products/${id}/price-history`, { schema: priceHistorySchema }),
       createProduct: (body: SaveProduct) =>
         request('POST', '/manager/products', { body, schema: productSchema }),
       updateProduct: (id: string, body: SaveProduct) =>
@@ -1132,6 +1175,12 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('PUT', `/manager/employees/${id}/assignments`, { body, schema: employeeSchema }),
       sendPasswordReset: (id: string) =>
         request('POST', `/manager/employees/${id}/password-reset`, { body: {} }),
+      revokeSessions: (id: string) =>
+        request('POST', `/manager/employees/${id}/sessions/revoke`, {
+          body: {},
+          schema: z.object({ ended: z.number().int() }),
+        }),
+      unlock: (id: string) => request('POST', `/manager/employees/${id}/unlock`, { body: {} }),
     },
   };
 }

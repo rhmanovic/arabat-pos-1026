@@ -176,3 +176,24 @@ export const switchBranchRequestSchema = z.object({ branchId: z.uuid() });
 /** POS screen lock (AUTH.md §2.1): after this long without input the till locks itself. */
 export const POS_IDLE_LOCK_SECONDS = 300;
 export const unlockRequestSchema = z.object({ password: z.string().min(1).max(200) });
+
+// ---------------------------------------------------------------- account hygiene (R5.4)
+/** Self-service password change: the current password is required; other sessions end. */
+export const changePasswordSchema = z.object({
+  currentPassword: passwordInputSchema,
+  newPassword: newPasswordSchema,
+});
+export type ChangePassword = z.input<typeof changePasswordSchema>;
+
+export const sessionInfoSchema = z.object({
+  id: z.string(),
+  interface: z.enum(['manager', 'pos']),
+  merchantName: z.string().nullable(),
+  ip: z.string().nullable(),
+  userAgent: z.string().nullable(),
+  createdAt: z.string(),
+  lastSeenAt: z.string(),
+  current: z.boolean(),
+});
+export const sessionListSchema = z.object({ sessions: z.array(sessionInfoSchema) });
+export type SessionInfo = z.infer<typeof sessionInfoSchema>;

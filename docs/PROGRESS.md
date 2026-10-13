@@ -553,10 +553,27 @@ Implemented (ADR-0103, BR-189, BR-190):
   refused; posting times stay the ledger basis.
 - **Manager**: `/periods` page with the pack and a close dialog; date fields on the purchase
   order form and the receive dialog.
-Verified: see `TESTING.md` (results after remediation session 11). Not done (next session):
-access and continuity (R5.2 ownership transfer / freeze, R5.3 audit detail and price history,
-R5.4 account hygiene); server-rendered exports, a supplier ledger with invoices (R6) and
-acquirer-statement reconciliation remain outside the plan.
+Verified: see `TESTING.md` (results after remediation session 11).
+
+### 2026-10-13 — Remediation session 12 (R5.2 ownership transfer and freeze, R5.3 audit detail and price history, R5.4 account hygiene)
+Implemented (ADR-0104, BR-020 revised, BR-191 to BR-193):
+- **Ownership**: owner-initiated transfer with password re-entry and an e-mailed confirmation
+  code to the named member (72 h, cancellable, one at a time); platform-initiated transfer by
+  a super administrator with a recorded reason; emergency freeze / release of the owner by
+  support; old owner demoted to a plain member and signed out; both parties notified; all
+  audited.
+- **Audit detail**: before / after values on company profile, branch, employee profile,
+  category, product (attributes and variant prices / costs), supplier and draft-order edits;
+  permission set on role deletion; `price_history` with a history tab on the product.
+- **Account hygiene**: self-service password change (other sessions end) and device list with
+  sign-out; manager "end all sessions" and "clear sign-in lock"; lock-out notice e-mailed to
+  the account holder; invitation grants re-checked against the inviter's current authority at
+  acceptance and revoked when the inviter is deactivated; dormant grants confirmed (keep /
+  clear) on branch reactivation and recorded.
+Verified: see `TESTING.md` (results after remediation session 12). The remediation plan's
+sessions 1 to 12 are complete; outside it remain the supplier side (R6, decision D5), the
+online-store go-live prerequisites (R7, decision D7), server-rendered exports and
+acquirer-statement reconciliation.
 
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025

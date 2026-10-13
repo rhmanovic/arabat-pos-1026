@@ -22,9 +22,11 @@ import { generateToken, hashToken } from '../../kernel/crypto/tokens.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
 import { Mailer } from '../../kernel/mail/mailer.js';
+import { diffFields } from '../../kernel/audit-diff.js';
 import { AuditService } from '../audit/audit.service.js';
 import { sessions } from '../auth/auth.schema.js';
 import { PasswordResetService } from '../auth/password-reset.service.js';
+import { RateLimiterService } from '../auth/rate-limiter.service.js';
 import { branches } from '../branches/branches.schema.js';
 import { merchants } from '../merchants/merchants.schema.js';
 import {
@@ -74,8 +76,35 @@ export class EmployeesService {
     private readonly mailer: Mailer,
     private readonly resets: PasswordResetService,
     private readonly subscriptions: SubscriptionsService,
+    private readonly limiter: RateLimiterService,
     @Inject(ENV) private readonly env: Env,
   ) {}
+
+  /** Ends every session of the member at once, without deactivating them (BR-193). */
+  async revokeSessions(actor: MerchantActor, membershipId: string, ip: string): Promise<number> {
+    return this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const member = await this.manageableMember(tx, actor, membershipId, { allowSelf: false });
+      const ended = await tx
+        .update(sessions)
+        .set({ revokedAt: sql`now()`, revokeReason: 'manager_revoked' })
+        .where(and(eq(sessions.userId, member.userId), sql`${sessions.revokedAt} is null`))
+        .returning({ id: sessions.id });
+      await this.record(tx, actor, 'employee.sessions_revoked', 'membership', membershipId, ip, {
+        ended: ended.length,
+      });
+      return ended.length;
+    });
+  }
+
+  /** Clears a sign-in lock caused by wrong passwords (BR-193, FND-110). */
+  async unlock(actor: MerchantActor, membershipId: string, ip: string): Promise<void> {
+    const email = await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const member = await this.manageableMember(tx, actor, membershipId, { allowSelf: false });
+      await this.record(tx, actor, 'employee.login_unlocked', 'membership', membershipId, ip);
+      return member.email;
+    });
+    await this.limiter.reset(`login:fail:${email}`);
+  }
 
   async list(actor: MerchantActor): Promise<{ employees: Employee[]; invitations: Invitation[] }> {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
@@ -219,16 +248,18 @@ export class EmployeesService {
   ): Promise<Employee> {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const member = await this.manageableMember(tx, actor, membershipId, { allowSelf: false });
+      const next = {
+        jobTitle: input.jobTitle,
+        phone: input.phone,
+        employeeCode: input.employeeCode,
+      };
       await tx
         .update(memberships)
-        .set({
-          jobTitle: input.jobTitle,
-          phone: input.phone,
-          employeeCode: input.employeeCode,
-          updatedAt: sql`now()`,
-        })
+        .set({ ...next, updatedAt: sql`now()` })
         .where(eq(memberships.id, member.membershipId));
-      await this.record(tx, actor, 'employee.updated', 'membership', membershipId, ip);
+      await this.record(tx, actor, 'employee.updated', 'membership', membershipId, ip, {
+        changes: diffFields(member, next, ['jobTitle', 'phone', 'employeeCode']),
+      });
       return this.toEmployee(
         actor,
         await this.findMember(tx, membershipId),
@@ -252,11 +283,19 @@ export class EmployeesService {
         .update(memberships)
         .set({ status, updatedAt: sql`now()` })
         .where(eq(memberships.id, membershipId));
+      let invitationsRevoked = 0;
       if (status === 'inactive') {
         await tx
           .update(sessions)
           .set({ revokedAt: sql`now()`, revokeReason: 'membership_deactivated' })
           .where(and(eq(sessions.membershipId, membershipId), sql`${sessions.revokedAt} is null`));
+        // Invitations stand on the inviter's authority: they fall with it (BR-193, FND-108).
+        const revoked = await tx
+          .update(invitations)
+          .set({ status: 'revoked', updatedAt: sql`now()` })
+          .where(and(eq(invitations.invitedBy, membershipId), eq(invitations.status, 'pending')))
+          .returning({ id: invitations.id });
+        invitationsRevoked = revoked.length;
       }
       await this.record(
         tx,
@@ -265,6 +304,7 @@ export class EmployeesService {
         'membership',
         membershipId,
         ip,
+        invitationsRevoked ? { invitationsRevoked } : {},
       );
       return this.toEmployee(
         actor,

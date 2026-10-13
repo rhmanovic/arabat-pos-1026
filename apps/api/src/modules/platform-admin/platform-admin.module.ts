@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module.js';
+import { MerchantsModule } from '../merchants/merchants.module.js';
 import { PlatformController } from './platform.controller.js';
 import { PlatformService } from './platform.service.js';
 
 /** SaaS operator administration (`/api/v1/platform/*`); platform realm only. */
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, MerchantsModule],
   controllers: [PlatformController],
   providers: [PlatformService],
 })

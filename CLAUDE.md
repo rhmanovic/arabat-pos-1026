@@ -208,4 +208,7 @@ Periods are cut only through `apps/api/src/kernel/time/period.ts` in the merchan
 refunds count on their completion day; report views and exports are audited; the supplier statement is
 received at order cost vs. cash paid (ADR-0102). Months close in order through `PeriodsService` with a stored
 pack; `assertPeriodOpen` refuses purchasing documents dated in a closed month (ADR-0103, BR-189/190).
+Ownership moves only through `OwnershipService` (owner flow with e-mailed code, or platform with a reason); a
+frozen owner is refused at login and on every request; audit entries carry `changes` from `diffFields`;
+variant price / cost changes are appended to `price_history` (ADR-0104, BR-020/191/192/193).
 See `docs/PROGRESS.md` for the current state and `docs/ROADMAP.md` for next steps.

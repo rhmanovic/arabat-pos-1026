@@ -54,7 +54,14 @@ engineering defaults pending owner confirmation.
 
 - **BR-020** The owner always has full access to all branches and both merchant
   interfaces; the owner cannot be removed, demoted or deactivated by another
-  tenant user. Ownership transfer is an explicit, audited action.
+  tenant user. Ownership transfer is an explicit, audited action (R5.2): the owner names
+  an active member and re-enters their password, the member confirms with a code e-mailed
+  to them within 72 hours (one pending transfer at a time, cancellable by the owner), or a
+  platform super administrator transfers with a recorded reason. The old owner becomes a
+  plain member without implicit rights and their sessions on the company end; both are
+  notified. A platform operator may **freeze** the owner's access in an emergency (sessions
+  ended, sign-in refused with `OWNER_FROZEN`, employees unaffected) and release it later;
+  both are reasoned and audited.
 - **BR-021** Non-owner users only see and act on branches they are assigned to.
 - **BR-022** A POS session operates on exactly one branch at a time.
 - **BR-023** Deactivating a user immediately revokes all their sessions.
@@ -456,6 +463,24 @@ Remediation session 3 (2026-10-13, owner decision D2):
   reports; the business date is what the period lock checks. Sales, refunds, cash and stock
   movements are stamped at posting and cannot be backdated, so the lock does not apply to
   them.
+- **BR-191** Audit detail (R5.3). Edits of the company profile, branches, employee
+  profiles, categories, products (attributes and per-variant price / cost), suppliers and
+  draft purchase orders (header and lines) record the changed fields with their old and new
+  values; role deletion records the permission set. Every change of a variant's selling
+  price or cost is also appended to `price_history` (with the creation values), shown on the
+  product as a history tab; cost rows are visible only with `catalog.prices.manage`.
+- **BR-192** Dormant grants (R5.4). Role assignments at a deactivated branch stay dormant.
+  Reactivating the branch requires the manager to say whether they are kept or cleared
+  (`GRANTS_NEED_CONFIRMATION` lists them otherwise); the decision and the grants concerned
+  go into the `branch.activated` audit entry.
+- **BR-193** Account hygiene (R5.4). A signed-in user can change their own password (current
+  password required; every other session of the account ends, the current device is
+  re-issued) and see and end their sessions. A manager can end every session of an employee
+  they manage and clear an employee's sign-in lock, without deactivating them. Ten wrong
+  passwords pause sign-in for 15 minutes and the account holder is told by e-mail at once.
+  Invitation grants are re-checked at acceptance against the inviter's authority as it
+  stands then (grants the inviter can no longer give are dropped and recorded); deactivating
+  an inviter revokes their pending invitations.
 
 Platform and subscriptions (Prompt 17):
 - **BR-150** Every merchant has exactly one subscription to a plan. New merchants start on

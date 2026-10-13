@@ -25,6 +25,7 @@ import { RestaurantPage } from './features/restaurant/RestaurantPage.js';
 import { OnlineStorePage } from './features/online/OnlineStorePage.js';
 import { SubscriptionPage } from './features/subscription/SubscriptionPage.js';
 import { PurchaseOrderPage, PurchaseOrdersPage } from './features/purchasing/PurchaseOrdersPage.js';
+import { AccountPage } from './features/account/AccountPage.js';
 import { PeriodsPage } from './features/periods/PeriodsPage.js';
 import { SuppliersPage } from './features/purchasing/SuppliersPage.js';
 import {
@@ -124,6 +125,7 @@ export const routes: RouteObject[] = [
       { path: 'cash', element: guard('cash.custody', <CashCustodyPage />) },
       { path: 'audit', element: guard('audit.read', <AuditLogPage />) },
       { path: 'periods', element: guard('reports.financial', <PeriodsPage />) },
+      { path: 'account', element: <AccountPage /> },
       { path: 'payments', element: guard('payments.settings', <PaymentsPage />) },
       {
         path: 'accounts',

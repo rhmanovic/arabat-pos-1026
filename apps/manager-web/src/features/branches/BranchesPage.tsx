@@ -10,6 +10,7 @@ import {
   PageHeader,
   Textarea,
 } from '@arabat/ui';
+import { ApiError } from '@arabat/api-client';
 import { localizedName, useApi, useNotify } from '@arabat/web-core';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -30,16 +31,34 @@ export function BranchesPage() {
   const { branches, isLoading } = useBranchContext();
   const [editing, setEditing] = useState<BranchDetail | 'new' | null>(null);
   const [deactivating, setDeactivating] = useState<BranchDetail | null>(null);
+  // Dormant grants listed by the API on reactivation (BR-192): keep or clear them.
+  const [grants, setGrants] = useState<{ branch: BranchDetail; names: string[] } | null>(null);
 
   const setStatus = useMutation({
-    mutationFn: (v: { id: string; status: 'active' | 'inactive' }) =>
-      api.branches.setStatus(v.id, v.status),
+    mutationFn: (v: {
+      id: string;
+      status: 'active' | 'inactive';
+      dormantGrants?: 'keep' | 'clear';
+    }) =>
+      api.branches.setStatus(v.id, {
+        status: v.status,
+        ...(v.dormantGrants ? { dormantGrants: v.dormantGrants } : {}),
+      }),
     onSuccess: async (b) => {
       await queryClient.invalidateQueries({ queryKey: branchesKey });
       notify.ok(b.status === 'active' ? t('branches.activated') : t('branches.deactivated'));
       setDeactivating(null);
+      setGrants(null);
     },
-    onError: notify.fail,
+    onError: (error, v) => {
+      if (error instanceof ApiError && error.code === 'GRANTS_NEED_CONFIRMATION') {
+        const branch = branches.find((b) => b.id === v.id);
+        if (branch)
+          setGrants({ branch, names: (error.problem.issues ?? []).map((i) => i.message) });
+        return;
+      }
+      notify.fail(error);
+    },
   });
 
   return (
@@ -137,6 +156,49 @@ export function BranchesPage() {
           branch={editing === 'new' ? null : editing}
           onClose={() => setEditing(null)}
         />
+      ) : null}
+      {grants ? (
+        <Dialog
+          open
+          onOpenChange={(o) => !o && setGrants(null)}
+          title={t('branches.dormantTitle', { name: localizedName(grants.branch, i18n.language) })}
+          footer={
+            <>
+              <Button
+                variant="secondary"
+                loading={setStatus.isPending}
+                onClick={() =>
+                  setStatus.mutate({
+                    id: grants.branch.id,
+                    status: 'active',
+                    dormantGrants: 'clear',
+                  })
+                }
+              >
+                {t('branches.dormantClear')}
+              </Button>
+              <Button
+                loading={setStatus.isPending}
+                onClick={() =>
+                  setStatus.mutate({
+                    id: grants.branch.id,
+                    status: 'active',
+                    dormantGrants: 'keep',
+                  })
+                }
+              >
+                {t('branches.dormantKeep')}
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm text-fg-muted">{t('branches.dormantBody')}</p>
+          <ul className="mt-3 list-disc ps-5 text-sm" data-testid="dormant-grants">
+            {grants.names.map((n) => (
+              <li key={n}>{n}</li>
+            ))}
+          </ul>
+        </Dialog>
       ) : null}
       <ConfirmDialog
         open={Boolean(deactivating)}

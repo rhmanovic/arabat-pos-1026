@@ -17,6 +17,7 @@ import { nextDocumentNumber } from '../../database/schema/sequences.schema.js';
 import { assertCan } from '../../kernel/access/assert.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
+import { diffFields } from '../../kernel/audit-diff.js';
 import { newId } from '../../kernel/ids.js';
 import { addDays, merchantTimezone, todayIn } from '../../kernel/time/period.js';
 import { AuditService } from '../audit/audit.service.js';
@@ -124,6 +125,7 @@ export class PurchasingService {
     assertCan(actor, 'purchasing.manage', null);
     const supplierId = id ?? newId();
     const { version, ...fields } = input;
+    let changes = {};
     try {
       await this.database.withMerchantTx(actor.merchantId, async (tx) => {
         if (id) {
@@ -131,6 +133,9 @@ export class PurchasingService {
             throw AppError.validation([
               { path: 'version', code: 'required', message: 'version is required' },
             ]);
+          const [before] = await tx.select().from(suppliers).where(eq(suppliers.id, id));
+          if (before)
+            changes = diffFields(before, fields, Object.keys(fields) as (keyof typeof fields)[]);
           const [row] = await tx
             .update(suppliers)
             .set({ ...fields, version: sql`${suppliers.version} + 1`, updatedAt: sql`now()` })
@@ -157,6 +162,7 @@ export class PurchasingService {
           supplierId,
           ip,
           {
+            ...(id ? { changes } : {}),
             status: fields.status,
           },
         );
@@ -279,6 +285,12 @@ export class PurchasingService {
       assertCan(actor, 'purchasing.manage', order.branchId);
       assertCan(actor, 'purchasing.manage', input.branchId);
       if (order.status !== 'draft') throw this.state('Only draft orders can be edited.');
+      // Before / after of a draft's header and lines (BR-191, FND-620).
+      const linesBefore = (await this.lineState(tx, id)).map((l) => ({
+        variantId: l.variantId,
+        quantity: formatQuantity(l.orderedMilli),
+        unitCost: money(l.unitCostMinor).amount,
+      }));
       await this.assertSupplierActive(tx, input.supplierId);
       await this.assertBranch(tx, input.branchId);
       await assertStockItems(
@@ -303,7 +315,33 @@ export class PurchasingService {
           updatedAt: sql`now()`,
         })
         .where(eq(purchaseOrders.id, id));
+      const linesAfter = lines.map((l) => ({
+        variantId: l.variantId,
+        quantity: formatQuantity(l.quantityMilli),
+        unitCost: money(l.unitCostMinor).amount,
+      }));
+      const header = diffFields(
+        order,
+        {
+          supplierId: input.supplierId,
+          branchId: input.branchId,
+          expectedDate: input.expectedDate,
+          note: input.note,
+          ...(documentDate ? { documentDate: documentDate.date } : {}),
+        },
+        [
+          'supplierId',
+          'branchId',
+          'expectedDate',
+          'note',
+          ...(documentDate ? ['documentDate' as const] : []),
+        ],
+      );
       await this.record(tx, actor, 'purchase_order.updated', 'purchase_order', id, ip, {
+        changes: header,
+        ...(JSON.stringify(linesBefore) !== JSON.stringify(linesAfter)
+          ? { lines: { from: linesBefore, to: linesAfter } }
+          : {}),
         ...(documentDate?.backdated ? { documentDate: documentDate.date } : {}),
       });
     });

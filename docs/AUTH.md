@@ -178,6 +178,9 @@ can(actor, permission, branchId?):
 | Customers | `customers.read`, `customers.create`, `customers.manage` | branch |
 | Reports | `reports.sales`, `reports.financial`, `reports.inventory` | branch |
 | Period close | `periods.close` (close a month and lock it; BR-189) | merchant |
+
+Ownership transfer and the platform's owner freeze are described in BR-020 (ADR-0104); self-service
+password change and session management in BR-193.
 | Payments | `payments.settings` | merchant |
 | Employees | `employees.read`, `employees.manage` (branch); `roles.manage` (merchant) | mixed |
 | Branches | `branches.read`, `branches.update` (branch); `branches.manage` (merchant) | mixed |

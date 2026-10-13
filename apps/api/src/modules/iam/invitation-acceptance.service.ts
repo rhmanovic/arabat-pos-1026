@@ -1,4 +1,5 @@
 import { type InvitationPreview, newPasswordSchema } from '@arabat/contracts';
+import { canGrant } from '@arabat/permissions';
 import { Injectable } from '@nestjs/common';
 import { and, eq, gt, inArray, sql } from 'drizzle-orm';
 import { DatabaseService } from '../../database/database.service.js';
@@ -17,6 +18,7 @@ import {
   invitations,
   memberships,
   roleAssignments,
+  rolePermissions,
   roles,
   users,
 } from './iam.schema.js';
@@ -164,7 +166,29 @@ export class InvitationAcceptanceService {
             ).map((b) => b.id)
           : [],
       );
-      const valid = grants.filter((g) => g.branchId === null || active.has(g.branchId));
+      // Each grant is re-checked against the inviter's authority as it stands now, not as it
+      // was at invitation time (BR-193, FND-108); what fails is dropped and recorded.
+      const inviter = await this.access.loadMembershipAccess(tx, invitation.invitedBy);
+      const permissionsOf = new Map<string, string[]>();
+      for (const rp of await tx
+        .select({ roleId: rolePermissions.roleId, key: rolePermissions.permissionKey })
+        .from(rolePermissions)) {
+        permissionsOf.set(rp.roleId, [...(permissionsOf.get(rp.roleId) ?? []), rp.key]);
+      }
+      const dropped: { roleId: string; branchId: string | null; reason: string }[] = [];
+      const valid = grants.filter((g) => {
+        if (g.branchId !== null && !active.has(g.branchId)) {
+          dropped.push({ ...g, reason: 'branch_inactive' });
+          return false;
+        }
+        if (!inviter || !inviter.access.membershipActive) {
+          dropped.push({ ...g, reason: 'inviter_inactive' });
+          return false;
+        }
+        const check = canGrant(inviter.access, permissionsOf.get(g.roleId) ?? [], g.branchId);
+        if (!check.ok) dropped.push({ ...g, reason: 'inviter_authority' });
+        return check.ok;
+      });
       if (valid.length) {
         await tx.insert(roleAssignments).values(
           valid.map((g) => ({
@@ -184,7 +208,12 @@ export class InvitationAcceptanceService {
         targetType: 'membership',
         targetId: membershipId,
         ip: client.ip,
-        details: { invitationId: invitation.id, newAccount: Boolean(newUserHash) },
+        details: {
+          invitationId: invitation.id,
+          newAccount: Boolean(newUserHash),
+          grantsApplied: valid.length,
+          ...(dropped.length ? { droppedGrants: dropped } : {}),
+        },
       });
     });
 

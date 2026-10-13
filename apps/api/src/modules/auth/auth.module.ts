@@ -1,4 +1,5 @@
 import { Global, Module } from '@nestjs/common';
+import { AccountService } from './account.service.js';
 import { SessionResolver } from '../../kernel/access/session-resolver.js';
 import { AccessRepository } from '../iam/access.repository.js';
 import { AuthController } from './auth.controller.js';
@@ -29,6 +30,7 @@ import { TicketService } from './ticket.service.js';
     PlatformAuthService,
     SessionContextService,
     PosLockService,
+    AccountService,
     { provide: SessionResolver, useClass: DbSessionResolver },
   ],
   exports: [

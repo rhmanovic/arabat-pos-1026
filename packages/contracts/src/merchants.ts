@@ -28,8 +28,32 @@ export const merchantProfileSchema = z.object({
   status: z.enum(['active', 'suspended', 'closed']),
   version: z.number().int(),
   createdAt: z.string(),
+  /** The owner's pending transfer, if any (BR-020); visible to the owner and the named member. */
+  pendingOwnershipTransfer: z
+    .object({
+      id: z.string(),
+      toMembershipId: z.string(),
+      toName: z.string(),
+      toEmail: z.string(),
+      expiresAt: z.string(),
+      createdAt: z.string(),
+      /** True when the signed-in member is the one named: they may accept with the e-mailed token. */
+      forMe: z.boolean(),
+    })
+    .nullable()
+    .default(null),
 });
 export type MerchantProfile = z.infer<typeof merchantProfileSchema>;
+
+/** The owner names a member and re-enters their password (BR-020, R5.2). */
+export const startOwnershipTransferSchema = z.object({
+  toMembershipId: z.uuid(),
+  password: z.string().min(1).max(128),
+});
+export type StartOwnershipTransfer = z.input<typeof startOwnershipTransferSchema>;
+/** The named member confirms with the token from their e-mail. */
+export const acceptOwnershipTransferSchema = z.object({ token: z.string().min(10).max(200) });
+export type AcceptOwnershipTransfer = z.input<typeof acceptOwnershipTransferSchema>;
 
 /** IANA zone names accepted for a company (validated again on the server). */
 export const timezoneSchema = z
