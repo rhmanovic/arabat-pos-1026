@@ -25,6 +25,10 @@ import {
   type SavePurchaseOrder,
   type SaveSupplier,
   type TransferListQuery,
+  type RecallTransfer,
+  type ClaimTransferLoss,
+  type DecideTransferLoss,
+  inTransitSummarySchema,
   type TransferQuantities,
   purchaseOrderListSchema,
   purchaseOrderSchema,
@@ -42,7 +46,10 @@ import {
   refundReceiptSchema,
   refundSchema,
   refundableSaleSchema,
+  type CartEvent,
   type Checkout,
+  type RequestOverride,
+  saleOverrideGrantSchema,
   type SaleListQuery,
   type SuspendOrder,
   receiptSchema,
@@ -50,6 +57,19 @@ import {
   saleSchema,
   saleSummarySchema,
   salesSettingsSchema,
+  type AuditListQuery,
+  auditListSchema,
+  posShiftSchema,
+  type DecideCashMovement,
+  controlsChecklistSchema,
+  type CashPayoutRequestQuery,
+  type CashVarianceQuery,
+  type DecidePayoutRequest,
+  type ResolveVariance,
+  cashPayoutRequestListSchema,
+  cashPayoutRequestSchema,
+  cashVarianceListSchema,
+  cashVarianceSchema,
   suspendedOrderListSchema,
   suspendedOrderSchema,
   type CloseShift,
@@ -58,6 +78,11 @@ import {
   type CancelCashBranchTransfer,
   type CashDisbursementQuery,
   type CreateBankDeposit,
+  type CreateBankReconciliation,
+  type SettleDeposit,
+  bankReconciliationStateSchema,
+  bankReconciliationSchema,
+  depositInTransitListSchema,
   type CreateCashBranchTransfer,
   type CreateCashDisbursement,
   type ReceiveCashBranchTransfer,
@@ -69,10 +94,13 @@ import {
   cashDisbursementSchema,
   supplierOptionsSchema,
   supplierPaymentsSchema,
+  supplierStatementSchema,
+  type SupplierStatementQuery,
   type CreateCashTransfer,
   cashBranchSchema,
   cashOverviewSchema,
   cashStatementSchema,
+  type CashStatementQuery,
   cashTransferListSchema,
   cashTransferSchema,
   type DiscrepancyReportQuery,
@@ -96,6 +124,11 @@ import {
   shiftSchema,
   type AdjustmentListQuery,
   type CreateAdjustment,
+  type DamagedReturnQuery,
+  type DecideAdjustment,
+  type DisposeDamagedReturn,
+  damagedReturnListSchema,
+  damagedReturnSchema,
   type MovementQuery,
   type StockLevelQuery,
   adjustmentListSchema,
@@ -146,6 +179,11 @@ import {
   paymentsReportSchema,
   purchasingReportSchema,
   salesReportSchema,
+  todaySummarySchema,
+  periodListSchema,
+  periodPackSchema,
+  type ClosePeriod,
+  type ReportExport,
   shiftsReportSchema,
   expensesReportSchema,
   type AddOrderItems,
@@ -191,6 +229,14 @@ import {
   platformMerchantListSchema,
   platformOverviewSchema,
   subscriptionViewSchema,
+  type StartOwnershipTransfer,
+  type AcceptOwnershipTransfer,
+  type BranchStatus,
+  type ChangePassword,
+  sessionListSchema,
+  type OwnerFreeze,
+  type PlatformOwnershipTransfer,
+  priceHistorySchema,
 } from '@arabat/contracts';
 import { z } from 'zod';
 import { ApiError, ContractError, NetworkError, toApiError } from './errors.js';
@@ -294,6 +340,15 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('POST', '/auth/password/reset', { body }),
       logout: (appInterface: AppInterface) =>
         request('POST', `/auth/${appInterface}/logout`, { body: {} }),
+      /** Account hygiene (BR-193): own password and sessions. */
+      changePassword: (body: ChangePassword) => request('POST', '/auth/manager/password', { body }),
+      sessions: () => request('GET', '/auth/manager/sessions', { schema: sessionListSchema }),
+      revokeSession: (id: string) => request('DELETE', `/auth/manager/sessions/${id}`),
+      revokeOtherSessions: () =>
+        request('POST', '/auth/manager/sessions/revoke-others', {
+          body: {},
+          schema: z.object({ ended: z.number().int() }),
+        }),
       /** POS screen lock (server-enforced until the password is entered again). */
       posLock: () => request('POST', '/auth/pos/lock', { body: {} }),
       posUnlock: (password: string) => request('POST', '/auth/pos/unlock', { body: { password } }),
@@ -349,6 +404,21 @@ export function createApiClient(options: ApiClientOptions = {}) {
           body,
           schema: platformMerchantDetailSchema,
         }),
+      freezeOwner: (id: string, body: OwnerFreeze) =>
+        request('POST', `/platform/merchants/${id}/owner-freeze`, {
+          body,
+          schema: platformMerchantDetailSchema,
+        }),
+      releaseOwner: (id: string, body: OwnerFreeze) =>
+        request('POST', `/platform/merchants/${id}/owner-release`, {
+          body,
+          schema: platformMerchantDetailSchema,
+        }),
+      transferOwnership: (id: string, body: PlatformOwnershipTransfer) =>
+        request('POST', `/platform/merchants/${id}/ownership-transfer`, {
+          body,
+          schema: platformMerchantDetailSchema,
+        }),
       planCheck: (id: string, planId: string) =>
         request('GET', `/platform/merchants/${id}/plan-check?${toParams({ planId })}`, {
           schema: planCheckSchema,
@@ -369,8 +439,22 @@ export function createApiClient(options: ApiClientOptions = {}) {
     },
     merchant: {
       get: () => request('GET', '/manager/merchant', { schema: merchantProfileSchema }),
+      controls: () =>
+        request('GET', '/manager/merchant/controls', { schema: controlsChecklistSchema }),
       update: (body: UpdateMerchantProfile) =>
         request('PATCH', '/manager/merchant', { body, schema: merchantProfileSchema }),
+      /** Ownership transfer (BR-020): the owner starts or cancels, the named member accepts. */
+      startOwnershipTransfer: (body: StartOwnershipTransfer) =>
+        request('POST', '/manager/merchant/ownership-transfers', {
+          body,
+          schema: merchantProfileSchema,
+        }),
+      cancelOwnershipTransfer: () =>
+        request('DELETE', '/manager/merchant/ownership-transfers', {
+          schema: merchantProfileSchema,
+        }),
+      acceptOwnershipTransfer: (body: AcceptOwnershipTransfer) =>
+        request('POST', '/manager/merchant/ownership-transfers/accept', { body }),
     },
     branches: {
       list: () => request('GET', '/manager/branches', { schema: branchDetailListSchema }),
@@ -380,11 +464,8 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('POST', '/manager/branches', { body, schema: branchDetailSchema }),
       update: (id: string, body: UpdateBranch) =>
         request('PATCH', `/manager/branches/${id}`, { body, schema: branchDetailSchema }),
-      setStatus: (id: string, status: 'active' | 'inactive') =>
-        request('POST', `/manager/branches/${id}/status`, {
-          body: { status },
-          schema: branchDetailSchema,
-        }),
+      setStatus: (id: string, body: BranchStatus) =>
+        request('POST', `/manager/branches/${id}/status`, { body, schema: branchDetailSchema }),
     },
     roles: {
       catalog: () => request('GET', '/manager/permissions', { schema: permissionCatalogSchema }),
@@ -414,6 +495,8 @@ export function createApiClient(options: ApiClientOptions = {}) {
         });
       },
       product: (id: string) => request('GET', `/manager/products/${id}`, { schema: productSchema }),
+      priceHistory: (id: string) =>
+        request('GET', `/manager/products/${id}/price-history`, { schema: priceHistorySchema }),
       createProduct: (body: SaveProduct) =>
         request('POST', '/manager/products', { body, schema: productSchema }),
       updateProduct: (id: string, body: SaveProduct) =>
@@ -466,6 +549,25 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('GET', `/manager/inventory/adjustments/${id}`, { schema: adjustmentSchema }),
       createAdjustment: (body: CreateAdjustment) =>
         request('POST', '/manager/inventory/adjustments', { body, schema: adjustmentSchema }),
+      decideAdjustment: (id: string, body: DecideAdjustment) =>
+        request('POST', `/manager/inventory/adjustments/${id}/decision`, {
+          body,
+          schema: adjustmentSchema,
+        }),
+      withdrawAdjustment: (id: string) =>
+        request('POST', `/manager/inventory/adjustments/${id}/withdraw`, {
+          body: {},
+          schema: adjustmentSchema,
+        }),
+      damagedReturns: (query: DamagedReturnQuery = {}) =>
+        request('GET', `/manager/inventory/damaged-returns?${toParams(query)}`, {
+          schema: damagedReturnListSchema,
+        }),
+      disposeDamagedReturn: (id: string, body: DisposeDamagedReturn) =>
+        request('POST', `/manager/inventory/damaged-returns/${id}/dispose`, {
+          body,
+          schema: damagedReturnSchema,
+        }),
       settings: () =>
         request('GET', '/manager/inventory/settings', { schema: inventorySettingsSchema }),
       updateSettings: (body: { allowNegativeStock: boolean; version: number }) =>
@@ -501,14 +603,10 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('GET', `/manager/cash/overview?${toParams({ branchId })}`, {
           schema: cashOverviewSchema,
         }),
-      statement: (accountId: string, page = 1, pageSize = 25) =>
-        request(
-          'GET',
-          `/manager/cash/accounts/${accountId}/entries?${toParams({ page, pageSize })}`,
-          {
-            schema: cashStatementSchema,
-          },
-        ),
+      statement: (accountId: string, query: CashStatementQuery = {}) =>
+        request('GET', `/manager/cash/accounts/${accountId}/entries?${toParams(query)}`, {
+          schema: cashStatementSchema,
+        }),
       count: (accountId: string, body: CashCount) =>
         request('POST', `/manager/cash/accounts/${accountId}/counts`, {
           body,
@@ -565,9 +663,63 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('GET', `/manager/suppliers/${supplierId}/payments`, {
           schema: supplierPaymentsSchema,
         }),
+      supplierStatement: (supplierId: string, query: SupplierStatementQuery = {}) =>
+        request('GET', `/manager/suppliers/${supplierId}/statement?${toParams(query)}`, {
+          schema: supplierStatementSchema,
+        }),
+      payoutRequests: (query: CashPayoutRequestQuery = {}) =>
+        request('GET', `/manager/cash/payout-requests?${toParams(query)}`, {
+          schema: cashPayoutRequestListSchema,
+        }),
+      requestPayout: (body: CreateCashDisbursement) =>
+        request('POST', '/manager/cash/payout-requests', {
+          body,
+          schema: cashPayoutRequestSchema,
+        }),
+      decidePayoutRequest: (id: string, body: DecidePayoutRequest) =>
+        request('POST', `/manager/cash/payout-requests/${id}/decision`, {
+          body,
+          schema: cashPayoutRequestSchema,
+        }),
+      withdrawPayoutRequest: (id: string) =>
+        request('POST', `/manager/cash/payout-requests/${id}/withdraw`, {
+          body: {},
+          schema: cashPayoutRequestSchema,
+        }),
+      variances: (query: CashVarianceQuery = {}) =>
+        request('GET', `/manager/cash/variances?${toParams(query)}`, {
+          schema: cashVarianceListSchema,
+        }),
+      resolveVariance: (sourceType: string, sourceId: string, body: ResolveVariance) =>
+        request('POST', `/manager/cash/variances/${sourceType}/${sourceId}/followup`, {
+          body,
+          schema: cashVarianceSchema,
+        }),
+      depositsInTransit: (branchId?: string | null) =>
+        request('GET', `/manager/cash/deposits/pending?${toParams({ branchId })}`, {
+          schema: depositInTransitListSchema,
+        }),
+      settleDeposit: (id: string, body: SettleDeposit) =>
+        request('POST', `/manager/cash/deposits/${id}/settle`, {
+          body,
+          schema: cashTransferSchema,
+        }),
+      bankReconciliation: (accountId: string) =>
+        request('GET', `/manager/cash/bank-accounts/${accountId}/reconciliation`, {
+          schema: bankReconciliationStateSchema,
+        }),
+      reconcileBank: (accountId: string, body: CreateBankReconciliation) =>
+        request('POST', `/manager/cash/bank-accounts/${accountId}/reconciliations`, {
+          body,
+          schema: bankReconciliationSchema,
+        }),
       posBankAccounts: () =>
         request('GET', '/pos/cash/bank-accounts', { schema: bankAccountOptionsSchema }),
       posSuppliers: () => request('GET', '/pos/cash/suppliers', { schema: supplierOptionsSchema }),
+    },
+    audit: {
+      list: (query: AuditListQuery = {}) =>
+        request('GET', `/manager/audit?${toParams(query)}`, { schema: auditListSchema }),
     },
     registers: {
       list: (branchId?: string | null) =>
@@ -594,17 +746,34 @@ export function createApiClient(options: ApiClientOptions = {}) {
         }),
       forceClose: (id: string, body: ForceCloseShift) =>
         request('POST', `/manager/shifts/${id}/force-close`, { body, schema: shiftSchema }),
+      decideMovement: (id: string, movementId: string, body: DecideCashMovement) =>
+        request('POST', `/manager/shifts/${id}/movements/${movementId}/decision`, {
+          body,
+          schema: shiftSchema,
+        }),
+      withdrawMovement: (movementId: string) =>
+        request('POST', `/pos/shifts/current/cash-movements/${movementId}/withdraw`, {
+          body: {},
+          schema: posShiftSchema,
+        }),
       posRegisters: () => request('GET', '/pos/registers', { schema: posRegisterListSchema }),
       current: () => request('GET', '/pos/shifts/current', { schema: currentShiftSchema }),
-      open: (body: OpenShift) => request('POST', '/pos/shifts', { body, schema: shiftSchema }),
+      open: (body: OpenShift) => request('POST', '/pos/shifts', { body, schema: posShiftSchema }),
       cashMovement: (body: RecordCashMovement) =>
-        request('POST', '/pos/shifts/current/cash-movements', { body, schema: shiftSchema }),
+        request('POST', '/pos/shifts/current/cash-movements', { body, schema: posShiftSchema }),
       close: (body: CloseShift) =>
         request('POST', '/pos/shifts/current/close', { body, schema: shiftSchema }),
     },
     sales: {
       settings: () => request('GET', '/pos/sales/settings', { schema: salesSettingsSchema }),
       checkout: (body: Checkout) => request('POST', '/pos/sales', { body, schema: saleSchema }),
+      requestOverride: (body: RequestOverride) =>
+        request('POST', '/pos/overrides', { body, schema: saleOverrideGrantSchema }),
+      lookup: (receipt: string) =>
+        request('GET', `/pos/sales/lookup?${toParams({ receipt })}`, { schema: saleSchema }),
+      reprint: (id: string) =>
+        request('POST', `/pos/sales/${id}/reprints`, { body: {}, schema: receiptSchema }),
+      cartEvent: (body: CartEvent) => request('POST', '/pos/cart-events', { body }),
       recent: () =>
         request('GET', '/pos/sales/recent', {
           schema: z.object({ sales: z.array(saleSummarySchema) }),
@@ -627,6 +796,23 @@ export function createApiClient(options: ApiClientOptions = {}) {
         maxDiscountPercent: string;
         refundWindowDays: number;
         refundApprovalLimit: string;
+        blindCashCount: boolean;
+        cashOutOtherLimit: string;
+        cashOutOtherShiftLimit: string;
+        maxRegisterTolerance: string;
+        expenseApprovalLimit: string;
+        supplierPaymentApprovalLimit: string;
+        adjustmentApprovalLimit?: string;
+        blindStockCount?: boolean;
+        priceOverrideFloorPercent?: string | null;
+        priceOverrideCeilingPercent?: string | null;
+        priceOverrideBelowCost?: boolean;
+        refundOwnSalesNeedApproval?: boolean;
+        requireTenderReference?: boolean;
+        heldSaleExpiryHours?: number;
+        cartClearLogThreshold?: string;
+        unusualRefundRatePercent?: string;
+        unusualActivityDays?: number;
         version: number;
       }) => request('PUT', '/manager/sales-settings', { body, schema: salesSettingsSchema }),
     },
@@ -878,6 +1064,9 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('POST', `/pos/kitchen/tickets/${id}/status`, { body, schema: kitchenTicketSchema }),
     },
     reports: {
+      today: () => request('GET', '/manager/reports/today', { schema: todaySummarySchema }),
+      /** A CSV built in the browser: recorded in the audit log (BR-187). */
+      logExport: (body: ReportExport) => request('POST', '/manager/reports/exports', { body }),
       sales: (query: ReportQuery) =>
         request('GET', `/manager/reports/sales?${toParams(query)}`, { schema: salesReportSchema }),
       payments: (query: ReportQuery) =>
@@ -900,6 +1089,13 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('GET', `/manager/reports/purchasing?${toParams(query)}`, {
           schema: purchasingReportSchema,
         }),
+    },
+    periods: {
+      list: () => request('GET', '/manager/periods', { schema: periodListSchema }),
+      get: (period: string) =>
+        request('GET', `/manager/periods/${period}`, { schema: periodPackSchema }),
+      close: (period: string, body: ClosePeriod) =>
+        request('POST', `/manager/periods/${period}/close`, { body, schema: periodPackSchema }),
     },
     customers: {
       list: (query: CustomerListQuery = {}) =>
@@ -942,6 +1138,19 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('POST', `/manager/transfers/${id}/dispatch`, { body, schema: transferSchema }),
       receive: (id: string, body: TransferQuantities) =>
         request('POST', `/manager/transfers/${id}/receive`, { body, schema: transferSchema }),
+      recall: (id: string, body: RecallTransfer) =>
+        request('POST', `/manager/transfers/${id}/recall`, { body, schema: transferSchema }),
+      claimLoss: (id: string, body: ClaimTransferLoss) =>
+        request('POST', `/manager/transfers/${id}/losses`, { body, schema: transferSchema }),
+      decideLoss: (id: string, lossId: string, body: DecideTransferLoss) =>
+        request('POST', `/manager/transfers/${id}/losses/${lossId}/decision`, {
+          body,
+          schema: transferSchema,
+        }),
+      inTransit: (branchId?: string | null) =>
+        request('GET', `/manager/transfers/in-transit?${toParams({ branchId })}`, {
+          schema: inTransitSummarySchema,
+        }),
     },
     employees: {
       list: () => request('GET', '/manager/employees', { schema: employeeListSchema }),
@@ -966,6 +1175,12 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('PUT', `/manager/employees/${id}/assignments`, { body, schema: employeeSchema }),
       sendPasswordReset: (id: string) =>
         request('POST', `/manager/employees/${id}/password-reset`, { body: {} }),
+      revokeSessions: (id: string) =>
+        request('POST', `/manager/employees/${id}/sessions/revoke`, {
+          body: {},
+          schema: z.object({ ended: z.number().int() }),
+        }),
+      unlock: (id: string) => request('POST', `/manager/employees/${id}/unlock`, { body: {} }),
     },
   };
 }

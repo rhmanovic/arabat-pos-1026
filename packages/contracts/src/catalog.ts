@@ -232,3 +232,20 @@ export const posCatalogSchema = z.object({
   version: z.string(),
 });
 export type PosCatalog = z.infer<typeof posCatalogSchema>;
+
+/** Price and cost history of a product's variants (BR-191, FND-222). */
+export const priceHistoryEntrySchema = z.object({
+  id: z.string(),
+  variantId: z.string(),
+  variantNameEn: z.string().nullable(),
+  variantNameAr: z.string().nullable(),
+  kind: z.enum(['price', 'cost']),
+  from: moneySchema.nullable(),
+  to: moneySchema.nullable(),
+  /** manual = edited in the catalog; created = set when the variant was created. */
+  source: z.enum(['manual', 'created']),
+  changedBy: z.string().nullable(),
+  changedAt: z.string(),
+});
+export const priceHistorySchema = z.object({ entries: z.array(priceHistoryEntrySchema) });
+export type PriceHistory = z.infer<typeof priceHistorySchema>;

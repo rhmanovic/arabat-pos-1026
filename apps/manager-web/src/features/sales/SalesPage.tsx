@@ -1,7 +1,8 @@
-import type { SaleListQuery } from '@arabat/contracts';
+import { SALE_FLAGS, type SaleFlag, type SaleListQuery } from '@arabat/contracts';
 import {
   Badge,
   Button,
+  Checkbox,
   DataTable,
   Dialog,
   Field,
@@ -46,11 +47,12 @@ export function SalesPage() {
   const [to, setTo] = useState('');
   const [policy, setPolicy] = useState(false);
   const [channel, setChannel] = useState<'' | 'pos' | 'online'>('');
+  const [flag, setFlag] = useState<'' | SaleFlag>('');
   useEffect(() => {
     const id = setTimeout(() => setQ(search.trim()), 300);
     return () => clearTimeout(id);
   }, [search]);
-  const filterKey = JSON.stringify([q, from, to, branchId, channel]);
+  const filterKey = JSON.stringify([q, from, to, branchId, channel, flag]);
   const [paging, setPaging] = useState({ key: filterKey, page: 1 });
   const page = paging.key === filterKey ? paging.page : 1;
   const query: SaleListQuery = {
@@ -61,6 +63,7 @@ export function SalesPage() {
     ...(DATE.test(to) ? { to } : {}),
     ...(branchId ? { branchId } : {}),
     ...(channel ? { channel } : {}),
+    ...(flag ? { flag } : {}),
   };
   const list = useQuery({
     queryKey: [...salesKey, query],
@@ -111,6 +114,19 @@ export function SalesPage() {
           <option value="">{t('sales.channelAll')}</option>
           <option value="pos">{t('sales.channel_pos')}</option>
           <option value="online">{t('sales.channel_online')}</option>
+        </Select>
+        <Select
+          className="w-48"
+          aria-label={t('sales.flagFilter')}
+          value={flag}
+          onChange={(e) => setFlag(e.target.value as '' | SaleFlag)}
+        >
+          <option value="">{t('sales.flagAll')}</option>
+          {SALE_FLAGS.map((f) => (
+            <option key={f} value={f}>
+              {t(`sales.flag_${f}`)}
+            </option>
+          ))}
         </Select>
       </div>
       {list.data ? (
@@ -196,6 +212,19 @@ export function SalesPage() {
             ),
           },
           { key: 'total', header: t('sales.total'), cell: (s) => <Amount value={s.total} /> },
+          {
+            key: 'flags',
+            header: t('sales.flags'),
+            cell: (s) => (
+              <span className="flex flex-wrap gap-1" data-testid="sale-flags">
+                {s.flags.map((f) => (
+                  <Badge key={f} tone="warning">
+                    {t(`sales.flag_${f}`)}
+                  </Badge>
+                ))}
+              </span>
+            ),
+          },
         ]}
       />
       <Pager
@@ -222,19 +251,92 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
   const [value, setValue] = useState<string | null>(null);
   const [days, setDays] = useState<string | null>(null);
   const [limit, setLimit] = useState<string | null>(null);
+  const [blind, setBlind] = useState<boolean | null>(null);
+  const blindCashCount = blind ?? settings.data?.blindCashCount ?? true;
+  const [cashLimit, setCashLimit] = useState<string | null>(null);
+  const [cashShiftLimit, setCashShiftLimit] = useState<string | null>(null);
+  const [maxTolerance, setMaxTolerance] = useState<string | null>(null);
+  const cashOutOtherLimit = cashLimit ?? settings.data?.cashOutOtherLimit.amount ?? '';
+  const cashOutOtherShiftLimit =
+    cashShiftLimit ?? settings.data?.cashOutOtherShiftLimit.amount ?? '';
+  const maxRegisterTolerance = maxTolerance ?? settings.data?.maxRegisterTolerance.amount ?? '';
+  const [expLimit, setExpLimit] = useState<string | null>(null);
+  const [supLimit, setSupLimit] = useState<string | null>(null);
+  const expenseApprovalLimit = expLimit ?? settings.data?.expenseApprovalLimit.amount ?? '';
+  const supplierPaymentApprovalLimit =
+    supLimit ?? settings.data?.supplierPaymentApprovalLimit.amount ?? '';
+  const [adjLimit, setAdjLimit] = useState<string | null>(null);
+  const [blindStock, setBlindStock] = useState<boolean | null>(null);
+  const adjustmentApprovalLimit = adjLimit ?? settings.data?.adjustmentApprovalLimit.amount ?? '';
+  const blindStockCount = blindStock ?? settings.data?.blindStockCount ?? true;
+  // Price-change bounds (BR-178): empty = no bound.
+  const [floorText, setFloorText] = useState<string | null>(null);
+  const [ceilingText, setCeilingText] = useState<string | null>(null);
+  const [belowCost, setBelowCost] = useState<boolean | null>(null);
+  const floor = floorText ?? settings.data?.priceOverrideFloorPercent ?? '';
+  const ceiling = ceilingText ?? settings.data?.priceOverrideCeilingPercent ?? '';
+  const priceOverrideBelowCost = belowCost ?? settings.data?.priceOverrideBelowCost ?? false;
+  const BOUND = /^\d{1,3}(\.\d{1,2})?$/;
+  const boundOk = (v: string) => v.trim() === '' || BOUND.test(v.trim());
+  // Session 9 controls (BR-180 to BR-182).
+  const [ownSale, setOwnSale] = useState<boolean | null>(null);
+  const [tenderRef, setTenderRef] = useState<boolean | null>(null);
+  const [heldHours, setHeldHours] = useState<string | null>(null);
+  const [clearThreshold, setClearThreshold] = useState<string | null>(null);
+  const refundOwnSalesNeedApproval = ownSale ?? settings.data?.refundOwnSalesNeedApproval ?? true;
+  const requireTenderReference = tenderRef ?? settings.data?.requireTenderReference ?? true;
+  const heldSaleExpiryHours = heldHours ?? String(settings.data?.heldSaleExpiryHours ?? '');
+  const cartClearLogThreshold = clearThreshold ?? settings.data?.cartClearLogThreshold.amount ?? '';
+  // Unusual-activity review (BR-186).
+  const [rateText, setRateText] = useState<string | null>(null);
+  const [daysText, setDaysText] = useState<string | null>(null);
+  const unusualRefundRatePercent = rateText ?? settings.data?.unusualRefundRatePercent ?? '';
+  const unusualActivityDays = daysText ?? String(settings.data?.unusualActivityDays ?? '');
+  const AMOUNT = /^\d{1,10}(\.\d{1,3})?$/;
   const current = value ?? settings.data?.maxDiscountPercent ?? '';
   const windowDays = days ?? String(settings.data?.refundWindowDays ?? '');
   const approvalLimit = limit ?? settings.data?.refundApprovalLimit.amount ?? '';
   const valid =
     /^(100(\.0{1,2})?|\d{1,2}(\.\d{1,2})?)$/.test(current.trim()) &&
     /^\d{1,4}$/.test(windowDays.trim()) &&
-    /^\d{1,10}(\.\d{1,3})?$/.test(approvalLimit.trim());
+    AMOUNT.test(approvalLimit.trim()) &&
+    AMOUNT.test(cashOutOtherLimit.trim()) &&
+    AMOUNT.test(cashOutOtherShiftLimit.trim()) &&
+    AMOUNT.test(maxRegisterTolerance.trim()) &&
+    AMOUNT.test(expenseApprovalLimit.trim()) &&
+    AMOUNT.test(supplierPaymentApprovalLimit.trim()) &&
+    AMOUNT.test(adjustmentApprovalLimit.trim()) &&
+    boundOk(floor) &&
+    boundOk(ceiling) &&
+    (floor.trim() === '' || ceiling.trim() === '' || Number(floor) <= Number(ceiling)) &&
+    /^\d{1,3}$/.test(heldSaleExpiryHours.trim()) &&
+    AMOUNT.test(cartClearLogThreshold.trim()) &&
+    BOUND.test(unusualRefundRatePercent.trim()) &&
+    /^\d{1,3}$/.test(unusualActivityDays.trim()) &&
+    Number(unusualActivityDays) >= 1;
   const save = useMutation({
     mutationFn: () =>
       api.sales.updateSettings({
         maxDiscountPercent: current.trim(),
         refundWindowDays: Number.parseInt(windowDays.trim(), 10),
         refundApprovalLimit: approvalLimit.trim(),
+        blindCashCount,
+        cashOutOtherLimit: cashOutOtherLimit.trim(),
+        cashOutOtherShiftLimit: cashOutOtherShiftLimit.trim(),
+        maxRegisterTolerance: maxRegisterTolerance.trim(),
+        expenseApprovalLimit: expenseApprovalLimit.trim(),
+        supplierPaymentApprovalLimit: supplierPaymentApprovalLimit.trim(),
+        adjustmentApprovalLimit: adjustmentApprovalLimit.trim(),
+        blindStockCount,
+        priceOverrideFloorPercent: floor.trim() === '' ? null : floor.trim(),
+        priceOverrideCeilingPercent: ceiling.trim() === '' ? null : ceiling.trim(),
+        priceOverrideBelowCost,
+        refundOwnSalesNeedApproval,
+        requireTenderReference,
+        heldSaleExpiryHours: Number.parseInt(heldSaleExpiryHours.trim(), 10),
+        cartClearLogThreshold: cartClearLogThreshold.trim(),
+        unusualRefundRatePercent: unusualRefundRatePercent.trim(),
+        unusualActivityDays: Number.parseInt(unusualActivityDays.trim(), 10),
         version: settings.data!.version,
       }),
     onSuccess: async () => {
@@ -298,6 +400,168 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
             />
           )}
         </Field>
+        <Checkbox
+          label={t('sales.blindCount')}
+          description={t('sales.blindCountHint')}
+          checked={blindCashCount}
+          onChange={(e) => setBlind(e.target.checked)}
+        />
+        <Field label={t('sales.cashOutLimit')} hint={t('sales.cashOutLimitHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="decimal"
+              value={cashOutOtherLimit}
+              onChange={(e) => setCashLimit(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('sales.cashOutShiftLimit')} hint={t('sales.cashOutShiftLimitHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="decimal"
+              value={cashOutOtherShiftLimit}
+              onChange={(e) => setCashShiftLimit(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('sales.maxTolerance')} hint={t('sales.maxToleranceHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="decimal"
+              value={maxRegisterTolerance}
+              onChange={(e) => setMaxTolerance(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('sales.expenseLimit')} hint={t('sales.approvalLimitHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="decimal"
+              value={expenseApprovalLimit}
+              onChange={(e) => setExpLimit(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('sales.supplierPaymentLimit')} hint={t('sales.approvalLimitHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="decimal"
+              value={supplierPaymentApprovalLimit}
+              onChange={(e) => setSupLimit(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('sales.adjustmentLimit')} hint={t('sales.adjustmentLimitHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="decimal"
+              value={adjustmentApprovalLimit}
+              onChange={(e) => setAdjLimit(e.target.value)}
+            />
+          )}
+        </Field>
+        <Checkbox
+          label={t('sales.blindStockCount')}
+          description={t('sales.blindStockCountHint')}
+          checked={blindStockCount}
+          onChange={(e) => setBlindStock(e.target.checked)}
+        />
+        <Field label={t('sales.priceFloor')} hint={t('sales.priceBoundsHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="decimal"
+              value={floor}
+              onChange={(e) => setFloorText(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('sales.priceCeiling')} hint={t('sales.priceBoundsHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="decimal"
+              value={ceiling}
+              onChange={(e) => setCeilingText(e.target.value)}
+            />
+          )}
+        </Field>
+        <Checkbox
+          label={t('sales.priceBelowCost')}
+          description={t('sales.priceBelowCostHint')}
+          checked={priceOverrideBelowCost}
+          onChange={(e) => setBelowCost(e.target.checked)}
+        />
+        <Checkbox
+          label={t('sales.ownSaleApproval')}
+          description={t('sales.ownSaleApprovalHint')}
+          checked={refundOwnSalesNeedApproval}
+          onChange={(e) => setOwnSale(e.target.checked)}
+        />
+        <Checkbox
+          label={t('sales.tenderReference')}
+          description={t('sales.tenderReferenceHint')}
+          checked={requireTenderReference}
+          onChange={(e) => setTenderRef(e.target.checked)}
+        />
+        <Field label={t('sales.heldExpiry')} hint={t('sales.heldExpiryHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="numeric"
+              value={heldSaleExpiryHours}
+              onChange={(e) => setHeldHours(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('sales.clearThreshold')} hint={t('sales.clearThresholdHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="decimal"
+              value={cartClearLogThreshold}
+              onChange={(e) => setClearThreshold(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('sales.unusualRate')} hint={t('sales.unusualRateHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="decimal"
+              value={unusualRefundRatePercent}
+              onChange={(e) => setRateText(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('sales.unusualDays')} hint={t('sales.unusualDaysHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="numeric"
+              value={unusualActivityDays}
+              onChange={(e) => setDaysText(e.target.value)}
+            />
+          )}
+        </Field>
       </div>
     </Dialog>
   );
@@ -331,6 +595,37 @@ export function SaleDetailPage() {
       />
       {s ? (
         <div className="grid gap-6">
+          {s.aboveLimit ||
+          s.zeroTotalReason !== null ||
+          s.override ||
+          s.heldByName ||
+          s.reprintCount > 0 ? (
+            <div
+              className="grid gap-1 rounded-lg border border-warning/50 bg-warning/10 p-3 text-sm"
+              data-testid="sale-exceptions"
+            >
+              <p className="font-semibold">{t('sales.exceptions')}</p>
+              {s.aboveLimit ? (
+                <p>{t('sales.aboveLimitNote', { limit: s.discountLimitPercent ?? '' })}</p>
+              ) : null}
+              {s.zeroTotalReason !== null ? (
+                <p>
+                  {t('sales.flag_zero_total')}: {s.zeroTotalReason}
+                </p>
+              ) : null}
+              {s.heldByName ? <p>{t('sales.heldBy', { name: s.heldByName })}</p> : null}
+              {s.reprintCount > 0 ? <p>{t('sales.reprints', { count: s.reprintCount })}</p> : null}
+              {s.override ? (
+                <p>
+                  {t('sales.supervisedBy', { name: s.override.approverName })}
+                  {s.override.kinds.length
+                    ? ` (${s.override.kinds.map((k) => t(`perm.${k}`, { defaultValue: k })).join(', ')})`
+                    : ''}
+                  {s.override.note ? ` — ${s.override.note}` : ''}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <p className="text-sm" data-testid="sale-customer">
             {t('sales.customer')}:{' '}
             {s.customer ? (
@@ -389,7 +684,10 @@ export function SaleDetailPage() {
                         : ''}
                     </span>
                     {l.priceOverridden ? (
-                      <Badge tone="warning">{t('sales.overridden')}</Badge>
+                      <Badge tone="warning">
+                        {t('sales.overridden')}
+                        {l.priceOverrideReason ? `: ${l.priceOverrideReason}` : ''}
+                      </Badge>
                     ) : null}
                   </span>
                 ),

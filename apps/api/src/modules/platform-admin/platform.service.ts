@@ -11,6 +11,8 @@ import type {
   platformAuditQuerySchema,
   platformMerchantQuerySchema,
   savePlanSchema,
+  ownerFreezeSchema,
+  platformOwnershipTransferSchema,
 } from '@arabat/contracts';
 import { parseAmount } from '../payments/payments.service.js';
 import { Injectable } from '@nestjs/common';
@@ -28,6 +30,7 @@ import { PasswordService } from '../auth/password.service.js';
 import { isUniqueViolation } from '../auth/registration.service.js';
 import { users } from '../iam/iam.schema.js';
 import { merchants } from '../merchants/merchants.schema.js';
+import { OwnershipService } from '../merchants/ownership.service.js';
 import { provisionMerchant } from '../merchants/provision.js';
 import { plans, subscriptionEvents, subscriptions } from '../subscriptions/subscriptions.schema.js';
 import {
@@ -57,6 +60,7 @@ export class PlatformService {
     private readonly subscriptions: SubscriptionsService,
     private readonly passwords: PasswordService,
     private readonly resets: PasswordResetService,
+    private readonly ownership: OwnershipService,
   ) {}
 
   // ------------------------------------------------------------ overview & lists
@@ -184,6 +188,22 @@ export class PlatformService {
             lastLoginAt: iso(owner['last_login_at']),
           }
         : null,
+      ownerFrozenAt: m.ownerFrozenAt?.toISOString() ?? null,
+      ownerFrozenReason: m.ownerFrozenReason,
+      members: (
+        (
+          await tx.execute(sql`
+            select ms.id, u.full_name, u.email, ms.is_owner
+            from memberships ms join users u on u.id = ms.user_id
+            where ms.merchant_id = ${merchantId} and ms.status = 'active'
+            order by ms.is_owner desc, u.full_name`)
+        ).rows as Row[]
+      ).map((r) => ({
+        membershipId: r['id'] as string,
+        fullName: r['full_name'] as string,
+        email: r['email'] as string,
+        isOwner: Boolean(r['is_owner']),
+      })),
       subscription: await this.subscriptions.view(tx, merchantId),
       onboarding: {
         ownerSignedIn: Boolean(owner?.['last_login_at']),
@@ -358,6 +378,118 @@ export class PlatformService {
       });
       return this.detailIn(tx, merchantId);
     });
+  }
+
+  /** Emergency freeze (BR-020, R5.2): the owner's sessions end and the owner cannot sign in. */
+  async freezeOwner(
+    actor: PlatformActor,
+    merchantId: string,
+    input: O<typeof ownerFreezeSchema>,
+    ip: string,
+    freeze: boolean,
+  ): Promise<PlatformMerchantDetail> {
+    return this.database.withPlatformContext(actor.operatorId, merchantId, async (tx) => {
+      const [m] = await tx
+        .select()
+        .from(merchants)
+        .where(eq(merchants.id, merchantId))
+        .for('update');
+      if (!m) throw AppError.notFound('Merchant not found.');
+      if (m.version !== input.version) throw versionConflict();
+      if (freeze === Boolean(m.ownerFrozenAt))
+        throw new AppError(
+          409,
+          'INVALID_STATE',
+          freeze ? 'The owner is already frozen.' : 'The owner is not frozen.',
+        );
+      await tx
+        .update(merchants)
+        .set({
+          ownerFrozenAt: freeze ? sql`now()` : null,
+          ownerFrozenReason: freeze ? input.reason : null,
+          version: sql`${merchants.version} + 1`,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(merchants.id, merchantId));
+      let ended = 0;
+      if (freeze) {
+        const rows = await tx
+          .update(sessions)
+          .set({ revokedAt: sql`now()`, revokeReason: 'owner_frozen' })
+          .where(
+            sql`${sessions.merchantId} = ${merchantId} and ${sessions.revokedAt} is null
+            and ${sessions.membershipId} in (select id from memberships where merchant_id = ${merchantId} and is_owner)`,
+          )
+          .returning({ id: sessions.id });
+        ended = rows.length;
+      }
+      await this.record(
+        tx,
+        actor,
+        merchantId,
+        freeze ? 'platform.merchant.owner_frozen' : 'platform.merchant.owner_released',
+        'merchant',
+        merchantId,
+        ip,
+        { reason: input.reason, sessionsEnded: ended },
+      );
+      return this.detailIn(tx, merchantId);
+    });
+  }
+
+  /** Operator-initiated ownership transfer (BR-020): immediate, reasoned, both parties told. */
+  async transferOwnership(
+    actor: PlatformActor,
+    merchantId: string,
+    input: O<typeof platformOwnershipTransferSchema>,
+    ip: string,
+  ): Promise<PlatformMerchantDetail> {
+    const result = await this.database.withPlatformContext(
+      actor.operatorId,
+      merchantId,
+      async (tx) => {
+        const [m] = await tx
+          .select()
+          .from(merchants)
+          .where(eq(merchants.id, merchantId))
+          .for('update');
+        if (!m) throw AppError.notFound('Merchant not found.');
+        if (m.version !== input.version) throw versionConflict();
+        const [owner] = (
+          await tx.execute(
+            sql`select id from memberships where merchant_id = ${merchantId} and is_owner`,
+          )
+        ).rows as { id: string }[];
+        if (!owner) throw new AppError(409, 'INVALID_STATE', 'The merchant has no owner.');
+        const done = await this.ownership.transfer(tx, {
+          merchantId,
+          fromMembershipId: owner.id,
+          toMembershipId: input.toMembershipId,
+          actor: { type: 'operator', id: actor.operatorId },
+          initiatedBy: 'platform',
+          reason: input.reason,
+          transferId: null,
+          ip,
+        });
+        await tx
+          .update(merchants)
+          .set({ version: sql`${merchants.version} + 1`, updatedAt: sql`now()` })
+          .where(eq(merchants.id, merchantId));
+        await this.record(
+          tx,
+          actor,
+          merchantId,
+          'platform.merchant.ownership_transferred',
+          'merchant',
+          merchantId,
+          ip,
+          { reason: input.reason, toMembershipId: input.toMembershipId, toName: done.to.fullName },
+        );
+        return { done, detail: await this.detailIn(tx, merchantId) };
+      },
+    );
+    await this.ownership.notifyBoth(result.done);
+    return result.detail;
   }
 
   async planCheck(actor: PlatformActor, merchantId: string, planId: string): Promise<PlanCheck> {

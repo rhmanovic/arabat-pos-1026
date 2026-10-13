@@ -1,10 +1,10 @@
 import { type MerchantProfile, updateMerchantProfileSchema } from '@arabat/contracts';
-import { Button, Field, Input, PageHeader, Section, Select, Spinner } from '@arabat/ui';
+import { Alert, Button, Field, Input, PageHeader, Section, Select, Spinner } from '@arabat/ui';
 import { ErrorState, useApi, useNotify } from '@arabat/web-core';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useEffect, useState } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import type { z } from 'zod';
 import { useSession } from '../../app/context.js';
@@ -21,11 +21,19 @@ function toForm(p: MerchantProfile): FormValues {
     contactEmail: p.contactEmail ?? '',
     contactPhone: p.contactPhone ?? '',
     defaultLanguage: p.defaultLanguage,
+    timezone: p.timezone,
   };
 }
 
+/** IANA zones known to this browser; the saved one is always offered. */
+function timezoneOptions(current: string): string[] {
+  const known =
+    typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : [];
+  return known.includes(current) ? known : [current, ...known];
+}
+
 export function CompanySettingsPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const api = useApi();
   const queryClient = useQueryClient();
   const notify = useNotify();
@@ -36,6 +44,7 @@ export function CompanySettingsPage() {
     queryFn: () => api.merchant.get(),
   });
   const form = useForm<FormValues>({ resolver: zodResolver(updateMerchantProfileSchema) });
+  const watchedTimezone = useWatch({ control: form.control, name: 'timezone' });
   useEffect(() => {
     if (profile.data) form.reset(toForm(profile.data));
   }, [profile.data, form]);
@@ -54,6 +63,8 @@ export function CompanySettingsPage() {
     return <ErrorState error={profile.error} onRetry={() => void profile.refetch()} />;
   const e = form.formState.errors;
   const invalid = t('common:errors.VALIDATION_FAILED');
+  const chosenTimezone = watchedTimezone ?? profile.data.timezone;
+  const timezoneChanging = chosenTimezone !== profile.data.timezone;
 
   return (
     <div className="flex flex-col gap-6">
@@ -94,16 +105,10 @@ export function CompanySettingsPage() {
           </fieldset>
         </Section>
         <Section title={t('company.currency')} description={t('company.fixedHint')}>
-          <dl className="grid gap-4 text-sm sm:grid-cols-3">
+          <dl className="grid gap-4 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-fg-muted">{t('company.currency')}</dt>
               <dd className="font-medium">{profile.data.defaultCurrency}</dd>
-            </div>
-            <div>
-              <dt className="text-fg-muted">{t('company.timezone')}</dt>
-              <dd className="font-medium" dir="ltr">
-                {profile.data.timezone}
-              </dd>
             </div>
             <div>
               <dt className="text-fg-muted">{t('company.status')}</dt>
@@ -113,6 +118,35 @@ export function CompanySettingsPage() {
             </div>
           </dl>
         </Section>
+        <Section title={t('company.timezone')} description={t('company.timezoneHint')}>
+          <fieldset disabled={!editable} className="grid gap-4 md:grid-cols-2">
+            <Field label={t('company.timezone')} error={e.timezone && invalid}>
+              {(p) => (
+                <Select {...p} {...form.register('timezone')} dir="ltr">
+                  {timezoneOptions(profile.data.timezone).map((z) => (
+                    <option key={z} value={z}>
+                      {z}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+            <p className="self-end text-sm text-fg-muted">
+              {profile.data.timezoneChangedAt
+                ? t('company.timezoneChangedAt', {
+                    when: new Date(profile.data.timezoneChangedAt).toLocaleString(i18n.language, {
+                      numberingSystem: 'latn',
+                    }),
+                  })
+                : t('company.timezoneNeverChanged')}
+            </p>
+          </fieldset>
+          {timezoneChanging ? (
+            <Alert tone="warning" title={t('company.timezoneWarningTitle')}>
+              {t('company.timezoneWarning', { from: profile.data.timezone, to: chosenTimezone })}
+            </Alert>
+          ) : null}
+        </Section>
         {editable ? (
           <div className="flex justify-end">
             <Button type="submit" loading={save.isPending}>
@@ -121,6 +155,146 @@ export function CompanySettingsPage() {
           </div>
         ) : null}
       </form>
+      <OwnershipSection profile={profile.data} />
     </div>
+  );
+}
+
+/**
+ * Ownership transfer (BR-020): the owner names a member and re-enters their password; the
+ * member confirms with the code from their e-mail. Visible to the owner and the named member.
+ */
+function OwnershipSection({ profile }: { profile: MerchantProfile }) {
+  const { t } = useTranslation();
+  const api = useApi();
+  const notify = useNotify();
+  const queryClient = useQueryClient();
+  const { session } = useSession();
+  const [toMembershipId, setTo] = useState('');
+  const [password, setPassword] = useState('');
+  const [token, setToken] = useState(
+    () => new URLSearchParams(window.location.search).get('ownership-token') ?? '',
+  );
+  const employees = useQuery({
+    queryKey: ['manager', 'employees'],
+    queryFn: () => api.employees.list(),
+    enabled: session.isOwner,
+  });
+  const refresh = async (data?: MerchantProfile) => {
+    if (data) queryClient.setQueryData(['manager', 'merchant'], data);
+    await queryClient.invalidateQueries({ queryKey: ['manager', 'merchant'] });
+  };
+  const start = useMutation({
+    mutationFn: () => api.merchant.startOwnershipTransfer({ toMembershipId, password }),
+    onSuccess: async (data) => {
+      setPassword('');
+      await refresh(data);
+      notify.ok(t('company.transferStarted'));
+    },
+    onError: notify.fail,
+  });
+  const cancel = useMutation({
+    mutationFn: () => api.merchant.cancelOwnershipTransfer(),
+    onSuccess: async (data) => {
+      await refresh(data);
+      notify.ok(t('company.transferCancelled'));
+    },
+    onError: notify.fail,
+  });
+  const accept = useMutation({
+    mutationFn: () => api.merchant.acceptOwnershipTransfer({ token: token.trim() }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['auth'] });
+      await refresh();
+      notify.ok(t('company.transferAccepted'));
+    },
+    onError: notify.fail,
+  });
+  const pending = profile.pendingOwnershipTransfer;
+  if (!session.isOwner && !pending?.forMe) return null;
+  return (
+    <Section title={t('company.ownership')} description={t('company.ownershipHint')}>
+      {pending?.forMe ? (
+        <div className="flex flex-col gap-3" data-testid="ownership-accept">
+          <Alert tone="warning" title={t('company.transferForMeTitle')}>
+            {t('company.transferForMe', { expires: pending.expiresAt.slice(0, 10) })}
+          </Alert>
+          <Field label={t('company.transferCode')}>
+            {(p) => (
+              <Input {...p} dir="ltr" value={token} onChange={(e) => setToken(e.target.value)} />
+            )}
+          </Field>
+          <div>
+            <Button
+              disabled={token.trim().length < 10}
+              loading={accept.isPending}
+              onClick={() => accept.mutate()}
+            >
+              {t('company.acceptOwnership')}
+            </Button>
+          </div>
+        </div>
+      ) : pending ? (
+        <div className="flex flex-col gap-3" data-testid="ownership-pending">
+          <Alert tone="info">
+            {t('company.transferPending', {
+              name: pending.toName,
+              email: pending.toEmail,
+              expires: pending.expiresAt.slice(0, 10),
+            })}
+          </Alert>
+          <div>
+            <Button variant="secondary" loading={cancel.isPending} onClick={() => cancel.mutate()}>
+              {t('company.cancelTransfer')}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <form
+          className="grid gap-4 md:grid-cols-3"
+          data-testid="ownership-start"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (toMembershipId && password) start.mutate();
+          }}
+        >
+          <Field label={t('company.newOwner')}>
+            {(p) => (
+              <Select {...p} value={toMembershipId} onChange={(e) => setTo(e.target.value)}>
+                <option value="">{t('company.chooseMember')}</option>
+                {(employees.data?.employees ?? [])
+                  .filter((e) => !e.isOwner && e.status === 'active')
+                  .map((e) => (
+                    <option key={e.membershipId} value={e.membershipId}>
+                      {e.fullName} ({e.email})
+                    </option>
+                  ))}
+              </Select>
+            )}
+          </Field>
+          <Field label={t('company.ownerPassword')} hint={t('company.ownerPasswordHint')}>
+            {(p) => (
+              <Input
+                {...p}
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            )}
+          </Field>
+          <div className="self-end">
+            <Button
+              type="submit"
+              variant="danger"
+              disabled={!toMembershipId || !password}
+              loading={start.isPending}
+            >
+              {t('company.startTransfer')}
+            </Button>
+          </div>
+        </form>
+      )}
+    </Section>
   );
 }

@@ -190,4 +190,25 @@ Stock balances change **only** through `StockLedgerService.apply` (inventory mod
 Cash balances (registers, treasuries) change **only** through `apps/api/src/modules/payments/cash-ledger.ts`
 (`postEntries` / `postTransfer` / `postDisbursement`); a shift opens and closes with a count against the
 drawer balance (ADR-0090). Expenses and supplier payments are `cash_disbursements`, never transfers (ADR-0091).
+Bank deposits go register/treasury → `deposit_transit` with a mandatory slip reference and reach the bank only
+through a second person's confirmation transfer (`confirms_transfer_id`, ADR-0096); bank accounts are reconciled by hand.
+Stock adjustments above the company limit at cost are `pending` until a second holder of `inventory.adjust`
+approves (ADR-0097); master data that still holds stock cannot be untracked, archived or deactivated (BR-171).
+Transfer shortages are explicit `stock_transfer_losses` documents (approved at the source above the limit); in-transit
+stock is computed from transfer lines, never stored, and a transfer in transit can be recalled (ADR-0098).
+The moving average is carried in `avg_cost_micro` (fils × 1000); `avg_cost_minor` is display only (ADR-0099).
+Non-restocked refund lines become `damaged_returns` custody records (held → disposed once).
+Selling rights are checked in `completeSaleInTx`, where a single-use `sale_overrides` grant from a supervisor
+(`POST /pos/overrides`) may supply what the cashier lacks; price changes need a reason and stay within the
+company bounds; free sales need `sales.zero_total` and a reason (ADR-0100).
+Refunds of one's own sales wait for a second person and exchange credit goes back to the original tenders;
+non-cash methods need a settlement account and card / transfer tenders a reference; held sales expire;
+reprints and cleared carts are logged (ADR-0101). The discount limit is combined per line (D4).
+Periods are cut only through `apps/api/src/kernel/time/period.ts` in the merchant's single time zone (BR-184);
+refunds count on their completion day; report views and exports are audited; the supplier statement is
+received at order cost vs. cash paid (ADR-0102). Months close in order through `PeriodsService` with a stored
+pack; `assertPeriodOpen` refuses purchasing documents dated in a closed month (ADR-0103, BR-189/190).
+Ownership moves only through `OwnershipService` (owner flow with e-mailed code, or platform with a reason); a
+frozen owner is refused at login and on every request; audit entries carry `changes` from `diffFields`;
+variant price / cost changes are appended to `price_history` (ADR-0104, BR-020/191/192/193).
 See `docs/PROGRESS.md` for the current state and `docs/ROADMAP.md` for next steps.

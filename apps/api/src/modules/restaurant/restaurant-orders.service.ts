@@ -710,6 +710,7 @@ export class RestaurantOrdersService {
         variantId: r.variantId,
         quantity: r.quantity,
         priceOverride: null,
+        priceOverrideReason: null,
         discount: null,
       })),
       orderDiscount: discount,

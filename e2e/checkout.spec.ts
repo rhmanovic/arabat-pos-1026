@@ -121,7 +121,7 @@ test('end-to-end sale from setup to manager review', async ({ page, browser }) =
   const pay = pos.getByRole('dialog');
   await pay.getByRole('button', { name: 'Card (KNET)' }).click();
   await pay.getByLabel('Amount (KWD)').fill('1.000');
-  await pay.getByLabel('Reference (optional)').fill('APPROVAL-1');
+  await pay.getByLabel(/^Reference/).fill('APPROVAL-1');
   await pay.getByRole('button', { name: 'Add payment' }).click();
   await pay.getByRole('button', { name: 'Cash' }).click();
   await pay.getByLabel('Cash received (KWD)').fill('2');
@@ -150,9 +150,12 @@ test('end-to-end sale from setup to manager review', async ({ page, browser }) =
   ).json();
   expect(moves.total).toBe(2);
 
-  // The drawer expects opening 10 + cash 1.575.
+  // Blind counts (BR-162): the cashier sees no drawer figures; the owner sees 10 + 1.575.
   await pos.getByRole('link', { name: 'Shift & cash' }).click();
-  await expect(pos.getByTestId('expected-cash')).toHaveText('KWD 11.575');
+  await expect(pos.getByTestId('blind-count')).toBeVisible();
+  await expect(pos.getByTestId('expected-cash')).toHaveCount(0);
+  const openShifts = await (await page.request.get('/api/v1/manager/shifts?status=open')).json();
+  expect(openShifts.shifts[0].summary.expectedCash.amount).toBe('11.575');
 
   // 11. The manager views the transaction.
   await page.goto('/manager/sales');

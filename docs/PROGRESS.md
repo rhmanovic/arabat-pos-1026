@@ -362,6 +362,219 @@ New companies (and, once, existing ones without balances) get cash on hand («ا
 and Cash / KNET / Visa-Mastercard / payment link / WAMD linked to them (BR-086). Open: real
 fee rates and cash-to-bank transfers (OQ-026).
 
+### 2026-10-13 — Remediation session 1 (audit Phase 1 → retail remediation plan)
+Owner approved `docs/audit/REMEDIATION_PLAN.md` with decisions D1–D7 (blind counts, per-merchant
+approval thresholds, treasurer role, combined discount limit, payables deferred, fees per provider,
+online store deferred) and moved the audit-log screen into R1. Implemented (ADR-0093):
+- **Blind cash counts (BR-162, FND-401):** `sales_settings.blind_cash_count` (migration 0036,
+  default on, switch in the selling policy). POS endpoints withhold drawer figures from users
+  without `shifts.view_all`: no expected balance at opening (`expectedCash` optional, no
+  opening-note requirement for a blind cashier), no summary during the shift, figures and
+  difference after the count; owners and supervisors unaffected.
+- **Merchant audit log (BR-163, FND-101):** `GET /manager/audit` (`audit.read`) with local-day
+  period, action, record type and actor filters, pagination and distinct actions; screen
+  `/manager/audit` with CSV export; nav entry under Organization.
+- **Test gateway guard (FND-709):** warning at start when the mock gateway is on in a production
+  build; OPERATIONS rule (staging only).
+- Tracking: `docs/audit/FINDINGS_STATUS.md` (180 findings: 2 tested, 1 fixed, 128 open, 49 deferred).
+Verified: `pnpm verify` green (160 unit/web tests), `pnpm test:integration` 173 passed (incl. new
+`audit.int.test.ts` and the blind-count case in `shifts.int.test.ts`), `pnpm test:e2e` 35 passed
+(`checkout.spec` and `refunds.spec` now assert the blind notice and verify drawer figures through
+the manager API). Not done (next sessions): cash-out limits and corrections (R1.1), custody roles
+(R1.6), disbursement approvals with per-merchant thresholds (R1.2), variance follow-up (R1.4),
+deposits in transit and bank reconciliation (R1.3).
+
+### 2026-10-13 — Remediation session 2 (R1.1 cash-out controls, R1.6 treasurer and controls checklist)
+Implemented (ADR-0094, BR-164, BR-165):
+- **Corrections** reverse only a posted "other" movement of the same shift, opposite way, up to
+  what is left, with a note; the POS offers the correctable movements.
+- **"Other" cash-out limits** per movement and per shift, owner-set in the selling policy
+  (defaults 20.000 / 50.000 KWD): above them the request is *pending*, decided by a holder of
+  `shifts.view_all` in the shift detail (approve posts the cash then; reject needs a reason),
+  withdrawable by the cashier, refused at closing, auto-rejected on a forced close; the owner
+  posts directly with an audited override flag.
+- **Tolerance cap** per company (default 1.000 KWD) enforced on register save; a visible
+  closing difference beyond the tolerance needs a note (blind cashiers excepted).
+- **Treasurer** role template (least privilege) and the dashboard **internal-control checklist**
+  (`GET /manager/merchant/controls`): treasurer assigned, members without roles, registers above
+  the tolerance cap, cash-outs awaiting approval.
+Verified: see `TESTING.md` (results after remediation session 2). Not done (next sessions):
+disbursement approvals with per-merchant thresholds and owner override (R1.2), variance
+follow-up (R1.4), deposits in transit and bank reconciliation (R1.3), custody-right split
+(FND-422), cashier acknowledgement of manager cash moves (FND-419).
+
+### 2026-10-13 — Remediation session 3 (R1.2 disbursement approvals, R1.4 variance follow-up)
+Implemented (ADR-0095, BR-166, BR-167):
+- **Approval limits** for expenses and supplier payments (owner-set, defaults 20.000 / 100.000
+  KWD) with a mandatory receipt reference above them. At the till the payment waits as a pending
+  movement with its category, supplier and reference; from a treasury it becomes a **payout
+  request** decided by another custody holder (approve pays then, reject needs a reason,
+  withdraw by the requester); the owner pays directly with an audited override.
+- **Overpayment guard** on supplier payments naming a purchase order, owner-confirmable;
+  purchase orders show **paid to date** net of reversals.
+- **Follow-up of cash differences**: a Shifts tab lists shift-close, between-shift, count and
+  branch-transfer differences with the accountable person; explained / settled / written off
+  with a note, audited; dashboard checklist counts pending payout requests and open differences.
+Verified: see `TESTING.md` (results after remediation session 3). Not done (next sessions):
+deposits in transit and bank reconciliation (R1.3), custody-right split (FND-422), approval
+of stock adjustments (R2.1).
+
+### 2026-10-13 — Remediation session 4 (R1.3 deposits in transit, bank reconciliation)
+Implemented (ADR-0096, BR-168):
+- **Deposits in transit**: every bank deposit (POS drawer or manager treasury) needs its slip
+  number and lands in the company "deposits in transit" account; a second holder of
+  `cash.deposit` confirms it into the bank (bank reference) or returns it to the treasury with a
+  reason; the owner settles their own deposits with an audited override. Cash overview card,
+  "Deposits in transit" list on the custody page, dashboard checklist count.
+- **Manual bank reconciliation** per bank account (`/manager/accounts` → Reconcile): tick the
+  entries on the statement, enter the statement balance, see the cleared balance and the
+  difference, explain any difference; history kept; unreconciled count and last reconciliation
+  on the accounts list; checklist counts bank entries older than a week on no statement.
+- **Deactivation guard**: a bank account with a balance, unreconciled entries or a deposit in
+  transit cannot be set inactive (`ACCOUNT_IN_USE`).
+Verified: see `TESTING.md` (results after remediation session 4). Not done (next sessions):
+custody-right split (FND-422), approval of stock adjustments (R2.1), blind counts with sign-off
+(R2.2), master-data guards (R2.5); fee settlement per acquirer (FND-413 in full, R3.5).
+
+### 2026-10-13 — Remediation session 5 (R2.1 adjustment approvals, R2.2 blind counts, R2.5 master-data guards)
+Implemented (ADR-0097, BR-169 to BR-171):
+- **Adjustment approvals**: numbered documents (ADJ-), value at cost on every document; above
+  the company limit (default KWD 50, in the selling policy) a non-owner's document waits for a
+  second holder of the adjust right (approve posts, reject needs a reason, requester withdraws);
+  owner override audited; list filter and detail panel; dashboard checklist count.
+- **Blind counts**: count sheets hide the book quantity and the resulting balance (policy,
+  default on); stock that moved since the sheet was started is listed and must be acknowledged
+  before the count posts.
+- **Master-data guards**: tracking off, goods → service, archiving and variant removal refused
+  while stock is on hand (branches and quantities named); archived items can still be written
+  off or counted; branch deactivation refused while stock, cash, open shifts, open purchase
+  orders, open stock transfers or cash in transit remain.
+Verified: see `TESTING.md` (results after remediation session 5). Not done (next sessions):
+transfer losses posted and approved (R2.3), in-transit stock as a valued location (R2.4),
+custody-right split (FND-422).
+
+### 2026-10-13 — Remediation session 6 (R2.3 transfer losses, R2.4 in-transit stock)
+Implemented (ADR-0098, BR-172, BR-173):
+- **Transfer losses**: a shortage at receipt becomes a numbered loss document (TL-) with the
+  receiver's explanation, valued at dispatch cost; within the adjustment limit it posts at once,
+  above it the source approver approves or rejects (reason) — never the claimant; the owner
+  overrides, flagged. Rejected or unclaimed shortages can be claimed again. Surplus at receipt
+  is recorded with a note. Dispatch is refused for items with no cost at all.
+- **In-transit stock**: goods on the road listed per transfer with age and value on the
+  transfers page and in the inventory report (`In transit` KPI, `transfer_loss` movement line);
+  transfer detail shows per-line quantities on the road; a transfer in transit can be
+  **recalled** to the source with a reason. Purchasing report: written-off quantity and value,
+  pending losses. Dashboard checklist: pending losses, unresolved shortages.
+Verified: see `TESTING.md` (results after remediation session 6). Not done (next sessions):
+valuation as at a date and stock roll-forward (R2.6), cost edge cases (R2.7), damaged returns
+(R2.8), custody-right split (FND-422), stock-side follow-up list for losses.
+
+### 2026-10-13 — Remediation session 7 (R2.6 valuation as at a date, R2.7 cost edge cases, R2.8 returned goods)
+Implemented (ADR-0099, BR-174 to BR-176):
+- **Closing stock as at a date and roll-forward** in the inventory report: opening and closing
+  per branch and in total reconstructed from the ledger, movement values by type, the rounding
+  of averages as its own line; reserved quantities per item and in total; items without cost
+  listed.
+- **Cost precision**: the average is carried at thousandths of a fils (display in fils);
+  negative balances keep their cost basis and are valued; a receipt that brings a negative
+  balance back absorbs it at that basis; product screen explains catalog cost vs average and
+  flags a missing cost.
+- **Returned goods**: damaged / defective returns stay out of stock by default; every
+  non-restocked return is a held custody record (Inventory → Returned goods) until its disposal
+  is recorded with a note; the "customer return (outside POS)" increase reason is gone.
+Verified: see `TESTING.md` (results after remediation session 7). Not done (next sessions):
+till overrides (R3.1), price bounds (R3.2), zero-total sales (R3.3), custody-right split
+(FND-422), gross profit with a costless item (R4.3).
+
+### 2026-10-13 — Remediation session 8 (R3.1 till overrides, R3.2 price bounds, R3.3 zero-total sales)
+Implemented (ADR-0100, BR-177 to BR-179):
+- **Supervisor override on the cashier's till**: a supervisor (or the owner) enters their own
+  e-mail and password in the POS payment dialog; a single-use ten-minute grant lends the
+  overridable rights the cashier lacks; the sale stays on the cashier's shift and drawer and
+  records who authorised what; grants, uses and refusals are audited; the manager sees the
+  override on the sale, can filter "supervisor override" sales and sees counts per employee.
+  Discount and price fields are always offered at the till; what exceeds the cashier's rights
+  says so and waits for the supervisor.
+- **Price-change bounds**: reason required; owner-set floor and ceiling (% of list price,
+  defaults 50 / 200, each switchable off) and "not below cost" (default) enforced for everyone;
+  the gap under the list price counts as a discount for the limit, a zero price is always above
+  it; every POS sale stores the limit in force and the above-limit flag.
+- **Zero-total sales**: new right `sales.zero_total` (supervisor template), reason required and
+  stored, database check for POS sales; unusual-sales filter (free, above limit, price changed,
+  supervised) in the sales history and counts in the sales-by-employee report.
+Verified: see `TESTING.md` (results after remediation session 8). Not done (next sessions):
+refund segregation (R3.4), tender hygiene (R3.5), held sales (R3.6), combined discount limit
+(R3.7, D4), custody-right split (FND-422), gross profit with a costless item (R4.3).
+
+### 2026-10-13 — Remediation session 9 (R3.4 refund segregation, R3.5 tender hygiene, R3.6 held sales and reprints, R3.7 combined limit)
+Implemented (ADR-0101, BR-180 to BR-183):
+- **Refund segregation**: refunds of one's own sales wait for a second person (owner switch,
+  default on); approvers no longer bypass the limit or window for their own refunds; the owner
+  completes directly, flagged as an override; optional customer contact on requests that wait;
+  exchange credit paid back to the original tenders, not cash; a pending request survives the
+  requester's shift close (the approver pays from their own shift); own-sale refunds counted
+  per employee.
+- **Tender hygiene (D6)**: settlement account mandatory on every non-cash method, no fee on
+  cash, terminal / transfer reference mandatory on card and transfer tenders and pay-backs
+  (owner switch), unreferenced tenders listed in the payments report, fee given back on refunds
+  only under the method's policy (`keep` / `reverse`), shown as fees given back.
+- **Held sales and reprints**: held sales expire after an owner-set time, the completing cashier
+  is recorded and the held lines kept, receipts can be found by number at the till, every copy
+  is numbered, logged and audited, cleared carts and removed lines above a threshold are logged.
+- **Combined discount limit (D4)**: item discount + share of the sale discount + price gap per
+  line against the limit, on the server and in the POS mirror.
+Verified: see `TESTING.md` (results after remediation session 9).
+
+### 2026-10-13 — Remediation session 10 (R4.1 one cut-off rule, R4.3 gross profit, R4.4 report access log and dashboard, R4.5 supplier statement)
+Implemented (ADR-0102, BR-184 to BR-188):
+- **One cut-off rule**: a single period helper in the merchant's time zone used by every list,
+  statement and report (cash variances and disbursements no longer cut on UTC days); refunds
+  counted on their completion day in the sales history and the refund register (with totals);
+  cash statements take a period with the balance brought forward; the time zone is set at
+  registration and any later change is stamped, audited and warned about.
+- **Gross profit**: always shown for the costed part with the uncosted share (amount, % of net)
+  flagged; the by-employee breakdown carries the online store as its own row.
+- **Report access log and dashboard**: every report view and CSV export in the audit log;
+  dashboard KPIs (today / yesterday net sales, refunds, net after refunds, open shifts) in the
+  merchant's zone; the unusual-activity threshold and window are company policy.
+- **Supplier statement**: received at order cost vs. cash paid (and reversals) with the running
+  difference, period filter and balance brought forward, on the suppliers page.
+Verified: see `TESTING.md` (results after remediation session 10).
+
+### 2026-10-13 — Remediation session 11 (R4.2 period close pack)
+Implemented (ADR-0103, BR-189, BR-190):
+- **Period close**: months since registration listed with their status; the month-end pack
+  (sales, profit, collections by tender, unreferenced tenders, cash by place at month end,
+  closing stock, refunds owed, open items, supplier balance, document counts) computed live for
+  an open month and stored at close; months close in order, once, after they end, by
+  `periods.close` holders with company-wide report rights; audited; never reopened.
+- **Lock and document dates**: purchase orders and deliveries carry a business date (today
+  unless set, at most 7 days back, audited when backdated); a date inside a closed month is
+  refused; posting times stay the ledger basis.
+- **Manager**: `/periods` page with the pack and a close dialog; date fields on the purchase
+  order form and the receive dialog.
+Verified: see `TESTING.md` (results after remediation session 11).
+
+### 2026-10-13 — Remediation session 12 (R5.2 ownership transfer and freeze, R5.3 audit detail and price history, R5.4 account hygiene)
+Implemented (ADR-0104, BR-020 revised, BR-191 to BR-193):
+- **Ownership**: owner-initiated transfer with password re-entry and an e-mailed confirmation
+  code to the named member (72 h, cancellable, one at a time); platform-initiated transfer by
+  a super administrator with a recorded reason; emergency freeze / release of the owner by
+  support; old owner demoted to a plain member and signed out; both parties notified; all
+  audited.
+- **Audit detail**: before / after values on company profile, branch, employee profile,
+  category, product (attributes and variant prices / costs), supplier and draft-order edits;
+  permission set on role deletion; `price_history` with a history tab on the product.
+- **Account hygiene**: self-service password change (other sessions end) and device list with
+  sign-out; manager "end all sessions" and "clear sign-in lock"; lock-out notice e-mailed to
+  the account holder; invitation grants re-checked against the inviter's current authority at
+  acceptance and revoked when the inviter is deactivated; dormant grants confirmed (keep /
+  clear) on branch reactivation and recorded.
+Verified: see `TESTING.md` (results after remediation session 12). The remediation plan's
+sessions 1 to 12 are complete; outside it remain the supplier side (R6, decision D5), the
+online-store go-live prerequisites (R7, decision D7), server-rendered exports and
+acquirer-statement reconciliation.
+
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025
 before any production launch.

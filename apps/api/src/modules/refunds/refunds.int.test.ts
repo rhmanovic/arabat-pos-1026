@@ -33,6 +33,10 @@ type Cookies = Co['cookies'];
 
 async function setup() {
   const c = await createCompany(app, db, mailer);
+  // These tests read drawer figures through cashier sessions: counts are not blind here, and
+  // the same cashier sells and refunds (the own-sale rule of BR-180 has its own tests).
+  await c.showExpectedCash();
+  await c.allowOwnSaleRefunds();
   const mk = async (nameEn: string, price: string, cost: string) => {
     const p = (
       await c.client.request('POST', '/manager/products', {
@@ -428,13 +432,21 @@ describe('refunds', () => {
       body: {},
     });
     expect(cancelled.json().status).toBe('cancelled');
-    // A supervisor's own large refund needs no approval (they hold refunds.approve).
+    // A supervisor's own large refund waits like anyone else's (BR-180, FND-502); only the
+    // owner completes it directly, flagged as an override.
     const supervisor = await staff(s, 'supervisor', 'R2', '100.000');
     const big = await refund(s, supervisor.cookies, {
       saleId: sale.id,
       lines: [{ position: 0, quantity: '25' }],
     });
-    expect(big.json().status).toBe('completed');
+    expect(big.json()).toMatchObject({
+      status: 'pending_approval',
+      approvalReasons: ['over_limit'],
+    });
+    await s.c.client.request('POST', `/pos/refunds/${big.json().id}/cancel`, {
+      cookies: supervisor.cookies,
+      body: {},
+    });
     // Self-approval is blocked.
     const sale2 = await sell(
       s,
@@ -560,7 +572,7 @@ describe('refunds', () => {
       s,
       cashier.cookies,
       [{ variantId: s.tea, quantity: '2' }],
-      [{ methodId: s.card, amount: '2.000' }],
+      [{ methodId: s.card, amount: '2.000', reference: 'KNET-2' }],
       '2.000',
     );
     // Simulate an online (gateway-verified) payment; real gateways arrive in Prompt 16.
@@ -639,7 +651,7 @@ describe('voids and exchanges', () => {
       s,
       cashier.cookies,
       [{ variantId: s.tea, quantity: '2' }],
-      [{ methodId: s.card, amount: '2.000' }],
+      [{ methodId: s.card, amount: '2.000', reference: 'KNET-1' }],
       '2.000',
     );
     // The same returned line twice is a validation error, not a server error (audit fix).

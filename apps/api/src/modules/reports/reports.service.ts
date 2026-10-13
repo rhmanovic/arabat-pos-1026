@@ -3,11 +3,14 @@ import type {
   InventoryReport,
   PaymentsReport,
   PurchasingReport,
+  ReportExport,
   ReportPeriod,
   SalesReport,
   SalesSummary,
   ShiftsReport,
+  TodaySummary,
   reportQuerySchema,
+  StockRollForward,
 } from '@arabat/contracts';
 import { Money, formatQuantity, parseQuantity } from '@arabat/money';
 import { type PermissionKey, can, permissionBranchScope } from '@arabat/permissions';
@@ -18,6 +21,8 @@ import { DatabaseService, type Transaction } from '../../database/database.servi
 import { assertCan } from '../../kernel/access/assert.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
+import { addDays, merchantTimezone, todayIn, withinLocalDays } from '../../kernel/time/period.js';
+import { AuditService } from '../audit/audit.service.js';
 import { outcomeOf } from '../registers/shifts.service.js';
 
 type Query = z.output<typeof reportQuerySchema>;
@@ -51,12 +56,6 @@ export function percentOf(a: bigint, b: bigint): string | null {
   return `${sign}${abs / 10n}.${abs % 10n}`;
 }
 
-function addDays(date: string, days: number): string {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
 function eachDay(from: string, to: string): string[] {
   const out: string[] = [];
   for (let d = from; d <= to; d = addDays(d, 1)) out.push(d);
@@ -83,7 +82,54 @@ interface Ctx {
  */
 @Injectable()
 export class ReportsService {
-  constructor(private readonly database: DatabaseService) {}
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly audit: AuditService,
+  ) {}
+
+  /**
+   * Report access is part of the audit trail (BR-187, FND-518): every report view and every
+   * CSV export is recorded with its period and scope.
+   */
+  private async viewed(tx: Transaction, actor: MerchantActor, report: string, c: Ctx, ip?: string) {
+    await this.audit.recordIn(tx, {
+      merchantId: actor.merchantId,
+      actorType: 'user',
+      actorId: actor.userId,
+      action: 'report.viewed',
+      targetType: 'report',
+      targetId: null,
+      ip: ip ?? null,
+      details: {
+        report,
+        from: c.from,
+        to: c.to,
+        branchIds: c.branchIds,
+        employeeId: c.membershipId,
+      },
+    });
+  }
+
+  /** A CSV export built in the browser from a report the actor had already read. */
+  async logExport(actor: MerchantActor, input: ReportExport, ip: string): Promise<void> {
+    await this.audit.record({
+      merchantId: actor.merchantId,
+      actorType: 'user',
+      actorId: actor.userId,
+      action: 'report.exported',
+      targetType: 'report',
+      targetId: null,
+      ip,
+      details: {
+        report: input.report,
+        section: input.section,
+        from: input.from ?? null,
+        to: input.to ?? null,
+        branchId: input.branchId ?? null,
+        rows: input.rows,
+      },
+    });
+  }
 
   // ------------------------------------------------------------ helpers
   private branchScope(actor: MerchantActor, permission: PermissionKey, branchId?: string) {
@@ -104,9 +150,7 @@ export class ReportsService {
     query: Query,
   ): Promise<Ctx> {
     const branchIds = this.branchScope(actor, permission, query.branchId);
-    const [m] = (
-      await tx.execute(sql`select timezone from merchants where id = ${actor.merchantId}`)
-    ).rows as { timezone: string }[];
+    const tz = await merchantTimezone(tx, actor.merchantId);
     if (query.branchId) {
       // RLS limits this to the merchant: another merchant's branch is simply not found.
       const [branch] = (await tx.execute(sql`select id from branches where id = ${query.branchId}`))
@@ -123,7 +167,7 @@ export class ReportsService {
     }
     const days = eachDay(query.from, query.to).length;
     return {
-      tz: m?.timezone ?? 'Asia/Kuwait',
+      tz,
       from: query.from,
       to: query.to,
       prevFrom: addDays(query.from, -days),
@@ -144,10 +188,9 @@ export class ReportsService {
     };
   }
 
-  /** `column` within the local days [from, to]. */
+  /** `column` within the local days [from, to] (the one cut-off rule, BR-184). */
   private within(c: Ctx, column: SQL, from = c.from, to = c.to): SQL {
-    return sql`${column} >= (${from}::date)::timestamp at time zone ${c.tz}
-               and ${column} < ((${to}::date + 1)::timestamp at time zone ${c.tz})`;
+    return withinLocalDays(c.tz, column, from, to);
   }
 
   private branches(c: Ctx, column: SQL): SQL {
@@ -220,7 +263,7 @@ export class ReportsService {
     };
   }
 
-  async sales(actor: MerchantActor, query: Query): Promise<SalesReport> {
+  async sales(actor: MerchantActor, query: Query, ip?: string): Promise<SalesReport> {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const c = await this.context(tx, actor, 'reports.sales', query);
       const saleWhere = sql`${this.within(c, sql.raw('s.created_at'))}
@@ -316,13 +359,26 @@ export class ReportsService {
         tx,
         sql`select s.membership_id, max(u.full_name) as name, count(*)::int as n,
                    sum(s.line_discounts_minor + s.order_discount_minor)::text as disc,
-                   sum(s.total_minor)::text as net
+                   sum(s.total_minor)::text as net,
+                   count(*) filter (where exists (select 1 from sale_lines fl
+                     where fl.sale_id = s.id and fl.price_overridden))::int as price_overrides,
+                   count(*) filter (where s.above_limit)::int as above_limit,
+                   count(*) filter (where s.total_minor = 0)::int as zero_total,
+                   count(*) filter (where s.override_id is not null)::int as supervised
             from sales s join users u on u.id = s.user_id where ${saleWhere} and s.channel = 'pos' group by 1`,
       );
       const empRefunds = await this.rows(
         tx,
         sql`select r.membership_id, max(u.full_name) as name, sum(r.total_minor)::text as total
             from refunds r join users u on u.id = r.user_id where ${refundWhere} group by 1`,
+      );
+      // Online-store sales have no cashier: one "online" row keeps the breakdown adding up
+      // to net sales (BR-185, FND-514).
+      const [online] = await this.rows(
+        tx,
+        sql`select count(*)::int as n, coalesce(sum(s.line_discounts_minor + s.order_discount_minor), 0)::text as disc,
+                   coalesce(sum(s.total_minor), 0)::text as net
+            from sales s where ${saleWhere} and s.channel = 'online'`,
       );
       const members = new Set([
         ...empSales.map((r) => r['membership_id'] as string),
@@ -339,8 +395,31 @@ export class ReportsService {
             discounts: money(big(s?.['disc'])),
             netSales: money(big(s?.['net'])),
             refunds: money(big(r?.['total'])),
+            // Unusual sales (BR-179): what was allowed on this employee's sales.
+            priceOverrides: int(s?.['price_overrides']),
+            aboveLimitSales: int(s?.['above_limit']),
+            zeroTotalSales: int(s?.['zero_total']),
+            supervisedSales: int(s?.['supervised']),
           };
         })
+        .concat(
+          int(online?.['n']) > 0
+            ? [
+                {
+                  membershipId: 'online',
+                  name: 'online',
+                  saleCount: int(online!['n']),
+                  discounts: money(big(online!['disc'])),
+                  netSales: money(big(online!['net'])),
+                  refunds: money(0n),
+                  priceOverrides: 0,
+                  aboveLimitSales: 0,
+                  zeroTotalSales: 0,
+                  supervisedSales: 0,
+                },
+              ]
+            : [],
+        )
         .sort((a, b) => desc(minorOf(a.netSales), minorOf(b.netSales)));
 
       const byPaymentMethod = (
@@ -445,48 +524,45 @@ export class ReportsService {
         netSales: money(big(x['net'])),
       }));
 
-      // Gross profit (BR-127): only with reports.financial for the whole scope, and only
-      // when every sale (and every restocked refund line) in the period has a known cost.
+      // Gross profit (BR-127, BR-185): only with reports.financial for the whole scope. Sales
+      // without a known cost (and their refunds) are set aside as the uncosted share instead
+      // of hiding the figure; restocked return lines without a cost count as missing too.
       let profit: SalesReport['profit'] = null;
       if (this.coversScope(actor, 'reports.financial', c)) {
         const [cost] = await this.rows(
           tx,
           sql`select count(*) filter (where s.cost_minor is null)::int as missing,
+                     coalesce(sum(s.total_minor) filter (where s.cost_minor is null), 0)::text as uncosted,
                      coalesce(sum(s.cost_minor), 0)::text as cogs
               from sales s where ${saleWhere}`,
         );
         const [back] = await this.rows(
           tx,
-          sql`select count(*) filter (where rl.unit_cost_minor is null)::int as missing,
-                     coalesce(sum(round(rl.quantity * rl.unit_cost_minor)), 0)::text as restocked
-              from refund_lines rl join refunds r on r.id = rl.refund_id
-              where rl.restock and ${refundWhere}`,
+          sql`select count(*) filter (where rl.unit_cost_minor is null and rl.restock)::int as missing,
+                     coalesce(sum(round(rl.quantity * rl.unit_cost_minor)) filter (where rl.restock), 0)::text as restocked,
+                     coalesce(sum(rl.amount_minor) filter (where os.cost_minor is null), 0)::text as uncosted_refunds
+              from refund_lines rl join refunds r on r.id = rl.refund_id join sales os on os.id = r.sale_id
+              where ${refundWhere}`,
         );
         const missing = int(cost!['missing']) + int(back!['missing']);
         const netAfter = minorOf(summary.netAfterRefunds);
-        if (missing > 0)
-          profit = {
-            available: false,
-            missingCostSales: missing,
-            costOfSales: null,
-            restockedCost: null,
-            grossProfit: null,
-            marginPercent: null,
-          };
-        else {
-          const cogs = big(cost!['cogs']);
-          const restocked = big(back!['restocked']);
-          const gp = netAfter - (cogs - restocked);
-          profit = {
-            available: true,
-            missingCostSales: 0,
-            costOfSales: money(cogs),
-            restockedCost: money(restocked),
-            grossProfit: money(gp),
-            marginPercent: percentOf(gp, netAfter),
-          };
-        }
+        const uncosted = big(cost!['uncosted']) - big(back!['uncosted_refunds']);
+        const cogs = big(cost!['cogs']);
+        const restocked = big(back!['restocked']);
+        const costedNet = netAfter - uncosted;
+        const gp = costedNet - (cogs - restocked);
+        profit = {
+          available: missing === 0,
+          missingCostSales: missing,
+          uncostedSales: money(uncosted),
+          uncostedSharePercent: percentOf(uncosted, netAfter),
+          costOfSales: money(cogs),
+          restockedCost: money(restocked),
+          grossProfit: money(gp),
+          marginPercent: percentOf(gp, costedNet),
+        };
       }
+      await this.viewed(tx, actor, 'sales', c, ip);
 
       return {
         period: this.period(c),
@@ -507,7 +583,7 @@ export class ReportsService {
   }
 
   // ------------------------------------------------------------ payments & cash
-  async payments(actor: MerchantActor, query: Query): Promise<PaymentsReport> {
+  async payments(actor: MerchantActor, query: Query, ip?: string): Promise<PaymentsReport> {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const c = await this.context(tx, actor, 'reports.financial', query);
       // Collections: money actually received for sales (exchange credit is internal, BR-124).
@@ -532,7 +608,8 @@ export class ReportsService {
       const paidOut = await this.rows(
         tx,
         sql`select rp.method_kind, rp.payment_method_id, max(rp.method_name_en) as name_en,
-                   max(rp.method_name_ar) as name_ar, sum(rp.amount_minor)::text as amount
+                   max(rp.method_name_ar) as name_ar, sum(rp.amount_minor)::text as amount,
+                   sum(rp.fee_reversed_minor)::text as fees_reversed
             from refund_payments rp join refunds r on r.id = rp.refund_id where ${outWhere}
             group by rp.method_kind, rp.payment_method_id`,
       );
@@ -553,6 +630,7 @@ export class ReportsService {
           count: int(inRow?.['n']),
           collected: money(amount),
           fees: money(big(inRow?.['fees'])),
+          feesReversed: money(big(outRow?.['fees_reversed'])),
           refunded: money(refunded),
           net: money(amount - refunded),
         };
@@ -560,7 +638,50 @@ export class ReportsService {
       const sum = (xs: { amount: string }[]) => xs.reduce((s, x) => s + minorOf(x), 0n);
       const totalIn = sum(collections.map((x) => x.collected));
       const totalFees = sum(collections.map((x) => x.fees));
+      const totalFeesReversed = sum(collections.map((x) => x.feesReversed));
       const totalOut = sum(collections.map((x) => x.refunded));
+      // Card and transfer money recorded without a reference (BR-181, FND-305 / FND-505).
+      const unreferencedRows = await this.rows(
+        tx,
+        sql`select * from (
+              select p.id, 'payment' as kind, s.receipt_number as document, p.method_name_en as name_en,
+                     p.method_name_ar as name_ar, p.amount_minor::text as amount, p.created_at, u.full_name
+              from payments p join sales s on s.id = p.sale_id left join users u on u.id = s.user_id
+              where ${payWhere(c.from, c.to)} and p.method_kind <> 'cash' and p.verification = 'manual'
+                and p.reference is null
+              union all
+              select rp.id, 'refund_payment' as kind, r.refund_number as document, rp.method_name_en,
+                     rp.method_name_ar, rp.amount_minor::text, coalesce(r.completed_at, r.created_at), u.full_name
+              from refund_payments rp join refunds r on r.id = rp.refund_id left join users u on u.id = r.user_id
+              where ${outWhere} and rp.method_kind <> 'cash' and rp.verification = 'manual'
+                and rp.reference is null
+            ) x order by x.created_at desc limit 200`,
+      );
+      const [unrefTotals] = await this.rows(
+        tx,
+        sql`select count(*)::int as n, coalesce(sum(amount), 0)::text as amount from (
+              select p.amount_minor as amount from payments p join sales s on s.id = p.sale_id
+              where ${payWhere(c.from, c.to)} and p.method_kind <> 'cash' and p.verification = 'manual'
+                and p.reference is null
+              union all
+              select rp.amount_minor from refund_payments rp join refunds r on r.id = rp.refund_id
+              where ${outWhere} and rp.method_kind <> 'cash' and rp.verification = 'manual'
+                and rp.reference is null) x`,
+      );
+      const unreferenced = {
+        count: int(unrefTotals?.['n']),
+        amount: money(big(unrefTotals?.['amount'])),
+        items: unreferencedRows.map((r) => ({
+          id: r['id'] as string,
+          kind: r['kind'] as 'payment' | 'refund_payment',
+          document: r['document'] as string,
+          nameEn: (r['name_en'] as string | null) ?? null,
+          nameAr: (r['name_ar'] as string | null) ?? null,
+          amount: money(big(r['amount'])),
+          createdAt: iso(r['created_at']),
+          employeeName: (r['full_name'] as string | null) ?? null,
+        })),
+      };
       const [prev] = await this.rows(
         tx,
         sql`select coalesce(sum(p.amount_minor), 0)::text as amount
@@ -574,6 +695,7 @@ export class ReportsService {
         sql`select coalesce(sum(m.amount_minor) filter (where m.kind = 'cash_in'), 0)::text as cash_in,
                    coalesce(sum(m.amount_minor) filter (where m.kind = 'cash_out'), 0)::text as cash_out
             from cash_movements m where ${this.within(c, sql.raw('m.created_at'))}
+              and m.status = 'posted'
               and ${this.branches(c, sql.raw('m.branch_id'))}
               and ${c.userId ? sql`m.created_by_user_id = ${c.userId}` : sql`true`}`,
       );
@@ -591,8 +713,9 @@ export class ReportsService {
                 and fa.kind = 'register' and ta.kind = 'treasury'), 0)::text as drops,
               coalesce(-sum(e.amount_minor) filter (where e.account_id = t.from_account_id
                 and fa.kind = 'treasury' and ta.kind = 'register'), 0)::text as top_ups,
-              coalesce(-sum(e.amount_minor) filter (where e.account_id = t.from_account_id
-                and ta.kind = 'bank'), 0)::text as deposits,
+              coalesce(-sum(e.amount_minor) filter (where (e.account_id = t.from_account_id
+                and ta.kind in ('bank', 'deposit_transit'))
+                or (e.account_id = t.to_account_id and fa.kind = 'deposit_transit')), 0)::text as deposits,
               coalesce(-sum(e.amount_minor) filter (where e.entry_type = 'expense'), 0)::text as expenses,
               coalesce(-sum(e.amount_minor) filter (where e.entry_type = 'supplier_payment'), 0)::text as supplier,
               coalesce(sum(e.amount_minor) filter (where e.source_type = 'cash_movement'), 0)::text as corrections,
@@ -651,17 +774,20 @@ export class ReportsService {
         ).map((r) => [r['d'] as string, big(r['amount'])]),
       );
 
+      await this.viewed(tx, actor, 'payments', c, ip);
       return {
         period: this.period(c),
         collections: collections.sort((a, b) => desc(minorOf(a.collected), minorOf(b.collected))),
         totals: {
           collected: money(totalIn),
           fees: money(totalFees),
+          feesReversed: money(totalFeesReversed),
           refunded: money(totalOut),
           net: money(totalIn - totalOut),
-          netAfterFees: money(totalIn - totalOut - totalFees),
+          netAfterFees: money(totalIn - totalOut - totalFees + totalFeesReversed),
           previousCollected: money(big(prev!['amount'])),
         },
+        unreferenced,
         cash: {
           cashSales: money(cashSales),
           cashRefunds: money(cashRefunds),
@@ -695,7 +821,7 @@ export class ReportsService {
   }
 
   // ------------------------------------------------------------ shifts
-  async shifts(actor: MerchantActor, query: Query): Promise<ShiftsReport> {
+  async shifts(actor: MerchantActor, query: Query, ip?: string): Promise<ShiftsReport> {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const c = await this.context(tx, actor, 'reports.financial', query);
       const rows = await this.rows(
@@ -717,7 +843,7 @@ export class ReportsService {
                        group by rp.shift_id) rs on rs.shift_id = sh.id
             left join (select m.shift_id, sum(m.amount_minor) filter (where m.kind = 'cash_in') as cash_in,
                               sum(m.amount_minor) filter (where m.kind = 'cash_out') as cash_out
-                       from cash_movements m group by m.shift_id) ms on ms.shift_id = sh.id
+                       from cash_movements m where m.status = 'posted' group by m.shift_id) ms on ms.shift_id = sh.id
             where sh.status = 'closed' and ${this.within(c, sql.raw('sh.closed_at'))}
               and ${this.branches(c, sql.raw('sh.branch_id'))} and ${this.member(c, sql.raw('sh.membership_id'))}
             order by sh.closed_at desc`,
@@ -780,6 +906,7 @@ export class ReportsService {
       }
       const over = shifts.filter((s) => s.outcome === 'over');
       const short = shifts.filter((s) => s.outcome === 'short');
+      await this.viewed(tx, actor, 'shifts', c, ip);
       return {
         period: this.period(c),
         shifts: shifts.map(({ minor: _m, registerId: _r, ...s }) => s),
@@ -807,7 +934,7 @@ export class ReportsService {
 
   // ------------------------------------------------------------ expenses (ADR-0091)
   /** Expenses by category and supplier payments by supplier, reversals netted (BR-087). */
-  async expenses(actor: MerchantActor, query: Query): Promise<ExpensesReport> {
+  async expenses(actor: MerchantActor, query: Query, ip?: string): Promise<ExpensesReport> {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const c = await this.context(tx, actor, 'reports.financial', query);
       const where = (
@@ -880,6 +1007,7 @@ export class ReportsService {
       );
       const expenses = big(totals!['expenses']);
       const supplier = big(totals!['supplier']);
+      await this.viewed(tx, actor, 'expenses', c, ip);
       return {
         period: this.period(c),
         totals: {
@@ -925,17 +1053,20 @@ export class ReportsService {
   }
 
   // ------------------------------------------------------------ inventory
-  async inventory(actor: MerchantActor, query: Query): Promise<InventoryReport> {
+  async inventory(actor: MerchantActor, query: Query, ip?: string): Promise<InventoryReport> {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const c = await this.context(tx, actor, 'reports.inventory', query);
       const levelScope = this.branches(c, sql.raw('l.branch_id'));
+      // Balances are valued at the micro-precision average; negatives keep their cost basis
+      // and count negatively (BR-174).
+      const avgMicro = sql.raw('coalesce(l.avg_cost_micro, l.avg_cost_minor * 1000)');
       const valuation = (
         await this.rows(
           tx,
           sql`select l.branch_id, count(*)::int as items, coalesce(sum(l.on_hand), 0)::text as qty,
-                     coalesce(sum(case when l.on_hand > 0 and l.avg_cost_minor is not null
-                                       then round(l.on_hand * l.avg_cost_minor) else 0 end), 0)::text as value,
-                     count(*) filter (where l.on_hand > 0 and l.avg_cost_minor is null)::int as unvalued
+                     coalesce(sum(case when l.on_hand <> 0 and ${avgMicro} is not null
+                                       then round(l.on_hand * ${avgMicro} / 1000) else 0 end), 0)::text as value,
+                     count(*) filter (where l.on_hand <> 0 and l.avg_cost_minor is null)::int as unvalued
               from stock_levels l join product_variants v on v.id = l.variant_id
               join products p on p.id = v.product_id
               where p.track_inventory and ${levelScope} group by l.branch_id`,
@@ -952,7 +1083,10 @@ export class ReportsService {
           tx,
           sql`select l.variant_id, l.branch_id, p.name_en, p.name_ar, v.name_en as vn_en, v.name_ar as vn_ar,
                      v.sku, l.on_hand::text as on_hand, l.low_stock_threshold::text as threshold,
-                     l.avg_cost_minor::text as avg
+                     l.avg_cost_minor::text as avg, ${avgMicro}::text as avg_micro,
+                     coalesce((select sum(sr.quantity) from stock_reservations sr
+                               where sr.branch_id = l.branch_id and sr.variant_id = l.variant_id
+                                 and sr.status = 'active' and sr.expires_at > now()), 0)::text as reserved
               from stock_levels l join product_variants v on v.id = l.variant_id
               join products p on p.id = v.product_id
               where p.track_inventory and ${levelScope}
@@ -967,6 +1101,7 @@ export class ReportsService {
         const onHand = parseQuantity(r['on_hand'] as string);
         const threshold = r['threshold'] === null ? null : parseQuantity(r['threshold'] as string);
         const avg = r['avg'] === null ? null : big(r['avg']);
+        const micro = r['avg_micro'] === null ? null : big(r['avg_micro']);
         return {
           variantId: r['variant_id'] as string,
           branchId: r['branch_id'] as string,
@@ -976,9 +1111,10 @@ export class ReportsService {
           variantNameAr: (r['vn_ar'] as string | null) ?? null,
           sku: (r['sku'] as string | null) ?? null,
           onHand: formatQuantity(onHand),
+          reserved: qty(r['reserved']),
           lowStockThreshold: threshold === null ? null : formatQuantity(threshold),
           averageCost: avg === null ? null : money(avg),
-          value: avg === null ? null : money(onHand > 0n ? divHalfUp(onHand * avg, 1000n) : 0n),
+          value: micro === null ? null : money(divHalfUp(onHand * micro, 1_000_000n)),
           status: (onHand < 0n
             ? 'negative'
             : onHand === 0n
@@ -1005,6 +1141,43 @@ export class ReportsService {
         quantityOut: qty(r['q_out']),
         value: money(big(r['value'])),
       }));
+      // Transfer losses posted in the period (BR-172): written off against the source branch.
+      const [lossRow] = await this.rows(
+        tx,
+        sql`select count(distinct x.id)::int as n, coalesce(sum(ll.quantity), 0)::text as q_out,
+                   coalesce(sum(round(ll.quantity * coalesce(ll.unit_cost_minor, 0))), 0)::text as value
+            from stock_transfer_losses x
+            join stock_transfers t on t.id = x.transfer_id
+            join stock_transfer_loss_lines ll on ll.loss_id = x.id
+            where x.status = 'posted' and ${this.within(c, sql.raw('coalesce(x.decided_at, x.created_at)'))}
+              and ${this.branches(c, sql.raw('t.source_branch_id'))}`,
+      );
+      if (int(lossRow!['n']) > 0)
+        movements.push({
+          movementType: 'transfer_loss',
+          count: int(lossRow!['n']),
+          quantityIn: qty('0'),
+          quantityOut: qty(lossRow!['q_out']),
+          value: money(-big(lossRow!['value'])),
+        });
+      // Goods on the road right now, at dispatch cost (BR-173): either end in scope.
+      const [transit] = await this.rows(
+        tx,
+        sql`select count(distinct t.id)::int as n, coalesce(sum(r.qty), 0)::text as qty, coalesce(sum(r.value), 0)::text as value
+            from (
+              select t.id, greatest(l.dispatched_quantity - coalesce(l.received_quantity, 0)
+                       - coalesce(l.recalled_quantity, 0) - coalesce(lp.lost, 0), 0) as qty,
+                     round(greatest(l.dispatched_quantity - coalesce(l.received_quantity, 0)
+                       - coalesce(l.recalled_quantity, 0) - coalesce(lp.lost, 0), 0) * coalesce(l.unit_cost_minor, 0)) as value
+              from stock_transfers t join stock_transfer_lines l on l.transfer_id = t.id
+              left join lateral (
+                select sum(ll.quantity) as lost from stock_transfer_loss_lines ll
+                join stock_transfer_losses x on x.id = ll.loss_id
+                where x.transfer_id = t.id and x.status = 'posted' and ll.position = l.position) lp on true
+              where t.status in ('in_transit', 'received') and t.dispatched_at is not null
+                and ${c.branchIds === null ? sql`true` : sql`(${this.branches(c, sql.raw('t.source_branch_id'))} or ${this.branches(c, sql.raw('t.destination_branch_id'))})`}
+            ) r join stock_transfers t on t.id = r.id where r.qty > 0`,
+      );
       const adjustments = (
         await this.rows(
           tx,
@@ -1064,8 +1237,132 @@ export class ReportsService {
         .sort((a, b) => desc(a.k, b.k))
         .slice(0, 1000)
         .map(({ k: _k, ...rest }) => rest);
+      // Closing stock at the end of the period and opening stock at its start, from the ledger
+      // (BR-176): the last movement before the cut-off carries the balance and the average.
+      const position = (cutoff: SQL) => sql`
+        select x.branch_id, x.variant_id, x.balance_after, x.avg
+        from (
+          select distinct on (m.branch_id, m.variant_id) m.branch_id, m.variant_id, m.balance_after,
+                 coalesce(m.avg_cost_micro_after, m.avg_cost_after_minor * 1000) as avg
+          from stock_movements m
+          where m.created_at < ${cutoff} and ${this.branches(c, sql.raw('m.branch_id'))}
+          order by m.branch_id, m.variant_id, m.created_at desc, m.id desc
+        ) x`;
+      const closingCutoff = sql`((${c.to}::date + 1)::timestamp at time zone ${c.tz})`;
+      const openingCutoff = sql`((${c.from}::date)::timestamp at time zone ${c.tz})`;
+      const positions = async (cutoff: SQL) =>
+        (
+          await this.rows(
+            tx,
+            sql`select x.branch_id, count(*) filter (where x.balance_after <> 0)::int as items,
+                       coalesce(sum(x.balance_after), 0)::text as qty,
+                       coalesce(sum(case when x.balance_after <> 0 and x.avg is not null
+                                         then round(x.balance_after * x.avg / 1000) else 0 end), 0)::text as value
+                from (${position(cutoff)}) x group by x.branch_id order by x.branch_id`,
+          )
+        ).map((r) => ({
+          branchId: r['branch_id'] as string,
+          items: int(r['items']),
+          quantity: qty(r['qty']),
+          value: money(big(r['value'])),
+          quantityMilli: parseQuantity(r['qty'] as string),
+          valueMinor: big(r['value']),
+        }));
+      const closingRows = await positions(closingCutoff);
+      const openingRows = await positions(openingCutoff);
+      const periodMoves = (
+        await this.rows(
+          tx,
+          sql`select m.branch_id, m.movement_type, coalesce(sum(m.quantity), 0)::text as qty,
+                     coalesce(sum(m.value_minor), 0)::text as value
+              from stock_movements m where ${movementScope}
+              group by m.branch_id, m.movement_type order by m.branch_id, m.movement_type`,
+        )
+      ).map((r) => ({
+        branchId: r['branch_id'] as string,
+        movementType: r['movement_type'] as string,
+        quantityMilli: parseQuantity(r['qty'] as string),
+        valueMinor: big(r['value']),
+      }));
+      const branchIds = [
+        ...new Set([...closingRows, ...openingRows, ...periodMoves].map((r) => r.branchId)),
+      ].sort();
+      const rollFor = (branchId: string | null): StockRollForward => {
+        const pick = <T extends { branchId: string }>(rows: T[]) =>
+          branchId === null ? rows : rows.filter((r) => r.branchId === branchId);
+        const sumQ = (rows: { quantityMilli: bigint }[]) =>
+          rows.reduce((s, r) => s + r.quantityMilli, 0n);
+        const sumV = (rows: { valueMinor: bigint }[]) =>
+          rows.reduce((s, r) => s + r.valueMinor, 0n);
+        const opening = pick(openingRows);
+        const closing = pick(closingRows);
+        const byType = new Map<string, { quantityMilli: bigint; valueMinor: bigint }>();
+        for (const m of pick(periodMoves)) {
+          const cur = byType.get(m.movementType) ?? { quantityMilli: 0n, valueMinor: 0n };
+          cur.quantityMilli += m.quantityMilli;
+          cur.valueMinor += m.valueMinor;
+          byType.set(m.movementType, cur);
+        }
+        const movedValue = [...byType.values()].reduce((s, r) => s + r.valueMinor, 0n);
+        return {
+          branchId,
+          opening: { quantity: formatQuantity(sumQ(opening)), value: money(sumV(opening)) },
+          movements: [...byType.entries()]
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([movementType, r]) => ({
+              movementType,
+              quantity: formatQuantity(r.quantityMilli),
+              value: money(r.valueMinor),
+            })),
+          closing: { quantity: formatQuantity(sumQ(closing)), value: money(sumV(closing)) },
+          rounding: money(sumV(closing) - sumV(opening) - movedValue),
+        };
+      };
+      const [reserved] = await this.rows(
+        tx,
+        sql`select coalesce(sum(sr.quantity), 0)::text as qty from stock_reservations sr
+            where sr.status = 'active' and sr.expires_at > now() and ${this.branches(c, sql.raw('sr.branch_id'))}`,
+      );
+      const unvalued = (
+        await this.rows(
+          tx,
+          sql`select l.variant_id, p.id as product_id, l.branch_id, p.name_en, p.name_ar,
+                     v.name_en as vn_en, v.name_ar as vn_ar, v.sku, l.on_hand::text as on_hand
+              from stock_levels l join product_variants v on v.id = l.variant_id
+              join products p on p.id = v.product_id
+              where p.track_inventory and l.on_hand <> 0 and l.avg_cost_minor is null and ${levelScope}
+              order by coalesce(lower(p.name_en), p.name_ar) limit 200`,
+        )
+      ).map((r) => ({
+        variantId: r['variant_id'] as string,
+        productId: r['product_id'] as string,
+        branchId: r['branch_id'] as string,
+        nameEn: (r['name_en'] as string | null) ?? null,
+        nameAr: (r['name_ar'] as string | null) ?? null,
+        variantNameEn: (r['vn_en'] as string | null) ?? null,
+        variantNameAr: (r['vn_ar'] as string | null) ?? null,
+        sku: (r['sku'] as string | null) ?? null,
+        onHand: qty(r['on_hand']),
+      }));
+      await this.viewed(tx, actor, 'inventory', c, ip);
       return {
         period: this.period(c),
+        inTransit: {
+          transfers: int(transit!['n']),
+          quantity: qty(transit!['qty']),
+          value: money(big(transit!['value'])),
+        },
+        asAt: {
+          date: c.to,
+          valuation: closingRows.map(({ quantityMilli: _q, valueMinor: _v, ...r }) => r),
+          total: {
+            quantity: formatQuantity(closingRows.reduce((s, r) => s + r.quantityMilli, 0n)),
+            value: money(closingRows.reduce((s, r) => s + r.valueMinor, 0n)),
+          },
+        },
+        rollForward: { branches: branchIds.map((b) => rollFor(b)), total: rollFor(null) },
+        reservedQuantity: qty(reserved!['qty']),
+        unvalued,
         valuation,
         stock,
         movements,
@@ -1076,7 +1373,7 @@ export class ReportsService {
   }
 
   // ------------------------------------------------------------ purchasing
-  async purchasing(actor: MerchantActor, query: Query): Promise<PurchasingReport> {
+  async purchasing(actor: MerchantActor, query: Query, ip?: string): Promise<PurchasingReport> {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const c = await this.context(tx, actor, 'reports.inventory', query);
       const orderValue = sql`(select coalesce(sum(round(ol.quantity * ol.unit_cost_minor)), 0)
@@ -1194,8 +1491,16 @@ export class ReportsService {
                      coalesce(sum(tl.dispatched_quantity - tl.received_quantity) filter (where t.status = 'received'), 0)::text as missing,
                      coalesce(sum(round(tl.dispatched_quantity * tl.unit_cost_minor)), 0)::text as dispatched_value,
                      coalesce(sum(round((tl.dispatched_quantity - tl.received_quantity) * tl.unit_cost_minor))
-                              filter (where t.status = 'received'), 0)::text as missing_value
+                              filter (where t.status = 'received'), 0)::text as missing_value,
+                     coalesce(sum(lp.lost), 0)::text as lost,
+                     coalesce(sum(lp.lost_value), 0)::text as lost_value,
+                     count(distinct px.id)::int as pending_losses
               from stock_transfers t join stock_transfer_lines tl on tl.transfer_id = t.id
+              left join lateral (
+                select sum(ll.quantity) as lost, sum(round(ll.quantity * coalesce(ll.unit_cost_minor, 0))) as lost_value
+                from stock_transfer_loss_lines ll join stock_transfer_losses x on x.id = ll.loss_id
+                where x.transfer_id = t.id and x.status = 'posted' and ll.position = tl.position) lp on true
+              left join stock_transfer_losses px on px.transfer_id = t.id and px.status = 'pending'
               where t.dispatched_at is not null and ${this.within(c, sql.raw('t.dispatched_at'))} and ${transferScope}
               group by 1, 2 order by 3 desc`,
         )
@@ -1208,7 +1513,11 @@ export class ReportsService {
         missing: qty(r['missing']),
         dispatchedValue: money(big(r['dispatched_value'])),
         missingValue: money(big(r['missing_value'])),
+        lost: qty(r['lost']),
+        lostValue: money(big(r['lost_value'])),
+        pendingLosses: int(r['pending_losses']),
       }));
+      await this.viewed(tx, actor, 'purchasing', c, ip);
       return {
         period: this.period(c),
         summary: {
@@ -1222,6 +1531,43 @@ export class ReportsService {
         bySupplier,
         receipts,
         transfers,
+      };
+    });
+  }
+
+  // ------------------------------------------------------------ dashboard
+  /** Today and yesterday in the merchant's time zone, in the actor's `reports.sales` scope (BR-187). */
+  async today(actor: MerchantActor): Promise<TodaySummary> {
+    return this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const tz = await merchantTimezone(tx, actor.merchantId);
+      const date = todayIn(tz);
+      const c = await this.context(tx, actor, 'reports.sales', { from: date, to: date });
+      const day = async (from: string, to: string) => {
+        const s = await this.salesSummary(tx, c, from, to);
+        return {
+          saleCount: s.saleCount,
+          netSales: s.netSales,
+          refundCount: s.refundCount,
+          refunds: s.refunds,
+          netAfterRefunds: s.netAfterRefunds,
+        };
+      };
+      const [open] = await this.rows(
+        tx,
+        sql`select count(*)::int as n from shifts s where s.status = 'open'
+            and ${this.branches(c, sql.raw('s.branch_id'))}`,
+      );
+      const [ever] = await this.rows(
+        tx,
+        sql`select exists(select 1 from sales s where ${this.branches(c, sql.raw('s.branch_id'))}) as any`,
+      );
+      return {
+        date,
+        timezone: tz,
+        today: await day(date, date),
+        yesterday: await day(addDays(date, -1), addDays(date, -1)),
+        openShifts: int(open?.['n']),
+        hasSales: Boolean(ever?.['any']),
       };
     });
   }

@@ -38,7 +38,7 @@ test('a shopper buys online with the sandbox gateway; the order, stock and repor
     },
   });
   const methods = (await (await page.request.get('/api/v1/manager/payment-methods')).json())
-    .methods as { id: string; kind: string; version: number }[];
+    .methods as { id: string; kind: string; version: number; financialAccountId: string }[];
   const card = methods.find((m) => m.kind === 'card')!;
   expect(
     (
@@ -48,6 +48,7 @@ test('a shopper buys online with the sandbox gateway; the order, stock and repor
           nameEn: 'Card (test)',
           availableOnline: true,
           gatewayProvider: 'mock',
+          financialAccountId: card.financialAccountId,
           version: card.version,
         },
       })

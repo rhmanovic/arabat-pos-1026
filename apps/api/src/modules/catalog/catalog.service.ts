@@ -1,6 +1,7 @@
 import type {
   Category,
   PosCatalog,
+  PriceHistory,
   Product,
   ProductSummary,
   productListQuerySchema,
@@ -16,6 +17,7 @@ import type { z } from 'zod';
 import { DatabaseService, type Transaction } from '../../database/database.service.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
+import { diffFields } from '../../kernel/audit-diff.js';
 import { newId } from '../../kernel/ids.js';
 import { FileStorage, sniffImageType } from '../../kernel/storage/file-storage.js';
 import { AuditService } from '../audit/audit.service.js';
@@ -24,6 +26,7 @@ import { versionConflict } from '../branches/branches.service.js';
 import { branches } from '../branches/branches.schema.js';
 import {
   categories,
+  priceHistory,
   productBarcodes,
   productBranchAvailability,
   productImages,
@@ -100,11 +103,23 @@ export class CatalogService {
     const categoryId = id ?? newId();
     await this.database.withMerchantTx(actor.merchantId, async (tx) => {
       if (input.parentId) await this.assertParentValid(tx, categoryId, input.parentId);
+      let changes = {};
       if (id) {
         if (!input.version)
           throw AppError.validation([
             { path: 'version', code: 'required', message: 'version is required' },
           ]);
+        const before = await this.findCategory(tx, id);
+        changes = diffFields(
+          before,
+          {
+            nameEn: input.nameEn,
+            nameAr: input.nameAr,
+            parentId: input.parentId,
+            sortOrder: input.sortOrder,
+          },
+          ['nameEn', 'nameAr', 'parentId', 'sortOrder'],
+        );
         const [row] = await tx
           .update(categories)
           .set({
@@ -138,6 +153,7 @@ export class CatalogService {
         'category',
         categoryId,
         ip,
+        id ? { changes } : {},
       );
     });
     return (await this.listCategories(actor)).find((c) => c.id === categoryId)!;
@@ -296,10 +312,31 @@ export class CatalogService {
       this.database.withMerchantTx(actor.merchantId, async (tx) => {
         const existing = await this.loadProduct(tx, actor, productId);
         await this.validateReferences(tx, input);
+        const fields = productFields(input);
+        const currentVariants = await tx
+          .select()
+          .from(productVariants)
+          .where(eq(productVariants.productId, productId));
+        // Stock never disappears silently (BR-171): tracking stays on, goods stay goods and
+        // variants stay active while any balance is not zero.
+        if (existing.trackInventory && !fields.trackInventory)
+          await assertNoStockOnHand(
+            tx,
+            currentVariants.map((v) => v.id),
+            'switch stock tracking off',
+          );
+        const requestedIds = new Set(input.variants.map((v) => v.id).filter(Boolean));
+        await assertNoStockOnHand(
+          tx,
+          currentVariants
+            .filter((v) => v.status === 'active' && !requestedIds.has(v.id))
+            .map((v) => v.id),
+          'remove a variant',
+        );
         const [row] = await tx
           .update(products)
           .set({
-            ...productFields(input),
+            ...fields,
             version: sql`${products.version} + 1`,
             updatedAt: sql`now()`,
           })
@@ -307,13 +344,10 @@ export class CatalogService {
           .returning({ id: products.id });
         if (!row) throw versionConflict();
         await this.saveAvailability(tx, actor.merchantId, productId, input);
-        const currentVariants = await tx
-          .select()
-          .from(productVariants)
-          .where(eq(productVariants.productId, productId));
         const changes = await this.saveVariants(tx, actor, productId, input, currentVariants);
         await this.record(tx, actor, 'product.updated', 'product', productId, ip, {
           before: { status: existing.status, name: existing.nameEn ?? existing.nameAr },
+          changes: diffFields(existing, fields, Object.keys(fields) as (keyof typeof fields)[]),
           variants: changes,
         });
         return this.loadProduct(tx, actor, productId);
@@ -331,6 +365,17 @@ export class CatalogService {
       const current = await this.loadProduct(tx, actor, productId);
       if (status === 'active' && current.status !== 'active')
         await this.subscriptions.assertCapacity(tx, actor.merchantId, 'products');
+      if (status === 'archived' && current.status === 'active')
+        await assertNoStockOnHand(
+          tx,
+          (
+            await tx
+              .select({ id: productVariants.id })
+              .from(productVariants)
+              .where(eq(productVariants.productId, productId))
+          ).map((v) => v.id),
+          'archive the product',
+        );
       await tx
         .update(products)
         .set({ status, version: sql`${products.version} + 1`, updatedAt: sql`now()` })
@@ -620,6 +665,18 @@ export class CatalogService {
             updatedAt: sql`now()`,
           })
           .where(eq(productVariants.id, existing.id));
+        if (priceChanged)
+          await this.history(
+            tx,
+            actor,
+            productId,
+            existing.id,
+            'price',
+            existing.priceMinor,
+            price,
+          );
+        if (costChanged)
+          await this.history(tx, actor, productId, existing.id, 'cost', existing.costMinor, cost);
         if (priceChanged || costChanged) {
           changes.push({
             variantId: existing.id,
@@ -657,11 +714,69 @@ export class CatalogService {
         });
         if (isDefault) await this.markDefault(tx, productId, id);
         await this.replaceBarcodes(tx, actor.merchantId, id, v.barcodes);
+        await this.history(tx, actor, productId, id, 'price', null, price, 'created');
+        if (cost !== null)
+          await this.history(tx, actor, productId, id, 'cost', null, cost, 'created');
         changes.push({ variantId: id, created: true, price: money(price).amount });
       }
     }
 
     return changes;
+  }
+
+  /** Append-only price / cost history of a variant (BR-191, FND-222). */
+  private async history(
+    tx: Transaction,
+    actor: MerchantActor,
+    productId: string,
+    variantId: string,
+    kind: 'price' | 'cost',
+    from: bigint | null,
+    to: bigint | null,
+    source: 'manual' | 'created' = 'manual',
+  ) {
+    await tx.insert(priceHistory).values({
+      id: newId(),
+      merchantId: actor.merchantId,
+      productId,
+      variantId,
+      kind,
+      fromMinor: from,
+      toMinor: to,
+      source,
+      changedByUserId: actor.userId,
+    });
+  }
+
+  /** Price and cost history of a product; cost rows only for holders of `catalog.prices.manage`. */
+  async priceHistory(actor: MerchantActor, productId: string): Promise<PriceHistory> {
+    return this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      await this.loadProduct(tx, actor, productId);
+      const showCost = can(actor.access, 'catalog.prices.manage', null);
+      const rows = (
+        await tx.execute(sql`
+          select h.id, h.variant_id, v.name_en, v.name_ar, h.kind, h.from_minor::text as from_minor,
+                 h.to_minor::text as to_minor, h.source, u.full_name, h.created_at
+          from price_history h join product_variants v on v.id = h.variant_id
+          left join users u on u.id = h.changed_by_user_id
+          where h.product_id = ${productId} ${showCost ? sql`` : sql`and h.kind = 'price'`}
+          order by h.created_at desc, h.id desc limit 500`)
+      ).rows as Record<string, unknown>[];
+      return {
+        entries: rows.map((r) => ({
+          id: r['id'] as string,
+          variantId: r['variant_id'] as string,
+          variantNameEn: (r['name_en'] as string | null) ?? null,
+          variantNameAr: (r['name_ar'] as string | null) ?? null,
+          kind: r['kind'] as 'price' | 'cost',
+          from: r['from_minor'] === null ? null : money(BigInt(r['from_minor'] as string)),
+          to: r['to_minor'] === null ? null : money(BigInt(r['to_minor'] as string)),
+          source: r['source'] as 'manual' | 'created',
+          changedBy: (r['full_name'] as string | null) ?? null,
+          changedAt: new Date(r['created_at'] as string).toISOString(),
+        })),
+      };
+    });
   }
 
   private async markDefault(tx: Transaction, productId: string, variantId: string) {
@@ -800,6 +915,45 @@ export class CatalogService {
       details,
     });
   }
+}
+
+/**
+ * Refuses an action that would hide a stock balance (BR-171, FND-206 / FND-207): every
+ * branch where one of the variants still holds stock is named, with what to do first.
+ */
+export async function assertNoStockOnHand(
+  tx: Transaction,
+  variantIds: readonly string[],
+  action: string,
+): Promise<void> {
+  if (variantIds.length === 0) return;
+  const rows = (
+    await tx.execute(sql`
+      select l.variant_id, l.on_hand::text as on_hand, b.name_en, b.name_ar,
+             coalesce(v.name_en, p.name_en, v.name_ar, p.name_ar) as item
+      from stock_levels l
+      join branches b on b.id = l.branch_id
+      join product_variants v on v.id = l.variant_id
+      join products p on p.id = v.product_id
+      where l.on_hand <> 0 and l.variant_id in (${sql.join(
+        variantIds.map((id) => sql`${id}`),
+        sql`, `,
+      )})
+      order by b.is_main desc, b.name_en, v.position`)
+  ).rows as Record<string, string | null>[];
+  if (rows.length === 0) return;
+  throw new AppError(
+    409,
+    'STOCK_ON_HAND',
+    `Cannot ${action} while stock is on hand. Write it off or transfer it first: ${rows
+      .map((r) => `${r['item']} at ${r['name_en'] ?? r['name_ar']}: ${r['on_hand']}`)
+      .join('; ')}.`,
+    rows.map((r) => ({
+      path: `variants.${r['variant_id']}`,
+      code: 'stock_on_hand',
+      message: `${r['name_en'] ?? r['name_ar']}: ${r['on_hand']}`,
+    })),
+  );
 }
 
 function productFields(input: SaveProductInput) {

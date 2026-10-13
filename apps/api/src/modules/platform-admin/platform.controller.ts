@@ -7,7 +7,9 @@ import {
   changeSubscriptionSchema,
   createMerchantSchema,
   merchantStatusChangeSchema,
+  ownerFreezeSchema,
   platformAuditQuerySchema,
+  platformOwnershipTransferSchema,
   platformMerchantQuerySchema,
   savePlanSchema,
 } from '@arabat/contracts';
@@ -89,6 +91,45 @@ export class PlatformController {
     @Req() req: FastifyRequest,
   ): Promise<PlatformMerchantDetail> {
     return this.platform.setStatus(actor, id, body, req.ip);
+  }
+
+  /** Emergency freeze / release of the owner's access (support, super admin; BR-020). */
+  @RequirePlatformRole(...SUPPORT)
+  @Post('merchants/:id/owner-freeze')
+  @HttpCode(200)
+  freezeOwner(
+    @CurrentPlatformActor() actor: PlatformActor,
+    @Param('id', uuid) id: string,
+    @Body(new ZodPipe(ownerFreezeSchema)) body: O<typeof ownerFreezeSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<PlatformMerchantDetail> {
+    return this.platform.freezeOwner(actor, id, body, req.ip, true);
+  }
+
+  @RequirePlatformRole(...SUPPORT)
+  @Post('merchants/:id/owner-release')
+  @HttpCode(200)
+  releaseOwner(
+    @CurrentPlatformActor() actor: PlatformActor,
+    @Param('id', uuid) id: string,
+    @Body(new ZodPipe(ownerFreezeSchema)) body: O<typeof ownerFreezeSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<PlatformMerchantDetail> {
+    return this.platform.freezeOwner(actor, id, body, req.ip, false);
+  }
+
+  /** Operator-initiated ownership transfer with a recorded reason (super admin only). */
+  @RequirePlatformRole('platform.super_admin')
+  @Post('merchants/:id/ownership-transfer')
+  @HttpCode(200)
+  transferOwnership(
+    @CurrentPlatformActor() actor: PlatformActor,
+    @Param('id', uuid) id: string,
+    @Body(new ZodPipe(platformOwnershipTransferSchema))
+    body: O<typeof platformOwnershipTransferSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<PlatformMerchantDetail> {
+    return this.platform.transferOwnership(actor, id, body, req.ip);
   }
 
   @RequirePlatformRole(...ANY)

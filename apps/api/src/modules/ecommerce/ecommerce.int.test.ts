@@ -91,6 +91,7 @@ async function setup() {
     gatewayProvider: 'mock',
     feeType: 'percentage',
     feePercent: '2',
+    financialAccountId: card['financialAccountId'],
     version: card['version'],
   });
   const slug = `shop-${Date.now().toString(36)}-${(seq += 1)}`;
@@ -365,6 +366,16 @@ describe('online checkout and payments', () => {
       { channel: 'pos', saleCount: 1, netSales: { amount: '3.750', currency: 'KWD' } },
       { channel: 'online', saleCount: 1, netSales: { amount: '3.000', currency: 'KWD' } },
     ]);
+    // Sales by employee carry the online store as its own row, so the breakdown adds up (BR-185).
+    expect(
+      report.byEmployee.find((e: { membershipId: string }) => e.membershipId === 'online'),
+    ).toMatchObject({ saleCount: 1, netSales: { amount: '3.000' }, refunds: { amount: '0.000' } });
+    expect(
+      report.byEmployee.reduce(
+        (t: number, e: { netSales: { amount: string } }) => t + Number(e.netSales.amount) * 1000,
+        0,
+      ),
+    ).toBe(6750);
     expect(report.summary.netSales.amount).toBe('6.750');
     // The delivery fee is a zero-cost service: profit stays available and exact (audit fix).
     // Cost: 3 + 2 teas at 0.400 = 2.000; profit 6.750 − 2.000 = 4.750.
@@ -583,11 +594,13 @@ describe('online checkout and payments', () => {
   it('refuses unconfigured gateways, closed stores and unauthorised managers', async () => {
     const s = await setup();
     // A Tap method is not ready (no approved credentials): hidden and refused.
+    const bank = (await s.ok('GET', '/manager/financial-accounts')).accounts[0].id as string;
     const tap = await s.ok('POST', '/manager/payment-methods', {
       kind: 'custom',
       nameEn: 'Tap',
       availableOnline: true,
       gatewayProvider: 'tap',
+      financialAccountId: bank,
     });
     expect(
       (await pub(s, 'GET', '')).json().paymentMethods.map((m: { provider: string }) => m.provider),

@@ -22,9 +22,11 @@ import { formatAmount } from '../catalog/ProductsPage.js';
 import {
   BranchTransferList,
   DepositDialog,
+  DepositsInTransitList,
   DisbursementDialog,
   DisbursementList,
   SendToBranchDialog,
+  PayoutRequestList,
 } from './CashPayouts.js';
 import { CashTabs } from './shared.js';
 
@@ -123,11 +125,15 @@ export function CashCustodyPage() {
         <ErrorState error={overview.error} onRetry={() => void overview.refetch()} />
       ) : null}
       {data ? (
-        <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
+        <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-5 sm:gap-4">
           <StatCard label={t('cashCustody.total')} value={fmt(data.total)} />
           <StatCard label={t('cashCustody.treasuries')} value={fmt(data.treasuriesTotal)} />
           <StatCard label={t('cashCustody.registers')} value={fmt(data.registersTotal)} />
           <StatCard label={t('cashCustody.inTransit')} value={fmt(data.inTransitTotal)} />
+          <StatCard
+            label={t('cashCustody.depositsInTransit')}
+            value={fmt(data.depositsInTransitTotal)}
+          />
         </div>
       ) : null}
       <CashTabs
@@ -209,7 +215,11 @@ export function CashCustodyPage() {
       ) : tab === 'transfers' ? (
         <TransferList />
       ) : tab === 'payouts' ? (
-        <DisbursementList />
+        <div className="grid gap-4">
+          <PayoutRequestList />
+          {can('cash.deposit') ? <DepositsInTransitList /> : null}
+          <DisbursementList />
+        </div>
       ) : (
         <BranchTransferList />
       )}
@@ -510,11 +520,21 @@ function StatementDialog({ place, onClose }: { place: Place; onClose: () => void
   const { t, i18n } = useTranslation();
   const api = useApi();
   const [page, setPage] = useState(1);
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const DATE = /^\d{4}-\d{2}-\d{2}$/;
+  // A period cuts on the merchant's local days with the balance brought forward (BR-184).
+  const query = {
+    page,
+    ...(DATE.test(from) ? { from } : {}),
+    ...(DATE.test(to) ? { to } : {}),
+  };
   const statement = useQuery({
-    queryKey: [...cashKey, 'statement', place.accountId, page],
-    queryFn: () => api.cash.statement(place.accountId, page),
+    queryKey: [...cashKey, 'statement', place.accountId, query],
+    queryFn: () => api.cash.statement(place.accountId, query),
   });
   const pages = statement.data ? Math.max(1, Math.ceil(statement.data.total / 25)) : 1;
+  const amount = (m: { amount: string; currency: string }) => formatAmount(m, i18n.language);
   return (
     <Dialog
       open
@@ -527,6 +547,67 @@ function StatementDialog({ place, onClose }: { place: Place; onClose: () => void
             : localizedName(place, i18n.language),
       })}
     >
+      <div className="mb-3 flex flex-wrap items-end gap-3">
+        <Field label={t('cashCustody.periodFrom')}>
+          {(p) => (
+            <Input
+              {...p}
+              type="date"
+              className="w-40"
+              value={from}
+              onChange={(e) => {
+                setFrom(e.target.value);
+                setPage(1);
+              }}
+            />
+          )}
+        </Field>
+        <Field label={t('cashCustody.periodTo')}>
+          {(p) => (
+            <Input
+              {...p}
+              type="date"
+              className="w-40"
+              value={to}
+              onChange={(e) => {
+                setTo(e.target.value);
+                setPage(1);
+              }}
+            />
+          )}
+        </Field>
+      </div>
+      {statement.data?.period ? (
+        <dl
+          className="mb-3 grid grid-cols-2 gap-2 rounded-md bg-surface-muted p-3 text-sm sm:grid-cols-4"
+          data-testid="statement-summary"
+        >
+          <div>
+            <dt className="text-fg-muted">{t('cashCustody.openingBalance')}</dt>
+            <dd dir="ltr" className="font-medium tabular-nums">
+              {amount(statement.data.openingBalance)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-fg-muted">{t('cashCustody.totalIn')}</dt>
+            <dd dir="ltr" className="font-medium tabular-nums">
+              {amount(statement.data.totalIn)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-fg-muted">{t('cashCustody.totalOut')}</dt>
+            <dd dir="ltr" className="font-medium tabular-nums">
+              {amount(statement.data.totalOut)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-fg-muted">{t('cashCustody.closingBalance')}</dt>
+            <dd dir="ltr" className="font-medium tabular-nums">
+              {amount(statement.data.closingBalance)}
+            </dd>
+          </div>
+        </dl>
+      ) : null}
       <DataTable
         caption={t('cashCustody.statement')}
         loading={statement.isPending}

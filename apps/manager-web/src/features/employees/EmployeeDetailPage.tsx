@@ -98,6 +98,17 @@ function EmployeeDetail({ employee, roles }: { employee: Employee; roles: Role[]
     onSuccess: () => notify.ok(t('employees.resetSent')),
     onError: notify.fail,
   });
+  // Account hygiene (BR-193): end every session at once; clear a sign-in lock.
+  const endSessions = useMutation({
+    mutationFn: () => api.employees.revokeSessions(employee.membershipId),
+    onSuccess: (r) => notify.ok(t('employees.sessionsEnded', { count: r.ended })),
+    onError: notify.fail,
+  });
+  const unlock = useMutation({
+    mutationFn: () => api.employees.unlock(employee.membershipId),
+    onSuccess: () => notify.ok(t('employees.unlocked')),
+    onError: notify.fail,
+  });
 
   return (
     <div className="flex flex-col gap-6">
@@ -120,6 +131,20 @@ function EmployeeDetail({ employee, roles }: { employee: Employee; roles: Role[]
             <>
               <Button variant="secondary" loading={reset.isPending} onClick={() => reset.mutate()}>
                 {t('employees.sendReset')}
+              </Button>
+              <Button
+                variant="secondary"
+                loading={endSessions.isPending}
+                onClick={() => endSessions.mutate()}
+              >
+                {t('employees.endSessions')}
+              </Button>
+              <Button
+                variant="secondary"
+                loading={unlock.isPending}
+                onClick={() => unlock.mutate()}
+              >
+                {t('employees.unlock')}
               </Button>
               {employee.status === 'active' ? (
                 <Button variant="danger" onClick={() => setConfirmOff(true)}>

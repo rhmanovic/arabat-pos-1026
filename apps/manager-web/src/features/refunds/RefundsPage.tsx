@@ -306,7 +306,13 @@ function RefundDialog({ id, onClose }: { id: string; onClose: () => void }) {
           {r.approvalReasons.length ? (
             <Alert tone="warning">
               {r.approvalReasons.map((x) => t(`refunds.approvalReason_${x}`)).join(' · ')}
+              {r.ownerOverride ? ` — ${t('refunds.ownerOverrideNote')}` : ''}
             </Alert>
+          ) : null}
+          {r.customerContact ? (
+            <p data-testid="refund-contact">
+              {t('refunds.customerContact')}: {r.customerContact}
+            </p>
           ) : null}
           <Section title={t('refunds.items')}>
             <ul className="divide-y divide-border">
@@ -387,8 +393,14 @@ function Activity() {
         </label>
       </div>
       {activity.data ? (
-        <p className="mb-3 text-sm text-fg-muted">
-          {t('refunds.activityHint', { percent: activity.data.flagThresholdPercent })}
+        <p className="mb-3 text-sm text-fg-muted" data-testid="activity-hint">
+          {t('refunds.activityHint', { percent: activity.data.flagThresholdPercent })}{' '}
+          <span dir="ltr">
+            {t('refunds.activityPeriod', {
+              from: activity.data.period.from,
+              to: activity.data.period.to,
+            })}
+          </span>
         </p>
       ) : null}
       <DataTable<A>
@@ -427,6 +439,12 @@ function Activity() {
             header: t('refunds.outsideWindow'),
             hideBelow: 'lg',
             cell: (a) => a.outsideWindow,
+          },
+          {
+            key: 'own',
+            header: t('refunds.ownSaleRefunds'),
+            hideBelow: 'lg',
+            cell: (a) => a.ownSaleRefunds,
           },
           {
             key: 'flag',

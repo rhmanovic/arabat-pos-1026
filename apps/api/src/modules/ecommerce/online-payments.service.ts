@@ -50,8 +50,15 @@ export class OnlinePaymentsService implements OnModuleInit, OnModuleDestroy {
     @Inject(ENV) private readonly env: Env,
   ) {
     for (const p of GATEWAY_PROVIDERS) this.gateways.set(p, new UnconfiguredGateway(p));
-    if (mockPaymentsEnabled(env))
+    if (mockPaymentsEnabled(env)) {
       this.gateways.set('mock', new MockGateway(env.PAYMENT_MOCK_SECRET, env.PUBLIC_STORE_URL));
+      // Test payments create real sales and bank entries without money (FND-709): outside
+      // development this must be a deliberate, visible choice (staging only, OPERATIONS.md).
+      if (env.NODE_ENV === 'production')
+        this.logger.warn(
+          'PAYMENT_MOCK_ENABLED is on in a production build: test payments create sales and bank entries without real money. Never use this for a live merchant.',
+        );
+    }
   }
 
   onModuleInit() {

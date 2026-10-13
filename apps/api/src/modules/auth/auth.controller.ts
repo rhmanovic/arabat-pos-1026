@@ -13,8 +13,21 @@ import {
   switchBranchRequestSchema,
   switchMerchantRequestSchema,
   unlockRequestSchema,
+  changePasswordSchema,
+  type SessionInfo,
 } from '@arabat/contracts';
-import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Req,
+  Res,
+} from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { z } from 'zod';
 import { Authenticated, Public } from '../../kernel/access/access.decorators.js';
@@ -26,6 +39,7 @@ import { PasswordResetService } from './password-reset.service.js';
 import { PlatformAuthService } from './platform-auth.service.js';
 import { PosLockService } from './pos-lock.service.js';
 import { RegistrationService } from './registration.service.js';
+import { AccountService } from './account.service.js';
 import { SessionContextService } from './session-context.service.js';
 import { SessionService, clientInfo } from './session.service.js';
 
@@ -38,6 +52,7 @@ export class AuthController {
     private readonly platformAuth: PlatformAuthService,
     private readonly resets: PasswordResetService,
     private readonly context: SessionContextService,
+    private readonly account: AccountService,
     private readonly sessions: SessionService,
     private readonly posLocks: PosLockService,
   ) {}
@@ -173,6 +188,50 @@ export class AuthController {
       reply,
       await this.context.switchInterface(actor, body.target, body.branchId, clientInfo(request)),
     );
+  }
+
+  /** Self-service password change (BR-193): other sessions end, this one is replaced. */
+  @Authenticated('manager')
+  @Post('manager/password')
+  @HttpCode(200)
+  async managerChangePassword(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Body(new ZodPipe(changePasswordSchema)) body: z.output<typeof changePasswordSchema>,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<{ status: 'password_changed' }> {
+    const { token } = await this.account.changePassword(actor, body, clientInfo(request));
+    this.sessions.setCookie(reply, 'manager', token);
+    return { status: 'password_changed' };
+  }
+
+  @Authenticated('manager')
+  @Get('manager/sessions')
+  async managerSessions(
+    @CurrentMerchantActor() actor: MerchantActor,
+  ): Promise<{ sessions: SessionInfo[] }> {
+    return { sessions: await this.account.list(actor) };
+  }
+
+  @Authenticated('manager')
+  @Post('manager/sessions/revoke-others')
+  @HttpCode(200)
+  async managerRevokeOthers(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Req() request: FastifyRequest,
+  ): Promise<{ ended: number }> {
+    return { ended: await this.account.revokeOthers(actor, request.ip) };
+  }
+
+  @Authenticated('manager')
+  @Delete('manager/sessions/:id')
+  @HttpCode(204)
+  async managerRevokeSession(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() request: FastifyRequest,
+  ): Promise<void> {
+    await this.account.revoke(actor, id, request.ip);
   }
 
   @Authenticated('manager')

@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ShiftMoreMenu, ShiftStrip, type StripAction } from '../pages/ShiftPages.js';
 import { useRestaurantEnabled } from '../restaurant/RestaurantPages.js';
-import { type CartLine, formatQty, priceLines, useCart } from './cart.js';
+import { type CartLine, formatQty, priceLines, requiredRights, useCart } from './cart.js';
 import { CustomerBar } from './customer.js';
 import {
   HeldSalesDialog,
@@ -93,6 +93,8 @@ export function SalePage() {
     null,
   );
   const [receiptId, setReceiptId] = useState<string | null>(null);
+  /** Receipts opened from the list are copies; the one right after a sale is the original. */
+  const [receiptIsCopy, setReceiptIsCopy] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const items = useMemo(
@@ -117,6 +119,19 @@ export function SalePage() {
   });
   const linesReady = cart.state.lines.every((l) => items.has(l.variantId));
   const pricing = linesReady && cart.state.lines.length > 0 ? priceLines(cart.state, items) : null;
+  // Selling policy: the discount limit decides which exceptions need a supervisor (BR-177).
+  const policy = useQuery({
+    queryKey: ['pos', 'sales', 'settings'],
+    queryFn: () => api.sales.settings(),
+    staleTime: 60_000,
+  });
+  const required = useMemo(
+    () =>
+      pricing?.ok
+        ? requiredRights(cart.state, items, pricing.cart, policy.data?.maxDiscountPercent ?? null)
+        : [],
+    [cart.state, items, pricing, policy.data],
+  );
 
   // Barcode scanners type quickly and end with Enter; keep the search box focused.
   useEffect(() => {
@@ -153,8 +168,6 @@ export function SalePage() {
       ? [{ key: 'returns', label: t('returns.open'), to: '/returns' }]
       : []),
   ];
-  const canDiscount = hasPermission('sales.discount');
-
   // Desktop shortcuts: F2 search, F4 customer, F8 hold, F12 pay, Esc clears the search box.
   const ready = cart.state.lines.length > 0 && pricing?.ok === true;
   const busy = dialog !== null || editing !== null || receiptId !== null;
@@ -178,6 +191,16 @@ export function SalePage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [busy, ready, hasSearch]);
   const total = pricing?.ok ? pricing.cart.totalMinor : null;
+  // Cleared carts and removed lines above the company threshold leave a trace (BR-182).
+  const threshold = policy.data
+    ? Money.fromJSON(policy.data.cartClearLogThreshold as { amount: string; currency: 'KWD' }).minor
+    : null;
+  const trace = (kind: 'cleared' | 'line_removed', amountMinor: bigint, lineCount: number) => {
+    if (threshold === null || amountMinor < threshold || amountMinor <= 0n) return;
+    void api.sales
+      .cartEvent({ kind, amount: Money.ofMinor(amountMinor, 'KWD').toDecimalString(), lineCount })
+      .catch(() => undefined);
+  };
 
   return (
     <div className="flex h-full flex-col gap-2 p-2 sm:gap-3 sm:p-3">
@@ -377,7 +400,10 @@ export function SalePage() {
                         <Button
                           className="h-11"
                           variant="secondary"
-                          onClick={() => cart.remove(l.key)}
+                          onClick={() => {
+                            if (priced) trace('line_removed', priced.netMinor, 1);
+                            cart.remove(l.key);
+                          }}
                         >
                           {t('sale.remove')}
                         </Button>
@@ -422,6 +448,7 @@ export function SalePage() {
               onClick={() => {
                 if (!confirmClear) return setConfirmClear(true);
                 setConfirmClear(false);
+                if (total !== null) trace('cleared', total, cart.state.lines.length);
                 cart.clear();
               }}
             >
@@ -437,7 +464,7 @@ export function SalePage() {
             </Button>
             <Button
               variant="secondary"
-              disabled={!canDiscount || cart.state.lines.length === 0}
+              disabled={cart.state.lines.length === 0}
               onClick={() => setDialog('discount')}
               aria-label={t('sale.orderDiscount')}
             >
@@ -488,6 +515,7 @@ export function SalePage() {
           onClose={() => setDialog(null)}
           onOpen={(id) => {
             setDialog(null);
+            setReceiptIsCopy(true);
             setReceiptId(id);
           }}
         />
@@ -495,15 +523,19 @@ export function SalePage() {
       {dialog === 'pay' && pricing?.ok ? (
         <PaymentDialog
           totalMinor={pricing.cart.totalMinor}
+          required={required}
           onClose={() => setDialog(null)}
           onCompleted={(saleId) => {
             setDialog(null);
             setCartOpen(false);
+            setReceiptIsCopy(false);
             setReceiptId(saleId);
           }}
         />
       ) : null}
-      {receiptId ? <ReceiptDialog saleId={receiptId} onClose={() => setReceiptId(null)} /> : null}
+      {receiptId ? (
+        <ReceiptDialog saleId={receiptId} copy={receiptIsCopy} onClose={() => setReceiptId(null)} />
+      ) : null}
     </div>
   );
 }

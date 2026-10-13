@@ -1,4 +1,9 @@
-import { TRANSFER_STATUSES, type Transfer, type TransferStatus } from '@arabat/contracts';
+import {
+  TRANSFER_STATUSES,
+  type Transfer,
+  type TransferLoss,
+  type TransferStatus,
+} from '@arabat/contracts';
 import { QuantityError, parseQuantity } from '@arabat/money';
 import {
   Alert,
@@ -19,6 +24,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useBranchContext, useBranchName, useSession } from '../../app/context.js';
+import { formatAmount } from '../catalog/ProductsPage.js';
 import { formatDateTime } from '../inventory/AdjustmentsPage.js';
 import { Pager, displayQty, itemName } from '../inventory/shared.js';
 import { ItemPicker } from '../purchasing/ItemPicker.js';
@@ -30,6 +36,12 @@ const TONE: Record<TransferStatus, 'neutral' | 'warning' | 'primary' | 'success'
   in_transit: 'primary',
   received: 'success',
   cancelled: 'danger',
+  recalled: 'neutral',
+};
+const LOSS_TONE: Record<TransferLoss['status'], 'success' | 'warning' | 'danger'> = {
+  posted: 'success',
+  pending: 'warning',
+  rejected: 'danger',
 };
 const QTY = /^\d{1,11}(\.\d{1,3})?$/;
 
@@ -83,6 +95,7 @@ export function TransfersPage() {
           ) : null
         }
       />
+      <InTransitSummary />
       <div className="mb-4">
         <Select
           className="max-w-52"
@@ -164,6 +177,53 @@ export function TransfersPage() {
         label={t('inventory.count', { count: list.data?.total ?? 0 })}
       />
     </div>
+  );
+}
+
+/** Goods on the road right now, valued at dispatch cost and aged (BR-173). */
+function InTransitSummary() {
+  const { t, i18n } = useTranslation();
+  const api = useApi();
+  const branchName = useBranchName();
+  const { branchId } = useBranchContext();
+  const summary = useQuery({
+    queryKey: [...transfersKey, 'in-transit', branchId],
+    queryFn: () => api.transfers.inTransit(branchId),
+  });
+  const data = summary.data;
+  if (!data || data.transfers.length === 0) return null;
+  return (
+    <section className="mb-4 rounded-lg border border-border bg-surface" data-testid="in-transit">
+      <h2 className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 font-semibold">
+        <span>{t('transfers.inTransitTitle', { count: data.transfers.length })}</span>
+        <span dir="ltr" className="tabular-nums">
+          {displayQty(data.quantity)}
+          {data.value ? ` · ${formatAmount(data.value, i18n.language)}` : ''}
+        </span>
+      </h2>
+      <ul className="divide-y divide-border text-sm">
+        {data.transfers.map((x) => (
+          <li key={x.id} className="flex flex-wrap items-center gap-3 px-4 py-2">
+            <Link className="font-medium text-primary" dir="ltr" to={`/transfers/${x.id}`}>
+              {x.number}
+            </Link>
+            <span className="min-w-0 flex-1 text-fg-muted">
+              {branchName(x.sourceBranchId) ?? ''} → {branchName(x.destinationBranchId) ?? ''} ·{' '}
+              {t('transfers.age', { count: x.ageDays })}
+            </span>
+            {x.unresolved ? (
+              <Badge tone={x.pendingLoss ? 'warning' : 'danger'}>
+                {t(x.pendingLoss ? 'transfers.lossPending' : 'transfers.shortageUnresolved')}
+              </Badge>
+            ) : null}
+            <span dir="ltr" className="tabular-nums">
+              {displayQty(x.quantity)}
+              {x.value ? ` · ${formatAmount(x.value, i18n.language)}` : ''}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -329,7 +389,9 @@ export function TransferDetailPage() {
     queryKey: [...transfersKey, 'detail', transferId],
     queryFn: () => api.transfers.get(transferId!),
   });
-  const [dialog, setDialog] = useState<'dispatch' | 'receive' | null>(null);
+  const [dialog, setDialog] = useState<'dispatch' | 'receive' | 'recall' | 'claim' | null>(null);
+  const [deciding, setDeciding] = useState<TransferLoss | null>(null);
+  const { session } = useSession();
   const done = async () => {
     await queryClient.invalidateQueries({ queryKey: transfersKey });
     notify.ok(t('transfers.updated'));
@@ -365,6 +427,19 @@ export function TransferDetailPage() {
               {tr.status === 'in_transit' && can('inventory.transfer') ? (
                 <Button onClick={() => setDialog('receive')}>{t('transfers.receive')}</Button>
               ) : null}
+              {tr.status === 'in_transit' && can('inventory.transfer') ? (
+                <Button variant="secondary" onClick={() => setDialog('recall')}>
+                  {t('transfers.recall')}
+                </Button>
+              ) : null}
+              {tr.status === 'received' &&
+              tr.inTransitQuantity !== '0.000' &&
+              !tr.losses.some((l) => l.status === 'pending') &&
+              can('inventory.transfer') ? (
+                <Button variant="secondary" onClick={() => setDialog('claim')}>
+                  {t('transfers.claimLoss')}
+                </Button>
+              ) : null}
               {['requested', 'approved'].includes(tr.status) ? (
                 <Button
                   variant="ghost"
@@ -384,7 +459,63 @@ export function TransferDetailPage() {
       {tr ? (
         <div className="grid gap-6">
           {tr.status === 'in_transit' ? (
-            <Alert tone="info">{t('transfers.inTransitHint')}</Alert>
+            <Alert tone="info">
+              {t('transfers.inTransitHint')}{' '}
+              {tr.inTransitValue
+                ? t('transfers.inTransitValue', {
+                    quantity: displayQty(tr.inTransitQuantity),
+                    amount: formatAmount(tr.inTransitValue, i18n.language),
+                  })
+                : null}
+            </Alert>
+          ) : null}
+          {tr.status === 'received' && tr.inTransitQuantity !== '0.000' ? (
+            <Alert tone="warning" title={t('transfers.shortageUnresolved')}>
+              {t('transfers.shortageUnresolvedHint', {
+                quantity: displayQty(tr.inTransitQuantity),
+              })}
+            </Alert>
+          ) : null}
+          {tr.losses.length > 0 ? (
+            <section
+              className="rounded-lg border border-border bg-surface"
+              data-testid="transfer-losses"
+            >
+              <h2 className="border-b border-border px-4 py-3 font-semibold">
+                {t('transfers.losses')}
+              </h2>
+              <ul className="divide-y divide-border text-sm">
+                {tr.losses.map((loss) => (
+                  <li key={loss.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-medium">
+                        <span dir="ltr">{loss.number}</span> ·{' '}
+                        {loss.lines.map((l) => `+${displayQty(l.quantity)}`).join(', ')}
+                        {loss.value ? ` · ${formatAmount(loss.value, i18n.language)}` : ''}
+                      </span>
+                      <span className="block text-xs text-fg-muted">
+                        {loss.claimedBy} · {formatDateTime(loss.createdAt, i18n.language)} —{' '}
+                        {loss.explanation}
+                        {loss.decidedBy
+                          ? ` · ${t(`transfers.lossDecided_${loss.status}`)} ${loss.decidedBy}${loss.decisionNote ? ` — ${loss.decisionNote}` : ''}`
+                          : ''}
+                        {loss.ownerOverride ? ` · ${t('transfers.ownerOverride')}` : ''}
+                      </span>
+                    </span>
+                    <Badge tone={LOSS_TONE[loss.status]}>
+                      {t(`transfers.loss_${loss.status}`)}
+                    </Badge>
+                    {loss.status === 'pending' &&
+                    can('inventory.transfer.approve') &&
+                    (loss.claimedByUserId !== session.actor.id || session.isOwner) ? (
+                      <Button size="sm" onClick={() => setDeciding(loss)} data-testid="decide-loss">
+                        {t('transfers.decideLoss')}
+                      </Button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
           ) : null}
           <DataTable<Transfer['lines'][number]>
             caption={t('transfers.item')}
@@ -423,6 +554,19 @@ export function TransferDetailPage() {
                     '—'
                   ),
               },
+              {
+                key: 'transit',
+                header: t('transfers.onRoad'),
+                hideBelow: 'md',
+                cell: (l) =>
+                  l.inTransitQuantity !== '0.000' ? (
+                    <span dir="ltr">{displayQty(l.inTransitQuantity)}</span>
+                  ) : l.recalledQuantity ? (
+                    t('transfers.status_recalled')
+                  ) : (
+                    '—'
+                  ),
+              },
             ]}
           />
           <Section title={t('transfers.title')}>
@@ -455,6 +599,15 @@ export function TransferDetailPage() {
                   </dd>
                 </div>
               ) : null}
+              {tr.recalledBy ? (
+                <div className="sm:col-span-2">
+                  <dt className="text-fg-muted">{t('transfers.recalledBy')}</dt>
+                  <dd>
+                    {tr.recalledBy} · {formatDateTime(tr.recalledAt!, i18n.language)}
+                    {tr.recallNote ? ` — ${tr.recallNote}` : ''}
+                  </dd>
+                </div>
+              ) : null}
               {tr.discrepancyNote ? (
                 <div className="sm:col-span-2">
                   <dt className="text-fg-muted">{t('transfers.discrepancyNote')}</dt>
@@ -465,7 +618,7 @@ export function TransferDetailPage() {
           </Section>
         </div>
       ) : null}
-      {dialog && tr ? (
+      {(dialog === 'dispatch' || dialog === 'receive') && tr ? (
         <QuantitiesDialog
           transfer={tr}
           mode={dialog}
@@ -473,7 +626,126 @@ export function TransferDetailPage() {
           onDone={done}
         />
       ) : null}
+      {(dialog === 'recall' || dialog === 'claim') && tr ? (
+        <NoteDialog transfer={tr} mode={dialog} onClose={() => setDialog(null)} onDone={done} />
+      ) : null}
+      {deciding && tr ? (
+        <LossDecisionDialog
+          transfer={tr}
+          loss={deciding}
+          onClose={() => setDeciding(null)}
+          onDone={done}
+        />
+      ) : null}
     </div>
+  );
+}
+
+/** Recall (goods return to the source) or claim the remaining shortage as a loss: a reason each. */
+function NoteDialog({
+  transfer,
+  mode,
+  onClose,
+  onDone,
+}: {
+  transfer: Transfer;
+  mode: 'recall' | 'claim';
+  onClose: () => void;
+  onDone: () => Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const api = useApi();
+  const notify = useNotify();
+  const [note, setNote] = useState('');
+  const run = useMutation({
+    mutationFn: () =>
+      mode === 'recall'
+        ? api.transfers.recall(transfer.id, { version: transfer.version, note: note.trim() })
+        : api.transfers.claimLoss(transfer.id, { explanation: note.trim() }),
+    onSuccess: async () => {
+      await onDone();
+      onClose();
+    },
+    onError: notify.fail,
+  });
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title={mode === 'recall' ? t('transfers.recallTitle') : t('transfers.claimLossTitle')}
+      description={mode === 'recall' ? t('transfers.recallHint') : t('transfers.claimLossHint')}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button disabled={!note.trim()} loading={run.isPending} onClick={() => run.mutate()}>
+            {mode === 'recall' ? t('transfers.recall') : t('transfers.claimLoss')}
+          </Button>
+        </>
+      }
+    >
+      <Field label={t('transfers.reason')}>
+        {(p) => <Textarea {...p} rows={2} value={note} onChange={(e) => setNote(e.target.value)} />}
+      </Field>
+    </Dialog>
+  );
+}
+
+/** The source approver accepts the write-off or rejects it with a reason (BR-172). */
+function LossDecisionDialog({
+  transfer,
+  loss,
+  onClose,
+  onDone,
+}: {
+  transfer: Transfer;
+  loss: TransferLoss;
+  onClose: () => void;
+  onDone: () => Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const api = useApi();
+  const notify = useNotify();
+  const [note, setNote] = useState('');
+  const decide = useMutation({
+    mutationFn: (decision: 'approve' | 'reject') =>
+      api.transfers.decideLoss(transfer.id, loss.id, { decision, note: note.trim() || null }),
+    onSuccess: async () => {
+      await onDone();
+      onClose();
+    },
+    onError: notify.fail,
+  });
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title={t('transfers.decideLossTitle', { number: loss.number })}
+      description={t('transfers.decideLossHint')}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            variant="danger"
+            disabled={!note.trim()}
+            loading={decide.isPending}
+            onClick={() => decide.mutate('reject')}
+          >
+            {t('transfers.rejectLoss')}
+          </Button>
+          <Button loading={decide.isPending} onClick={() => decide.mutate('approve')}>
+            {t('transfers.approveLoss')}
+          </Button>
+        </>
+      }
+    >
+      <Field label={t('transfers.decisionNote')}>
+        {(p) => <Textarea {...p} rows={2} value={note} onChange={(e) => setNote(e.target.value)} />}
+      </Field>
+    </Dialog>
   );
 }
 
@@ -497,12 +769,13 @@ function QuantitiesDialog({
     Object.fromEntries(transfer.lines.map((l) => [l.position, base(l)])),
   );
   const [note, setNote] = useState('');
+  // Short or over (surplus): either needs an explanation (BR-172).
   const short =
     mode === 'receive' &&
     transfer.lines.some(
       (l) =>
         qtyOk(qty[l.position] ?? '') &&
-        parseQuantity(qty[l.position]!.trim()) < parseQuantity(l.dispatchedQuantity ?? '0'),
+        parseQuantity(qty[l.position]!.trim()) !== parseQuantity(l.dispatchedQuantity ?? '0'),
     );
   const valid =
     transfer.lines.every((l) => qtyOk(qty[l.position] ?? '')) && (!short || Boolean(note.trim()));

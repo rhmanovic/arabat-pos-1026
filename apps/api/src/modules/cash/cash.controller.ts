@@ -6,7 +6,7 @@ import {
   cashCountSchema,
   cashTransferQuerySchema,
   createCashTransferSchema,
-  pageQuerySchema,
+  cashStatementQuerySchema,
 } from '@arabat/contracts';
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
@@ -39,7 +39,7 @@ export class CashController {
   statement(
     @CurrentMerchantActor() actor: MerchantActor,
     @Param('id', uuid) id: string,
-    @Query(new ZodPipe(pageQuerySchema)) query: z.output<typeof pageQuerySchema>,
+    @Query(new ZodPipe(cashStatementQuerySchema)) query: z.output<typeof cashStatementQuerySchema>,
   ): Promise<CashStatement> {
     return this.cash.statement(actor, id, query);
   }

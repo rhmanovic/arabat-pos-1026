@@ -168,6 +168,41 @@ describe('platform console', () => {
     );
   });
 
+  it('freezes the owner with a reason and offers the transfer to super administrators only (BR-020)', async () => {
+    const user = userEvent.setup();
+    let current: Record<string, unknown> = detail;
+    const fetch = routesFor('platform.support', {
+      [`GET /platform/merchants/${M}`]: () => ({ status: 200, body: current }),
+      [`POST /platform/merchants/${M}/owner-freeze`]: () => {
+        current = {
+          ...detail,
+          ownerFrozenAt: '2026-10-13T09:00:00.000Z',
+          ownerFrozenReason: 'Stolen phone',
+          version: 5,
+        };
+        return { status: 200, body: current };
+      },
+    });
+    renderApp({ routes, appInterface: 'platform', i18n, path: `/merchants/${M}`, fetch });
+    expect(await screen.findByRole('button', { name: 'Freeze owner' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Transfer ownership' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Freeze owner' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('signed out everywhere');
+    await user.type(
+      within(dialog).getByLabelText('Reason (recorded in the audit log)'),
+      'Stolen phone',
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Confirm' }));
+    await waitFor(() =>
+      expect(
+        fetch.calls.find((c) => c.method === 'POST' && c.path.endsWith('/owner-freeze'))?.body,
+      ).toEqual({ reason: 'Stolen phone', version: 4 }),
+    );
+    expect(await screen.findByRole('button', { name: 'Release owner' })).toBeInTheDocument();
+    expect(screen.getByText('Stolen phone')).toBeInTheDocument();
+  });
+
   it('shows why a downgrade is blocked and does not allow saving it', async () => {
     const user = userEvent.setup();
     const fetch = routesFor('platform.billing', {

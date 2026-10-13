@@ -17,6 +17,7 @@ import {
 import { createdAt, id, merchantId, updatedAt } from '../../database/schema/columns.js';
 import { currencies } from '../../database/schema/currencies.schema.js';
 import { branches } from '../branches/branches.schema.js';
+import { users } from '../iam/iam.schema.js';
 import { merchants } from '../merchants/merchants.schema.js';
 
 /**
@@ -196,5 +197,30 @@ export const productImages = pgTable(
       sql`${t.contentType} in ('image/jpeg', 'image/png', 'image/webp')`,
     ),
     check('product_images_size_valid', sql`${t.sizeBytes} > 0 and ${t.sizeBytes} <= 5242880`),
+  ],
+);
+
+/** Price and cost changes of variants (BR-191, FND-222): append-only, RLS (migration 0047). */
+export const priceHistory = pgTable(
+  'price_history',
+  {
+    id: id(),
+    merchantId: merchantId(),
+    productId: uuid().notNull(),
+    variantId: uuid().notNull(),
+    /** price | cost */
+    kind: text().notNull(),
+    fromMinor: bigint({ mode: 'bigint' }),
+    toMinor: bigint({ mode: 'bigint' }),
+    /** manual | created */
+    source: text().notNull().default('manual'),
+    changedByUserId: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('price_history_merchant_id_id_key').on(t.merchantId, t.id),
+    index('price_history_product_idx').on(t.merchantId, t.productId, t.createdAt),
+    check('price_history_kind_valid', sql`${t.kind} in ('price', 'cost')`),
+    check('price_history_source_valid', sql`${t.source} in ('manual', 'created')`),
   ],
 );

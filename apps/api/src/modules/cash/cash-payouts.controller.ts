@@ -6,6 +6,7 @@ import {
   type CashTransfer,
   type SupplierOptions,
   type SupplierPayments,
+  type SupplierStatement,
   cancelCashBranchTransferSchema,
   cashBranchTransferQuerySchema,
   cashDisbursementQuerySchema,
@@ -14,6 +15,7 @@ import {
   createCashDisbursementSchema,
   receiveCashBranchTransferSchema,
   reverseCashDisbursementSchema,
+  supplierStatementQuerySchema,
 } from '@arabat/contracts';
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
@@ -149,6 +151,18 @@ export class CashPayoutsController {
     @Param('id', uuid) id: string,
   ): Promise<SupplierPayments> {
     return this.payouts.supplierPayments(actor, id);
+  }
+
+  /** Received vs. paid per supplier with the running difference (BR-188). */
+  @RequirePermission('manager', 'purchasing.read')
+  @Get('suppliers/:id/statement')
+  supplierStatement(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Query(new ZodPipe(supplierStatementQuerySchema))
+    query: z.output<typeof supplierStatementQuerySchema>,
+  ): Promise<SupplierStatement> {
+    return this.payouts.supplierStatement(actor, id, query);
   }
 }
 

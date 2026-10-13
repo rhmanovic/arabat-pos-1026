@@ -8,6 +8,7 @@ import {
 import type { ReactNode } from 'react';
 import type { RouteObject } from 'react-router';
 import { ManagerLayout } from './layouts/ManagerLayout.js';
+import { AuditLogPage } from './features/audit/AuditLogPage.js';
 import { BranchesPage } from './features/branches/BranchesPage.js';
 import { CategoriesPage } from './features/catalog/CategoriesPage.js';
 import { ProductEditorPage } from './features/catalog/ProductEditorPage.js';
@@ -24,6 +25,8 @@ import { RestaurantPage } from './features/restaurant/RestaurantPage.js';
 import { OnlineStorePage } from './features/online/OnlineStorePage.js';
 import { SubscriptionPage } from './features/subscription/SubscriptionPage.js';
 import { PurchaseOrderPage, PurchaseOrdersPage } from './features/purchasing/PurchaseOrdersPage.js';
+import { AccountPage } from './features/account/AccountPage.js';
+import { PeriodsPage } from './features/periods/PeriodsPage.js';
 import { SuppliersPage } from './features/purchasing/SuppliersPage.js';
 import {
   NewTransferPage,
@@ -38,6 +41,7 @@ import { AdjustmentEditorPage } from './features/inventory/AdjustmentEditorPage.
 import { AdjustmentDetailPage, AdjustmentsPage } from './features/inventory/AdjustmentsPage.js';
 import { InventoryPage } from './features/inventory/InventoryPage.js';
 import { MovementsPage } from './features/inventory/MovementsPage.js';
+import { DamagedReturnsPage } from './features/inventory/DamagedReturnsPage.js';
 import { RolesPage } from './features/roles/RolesPage.js';
 import {
   ForgotPasswordPage,
@@ -99,6 +103,7 @@ export const routes: RouteObject[] = [
         element: guard('inventory.read', <AdjustmentDetailPage />),
       },
       { path: 'inventory/movements', element: guard('inventory.read', <MovementsPage />) },
+      { path: 'inventory/returns', element: guard('inventory.read', <DamagedReturnsPage />) },
       { path: 'sales', element: guard('sales.read', <SalesPage />) },
       { path: 'sales/:saleId', element: guard('sales.read', <SaleDetailPage />) },
       { path: 'refunds', element: guard('sales.read', <RefundsPage />) },
@@ -118,6 +123,9 @@ export const routes: RouteObject[] = [
       { path: 'transfers/new', element: guard('inventory.transfer', <NewTransferPage />) },
       { path: 'transfers/:transferId', element: guard('inventory.read', <TransferDetailPage />) },
       { path: 'cash', element: guard('cash.custody', <CashCustodyPage />) },
+      { path: 'audit', element: guard('audit.read', <AuditLogPage />) },
+      { path: 'periods', element: guard('reports.financial', <PeriodsPage />) },
+      { path: 'account', element: <AccountPage /> },
       { path: 'payments', element: guard('payments.settings', <PaymentsPage />) },
       {
         path: 'accounts',

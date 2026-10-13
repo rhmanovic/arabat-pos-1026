@@ -1,6 +1,13 @@
-import type { DiscountInput, PosCatalogItem, Receipt } from '@arabat/contracts';
+import type {
+  DiscountInput,
+  OverridablePermission,
+  PosCatalogItem,
+  Receipt,
+  SaleOverrideGrant,
+} from '@arabat/contracts';
 import { Money, MoneyError, parseQuantity } from '@arabat/money';
 import { Badge, Button, Dialog, Field, Input, Select, Spinner } from '@arabat/ui';
+import { ApiError } from '@arabat/api-client';
 import { localizedName, useApi, useAuth, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -98,9 +105,14 @@ export function LineDialog({
     text: string;
   });
   const [price, setPrice] = useState(line.priceOverride ?? '');
+  const [reason, setReason] = useState(line.priceOverrideReason ?? '');
   const disc = toInput(discount);
   const qtyOk = QTY.test(qty.trim()) && !/^0+(\.0+)?$/.test(qty.trim());
   const priceOk = price.trim() === '' || AMOUNT.test(price.trim());
+  // A changed price needs a reason (BR-178); rights the cashier lacks come from a supervisor
+  // at payment (BR-177), so the fields are always offered.
+  const priceChanged = price.trim() !== '' && price.trim() !== (item?.price.amount ?? '');
+  const reasonOk = !priceChanged || reason.trim() !== '';
   const step = (delta: number) => {
     const current = QTY.test(qty) ? Number.parseInt(qty.split('.')[0]!, 10) : 0;
     const next = Math.max(1, current + delta);
@@ -125,12 +137,13 @@ export function LineDialog({
           </Button>
           <Button
             size="lg"
-            disabled={!qtyOk || disc === 'invalid' || !priceOk}
+            disabled={!qtyOk || disc === 'invalid' || !priceOk || !reasonOk}
             onClick={() => {
               cart.update(line.key, {
                 quantity: formatQty(parseQuantity(qty.trim())),
                 discount: disc === 'invalid' ? null : disc,
                 priceOverride: price.trim() === '' ? null : price.trim(),
+                priceOverrideReason: priceChanged ? reason.trim() : null,
               });
               onClose();
             }}
@@ -173,19 +186,42 @@ export function LineDialog({
             +
           </Button>
         </div>
-        {hasPermission('sales.discount') ? (
-          <DiscountEditor value={discount} onChange={setDiscount} />
+        <DiscountEditor value={discount} onChange={setDiscount} />
+        {discount.type !== 'none' && !hasPermission('sales.discount') ? (
+          <p className="text-sm text-warning" data-testid="needs-supervisor">
+            {t('sale.needsSupervisor')}
+          </p>
         ) : null}
-        {hasPermission('sales.price_override') ? (
-          <Field label={t('sale.priceOverride')} hint={item ? `${item.price.amount}` : undefined}>
+        <Field
+          label={t('sale.priceOverride')}
+          hint={
+            priceChanged && !hasPermission('sales.price_override')
+              ? t('sale.needsSupervisor')
+              : item
+                ? t('sale.listPrice', { price: item.price.amount })
+                : undefined
+          }
+        >
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="decimal"
+              className="h-12 text-lg"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+            />
+          )}
+        </Field>
+        {priceChanged ? (
+          <Field label={t('sale.priceReason')}>
             {(p) => (
               <Input
                 {...p}
-                dir="ltr"
-                inputMode="decimal"
                 className="h-12 text-lg"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
+                maxLength={120}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
               />
             )}
           </Field>
@@ -237,11 +273,19 @@ export interface PlannedPayment {
   reference: string | null;
 }
 
+/** Error codes that mean "a supervisor must authorise this" (BR-177). */
+const SUPERVISOR_CODES = new Set([
+  'DISCOUNT_LIMIT_EXCEEDED',
+  'PRICE_OVERRIDE_DENIED',
+  'ZERO_TOTAL_DENIED',
+]);
+
 export function PaymentDialog({
   totalMinor,
   onClose,
   onCompleted,
   submit,
+  required = [],
 }: {
   totalMinor: bigint;
   onClose: () => void;
@@ -251,6 +295,8 @@ export function PaymentDialog({
     idempotencyKey: string;
     payments: PlannedPayment[];
   }) => Promise<{ id: string }>;
+  /** Selling rights this cart needs (see `requiredRights`). */
+  required?: OverridablePermission[];
 }) {
   const { t, i18n } = useTranslation();
   const api = useApi();
@@ -258,6 +304,20 @@ export function PaymentDialog({
   const queryClient = useQueryClient();
   const fmt = useMoneyFormat();
   const cart = useCart();
+  const { hasPermission } = useAuth();
+  // Rights the cashier lacks come from a supervisor's single-use grant (BR-177).
+  const missing = required.filter((p) => !hasPermission(p));
+  const [grant, setGrant] = useState<SaleOverrideGrant | null>(null);
+  const [serverAsked, setServerAsked] = useState(false);
+  const needsSupervisor = (missing.length > 0 || serverAsked) && !grant;
+  const [zeroReason, setZeroReason] = useState('');
+  // Card and transfer tenders need their reference when the company says so (BR-181).
+  const policy = useQuery({
+    queryKey: ['pos', 'sales', 'settings'],
+    queryFn: () => api.sales.settings(),
+    staleTime: 60_000,
+  });
+  const requireReference = policy.data?.requireTenderReference ?? true;
   const methods = useQuery({
     queryKey: ['pos', 'payment-methods'],
     queryFn: () => api.payments.posMethods(),
@@ -281,6 +341,7 @@ export function PaymentDialog({
     amountMinor !== null &&
     amountMinor > 0n &&
     amountMinor <= remaining &&
+    (isCash || !requireReference || reference.trim() !== '') &&
     (!isCash || !tendered.trim() || (tenderedMinor !== null && tenderedMinor >= amountMinor));
   const change = planned.reduce(
     (s, p) =>
@@ -324,12 +385,15 @@ export function PaymentDialog({
               variantId: l.variantId,
               quantity: l.quantity,
               priceOverride: l.priceOverride,
+              priceOverrideReason: l.priceOverrideReason,
               discount: l.discount,
             })),
             orderDiscount: cart.state.orderDiscount,
             customerId: cart.state.customer?.id ?? null,
             payments: planned,
             expectedTotal: Money.ofMinor(totalMinor, 'KWD').toDecimalString(),
+            overrideId: grant?.id ?? null,
+            zeroTotalReason: totalMinor === 0n ? zeroReason.trim() : null,
           }),
     onSuccess: async (sale) => {
       if (!submit) cart.clear();
@@ -341,7 +405,14 @@ export function PaymentDialog({
       ]);
       onCompleted(sale.id);
     },
-    onError: notify.fail,
+    onError: (error) => {
+      // The server is the authority: when it asks for a supervisor, offer the step.
+      if (error instanceof ApiError && SUPERVISOR_CODES.has(error.code)) {
+        setGrant(null);
+        setServerAsked(true);
+      }
+      notify.fail(error);
+    },
   });
 
   return (
@@ -354,7 +425,11 @@ export function PaymentDialog({
         <Button
           size="lg"
           className="h-14 w-full text-lg"
-          disabled={remaining !== 0n}
+          disabled={
+            remaining !== 0n ||
+            needsSupervisor ||
+            (totalMinor === 0n && !submit && zeroReason.trim() === '')
+          }
           loading={complete.isPending}
           onClick={() => complete.mutate()}
         >
@@ -387,7 +462,27 @@ export function PaymentDialog({
             </dd>
           </div>
         </dl>
-        {totalMinor === 0n ? <p className="text-fg-muted">{t('sale.zeroTotal')}</p> : null}
+        {totalMinor === 0n ? (
+          <div className="grid gap-2 rounded-lg border border-warning/50 bg-warning/10 p-3">
+            <p className="text-sm">{t('sale.zeroTotal')}</p>
+            {!submit ? (
+              <Field label={t('sale.zeroTotalReason')} hint={t('sale.zeroTotalHint')}>
+                {(p) => (
+                  <Input
+                    {...p}
+                    className="h-12 text-lg"
+                    maxLength={160}
+                    value={zeroReason}
+                    onChange={(e) => setZeroReason(e.target.value)}
+                  />
+                )}
+              </Field>
+            ) : null}
+          </div>
+        ) : null}
+        {!submit && (needsSupervisor || grant) ? (
+          <SupervisorPanel missing={missing} grant={grant} onGranted={setGrant} />
+        ) : null}
         {planned.length > 0 ? (
           <ul className="divide-y divide-border rounded-lg border border-border">
             {planned.map((p, i) => {
@@ -459,7 +554,9 @@ export function PaymentDialog({
                     )}
                   </Field>
                 ) : (
-                  <Field label={t('sale.reference')}>
+                  <Field
+                    label={requireReference ? t('sale.referenceRequired') : t('sale.reference')}
+                  >
                     {(p) => (
                       <Input
                         {...p}
@@ -489,6 +586,110 @@ export function PaymentDialog({
         ) : null}
       </div>
     </Dialog>
+  );
+}
+
+/**
+ * Supervisor override on this till (BR-177): a second person types their own e-mail and
+ * password on the cashier's screen and lends, once, the selling rights the cashier lacks.
+ */
+function SupervisorPanel({
+  missing,
+  grant,
+  onGranted,
+}: {
+  missing: OverridablePermission[];
+  grant: SaleOverrideGrant | null;
+  onGranted: (grant: SaleOverrideGrant) => void;
+}) {
+  const { t } = useTranslation();
+  const api = useApi();
+  const notify = useNotify();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [note, setNote] = useState('');
+  const ask = useMutation({
+    mutationFn: () =>
+      api.sales.requestOverride({
+        email: email.trim(),
+        password,
+        note: note.trim() || null,
+      }),
+    onSuccess: (g) => {
+      setPassword('');
+      onGranted(g);
+    },
+    onError: notify.fail,
+  });
+  const rightLabel = (p: OverridablePermission) => t(`sale.right_${p.replace(/\./g, '_')}`);
+  if (grant)
+    return (
+      <p className="rounded-lg bg-success/10 p-3 text-sm" data-testid="supervisor-granted">
+        {t('sale.authorisedBy', { name: grant.approverName })}
+      </p>
+    );
+  return (
+    <section
+      aria-labelledby="supervisor-title"
+      className="grid gap-3 rounded-lg border border-warning/50 bg-warning/10 p-3"
+      data-testid="supervisor-panel"
+    >
+      <h3 id="supervisor-title" className="font-semibold">
+        {t('sale.supervisorTitle')}
+      </h3>
+      <p className="text-sm">
+        {t('sale.supervisorHint')}
+        {missing.length ? ` ${missing.map(rightLabel).join(' · ')}` : ''}
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label={t('sale.supervisorEmail')}>
+          {(p) => (
+            <Input
+              {...p}
+              type="email"
+              dir="ltr"
+              autoComplete="off"
+              className="h-12"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('sale.supervisorPassword')}>
+          {(p) => (
+            <Input
+              {...p}
+              type="password"
+              dir="ltr"
+              autoComplete="off"
+              className="h-12"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('sale.supervisorNote')} className="sm:col-span-2">
+          {(p) => (
+            <Input
+              {...p}
+              className="h-12"
+              maxLength={160}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          )}
+        </Field>
+      </div>
+      <Button
+        variant="secondary"
+        size="lg"
+        disabled={!email.trim() || !password}
+        loading={ask.isPending}
+        onClick={() => ask.mutate()}
+      >
+        {t('sale.authorise')}
+      </Button>
+    </section>
   );
 }
 
@@ -592,6 +793,7 @@ export function HeldSalesDialog({ onClose }: { onClose: () => void }) {
                       variantId: l.variantId,
                       quantity: l.quantity.replace(/\.?0+$/, ''),
                       priceOverride: l.priceOverride?.amount ?? null,
+                      priceOverrideReason: l.priceOverrideReason,
                       discount: l.discount,
                     })),
                   });
@@ -620,10 +822,37 @@ export function RecentSalesDialog({
 }) {
   const { t, i18n } = useTranslation();
   const api = useApi();
+  const notify = useNotify();
   const fmt = useMoneyFormat();
   const recent = useQuery({ queryKey: ['pos', 'recent'], queryFn: () => api.sales.recent() });
+  // Any receipt of the branch can be found by number, read-only (BR-182).
+  const [code, setCode] = useState('');
+  const find = useMutation({
+    mutationFn: (receipt: string) => api.sales.lookup(receipt),
+    onSuccess: (sale) => onOpen(sale.id),
+    onError: notify.fail,
+  });
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()} title={t('sale.recent')}>
+      <form
+        className="mb-3 flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (code.trim()) find.mutate(code.trim());
+        }}
+      >
+        <Input
+          aria-label={t('sale.lookupReceipt')}
+          placeholder={t('sale.lookupReceipt')}
+          className="h-12 flex-1"
+          dir="ltr"
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+        />
+        <Button size="lg" type="submit" variant="secondary" loading={find.isPending}>
+          {t('sale.find')}
+        </Button>
+      </form>
       {recent.data?.sales.length === 0 ? (
         <p className="text-fg-muted">{t('sale.noRecent')}</p>
       ) : null}
@@ -658,13 +887,40 @@ export function RecentSalesDialog({
   );
 }
 
-export function ReceiptDialog({ saleId, onClose }: { saleId: string; onClose: () => void }) {
+export function ReceiptDialog({
+  saleId,
+  onClose,
+  copy = false,
+}: {
+  saleId: string;
+  onClose: () => void;
+  /** Opened after the sale: the first print. Otherwise every print is a logged copy (BR-182). */
+  copy?: boolean;
+}) {
   const { t } = useTranslation();
   const api = useApi();
+  const notify = useNotify();
+  const queryClient = useQueryClient();
   const receipt = useQuery({
     queryKey: ['pos', 'receipt', saleId],
     queryFn: () => api.sales.posReceipt(saleId),
   });
+  const [printed, setPrinted] = useState(false);
+  const reprint = useMutation({
+    mutationFn: () => api.sales.reprint(saleId),
+    onSuccess: (r) => {
+      queryClient.setQueryData(['pos', 'receipt', saleId], r);
+      setTimeout(() => window.print(), 0);
+    },
+    onError: notify.fail,
+  });
+  const print = () => {
+    if (copy || printed) reprint.mutate();
+    else {
+      setPrinted(true);
+      window.print();
+    }
+  };
   return (
     <Dialog
       open
@@ -676,9 +932,10 @@ export function ReceiptDialog({ saleId, onClose }: { saleId: string; onClose: ()
             variant="secondary"
             size="lg"
             disabled={!receipt.data}
-            onClick={() => window.print()}
+            loading={reprint.isPending}
+            onClick={print}
           >
-            {t('sale.print')}
+            {copy || printed ? t('sale.printCopy') : t('sale.print')}
           </Button>
           <Button size="lg" onClick={onClose}>
             {t('sale.newSale')}
@@ -713,6 +970,11 @@ export function ReceiptView({ receipt }: { receipt: Receipt }) {
       <header className="mb-2 text-center">
         <p className="text-base font-bold">{localizedName(receipt.merchant, i18n.language)}</p>
         <p>{localizedName(receipt.branch, i18n.language)}</p>
+        {s.reprintCount > 0 ? (
+          <p className="font-semibold" data-testid="receipt-copy">
+            {t('sale.copyNumber', { count: s.reprintCount })}
+          </p>
+        ) : null}
         {receipt.branch.address ? <p>{receipt.branch.address}</p> : null}
         {receipt.branch.phone ? <p dir="ltr">{receipt.branch.phone}</p> : null}
         {receipt.branch.receiptHeader ? (

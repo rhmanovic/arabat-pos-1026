@@ -1,4 +1,9 @@
-import type { DiscountInput, PosCatalogItem, SaleCustomer } from '@arabat/contracts';
+import type {
+  DiscountInput,
+  OverridablePermission,
+  PosCatalogItem,
+  SaleCustomer,
+} from '@arabat/contracts';
 import {
   type Discount,
   Money,
@@ -6,6 +11,8 @@ import {
   type PricedCart,
   PricingError,
   QuantityError,
+  divideHalfUp,
+  exceedsDiscountLimit,
   parseQuantity,
   priceCart,
 } from '@arabat/money';
@@ -17,6 +24,8 @@ export interface CartLine {
   /** Decimal string, e.g. "2" or "1.250". */
   quantity: string;
   priceOverride: string | null;
+  /** Required whenever the price differs from the list price (BR-178). */
+  priceOverrideReason: string | null;
   discount: DiscountInput | null;
 }
 
@@ -72,6 +81,40 @@ export function priceLines(state: CartState, items: Map<string, PosCatalogItem>)
   }
 }
 
+/**
+ * The selling rights this cart needs (the same rules the server applies, BR-177/178/179):
+ * what the cashier lacks must come from a supervisor override before the sale completes.
+ */
+export function requiredRights(
+  state: CartState,
+  items: Map<string, PosCatalogItem>,
+  pricing: PricedCart | null,
+  maxDiscountPercent: string | null,
+): OverridablePermission[] {
+  const rights = new Set<OverridablePermission>();
+  const listOf = (l: CartLine) =>
+    Money.fromJSON(items.get(l.variantId)!.price as { amount: string; currency: 'KWD' }).minor;
+  const changed = (l: CartLine) =>
+    l.priceOverride !== null && items.has(l.variantId) && toMinor(l.priceOverride) !== listOf(l);
+  if (state.orderDiscount || state.lines.some((l) => l.discount)) rights.add('sales.discount');
+  if (state.lines.some(changed)) rights.add('sales.price_override');
+  if (pricing && maxDiscountPercent) {
+    const over = state.lines.some((l, i) => {
+      if (!items.has(l.variantId)) return false;
+      const p = pricing.lines[i]!;
+      const listGross = divideHalfUp(listOf(l) * parseQuantity(l.quantity), 1000n);
+      const gap = listGross > p.grossMinor ? listGross - p.grossMinor : 0n;
+      if (changed(l) && toMinor(l.priceOverride!) === 0n) return true;
+      return exceedsDiscountLimit(p.lineDiscountMinor + gap, listGross, maxDiscountPercent);
+    });
+    const orderBase = pricing.subtotalMinor - pricing.lineDiscountsMinor;
+    if (over || exceedsDiscountLimit(pricing.orderDiscountMinor, orderBase, maxDiscountPercent))
+      rights.add('sales.discount.override_limit');
+  }
+  if (pricing && pricing.totalMinor === 0n) rights.add('sales.zero_total');
+  return [...rights];
+}
+
 function useCartState() {
   const [state, setState] = useState<CartState>(EMPTY);
   return useMemo(
@@ -100,6 +143,7 @@ function useCartState() {
                 variantId,
                 quantity,
                 priceOverride: null,
+                priceOverrideReason: null,
                 discount: null,
               },
             ],

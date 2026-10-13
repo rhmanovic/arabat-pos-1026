@@ -52,3 +52,41 @@ export function weightedAverageCost(
   const total = onHandMilli * currentAvgMinor + inMilli * inCostMinor;
   return divideHalfUp(total, onHandMilli + inMilli);
 }
+
+/**
+ * Average cost at micro precision (10⁻⁶ KWD per unit, i.e. thousandths of a fils; BR-174).
+ * The moving average is carried this way so low-value units (grams, millilitres) keep their
+ * cost; it is rounded to the fils only for display (`microToMinor`).
+ */
+export const MICRO_PER_MINOR = 1000n;
+
+export function microToMinor(micro: bigint): bigint {
+  return divideHalfUp(micro, MICRO_PER_MINOR);
+}
+
+/** Value of a quantity at a micro unit cost, rounded half-up to the minor unit. */
+export function quantityValueMicro(milli: bigint, unitCostMicro: bigint): bigint {
+  return divideHalfUp(milli * unitCostMicro, 1000n * MICRO_PER_MINOR);
+}
+
+/**
+ * Moving weighted-average cost at micro precision after receiving `inMilli` at `inCostMicro`
+ * (BR-061, BR-174). A negative balance keeps its cost basis: the receipt first absorbs the
+ * negative units at their recorded average, so value stays equal to the sum of movement values
+ * (FND-204). While the balance would stay negative the previous average is kept; with no
+ * known cost the incoming cost is adopted.
+ */
+export function weightedAverageCostMicro(
+  onHandMilli: bigint,
+  currentAvgMicro: bigint | null,
+  inMilli: bigint,
+  inCostMicro: bigint,
+): bigint {
+  if (inMilli <= 0n) throw new QuantityError('Received quantity must be positive');
+  if (currentAvgMicro === null || onHandMilli === 0n) return inCostMicro;
+  const after = onHandMilli + inMilli;
+  if (after <= 0n) return currentAvgMicro;
+  const total = onHandMilli * currentAvgMicro + inMilli * inCostMicro;
+  const avg = divideHalfUp(total, after);
+  return avg < 0n ? inCostMicro : avg;
+}

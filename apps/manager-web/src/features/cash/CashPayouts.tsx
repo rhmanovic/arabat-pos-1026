@@ -1,8 +1,11 @@
+import { ApiError } from '@arabat/api-client';
 import {
   CASH_EXPENSE_CATEGORIES,
   type CashBranchTransfer,
   type CashDisbursement,
   type CashOverview,
+  type CashPayoutRequest,
+  type DepositInTransit,
 } from '@arabat/contracts';
 import { Money, MoneyError } from '@arabat/money';
 import {
@@ -20,8 +23,9 @@ import { ErrorState, localizedName, useApi, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useBranchContext } from '../../app/context.js';
+import { useBranchContext, useSession } from '../../app/context.js';
 import { formatAmount } from '../catalog/ProductsPage.js';
+import { formatDateTime } from '../inventory/AdjustmentsPage.js';
 
 /**
  * Cash leaving custody (ADR-0091): expenses and supplier payments from a branch treasury,
@@ -132,27 +136,61 @@ export function DisbursementDialog({
     enabled: kind === 'supplier_payment' && Boolean(supplierId),
   });
   const amountMinor = minor(amount);
+  // Approval limits (BR-166): above them the payment waits for a second custody holder and
+  // must carry a receipt or invoice reference; the owner pays directly.
+  const notify = useNotify();
+  const queryClient = useQueryClient();
+  const { session } = useSession();
+  const policy = useQuery({
+    queryKey: ['manager', 'sales', 'settings'],
+    queryFn: () => api.sales.managerSettings(),
+  });
+  const limit = policy.data
+    ? minor(
+        kind === 'expense'
+          ? policy.data.expenseApprovalLimit.amount
+          : policy.data.supplierPaymentApprovalLimit.amount,
+      )
+    : null;
+  const aboveLimit = amountMinor !== null && limit !== null && amountMinor > limit;
   const valid =
     amountMinor !== null &&
     amountMinor > 0n &&
     (kind !== 'expense' || Boolean(category)) &&
     (category !== 'other' || Boolean(description.trim())) &&
-    (kind !== 'supplier_payment' || Boolean(supplierId));
-  const save = useMutation({
-    mutationFn: () =>
-      api.cash.disburse({
-        branchId,
-        kind,
-        ...(kind === 'expense'
-          ? { category: category as (typeof CASH_EXPENSE_CATEGORIES)[number] }
-          : { supplierId, ...(orderId ? { purchaseOrderId: orderId } : {}) }),
-        amount: amount.trim(),
-        description: description.trim() || null,
-        receiptReference: receipt.trim() || null,
-        idempotencyKey,
-      }),
-    ...useDone(onClose, t('cashCustody.paid')),
+    (kind !== 'supplier_payment' || Boolean(supplierId)) &&
+    (!aboveLimit || Boolean(receipt.trim()));
+  const body = () => ({
+    branchId,
+    kind,
+    ...(kind === 'expense'
+      ? { category: category as (typeof CASH_EXPENSE_CATEGORIES)[number] }
+      : { supplierId, ...(orderId ? { purchaseOrderId: orderId } : {}) }),
+    amount: amount.trim(),
+    description: description.trim() || null,
+    receiptReference: receipt.trim() || null,
+    idempotencyKey,
   });
+  const finish = async (message: string) => {
+    notify.ok(message);
+    await queryClient.invalidateQueries({ queryKey: cashKey });
+    onClose();
+  };
+  const requestApproval = useMutation({
+    mutationFn: () => api.cash.requestPayout(body()),
+    onSuccess: () => finish(t('cashCustody.sentForApproval')),
+    onError: notify.fail,
+  });
+  const save = useMutation({
+    mutationFn: () => api.cash.disburse(body()),
+    onSuccess: () => finish(t('cashCustody.paid')),
+    onError: (error) => {
+      // The server decides: above the limit a non-owner's payment becomes a request.
+      if (error instanceof ApiError && error.code === 'APPROVAL_REQUIRED') requestApproval.mutate();
+      else notify.fail(error);
+    },
+  });
+  const waits = aboveLimit && !session.isOwner;
   return (
     <Dialog
       open
@@ -164,13 +202,31 @@ export function DisbursementDialog({
           <Button variant="secondary" onClick={onClose}>
             {t('common.cancel')}
           </Button>
-          <Button disabled={!valid} loading={save.isPending} onClick={() => save.mutate()}>
-            {t('cashCustody.pay')}
+          <Button
+            disabled={!valid}
+            loading={save.isPending || requestApproval.isPending}
+            onClick={() => (waits ? requestApproval.mutate() : save.mutate())}
+          >
+            {waits ? t('cashCustody.requestApproval') : t('cashCustody.pay')}
           </Button>
         </>
       }
     >
       <div className="grid gap-4">
+        {policy.data && aboveLimit ? (
+          <Alert tone={waits ? 'warning' : 'info'}>
+            <span data-testid="approval-limit">
+              {t(waits ? 'cashCustody.aboveLimit' : 'cashCustody.aboveLimitOwner', {
+                amount: formatAmount(
+                  kind === 'expense'
+                    ? policy.data.expenseApprovalLimit
+                    : policy.data.supplierPaymentApprovalLimit,
+                  i18n.language,
+                ),
+              })}
+            </span>
+          </Alert>
+        ) : null}
         {overview.branches.length > 1 ? (
           <BranchField
             overview={overview}
@@ -257,7 +313,10 @@ export function DisbursementDialog({
             />
           )}
         </Field>
-        <Field label={t('cashCustody.receiptReference')}>
+        <Field
+          label={t('cashCustody.receiptReference')}
+          error={aboveLimit && !receipt.trim() ? t('cashCustody.receiptRequired') : undefined}
+        >
           {(p) => (
             <Input {...p} dir="ltr" value={receipt} onChange={(e) => setReceipt(e.target.value)} />
           )}
@@ -267,7 +326,149 @@ export function DisbursementDialog({
   );
 }
 
-/** Deposits cash from a branch treasury into a bank account (`cash.deposit`). */
+/** Treasury payments waiting for a second custody holder (BR-166). */
+export function PayoutRequestList() {
+  const { t, i18n } = useTranslation();
+  const api = useApi();
+  const notify = useNotify();
+  const queryClient = useQueryClient();
+  const { branchId } = useBranchContext();
+  const { session } = useSession();
+  const [deciding, setDeciding] = useState<CashPayoutRequest | null>(null);
+  const list = useQuery({
+    queryKey: [...cashKey, 'payout-requests', branchId],
+    queryFn: () =>
+      api.cash.payoutRequests({ ...(branchId ? { branchId } : {}), status: 'pending' }),
+  });
+  const withdraw = useMutation({
+    mutationFn: (id: string) => api.cash.withdrawPayoutRequest(id),
+    onSuccess: async () => {
+      notify.ok(t('cashCustody.requestWithdrawn'));
+      await queryClient.invalidateQueries({ queryKey: cashKey });
+    },
+    onError: notify.fail,
+  });
+  if (!list.data?.requests.length) return null;
+  return (
+    <section
+      className="rounded-lg border border-warning/40 bg-surface"
+      data-testid="payout-requests"
+    >
+      <h2 className="border-b border-border px-4 py-3 font-semibold">
+        {t('cashCustody.awaitingApproval')}
+      </h2>
+      <ul className="divide-y divide-border">
+        {list.data.requests.map((r) => (
+          <li key={r.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
+            <span className="min-w-0 flex-1">
+              <span className="block font-medium">
+                {t(`cashCustody.kind_${r.kind}`)}
+                {r.supplier ? ` · ${localizedName(r.supplier, i18n.language)}` : ''}
+                {r.category ? ` · ${t(`cashCustody.category_${r.category}`)}` : ''}
+                {r.purchaseOrder ? ` · ${r.purchaseOrder.number}` : ''}
+              </span>
+              <span className="block text-xs text-fg-muted">
+                {r.requestedBy} · {formatDateTime(r.createdAt, i18n.language)} ·{' '}
+                {localizedName(r.branch, i18n.language)}
+                {r.description ? ` — ${r.description}` : ''}
+              </span>
+            </span>
+            <span dir="ltr" className="font-semibold tabular-nums">
+              {formatAmount(r.amount, i18n.language)}
+            </span>
+            {r.requestedByUserId === session.actor.id && !session.isOwner ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                loading={withdraw.isPending}
+                onClick={() => withdraw.mutate(r.id)}
+              >
+                {t('cashCustody.withdraw')}
+              </Button>
+            ) : (
+              <Button size="sm" onClick={() => setDeciding(r)} data-testid="decide-payout">
+                {t('cashCustody.decide')}
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {deciding ? (
+        <PayoutDecisionDialog request={deciding} onClose={() => setDeciding(null)} />
+      ) : null}
+    </section>
+  );
+}
+
+function PayoutDecisionDialog({
+  request,
+  onClose,
+}: {
+  request: CashPayoutRequest;
+  onClose: () => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const api = useApi();
+  const notify = useNotify();
+  const queryClient = useQueryClient();
+  const [note, setNote] = useState('');
+  const decide = useMutation({
+    mutationFn: (decision: 'approve' | 'reject') =>
+      api.cash.decidePayoutRequest(request.id, { decision, note: note.trim() || null }),
+    onSuccess: async () => {
+      notify.ok(t('cashCustody.decided'));
+      await queryClient.invalidateQueries({ queryKey: cashKey });
+      onClose();
+    },
+    onError: notify.fail,
+  });
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={t('cashCustody.decideTitle')}
+      description={t('cashCustody.decideHint')}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            variant="danger"
+            disabled={!note.trim()}
+            loading={decide.isPending}
+            onClick={() => decide.mutate('reject')}
+          >
+            {t('cashCustody.reject')}
+          </Button>
+          <Button loading={decide.isPending} onClick={() => decide.mutate('approve')}>
+            {t('cashCustody.approve')}
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-4">
+        <p className="text-sm">
+          {t(`cashCustody.kind_${request.kind}`)} ·{' '}
+          <span dir="ltr">{formatAmount(request.amount, i18n.language)}</span> ·{' '}
+          {request.requestedBy}
+          {request.receiptReference ? ` · ${request.receiptReference}` : ''}
+          {request.description ? ` — ${request.description}` : ''}
+        </p>
+        <Field label={t('cashCustody.description')}>
+          {(p) => (
+            <Textarea {...p} rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
+          )}
+        </Field>
+      </div>
+    </Dialog>
+  );
+}
+
+/**
+ * Deposits cash from a branch treasury towards a bank account (`cash.deposit`). The slip number
+ * is mandatory; the cash waits in transit until a second person confirms it (BR-168).
+ */
 export function DepositDialog({
   overview,
   onClose,
@@ -295,7 +496,7 @@ export function DepositDialog({
         fromAccountId: branch.treasury.accountId,
         bankAccountId: bankId,
         amount: amount.trim(),
-        reference: reference.trim() || null,
+        reference: reference.trim(),
         note: note.trim() || null,
         idempotencyKey,
       }),
@@ -313,7 +514,7 @@ export function DepositDialog({
             {t('common.cancel')}
           </Button>
           <Button
-            disabled={!bankId || amountMinor === null || amountMinor <= 0n}
+            disabled={!bankId || !reference.trim() || amountMinor === null || amountMinor <= 0n}
             loading={save.isPending}
             onClick={() => save.mutate()}
           >
@@ -342,7 +543,10 @@ export function DepositDialog({
           )}
         </Field>
         <AmountField value={amount} onChange={setAmount} />
-        <Field label={t('cashCustody.depositReference')}>
+        <Field
+          label={t('cashCustody.depositReference')}
+          hint={t('cashCustody.depositReferenceHint')}
+        >
           {(p) => (
             <Input
               {...p}
@@ -353,6 +557,135 @@ export function DepositDialog({
           )}
         </Field>
         <Field label={t('cashCustody.note')}>
+          {(p) => (
+            <Textarea {...p} rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
+          )}
+        </Field>
+      </div>
+    </Dialog>
+  );
+}
+
+/** Deposits recorded but not yet confirmed on the bank side (BR-168). */
+export function DepositsInTransitList() {
+  const { t, i18n } = useTranslation();
+  const api = useApi();
+  const { branchId } = useBranchContext();
+  const { session } = useSession();
+  const [settling, setSettling] = useState<DepositInTransit | null>(null);
+  const list = useQuery({
+    queryKey: [...cashKey, 'deposits-pending', branchId],
+    queryFn: () => api.cash.depositsInTransit(branchId),
+  });
+  if (!list.data?.deposits.length) return null;
+  return (
+    <section
+      className="rounded-lg border border-warning/40 bg-surface"
+      data-testid="deposits-in-transit"
+    >
+      <h2 className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 font-semibold">
+        <span>{t('cashCustody.depositsInTransit')}</span>
+        <span dir="ltr" className="tabular-nums">
+          {formatAmount(list.data.total, i18n.language)}
+        </span>
+      </h2>
+      <p className="px-4 pt-3 text-xs text-fg-muted">{t('cashCustody.depositsInTransitHint')}</p>
+      <ul className="divide-y divide-border">
+        {list.data.deposits.map((d) => (
+          <li key={d.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
+            <span className="min-w-0 flex-1">
+              <span className="block font-medium">
+                {d.from.kind === 'treasury'
+                  ? t('cashCustody.treasury')
+                  : localizedName(d.from, i18n.language)}{' '}
+                → {localizedName(d.bank, i18n.language)} · {d.reference}
+              </span>
+              <span className="block text-xs text-fg-muted">
+                {d.createdBy} · {formatDateTime(d.createdAt, i18n.language)}
+                {d.note ? ` — ${d.note}` : ''}
+              </span>
+            </span>
+            <span dir="ltr" className="font-semibold tabular-nums">
+              {formatAmount(d.amount, i18n.language)}
+            </span>
+            {d.createdByUserId === session.actor.id && !session.isOwner ? (
+              <Badge tone="warning">{t('cashCustody.awaitingOther')}</Badge>
+            ) : (
+              <Button size="sm" onClick={() => setSettling(d)} data-testid="settle-deposit">
+                {t('cashCustody.confirmDeposit')}
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {settling ? (
+        <SettleDepositDialog deposit={settling} onClose={() => setSettling(null)} />
+      ) : null}
+    </section>
+  );
+}
+
+function SettleDepositDialog({
+  deposit,
+  onClose,
+}: {
+  deposit: DepositInTransit;
+  onClose: () => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const api = useApi();
+  const [reference, setReference] = useState('');
+  const [note, setNote] = useState('');
+  const settle = useMutation({
+    mutationFn: (decision: 'confirm' | 'return') =>
+      api.cash.settleDeposit(deposit.id, {
+        decision,
+        reference: reference.trim() || null,
+        note: note.trim() || null,
+      }),
+    ...useDone(onClose, t('cashCustody.depositSettled')),
+  });
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={t('cashCustody.confirmDepositTitle')}
+      description={t('cashCustody.confirmDepositHint')}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            variant="danger"
+            disabled={!note.trim()}
+            loading={settle.isPending}
+            onClick={() => settle.mutate('return')}
+          >
+            {t('cashCustody.returnDeposit')}
+          </Button>
+          <Button loading={settle.isPending} onClick={() => settle.mutate('confirm')}>
+            {t('cashCustody.confirmDeposit')}
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-4">
+        <p className="text-sm">
+          <span dir="ltr">{formatAmount(deposit.amount, i18n.language)}</span> ·{' '}
+          {localizedName(deposit.bank, i18n.language)} · {deposit.reference} · {deposit.createdBy}
+        </p>
+        <Field label={t('cashCustody.bankReference')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              value={reference}
+              onChange={(e) => setReference(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('cashCustody.returnReason')}>
           {(p) => (
             <Textarea {...p} rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
           )}

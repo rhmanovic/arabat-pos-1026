@@ -63,17 +63,26 @@ export const salesSummarySchema = z.object({
 });
 export type SalesSummary = z.infer<typeof salesSummarySchema>;
 
+/**
+ * Gross profit (BR-127, BR-185): always computed for the costed part of the period; sales
+ * and restocked returns without a known cost are excluded and shown as the uncosted share
+ * instead of hiding the whole figure.
+ */
 export const salesProfitSchema = z.object({
-  /** False when some sale in the period has no known cost (`missingCostSales` > 0). */
+  /** True when every sale and restocked return in the period has a known cost. */
   available: z.boolean(),
   missingCostSales: z.number().int(),
-  /** Cost of goods sold at weighted-average cost when sold. */
+  /** Net sales (after their refunds) of the sales without a known cost. */
+  uncostedSales: moneySchema.default({ amount: '0.000', currency: 'KWD' }),
+  /** uncostedSales ÷ netAfterRefunds × 100, one decimal; null when there are no sales. */
+  uncostedSharePercent: z.string().nullable().default(null),
+  /** Cost of goods sold at weighted-average cost when sold (costed sales only). */
   costOfSales: moneySchema.nullable(),
-  /** Cost of refunded units that went back to stock. */
+  /** Cost of refunded units that went back to stock (costed lines only). */
   restockedCost: moneySchema.nullable(),
-  /** netAfterRefunds − (costOfSales − restockedCost). Fees are not deducted. */
+  /** (netAfterRefunds − uncostedSales) − (costOfSales − restockedCost). Fees are not deducted. */
   grossProfit: moneySchema.nullable(),
-  /** grossProfit ÷ netAfterRefunds × 100, one decimal; null when not computable. */
+  /** grossProfit ÷ (netAfterRefunds − uncostedSales) × 100, one decimal; null when not computable. */
   marginPercent: z.string().nullable(),
 });
 
@@ -103,6 +112,7 @@ export const salesReportSchema = z.object({
       netAfterRefunds: moneySchema,
     }),
   ),
+  /** Who rang up the sale; online-store sales form one row with `membershipId` "online". */
   byEmployee: z.array(
     z.object({
       membershipId: z.string(),
@@ -111,6 +121,11 @@ export const salesReportSchema = z.object({
       discounts: moneySchema,
       netSales: moneySchema,
       refunds: moneySchema,
+      /** Unusual sales by this employee (BR-179): counts of flagged sales. */
+      priceOverrides: z.number().int().default(0),
+      aboveLimitSales: z.number().int().default(0),
+      zeroTotalSales: z.number().int().default(0),
+      supervisedSales: z.number().int().default(0),
     }),
   ),
   /** Amounts applied to the period's sales per tender (incl. exchange credit). */
@@ -159,6 +174,43 @@ export const salesReportSchema = z.object({
 });
 export type SalesReport = z.infer<typeof salesReportSchema>;
 
+/** Dashboard KPIs (BR-187): today and yesterday in the merchant's time zone, in scope. */
+export const todaySummarySchema = z.object({
+  date: z.string(),
+  timezone: z.string(),
+  today: z.object({
+    saleCount: z.number().int(),
+    netSales: moneySchema,
+    refundCount: z.number().int(),
+    refunds: moneySchema,
+    netAfterRefunds: moneySchema,
+  }),
+  yesterday: z.object({
+    saleCount: z.number().int(),
+    netSales: moneySchema,
+    refundCount: z.number().int(),
+    refunds: moneySchema,
+    netAfterRefunds: moneySchema,
+  }),
+  /** Shifts open right now in scope. */
+  openShifts: z.number().int(),
+  /** When the company has not sold anything yet (the dashboard says so instead of zeros). */
+  hasSales: z.boolean(),
+});
+export type TodaySummary = z.infer<typeof todaySummarySchema>;
+
+/** A CSV export built in the browser is reported so it lands in the audit log (BR-187). */
+export const reportExportSchema = z.object({
+  report: z.enum(['sales', 'payments', 'expenses', 'shifts', 'inventory', 'purchasing', 'audit']),
+  /** The table exported (e.g. "byProduct"). */
+  section: z.string().trim().min(1).max(60),
+  from: isoDate.optional(),
+  to: isoDate.optional(),
+  branchId: z.uuid().optional(),
+  rows: z.number().int().min(0).max(1_000_000),
+});
+export type ReportExport = z.input<typeof reportExportSchema>;
+
 // ---------------------------------------------------------------- payments & cash
 export const paymentsReportSchema = z.object({
   period: reportPeriodSchema,
@@ -170,6 +222,8 @@ export const paymentsReportSchema = z.object({
       count: z.number().int(),
       collected: moneySchema,
       fees: moneySchema,
+      /** Fees given back on refunds under the method's policy (D6). */
+      feesReversed: moneySchema.default({ amount: '0.000', currency: 'KWD' }),
       refunded: moneySchema,
       /** collected − refunded (fees are shown separately). */
       net: moneySchema,
@@ -178,11 +232,31 @@ export const paymentsReportSchema = z.object({
   totals: z.object({
     collected: moneySchema,
     fees: moneySchema,
+    feesReversed: moneySchema.default({ amount: '0.000', currency: 'KWD' }),
     refunded: moneySchema,
     net: moneySchema,
+    /** net − fees + feesReversed. */
     netAfterFees: moneySchema,
     previousCollected: moneySchema,
   }),
+  /** Card and transfer tenders and pay-backs recorded without a reference (BR-181). */
+  unreferenced: z
+    .object({
+      count: z.number().int(),
+      amount: moneySchema,
+      items: z.array(
+        z.object({
+          id: z.string(),
+          kind: z.enum(['payment', 'refund_payment']),
+          document: z.string(),
+          ...named,
+          amount: moneySchema,
+          createdAt: z.string(),
+          employeeName: z.string().nullable(),
+        }),
+      ),
+    })
+    .default({ count: 0, amount: { amount: '0.000', currency: 'KWD' }, items: [] }),
   cash: z.object({
     cashSales: moneySchema,
     cashRefunds: moneySchema,
@@ -276,8 +350,50 @@ export const shiftsReportSchema = z.object({
 export type ShiftsReport = z.infer<typeof shiftsReportSchema>;
 
 // ---------------------------------------------------------------- inventory
+const stockPosition = z.object({ quantity: z.string(), value: moneySchema });
+/** Opening → movements → closing for one branch (or the whole scope), from the ledger (BR-176). */
+export const stockRollForwardSchema = z.object({
+  branchId: z.string().nullable(),
+  opening: stockPosition,
+  movements: z.array(
+    z.object({ movementType: z.string(), quantity: z.string(), value: moneySchema }),
+  ),
+  closing: stockPosition,
+  /** closing − opening − Σ movement values: the rounding of averages, published (FND-205). */
+  rounding: moneySchema,
+});
+export type StockRollForward = z.infer<typeof stockRollForwardSchema>;
 export const inventoryReportSchema = z.object({
   period: reportPeriodSchema,
+  /** Goods in transit between branches right now, at dispatch cost (BR-173). */
+  inTransit: z.object({ transfers: z.number().int(), quantity: z.string(), value: moneySchema }),
+  /** Closing stock at the end of `period.to`, reconstructed from the ledger (BR-176). */
+  asAt: z.object({
+    date: z.string(),
+    valuation: z.array(
+      z.object({ branchId: z.string(), items: z.number().int(), ...stockPosition.shape }),
+    ),
+    total: stockPosition,
+  }),
+  rollForward: z.object({
+    branches: z.array(stockRollForwardSchema),
+    total: stockRollForwardSchema,
+  }),
+  /** Quantities held for unpaid online orders right now (BR-176). */
+  reservedQuantity: z.string(),
+  /** Items in stock with no cost at all (FND-216): value them by setting a product cost. */
+  unvalued: z.array(
+    z.object({
+      variantId: z.string(),
+      productId: z.string(),
+      branchId: z.string(),
+      ...named,
+      variantNameEn: z.string().nullable(),
+      variantNameAr: z.string().nullable(),
+      sku: z.string().nullable(),
+      onHand: z.string(),
+    }),
+  ),
   /** Current values (not period-bound). */
   valuation: z.array(
     z.object({
@@ -297,6 +413,8 @@ export const inventoryReportSchema = z.object({
       variantNameAr: z.string().nullable(),
       sku: z.string().nullable(),
       onHand: z.string(),
+      /** Held for unpaid online orders (BR-176). */
+      reserved: z.string(),
       lowStockThreshold: z.string().nullable(),
       averageCost: moneySchema.nullable(),
       value: moneySchema.nullable(),
@@ -379,6 +497,10 @@ export const purchasingReportSchema = z.object({
       missing: z.string(),
       dispatchedValue: moneySchema,
       missingValue: moneySchema,
+      /** Written off by posted transfer losses (BR-172). */
+      lost: z.string(),
+      lostValue: moneySchema,
+      pendingLosses: z.number().int(),
     }),
   ),
 });

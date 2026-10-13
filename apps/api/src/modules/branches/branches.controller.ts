@@ -61,6 +61,6 @@ export class BranchesController {
     @Body(new ZodPipe(branchStatusSchema)) body: z.output<typeof branchStatusSchema>,
     @Req() req: FastifyRequest,
   ): Promise<BranchDetail> {
-    return this.branches.setStatus(actor, branchId, body.status, req.ip);
+    return this.branches.setStatus(actor, branchId, body, req.ip);
   }
 }

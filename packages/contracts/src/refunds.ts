@@ -32,8 +32,11 @@ export const returnLineInputSchema = z.object({
   /** Position of the line on the original sale. */
   position: z.number().int().min(0),
   quantity: quantitySchema,
-  /** Put the item back into sellable stock (false for damaged goods). */
-  restock: z.boolean().default(true),
+  /**
+   * Put the item back into sellable stock. Omitted = decided by the refund reason: damaged and
+   * defective goods stay out of stock (BR-175).
+   */
+  restock: z.boolean().optional(),
 });
 
 export const refundAllocationSchema = z.object({
@@ -61,6 +64,13 @@ export const createRefundSchema = z
     note,
     /** Optional: how to pay back; defaults to the suggested allocation. */
     allocation: z.array(refundAllocationSchema).max(10).optional(),
+    /** Customer phone or name, asked for on refunds that wait for approval (BR-180). */
+    customerContact: z
+      .string()
+      .trim()
+      .max(120)
+      .nullish()
+      .transform((v) => (v == null || v === '' ? null : v)),
   })
   .refine((r) => r.reason !== 'other' || Boolean(r.note), {
     error: 'Add a note explaining the refund.',
@@ -151,8 +161,17 @@ export const refundPreviewSchema = z.object({
     z.object({ position: z.number().int(), quantity: z.string(), amount: moneySchema }),
   ),
   total: moneySchema,
-  allocation: z.array(z.object({ paymentId: z.string(), kind: z.string(), amount: moneySchema })),
+  allocation: z.array(
+    z.object({
+      paymentId: z.string(),
+      kind: z.string(),
+      amount: moneySchema,
+      /** The pay-back needs a terminal / transfer reference (BR-181). */
+      referenceRequired: z.boolean().default(false),
+    }),
+  ),
   approvalRequired: z.boolean(),
+  /** over_limit | outside_window | own_sale (BR-180). */
   approvalReasons: z.array(z.string()),
 });
 export type RefundPreview = z.infer<typeof refundPreviewSchema>;
@@ -174,6 +193,9 @@ export const refundSchema = z.object({
   requestedBy: z.string(),
   decidedBy: z.string().nullable(),
   decisionNote: z.string().nullable(),
+  /** The owner completed a refund that would otherwise have waited (BR-180). */
+  ownerOverride: z.boolean().default(false),
+  customerContact: z.string().nullable().default(null),
   createdAt: z.string(),
   completedAt: z.string().nullable(),
   lines: z.array(
@@ -197,16 +219,26 @@ export const refundSchema = z.object({
       status: z.enum(['succeeded', 'pending', 'failed']),
       verification: z.enum(['manual', 'gateway', 'internal']),
       reference: z.string().nullable(),
+      /** Processing fee given back with this pay-back (method policy, D6). */
+      feeReversed: moneySchema.optional(),
     }),
   ),
   version: z.number().int(),
 });
 export type Refund = z.infer<typeof refundSchema>;
+/**
+ * Refund register (BR-184): the period filter uses the refund's business date, its
+ * completion time when completed, otherwise its request time, in the merchant's time zone.
+ */
 export const refundListSchema = z.object({
   refunds: z.array(refundSchema.omit({ lines: true, payments: true })),
   total: z.number().int(),
   page: z.number().int(),
   pageSize: z.number().int(),
+  /** Over every matching refund, not only the page; `amount` counts completed refunds only. */
+  totals: z
+    .object({ count: z.number().int(), completedCount: z.number().int(), amount: moneySchema })
+    .default({ count: 0, completedCount: 0, amount: { amount: '0.000', currency: 'KWD' } }),
 });
 const isoDate = z.iso.date();
 export const refundListQuerySchema = z.object({
@@ -234,11 +266,17 @@ export const refundActivitySchema = z.object({
       /** Refunded amount as a percentage of sales (2 decimals). */
       refundRate: z.string(),
       outsideWindow: z.number().int(),
+      /** Completed refunds of sales this employee rang up themselves (BR-180). */
+      ownSaleRefunds: z.number().int().default(0),
       flagged: z.boolean(),
     }),
   ),
-  /** Employees whose refund rate is above this percentage are flagged. */
+  /** Employees whose refund rate is above this percentage are flagged (company policy, BR-186). */
   flagThresholdPercent: z.string(),
+  /** The window reviewed: the query's dates, else the company's default number of days. */
+  period: z
+    .object({ from: z.string(), to: z.string(), timezone: z.string() })
+    .default({ from: '', to: '', timezone: 'Asia/Kuwait' }),
 });
 export type RefundActivity = z.infer<typeof refundActivitySchema>;
 export const refundActivityQuerySchema = z.object({

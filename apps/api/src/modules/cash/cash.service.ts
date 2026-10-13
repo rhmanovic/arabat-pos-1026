@@ -4,9 +4,9 @@ import type {
   CashStatement,
   CashTransfer,
   cashCountSchema,
+  cashStatementQuerySchema,
   cashTransferQuerySchema,
   createCashTransferSchema,
-  pageQuerySchema,
 } from '@arabat/contracts';
 import { Money } from '@arabat/money';
 import { permissionBranchScope } from '@arabat/permissions';
@@ -18,6 +18,7 @@ import { assertCan } from '../../kernel/access/assert.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
+import { dayStart, merchantTimezone, withinLocalDays } from '../../kernel/time/period.js';
 import { AuditService } from '../audit/audit.service.js';
 import { isUniqueViolation } from '../auth/registration.service.js';
 import {
@@ -35,7 +36,7 @@ import { ShiftsService } from '../registers/shifts.service.js';
 
 type TransferInput = z.output<typeof createCashTransferSchema>;
 type CountInput = z.output<typeof cashCountSchema>;
-type PageQuery = z.output<typeof pageQuerySchema>;
+type StatementQuery = z.output<typeof cashStatementQuerySchema>;
 type TransferQuery = z.output<typeof cashTransferQuerySchema>;
 type AccountRow = typeof financialAccounts.$inferSelect;
 
@@ -132,39 +133,68 @@ export class CashService {
           where t.status = 'in_transit' and ${transitScope ?? sql`true`}`)
       ).rows as { total: string }[];
       const inTransitTotal = BigInt(transit!.total);
+      // Deposits not yet confirmed on the bank side (BR-168): no longer cash on hand, not yet
+      // in the bank; shown so nobody forgets them.
+      const depositScope = this.scope(actor, branchId, sql`f.branch_id`);
+      const [deposits] = (
+        await tx.execute(sql`select coalesce(sum(t.amount_minor), 0)::text as total
+          from cash_transfers t
+          join financial_accounts f on f.id = t.from_account_id
+          join financial_accounts d on d.id = t.to_account_id
+          where d.kind = 'deposit_transit'
+            and not exists (select 1 from cash_transfers c where c.confirms_transfer_id = t.id)
+            and ${depositScope ?? sql`true`}`)
+      ).rows as { total: string }[];
       return {
         branches: [...branches.values()].map(({ totalMinor: _t, ...b }) => b),
         treasuriesTotal: money(treasuriesTotal),
         registersTotal: money(registersTotal),
         inTransitTotal: money(inTransitTotal),
+        depositsInTransitTotal: money(BigInt(deposits!.total)),
         total: money(treasuriesTotal + registersTotal + inTransitTotal),
       };
     });
   }
 
-  /** The ledger of one treasury or drawer, newest first, with the running balance. */
+  /**
+   * The ledger of one treasury or drawer, newest first, with the running balance. With a
+   * period (BR-184) only the entries of the merchant's local days [from, to] are listed, with
+   * the balance brought forward and the period's totals.
+   */
   async statement(
     actor: MerchantActor,
     accountId: string,
-    query: PageQuery,
+    query: StatementQuery,
   ): Promise<CashStatement> {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const account = await this.custodyAccount(tx, accountId);
       assertCan(actor, 'cash.custody', account.branchId);
-      const [count] = (
-        await tx.execute(sql`select count(*)::int as n from financial_account_entries
-          where account_id = ${accountId}`)
-      ).rows as { n: number }[];
+      const tz = await merchantTimezone(tx, actor.merchantId);
+      const period = withinLocalDays(tz, sql`e.created_at`, query.from, query.to);
+      const [agg] = (
+        await tx.execute(sql`select count(*)::int as n,
+            coalesce(sum(e.amount_minor) filter (where e.amount_minor > 0), 0)::text as cash_in,
+            coalesce(sum(e.amount_minor) filter (where e.amount_minor < 0), 0)::text as cash_out,
+            coalesce((select sum(b.amount_minor) from financial_account_entries b
+                      where b.account_id = ${accountId}
+                        and ${query.from ? sql`b.created_at < ${dayStart(tz, query.from)}` : sql`false`}), 0)::text as opening
+          from financial_account_entries e where e.account_id = ${accountId} and ${period}`)
+      ).rows as { n: number; cash_in: string; cash_out: string; opening: string }[];
       const rows = (
         await tx.execute(sql`
-          select e.id, e.amount_minor::text as amount, e.entry_type, e.source_type, e.description,
-                 e.created_at, u.full_name,
-                 (sum(e.amount_minor) over (order by e.created_at, e.id))::text as running
-          from financial_account_entries e left join users u on u.id = e.created_by_user_id
-          where e.account_id = ${accountId}
+          select * from (
+            select e.id, e.amount_minor::text as amount, e.entry_type, e.source_type, e.description,
+                   e.created_at, u.full_name,
+                   (sum(e.amount_minor) over (order by e.created_at, e.id))::text as running
+            from financial_account_entries e left join users u on u.id = e.created_by_user_id
+            where e.account_id = ${accountId}) e
+          where ${period}
           order by e.created_at desc, e.id desc
           limit ${query.pageSize} offset ${(query.page - 1) * query.pageSize}`)
       ).rows as Record<string, unknown>[];
+      const opening = BigInt(agg!.opening);
+      const cashIn = BigInt(agg!.cash_in);
+      const cashOut = -BigInt(agg!.cash_out);
       return {
         account: {
           id: account.id,
@@ -174,6 +204,14 @@ export class CashService {
           branchId: account.branchId,
           balance: money(await accountBalance(tx, accountId)),
         },
+        period:
+          query.from || query.to
+            ? { from: query.from ?? '', to: query.to ?? '', timezone: tz }
+            : null,
+        openingBalance: money(opening),
+        totalIn: money(cashIn),
+        totalOut: money(cashOut),
+        closingBalance: money(opening + cashIn - cashOut),
         entries: rows.map((r) => ({
           id: r['id'] as string,
           amount: money(BigInt(r['amount'] as string)),
@@ -184,7 +222,7 @@ export class CashService {
           createdBy: (r['full_name'] as string | null) ?? null,
           createdAt: iso(r['created_at'] as string)!,
         })),
-        total: count?.n ?? 0,
+        total: agg?.n ?? 0,
         page: query.page,
         pageSize: query.pageSize,
       };
@@ -192,8 +230,12 @@ export class CashService {
   }
 
   async listTransfers(actor: MerchantActor, query: TransferQuery, onlyId?: string) {
-    // Branch of a transfer: its register/treasury side (the in-transit account has none).
-    const scope = this.scope(actor, query.branchId, sql`coalesce(f.branch_id, d.branch_id)`);
+    // Branch of a transfer: its register/treasury side (the transit accounts have none); a
+    // deposit confirmation belongs to the branch of the deposit it settles.
+    const branchOf = sql`coalesce(f.branch_id, d.branch_id,
+      (select ff.branch_id from cash_transfers c join financial_accounts ff on ff.id = c.from_account_id
+        where c.id = t.confirms_transfer_id))`;
+    const scope = this.scope(actor, query.branchId, branchOf);
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const where = sql`${scope ?? sql`true`} and ${onlyId ? sql`t.id = ${onlyId}` : sql`true`}`;
       const [count] = (
@@ -205,7 +247,7 @@ export class CashService {
         await tx.execute(sql`
           select t.id, t.amount_minor::text as amount, t.origin, t.note, t.reference, t.created_at,
                  u.full_name, f.id as f_id, f.kind as f_kind, f.name_en as f_en, f.name_ar as f_ar,
-                 coalesce(f.branch_id, d.branch_id) as branch_id, d.id as d_id, d.kind as d_kind, d.name_en as d_en, d.name_ar as d_ar
+                 ${branchOf} as branch_id, d.id as d_id, d.kind as d_kind, d.name_en as d_en, d.name_ar as d_ar
           from cash_transfers t
           join financial_accounts f on f.id = t.from_account_id
           join financial_accounts d on d.id = t.to_account_id

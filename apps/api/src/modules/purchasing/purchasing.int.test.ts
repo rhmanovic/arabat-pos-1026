@@ -549,7 +549,7 @@ describe('transfers', () => {
         })
       ).json().code,
     ).toBe('INVALID_STATE');
-    // Receiving less needs a note; over-receiving is refused.
+    // Receiving less needs a note; over-receiving is a surplus that needs one too.
     expect(
       (
         await req(s, 'POST', `/manager/transfers/${t.id}/receive`, {
@@ -561,14 +561,15 @@ describe('transfers', () => {
         })
       ).statusCode,
     ).toBe(400);
+    // Receiving more than was sent is a surplus: allowed, but only with an explanation (BR-172).
     expect(
       (
         await req(s, 'POST', `/manager/transfers/${t.id}/receive`, {
           version: sent.version,
           lines: [{ position: 0, quantity: '6' }],
         })
-      ).json().code,
-    ).toBe('RECEIVE_EXCEEDS_ORDER');
+      ).statusCode,
+    ).toBe(400);
     const received = (
       await req(s, 'POST', `/manager/transfers/${t.id}/receive`, {
         version: sent.version,
@@ -583,6 +584,10 @@ describe('transfers', () => {
       status: 'received',
       discrepancyQuantity: '1.000',
       discrepancyNote: 'One bag torn',
+      // The shortage is written off explicitly (BR-172): 1 × 1.200 is within the limit.
+      lostQuantity: '1.000',
+      inTransitQuantity: '0.000',
+      losses: [{ status: 'posted', explanation: 'One bag torn' }],
       lines: [{ discrepancyQuantity: '1.000' }, { discrepancyQuantity: '0.000' }],
     });
     expect(await onHand(s, s.rice, s.c.second)).toBe('4.000');

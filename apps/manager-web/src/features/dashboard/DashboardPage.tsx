@@ -1,10 +1,11 @@
-import { Alert, Badge, PageHeader, StatCard } from '@arabat/ui';
+import { Badge, PageHeader, StatCard } from '@arabat/ui';
 import { localizedName, useApi } from '@arabat/web-core';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { useBranchContext, useSession } from '../../app/context.js';
 import { formatAmount } from '../catalog/ProductsPage.js';
+import { TodayKpis } from './TodayKpis.js';
 
 /** Overview built only from data that exists (no invented sales or revenue). */
 export function DashboardPage() {
@@ -33,6 +34,129 @@ export function DashboardPage() {
     queryFn: () => api.merchant.get(),
     enabled: can('merchant.settings.read'),
   });
+  // Internal-control checklist (BR-165): live facts, never estimates.
+  const controls = useQuery({
+    queryKey: ['manager', 'merchant', 'controls'],
+    queryFn: () => api.merchant.controls(),
+    enabled: can('merchant.settings.read'),
+  });
+  const names = (xs: { nameEn: string | null; nameAr: string | null }[]) =>
+    xs.map((x) => localizedName(x, i18n.language)).join(', ');
+  const warnings = controls.data
+    ? [
+        ...(controls.data.treasurerAssigned
+          ? []
+          : [{ key: 'treasurer', to: '/employees', text: t('dashboard.controlTreasurerMissing') }]),
+        ...(controls.data.pendingCashMovements > 0
+          ? [
+              {
+                key: 'pending',
+                to: '/shifts',
+                text: t('dashboard.controlPending', { count: controls.data.pendingCashMovements }),
+              },
+            ]
+          : []),
+        ...(controls.data.pendingPayoutRequests > 0
+          ? [
+              {
+                key: 'payouts',
+                to: '/cash',
+                text: t('dashboard.controlPendingPayouts', {
+                  count: controls.data.pendingPayoutRequests,
+                }),
+              },
+            ]
+          : []),
+        ...(controls.data.openVariances > 0
+          ? [
+              {
+                key: 'variances',
+                to: '/shifts',
+                text: t('dashboard.controlOpenVariances', { count: controls.data.openVariances }),
+              },
+            ]
+          : []),
+        ...(controls.data.depositsInTransit > 0
+          ? [
+              {
+                key: 'deposits',
+                to: '/cash',
+                text: t('dashboard.controlDepositsInTransit', {
+                  count: controls.data.depositsInTransit,
+                }),
+              },
+            ]
+          : []),
+        ...(controls.data.unreconciledBankEntries > 0
+          ? [
+              {
+                key: 'bank',
+                to: '/accounts',
+                text: t('dashboard.controlUnreconciledBank', {
+                  count: controls.data.unreconciledBankEntries,
+                }),
+              },
+            ]
+          : []),
+        ...(controls.data.pendingAdjustments > 0
+          ? [
+              {
+                key: 'adjustments',
+                to: '/inventory/adjustments',
+                text: t('dashboard.controlPendingAdjustments', {
+                  count: controls.data.pendingAdjustments,
+                }),
+              },
+            ]
+          : []),
+        ...(controls.data.pendingTransferLosses > 0
+          ? [
+              {
+                key: 'losses',
+                to: '/transfers',
+                text: t('dashboard.controlPendingTransferLosses', {
+                  count: controls.data.pendingTransferLosses,
+                }),
+              },
+            ]
+          : []),
+        ...(controls.data.unresolvedTransferShortages > 0
+          ? [
+              {
+                key: 'shortages',
+                to: '/transfers',
+                text: t('dashboard.controlUnresolvedShortages', {
+                  count: controls.data.unresolvedTransferShortages,
+                }),
+              },
+            ]
+          : []),
+        ...(controls.data.membersWithoutRoles.length > 0
+          ? [
+              {
+                key: 'roles',
+                to: '/employees',
+                text: t('dashboard.controlMembersWithoutRoles', {
+                  count: controls.data.membersWithoutRoles.length,
+                  names: controls.data.membersWithoutRoles.map((m) => m.fullName).join(', '),
+                }),
+              },
+            ]
+          : []),
+        ...(controls.data.registersAboveTolerance.length > 0
+          ? [
+              {
+                key: 'tolerance',
+                to: '/registers',
+                text: t('dashboard.controlRegistersAboveTolerance', {
+                  count: controls.data.registersAboveTolerance.length,
+                  names: names(controls.data.registersAboveTolerance),
+                }),
+              },
+            ]
+          : []),
+      ]
+    : [];
 
   const inScope = (assignments: { branchId: string | null }[]) =>
     !branchId || assignments.some((a) => a.branchId === null || a.branchId === branchId);
@@ -74,6 +198,8 @@ export function DashboardPage() {
         title={t('dashboard.welcome', { name: session.actor.fullName })}
         description={t('dashboard.subtitle', { company })}
       />
+
+      {can('reports.sales') ? <TodayKpis /> : null}
 
       {cash.data ? (
         <Link
@@ -128,7 +254,30 @@ export function DashboardPage() {
         ) : null}
       </div>
 
-      <Alert tone="info" title={t('dashboard.noSalesYet')} />
+      {controls.data ? (
+        <section className="rounded-lg border border-border bg-surface" data-testid="controls">
+          <h2 className="border-b border-border p-5 font-semibold">
+            {t('dashboard.controlsTitle')}
+          </h2>
+          {warnings.length === 0 ? (
+            <p className="p-5 text-sm text-fg-muted">{t('dashboard.controlsAllGood')}</p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {warnings.map((w) => (
+                <li key={w.key}>
+                  <Link
+                    to={w.to}
+                    className="flex min-h-14 items-center justify-between gap-3 px-5 py-4 hover:bg-surface-muted"
+                  >
+                    <span className="text-sm">{w.text}</span>
+                    <Badge tone="warning">{t('dashboard.todo')}</Badge>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
 
       {steps.length > 0 ? (
         <section className="rounded-lg border border-border bg-surface">

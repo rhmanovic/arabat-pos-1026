@@ -67,6 +67,10 @@ export const purchaseOrders = pgTable(
     branchId: uuid().notNull(),
     status: text().notNull().default('draft'),
     expectedDate: date(),
+    /** Business date of the order (BR-190); the posting time stays `created_at`. */
+    documentDate: date()
+      .notNull()
+      .default(sql`current_date`),
     note: text(),
     createdByUserId: uuid()
       .notNull()
@@ -138,6 +142,10 @@ export const purchaseReceipts = pgTable(
     branchId: uuid().notNull(),
     note: text(),
     supplierReference: text(),
+    /** Delivery date (BR-190); the posting time stays `created_at`. */
+    receivedOn: date()
+      .notNull()
+      .default(sql`current_date`),
     idempotencyKey: uuid(),
     requestHash: text(),
     receivedByUserId: uuid()

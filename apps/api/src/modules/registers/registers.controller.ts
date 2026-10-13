@@ -1,8 +1,10 @@
 import {
   type DiscrepancyReport,
+  type PosShift,
   type Register,
   type Shift,
   closeShiftSchema,
+  decideCashMovementSchema,
   discrepancyReportQuerySchema,
   forceCloseShiftSchema,
   openShiftSchema,
@@ -107,6 +109,19 @@ export class RegistersController {
     return this.shifts.getShift(actor, id);
   }
 
+  /** A manager decides a cash-out that waits above the company limit (BR-164). */
+  @RequirePermission('manager', 'shifts.view_all')
+  @Post('shifts/:id/movements/:movementId/decision')
+  decide(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Param('movementId', uuid) movementId: string,
+    @Body(new ZodPipe(decideCashMovementSchema)) body: z.output<typeof decideCashMovementSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<Shift> {
+    return this.shifts.decideMovement(actor, id, movementId, body, req.ip);
+  }
+
   @RequirePermission('manager', 'registers.manage')
   @Post('shifts/:id/force-close')
   forceClose(
@@ -132,7 +147,7 @@ export class PosShiftsController {
 
   @RequirePermission('pos', 'shifts.operate')
   @Get('shifts/current')
-  async current(@CurrentMerchantActor() actor: MerchantActor): Promise<{ shift: Shift | null }> {
+  async current(@CurrentMerchantActor() actor: MerchantActor): Promise<{ shift: PosShift | null }> {
     return { shift: await this.shifts.currentShift(actor) };
   }
 
@@ -142,7 +157,7 @@ export class PosShiftsController {
     @CurrentMerchantActor() actor: MerchantActor,
     @Body(new ZodPipe(openShiftSchema)) body: z.output<typeof openShiftSchema>,
     @Req() req: FastifyRequest,
-  ): Promise<Shift> {
+  ): Promise<PosShift> {
     return this.shifts.openShift(actor, body, req.ip);
   }
 
@@ -152,8 +167,18 @@ export class PosShiftsController {
     @CurrentMerchantActor() actor: MerchantActor,
     @Body(new ZodPipe(recordCashMovementSchema)) body: z.output<typeof recordCashMovementSchema>,
     @Req() req: FastifyRequest,
-  ): Promise<Shift> {
+  ): Promise<PosShift> {
     return this.shifts.recordCashMovement(actor, body, req.ip);
+  }
+
+  @RequirePermission('pos', 'cash.move')
+  @Post('shifts/current/cash-movements/:movementId/withdraw')
+  withdraw(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('movementId', uuid) movementId: string,
+    @Req() req: FastifyRequest,
+  ): Promise<PosShift> {
+    return this.shifts.withdrawMovement(actor, movementId, req.ip);
   }
 
   @RequirePermission('pos', 'shifts.operate')

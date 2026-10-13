@@ -1,13 +1,17 @@
 import {
+  type InTransitSummary,
   type Transfer,
+  claimTransferLossSchema,
   createTransferSchema,
+  decideTransferLossSchema,
+  recallTransferSchema,
   transferActionSchema,
   transferListQuerySchema,
   transferQuantitiesSchema,
 } from '@arabat/contracts';
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
-import type { z } from 'zod';
+import { z } from 'zod';
 import { RequirePermission } from '../../kernel/access/access.decorators.js';
 import { CurrentMerchantActor } from '../../kernel/access/current-actor.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
@@ -30,6 +34,17 @@ export class TransfersController {
     @Query(new ZodPipe(transferListQuerySchema)) query: z.output<typeof transferListQuerySchema>,
   ) {
     return this.transfers.list(actor, query);
+  }
+
+  /** Goods on the road right now, valued at dispatch cost and aged (BR-173). */
+  @RequirePermission('manager', 'inventory.read')
+  @Get('in-transit')
+  inTransit(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Query(new ZodPipe(z.object({ branchId: z.uuid().optional() })))
+    query: { branchId?: string },
+  ): Promise<InTransitSummary> {
+    return this.transfers.inTransit(actor, query.branchId);
   }
 
   @RequirePermission('manager', 'inventory.read')
@@ -94,5 +109,40 @@ export class TransfersController {
     @Req() req: FastifyRequest,
   ) {
     return this.transfers.receive(actor, id, body, req.ip);
+  }
+
+  @RequirePermission('manager', 'inventory.transfer')
+  @Post(':id/recall')
+  recall(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Body(new ZodPipe(recallTransferSchema)) body: z.output<typeof recallTransferSchema>,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.transfers.recall(actor, id, body, req.ip);
+  }
+
+  @RequirePermission('manager', 'inventory.transfer')
+  @Post(':id/losses')
+  claimLoss(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Body(new ZodPipe(claimTransferLossSchema)) body: z.output<typeof claimTransferLossSchema>,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.transfers.claimLoss(actor, id, body, req.ip);
+  }
+
+  /** The source approver decides a pending loss (claimant ≠ decider, owner excepted). */
+  @RequirePermission('manager', 'inventory.transfer.approve')
+  @Post(':id/losses/:lossId/decision')
+  decideLoss(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Param('lossId', uuid) lossId: string,
+    @Body(new ZodPipe(decideTransferLossSchema)) body: z.output<typeof decideTransferLossSchema>,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.transfers.decideLoss(actor, id, lossId, body, req.ip);
   }
 }

@@ -42,6 +42,8 @@ const fils = (v: bigint) => {
 
 async function setup() {
   const c = await createCompany(app, db, mailer);
+  // The same person sells and refunds in these fixtures (own-sale rule tested in refunds-controls).
+  await c.allowOwnSaleRefunds();
   const req = (
     method: 'GET' | 'POST' | 'PATCH',
     path: string,
@@ -79,6 +81,7 @@ async function setup() {
     kind: string;
     version: number;
     nameEn: string;
+    financialAccountId: string;
   }[];
   const card = methods.find((m) => m.kind === 'card')!;
   const updated = await req('PATCH', `/manager/payment-methods/${card.id}`, {
@@ -86,6 +89,7 @@ async function setup() {
     nameEn: card.nameEn,
     feeType: 'percentage',
     feePercent: '1.5',
+    financialAccountId: card.financialAccountId,
     version: card.version,
   });
   if (updated.statusCode !== 200) throw new Error(updated.body);
@@ -139,12 +143,12 @@ async function scenario() {
       { variantId: s.tea, quantity: '1' },
     ],
     orderDiscount: { type: 'amount', value: '0.166' },
-    payments: [{ methodId: s.card, amount: '1.500' }],
+    payments: [{ methodId: s.card, amount: '1.500', reference: 'K-1' }],
     expectedTotal: '1.500',
   });
   const s3 = await sell(s, b, {
     lines: [{ variantId: s.tea, quantity: '2' }],
-    payments: [{ methodId: s.card, amount: '2.000' }],
+    payments: [{ methodId: s.card, amount: '2.000', reference: 'K-2' }],
     expectedTotal: '2.000',
   });
   const refund = await s.req(
@@ -169,7 +173,7 @@ async function scenario() {
   const closed = await s.req(
     'POST',
     '/pos/shifts/current/close',
-    { countedCash: '14.750', version: current.version },
+    { countedCash: '14.750', version: current.version, note: 'coins missing' },
     a,
   );
   if (closed.statusCode !== 201 && closed.statusCode !== 200) throw new Error(closed.body);
@@ -250,6 +254,8 @@ describe('sales report', () => {
     expect(r.profit).toEqual({
       available: true,
       missingCostSales: 0,
+      uncostedSales: { amount: '0.000', currency: 'KWD' },
+      uncostedSharePercent: '0.0',
       costOfSales: { amount: '2.600', currency: 'KWD' },
       restockedCost: { amount: '0.400', currency: 'KWD' },
       grossProfit: { amount: '3.300', currency: 'KWD' },
@@ -307,7 +313,7 @@ describe('sales report', () => {
     ]);
   });
 
-  it('hides profit when a sold item has no cost', async () => {
+  it('shows profit with the uncosted share when a sold item has no cost', async () => {
     const s = await setup();
     const free = (
       await s.req('POST', '/manager/products', {
@@ -325,7 +331,15 @@ describe('sales report', () => {
     });
     const r = (await s.req('GET', `/manager/reports/sales${q(today())}`)).json();
     expect(r.summary.netSales.amount).toBe('2.000');
-    expect(r.profit).toMatchObject({ available: false, missingCostSales: 1, grossProfit: null });
+    // The whole period is uncosted: nothing to compute a margin on, but nothing hidden (BR-185).
+    expect(r.profit).toMatchObject({
+      available: false,
+      missingCostSales: 1,
+      uncostedSales: { amount: '2.000' },
+      uncostedSharePercent: '100.0',
+      grossProfit: { amount: '0.000' },
+      marginPercent: null,
+    });
   });
 });
 

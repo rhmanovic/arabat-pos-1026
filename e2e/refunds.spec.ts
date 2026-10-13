@@ -40,6 +40,28 @@ test('cashier refunds and exchanges at the POS; a large refund waits for manager
       ],
     },
   });
+  // This scenario has the cashier refund their own sale: the owner switches the own-sale rule
+  // (BR-180) off for this company; the rule itself is covered by the integration tests.
+  const policy = await (await page.request.get('/api/v1/manager/sales-settings')).json();
+  expect(
+    (
+      await page.request.put('/api/v1/manager/sales-settings', {
+        data: {
+          maxDiscountPercent: policy.maxDiscountPercent,
+          refundWindowDays: policy.refundWindowDays,
+          refundApprovalLimit: policy.refundApprovalLimit.amount,
+          blindCashCount: policy.blindCashCount,
+          cashOutOtherLimit: policy.cashOutOtherLimit.amount,
+          cashOutOtherShiftLimit: policy.cashOutOtherShiftLimit.amount,
+          maxRegisterTolerance: policy.maxRegisterTolerance.amount,
+          expenseApprovalLimit: policy.expenseApprovalLimit.amount,
+          supplierPaymentApprovalLimit: policy.supplierPaymentApprovalLimit.amount,
+          refundOwnSalesNeedApproval: false,
+          version: policy.version,
+        },
+      })
+    ).status(),
+  ).toBe(200);
   const roles = (await (await page.request.get('/api/v1/manager/roles')).json()).roles as {
     id: string;
     templateKey: string;
@@ -101,6 +123,8 @@ test('cashier refunds and exchanges at the POS; a large refund waits for manager
   await expect(pos.getByTestId('refund-number').first()).toHaveText(`${first}-R1`);
   await expect(pos.getByTestId('refund-receipt-total').first()).toHaveText('KWD 10.000');
   await pos.getByRole('button', { name: 'Done' }).click();
+  // The sale is reloaded after the refund; typing before that reload lands is wiped by it.
+  await expect(pos.getByText('Already refunded: KWD 10.000')).toBeVisible();
 
   // 2. Exchange: return one lamp (10.000 credit) for 8 bulbs (12.000): customer pays 2.000.
   await pos.getByLabel('Return Desk lamp').fill('1');
@@ -143,8 +167,10 @@ test('cashier refunds and exchanges at the POS; a large refund waits for manager
     await (await page.request.get(`/api/v1/manager/inventory/variants/${lamp}`)).json()
   ).branches[0].onHand;
   expect(lampStock).toBe('18.500');
+  // 50 + 30 + 2 (exchange) + 30 − 10 − 25 = 77 — visible to the manager, blind for the cashier.
   await pos.goto('/pos/shift');
-  // 50 + 30 + 2 (exchange) + 30 − 10 − 25 = 77
-  await expect(pos.getByTestId('expected-cash')).toHaveText('KWD 77.000');
+  await expect(pos.getByTestId('blind-count')).toBeVisible();
+  const openShifts = await (await page.request.get('/api/v1/manager/shifts?status=open')).json();
+  expect(openShifts.shifts[0].summary.expectedCash.amount).toBe('77.000');
   await ctx.close();
 });

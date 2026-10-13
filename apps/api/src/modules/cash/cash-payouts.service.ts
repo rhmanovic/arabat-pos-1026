@@ -6,6 +6,7 @@ import type {
   CashTransfer,
   SupplierOptions,
   SupplierPayments,
+  SupplierStatement,
   cancelCashBranchTransferSchema,
   cashBranchTransferQuerySchema,
   cashDisbursementQuerySchema,
@@ -14,6 +15,7 @@ import type {
   createCashDisbursementSchema,
   receiveCashBranchTransferSchema,
   reverseCashDisbursementSchema,
+  supplierStatementQuerySchema,
 } from '@arabat/contracts';
 import { Money } from '@arabat/money';
 import { type PermissionKey, permissionBranchScope } from '@arabat/permissions';
@@ -26,6 +28,12 @@ import { assertCan } from '../../kernel/access/assert.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
+import {
+  addDays,
+  localDayStart,
+  merchantTimezone,
+  withinLocalDays,
+} from '../../kernel/time/period.js';
 import { AuditService } from '../audit/audit.service.js';
 import { isUniqueViolation } from '../auth/registration.service.js';
 import { branches } from '../branches/branches.schema.js';
@@ -35,6 +43,7 @@ import {
   assertCovers,
   assertTreasuryCounted,
   branchTreasury,
+  depositTransitAccount,
   inTransitAccount,
   lockAccounts,
   postDisbursement,
@@ -50,6 +59,11 @@ import {
 import { parseAmount } from '../payments/payments.service.js';
 import { purchaseOrders, suppliers } from '../purchasing/purchasing.schema.js';
 import { shifts } from '../registers/registers.schema.js';
+import {
+  assertNotOverpaid,
+  assertReceiptReference,
+  exceedsApprovalLimit,
+} from './approval-limits.js';
 import { CashService } from './cash.service.js';
 
 type DisbursementInput = z.output<typeof createCashDisbursementSchema>;
@@ -60,6 +74,7 @@ type SendInput = z.output<typeof createCashBranchTransferSchema>;
 type ReceiveInput = z.output<typeof receiveCashBranchTransferSchema>;
 type CancelInput = z.output<typeof cancelCashBranchTransferSchema>;
 type BranchTransferQuery = z.output<typeof cashBranchTransferQuerySchema>;
+type StatementQuery = z.output<typeof supplierStatementQuerySchema>;
 
 const CURRENCY = 'KWD' as const;
 const money = (minor: bigint) => Money.ofMinor(minor, CURRENCY).toJSON();
@@ -91,10 +106,11 @@ export class CashPayoutsService {
     if (query.kind) filters.push(sql`d.kind = ${query.kind}`);
     if (query.category) filters.push(sql`d.category = ${query.category}`);
     if (query.supplierId) filters.push(sql`d.supplier_id = ${query.supplierId}`);
-    if (query.from) filters.push(sql`d.created_at >= ${query.from}::date`);
-    if (query.to) filters.push(sql`d.created_at < ${query.to}::date + 1`);
-    const where = sql.join(filters, sql` and `);
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      // Local days of the merchant, like every other list (BR-184).
+      const tz = await merchantTimezone(tx, actor.merchantId);
+      filters.push(withinLocalDays(tz, sql`d.created_at`, query.from, query.to));
+      const where = sql.join(filters, sql` and `);
       const [agg] = (
         await tx.execute(sql`select count(*)::int as n,
             coalesce(sum(case when d.reverses_id is null then d.amount_minor
@@ -139,6 +155,104 @@ export class CashPayoutsService {
     });
   }
 
+  /**
+   * Supplier statement (BR-188): goods received at order cost against cash paid, in date
+   * order with the running "received − paid"; a period cuts on the merchant's local days with
+   * the balance brought forward (BR-184). Bridge until supplier accounts payable exist.
+   */
+  async supplierStatement(
+    actor: MerchantActor,
+    supplierId: string,
+    query: StatementQuery,
+  ): Promise<SupplierStatement> {
+    const payScope = branchScope(actor, 'purchasing.read', undefined, sql`d.branch_id`);
+    const receiptScope = branchScope(actor, 'purchasing.read', undefined, sql`rc.branch_id`);
+    return this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const [supplier] = await tx
+        .select({ id: suppliers.id, nameEn: suppliers.nameEn, nameAr: suppliers.nameAr })
+        .from(suppliers)
+        .where(eq(suppliers.id, supplierId));
+      if (!supplier) throw AppError.notFound('Supplier not found.');
+      const tz = await merchantTimezone(tx, actor.merchantId);
+      // Every line of the supplier in scope, oldest first; the running balance covers all of
+      // them, and the period only decides which lines are shown.
+      const receiptValue =
+        sql.raw(`(select coalesce(sum(round(rl.quantity * ol.unit_cost_minor)), 0)
+        from purchase_receipt_lines rl join purchase_order_lines ol
+          on ol.purchase_order_id = "rc"."purchase_order_id" and ol.position = rl.order_position
+        where rl.receipt_id = "rc"."id")`);
+      const rows = (
+        await tx.execute(sql`
+          select * from (
+            select rc.id, 'receipt' as kind, rc.created_at as at, rc.number as document, o.number as order_number,
+                   rc.supplier_reference as reference, rc.branch_id, ${receiptValue}::text as received,
+                   '0' as paid, u.full_name
+            from purchase_receipts rc join purchase_orders o on o.id = rc.purchase_order_id
+            join users u on u.id = rc.received_by_user_id
+            where o.supplier_id = ${supplierId} and ${receiptScope ?? sql`true`}
+            union all
+            select d.id, case when d.reverses_id is null then 'payment' else 'reversal' end, d.created_at,
+                   d.number, po.number, d.receipt_reference, d.branch_id, '0',
+                   (case when d.reverses_id is null then d.amount_minor else -d.amount_minor end)::text,
+                   u.full_name
+            from cash_disbursements d left join purchase_orders po on po.id = d.purchase_order_id
+            join users u on u.id = d.created_by_user_id
+            where d.kind = 'supplier_payment' and d.supplier_id = ${supplierId} and ${payScope ?? sql`true`}
+          ) x order by x.at asc, x.kind asc, x.id asc`)
+      ).rows as Record<string, unknown>[];
+      const inPeriod = (at: Date) =>
+        (!query.from || at >= localDayStart(tz, query.from)) &&
+        (!query.to || at < localDayStart(tz, addDays(query.to, 1)));
+      let balance = 0n;
+      let opening = 0n;
+      let received = 0n;
+      let paid = 0n;
+      let reversed = 0n;
+      const lines: SupplierStatement['lines'] = [];
+      for (const r of rows) {
+        const at = new Date(r['at'] as string);
+        const rec = BigInt(r['received'] as string);
+        const pay = BigInt(r['paid'] as string);
+        balance += rec - pay;
+        if (!inPeriod(at)) {
+          if (query.from && at < localDayStart(tz, query.from)) opening = balance;
+          continue;
+        }
+        received += rec;
+        if (pay >= 0n) paid += pay;
+        else reversed += -pay;
+        lines.push({
+          id: r['id'] as string,
+          kind: r['kind'] as 'receipt' | 'payment' | 'reversal',
+          occurredAt: at.toISOString(),
+          document: r['document'] as string,
+          orderNumber: str(r['order_number']),
+          reference: str(r['reference']),
+          branchId: r['branch_id'] as string,
+          received: money(rec),
+          paid: money(pay),
+          balance: money(balance),
+          createdBy: str(r['full_name']),
+        });
+      }
+      return {
+        supplier: { id: supplier.id, nameEn: supplier.nameEn, nameAr: supplier.nameAr },
+        period:
+          query.from || query.to
+            ? { from: query.from ?? '', to: query.to ?? '', timezone: tz }
+            : null,
+        openingBalance: money(opening),
+        totals: {
+          received: money(received),
+          paid: money(paid),
+          reversed: money(reversed),
+          closingBalance: money(opening + received - paid + reversed),
+        },
+        lines: lines.reverse(),
+      };
+    });
+  }
+
   /** A manager pays an expense or a supplier from a branch treasury. */
   async createDisbursement(
     actor: MerchantActor,
@@ -156,6 +270,33 @@ export class CashPayoutsService {
         if (done) return done.id;
         if (input.kind === 'supplier_payment')
           await assertPayable(tx, input.supplierId!, input.purchaseOrderId ?? null);
+        // Above the company's approval limit a second custody holder must approve (BR-166);
+        // the owner pays directly and the exception is recorded.
+        const limitExceeded = await exceedsApprovalLimit(
+          tx,
+          actor.merchantId,
+          input.kind,
+          amountMinor,
+        );
+        if (limitExceeded) {
+          assertReceiptReference(input.receiptReference);
+          if (!actor.access.isOwner)
+            throw new AppError(
+              409,
+              'APPROVAL_REQUIRED',
+              'This amount is above the approval limit: record it as a request for a second person to approve.',
+            );
+        }
+        const overpaid =
+          input.kind === 'supplier_payment' && input.purchaseOrderId
+            ? await assertNotOverpaid(
+                tx,
+                actor,
+                input.purchaseOrderId,
+                amountMinor,
+                input.confirmOverpayment,
+              )
+            : false;
         const treasury = await branchTreasury(tx, input.branchId);
         await lockAccounts(tx, [treasury.id]);
         assertTreasuryCounted(treasury);
@@ -181,6 +322,8 @@ export class CashPayoutsService {
           amount: decimal(amountMinor),
           branchId: input.branchId,
           source: 'treasury',
+          ...(limitExceeded ? { limitExceeded: true, ownerOverride: true } : {}),
+          ...(overpaid ? { overpaymentConfirmed: true } : {}),
         });
         return disbursementId;
       });
@@ -277,7 +420,11 @@ export class CashPayoutsService {
   }
 
   // ------------------------------------------------------------ bank deposits
-  /** A manager deposits cash from a branch treasury into a bank account. */
+  /**
+   * A manager deposits cash from a branch treasury towards a bank account. The cash moves into
+   * "deposits in transit" and reaches the bank account when a second person confirms it
+   * (BR-168); the deposit slip number is mandatory.
+   */
   async deposit(actor: MerchantActor, input: DepositInput, ip: string): Promise<CashTransfer> {
     const amountMinor = positive(input.amount, 'amount');
     try {
@@ -299,13 +446,15 @@ export class CashPayoutsService {
           );
         assertCan(actor, 'cash.deposit', from.branchId);
         const bankId = await activeBankAccount(tx, input.bankAccountId);
-        await lockAccounts(tx, [from.id, bankId]);
+        const transitId = await depositTransitAccount(tx, actor.merchantId);
+        await lockAccounts(tx, [from.id, transitId]);
         assertTreasuryCounted({ ...from, branchId: from.branchId });
         assertCovers(await accountBalance(tx, from.id), amountMinor, 'treasury');
         const transferId = await postTransfer(tx, {
           merchantId: actor.merchantId,
           fromAccountId: from.id,
-          toAccountId: bankId,
+          toAccountId: transitId,
+          targetAccountId: bankId,
           amountMinor,
           origin: 'deposit',
           note: input.note,

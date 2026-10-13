@@ -49,6 +49,26 @@ const branches = {
   ],
 };
 
+const settings = (overrides: Record<string, unknown> = {}) => ({
+  allowNegativeStock: false,
+  costingMethod: 'weighted_average',
+  adjustmentApprovalLimit: { amount: '50.000', currency: 'KWD' },
+  blindStockCount: true,
+  version: 1,
+  ...overrides,
+});
+const control = {
+  number: 'ADJ-000007',
+  status: 'posted',
+  limitExceeded: false,
+  ownerOverride: false,
+  decidedBy: null,
+  decidedAt: null,
+  decisionNote: null,
+  startedAt: null,
+  movementsAcknowledged: false,
+};
+
 const summary = (overrides: Record<string, unknown> = {}) => ({
   branchId: null,
   trackedVariants: 3,
@@ -144,6 +164,7 @@ describe('inventory', () => {
       ]),
       routes: {
         'GET /manager/branches': () => ({ status: 200, body: branches }),
+        'GET /manager/inventory/settings': () => ({ status: 200, body: settings() }),
         'GET /manager/inventory/levels': () => ({
           status: 200,
           body: { levels: [level()], total: 1, page: 1, pageSize: 10, costVisible: false },
@@ -156,6 +177,7 @@ describe('inventory', () => {
             kind: 'decrease',
             reason: 'damaged',
             note: null,
+            ...control,
             createdAt: '2026-10-11T10:00:00.000Z',
             createdBy: { userId: 'u', fullName: 'Owner' },
             lines: [
@@ -204,5 +226,140 @@ describe('inventory', () => {
       lines: [{ variantId: VARIANT, quantity: '1.25', unitCost: null }],
     });
     expect((post.body as { idempotencyKey: string }).idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
+  });
+});
+
+describe('stock controls (BR-169 / BR-170)', () => {
+  const pending = {
+    id: '0190a000-0000-7000-8000-0000000000dd',
+    branchId: BRANCH,
+    kind: 'decrease',
+    reason: 'theft',
+    note: null,
+    ...control,
+    number: 'ADJ-000009',
+    status: 'pending',
+    limitExceeded: true,
+    value: { amount: '60.000', currency: 'KWD' },
+    createdAt: '2026-10-12T10:00:00.000Z',
+    createdBy: { userId: 'u-bm', fullName: 'Badr Manager' },
+    lines: [
+      {
+        ...level(),
+        quantity: '60.000',
+        previousOnHand: '90.000',
+        delta: '-60.000',
+        newOnHand: '30.000',
+        unitCost: { amount: '1.000', currency: 'KWD' },
+      },
+    ],
+  };
+
+  it('counts blind, reports stock that moved meanwhile and posts once acknowledged', async () => {
+    const posts: Record<string, unknown>[] = [];
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', [
+        'manager.access',
+        'inventory.read',
+        'inventory.adjust',
+        'branches.read',
+      ]),
+      routes: {
+        'GET /manager/branches': () => ({ status: 200, body: branches }),
+        'GET /manager/inventory/settings': () => ({ status: 200, body: settings() }),
+        'GET /manager/inventory/levels': () => ({
+          status: 200,
+          body: { levels: [level()], total: 1, page: 1, pageSize: 10, costVisible: false },
+        }),
+        'POST /manager/inventory/adjustments': (body) => {
+          posts.push(body as Record<string, unknown>);
+          if (!(body as { acknowledgeMovements?: boolean }).acknowledgeMovements)
+            return {
+              status: 409,
+              body: {
+                type: 'urn:arabat:error:stock_moved_since_count',
+                title: 'Conflict',
+                status: 409,
+                code: 'STOCK_MOVED_SINCE_COUNT',
+                issues: [
+                  { path: 'lines.0', code: 'moved_since_count', message: 'net=-2.000 movements=1' },
+                ],
+              },
+            };
+          return {
+            status: 201,
+            body: {
+              ...pending,
+              kind: 'count',
+              reason: 'stock_count',
+              status: 'posted',
+              limitExceeded: false,
+              movementsAcknowledged: true,
+            },
+          };
+        },
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/inventory/adjustments/new', fetch });
+    await userEvent.selectOptions(await screen.findByLabelText('Type'), 'count');
+    expect(await screen.findByText(/Blind count/)).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('Add items'), 'tea');
+    await userEvent.click(await screen.findByRole('option', { name: /Karak tea/ }));
+    const line = screen.getByTestId('adjustment-line');
+    // The book quantity and the resulting balance are hidden while counting.
+    expect(within(line).queryByText('Current')).not.toBeInTheDocument();
+    expect(within(line).queryByTestId('after')).not.toBeInTheDocument();
+    await userEvent.type(within(line).getByLabelText('Counted'), '47');
+    await userEvent.click(screen.getByRole('button', { name: 'Post adjustment' }));
+    await userEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Post adjustment' }),
+    );
+    // Stock moved meanwhile: the items are listed and the count waits for an acknowledgement.
+    const moved = await screen.findByTestId('moved-items');
+    expect(moved).toHaveTextContent('Karak tea');
+    expect(moved).toHaveTextContent('net=-2.000');
+    expect(posts[0]).toMatchObject({ kind: 'count', acknowledgeMovements: false });
+    expect(typeof posts[0]!['startedAt']).toBe('string');
+    expect(screen.getByRole('button', { name: 'Post adjustment' })).toBeDisabled();
+    await userEvent.click(screen.getByLabelText(/I reviewed these movements/));
+    await userEvent.click(screen.getByRole('button', { name: 'Post adjustment' }));
+    await userEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Post adjustment' }),
+    );
+    await vi.waitFor(() => expect(posts).toHaveLength(2));
+    expect(posts[1]).toMatchObject({ acknowledgeMovements: true });
+  });
+
+  it('shows a pending document and lets another holder of the adjust right decide it', async () => {
+    const decisions: unknown[] = [];
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'inventory.read', 'inventory.adjust']),
+      routes: {
+        'GET /manager/branches': () => ({ status: 200, body: branches }),
+        [`GET /manager/inventory/adjustments/${pending.id}`]: () => ({
+          status: 200,
+          body: pending,
+        }),
+        [`POST /manager/inventory/adjustments/${pending.id}/decision`]: (body) => {
+          decisions.push(body);
+          return { status: 201, body: { ...pending, status: 'posted', decidedBy: 'Test User' } };
+        },
+      },
+    });
+    renderApp({
+      routes,
+      appInterface: 'manager',
+      i18n,
+      path: `/inventory/adjustments/${pending.id}`,
+      fetch,
+    });
+    expect(await screen.findByRole('heading', { name: /ADJ-000009/ })).toBeInTheDocument();
+    expect(screen.getByTestId('adjustment-value')).toHaveTextContent('KWD 60.000');
+    await userEvent.click(screen.getByTestId('decide-adjustment'));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('button', { name: 'Reject' })).toBeDisabled();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve' }));
+    await vi.waitFor(() => expect(decisions).toHaveLength(1));
+    expect(decisions[0]).toMatchObject({ decision: 'approve' });
   });
 });

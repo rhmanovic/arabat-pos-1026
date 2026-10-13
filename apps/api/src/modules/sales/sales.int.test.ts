@@ -34,6 +34,8 @@ type Cookies = Co['cookies'];
 /** A company with one product in stock at the main branch and payment method ids. */
 async function store(stock = '10', price = '1.250', cost = '0.500') {
   const c = await createCompany(app, db, mailer);
+  // These tests read drawer figures through cashier sessions: counts are not blind here.
+  await c.showExpectedCash();
   const product = (
     await c.client.request('POST', '/manager/products', {
       cookies: c.cookies,
@@ -56,7 +58,7 @@ async function store(stock = '10', price = '1.250', cost = '0.500') {
   });
   const methods = (
     await c.client.request('GET', '/manager/payment-methods', { cookies: c.cookies })
-  ).json().methods as { id: string; kind: string; version: number }[];
+  ).json().methods as { id: string; kind: string; version: number; financialAccountId: string }[];
   const cash = methods.find((m) => m.kind === 'cash')!.id;
   const card = methods.find((m) => m.kind === 'card')!;
   const registers = (
@@ -384,9 +386,15 @@ describe('discounts, overrides and payments validation', () => {
       lines: [line(s, '1', { discount: { type: 'percent', value: '100' } })],
       payments: [],
       expectedTotal: '0',
+      zeroTotalReason: 'display sample given away',
     });
     expect(big.statusCode).toBe(201);
-    expect(big.json().total.amount).toBe('0.000');
+    expect(big.json()).toMatchObject({
+      total: { amount: '0.000' },
+      aboveLimit: true,
+      discountLimitPercent: '10',
+      zeroTotalReason: 'display sample given away',
+    });
   });
 
   it('allows price overrides only with the permission, and audits them', async () => {
@@ -407,7 +415,7 @@ describe('discounts, overrides and payments validation', () => {
     ).json().id;
     const sup = await cashierWithShift(s, 'supervisor', r2);
     const ok = await checkout(s, sup.cookies, {
-      lines: [line(s, '2', { priceOverride: '1.500' })],
+      lines: [line(s, '2', { priceOverride: '1.500', priceOverrideReason: 'dented tin' })],
       payments: [{ methodId: s.cash, amount: '3.000' }],
       expectedTotal: '3.000',
     });
@@ -416,12 +424,17 @@ describe('discounts, overrides and payments validation', () => {
       listUnitPrice: { amount: '2.000' },
       unitPrice: { amount: '1.500' },
       priceOverridden: true,
+      priceOverrideReason: 'dented tin',
     });
+    // A 25 % price cut is a discount above the 10 % limit: flagged on the sale (BR-178).
+    expect(ok.json().aboveLimit).toBe(true);
     const audit = await owner.query(
       `select details->'priceOverrides' as o from audit_log where merchant_id = $1 and action = 'sale.completed'`,
       [s.c.merchantId],
     );
-    expect(audit.rows[0].o).toEqual([{ variantId: s.variantId, from: '2.000', to: '1.500' }]);
+    expect(audit.rows[0].o).toEqual([
+      { variantId: s.variantId, from: '2.000', to: '1.500', reason: 'dented tin' },
+    ]);
   });
 
   it('refuses incorrect payment totals and changed prices', async () => {
@@ -429,9 +442,14 @@ describe('discounts, overrides and payments validation', () => {
     const { cookies } = await cashierWithShift(s);
     const cases: [Record<string, unknown>[], string][] = [
       [[{ methodId: s.cash, amount: '0.999' }], 'PAYMENT_TOTAL_MISMATCH'],
-      [[{ methodId: s.card.id, amount: '1.500' }], 'PAYMENT_TOTAL_MISMATCH'],
+      [[{ methodId: s.card.id, amount: '1.500', reference: 'K' }], 'PAYMENT_TOTAL_MISMATCH'],
+      // Card and transfer tenders need their reference (BR-181).
+      [[{ methodId: s.card.id, amount: '1.000' }], 'REFERENCE_REQUIRED'],
       [[{ methodId: s.cash, amount: '1.000', tendered: '0.500' }], 'PAYMENT_TOTAL_MISMATCH'],
-      [[{ methodId: s.card.id, amount: '1.000', tendered: '2' }], 'PAYMENT_TOTAL_MISMATCH'],
+      [
+        [{ methodId: s.card.id, amount: '1.000', tendered: '2', reference: 'K' }],
+        'PAYMENT_TOTAL_MISMATCH',
+      ],
       [[], 'PAYMENT_TOTAL_MISMATCH'],
       [[{ methodId: newId(), amount: '1.000' }], 'PAYMENT_METHOD_UNAVAILABLE'],
     ];
@@ -454,7 +472,12 @@ describe('discounts, overrides and payments validation', () => {
     const gw = (
       await s.c.client.request('POST', '/manager/payment-methods', {
         cookies: s.c.cookies,
-        body: { kind: 'card', nameEn: 'Online card', gatewayProvider: 'tap' },
+        body: {
+          kind: 'card',
+          nameEn: 'Online card',
+          gatewayProvider: 'tap',
+          financialAccountId: s.card.financialAccountId,
+        },
       })
     ).json();
     const unverified = await checkout(s, cookies, {

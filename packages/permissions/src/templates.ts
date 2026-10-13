@@ -53,6 +53,7 @@ export const ROLE_TEMPLATES = {
       'reports.sales',
       'reports.financial',
       'reports.inventory',
+      'periods.close',
       'payments.settings',
       'employees.read',
       'employees.manage',
@@ -107,6 +108,7 @@ export const ROLE_TEMPLATES = {
       'sales.discount.override_limit',
       'sales.price_override',
       'sales.void',
+      'sales.zero_total',
       'refunds.create',
       'refunds.approve',
       'shifts.view_all',
@@ -130,6 +132,25 @@ export const ROLE_TEMPLATES = {
       // No 'cash.move' by default (ADR-0090): the owner grants cash in/out to whom they choose.
       'customers.create',
       'restaurant.orders',
+    ],
+  },
+  /**
+   * Cash custody outside the owner (BR-165, remediation R1.6): counts treasuries and drawers,
+   * moves cash between places, deposits to the bank and reads the financial reports; no selling,
+   * no master data, no employee administration (least privilege).
+   */
+  treasurer: {
+    nameEn: 'Treasurer',
+    nameAr: 'أمين الخزينة',
+    typicalScope: 'branch',
+    permissions: [
+      'manager.access',
+      'cash.custody',
+      'cash.deposit',
+      'shifts.view_all',
+      'reports.financial',
+      'purchasing.read',
+      'branches.read',
     ],
   },
   kitchen: {

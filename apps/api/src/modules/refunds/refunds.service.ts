@@ -23,10 +23,11 @@ import { assertCan } from '../../kernel/access/assert.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
+import { addDays, merchantTimezone, todayIn, withinLocalDays } from '../../kernel/time/period.js';
 import { AuditService } from '../audit/audit.service.js';
 import { isUniqueViolation } from '../auth/registration.service.js';
 import { StockLedgerService } from '../inventory/stock-ledger.service.js';
-import { postEntries, registerAccount } from '../payments/cash-ledger.js';
+import { type Entry, postEntries, registerAccount } from '../payments/cash-ledger.js';
 import { parseAmount } from '../payments/payments.service.js';
 import { ShiftsService } from '../registers/shifts.service.js';
 import { shifts } from '../registers/registers.schema.js';
@@ -44,13 +45,13 @@ const money = (minor: bigint | string) => Money.ofMinor(BigInt(minor), CURRENCY)
 const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
 /** Refund statuses that hold (reserve) quantities and amounts of the sale. */
 const ACTIVE = sql`('pending_approval', 'processing', 'completed')`;
-/** Employees refunding more than this share of their sales are flagged for review. */
-const FLAG_RATE_PERCENT = '10';
 
 interface SaleState {
   id: string;
   branchId: string;
   shiftId: string;
+  /** Cashier who rang the sale up (own-sale refunds wait for a second person, BR-180). */
+  userId: string | null;
   customerId: string | null;
   receiptNumber: string;
   createdAt: Date;
@@ -80,8 +81,27 @@ interface SaleState {
     refundedMinor: bigint;
     verification: string;
     financialAccountId: string | null;
+    /** Exchange credit: the refund that funded it (traced back to its tenders, BR-180). */
+    refundId: string | null;
+    feeMinor: bigint;
   }[];
   activeRefunds: number;
+}
+
+/** A pay-back row to write: the tender it goes back to and where the money leaves. */
+interface Payout {
+  payment: SaleState['payments'][number];
+  amountMinor: bigint;
+  reference: string | null;
+  /** Set when exchange credit was traced back to an original tender. */
+  via?: {
+    kind: string;
+    methodId: string | null;
+    nameEn: string | null;
+    nameAr: string | null;
+    financialAccountId: string | null;
+    verification: string;
+  };
 }
 
 interface Computed {
@@ -150,6 +170,7 @@ export class RefundsService {
       id: saleId,
       branchId: s['branch_id'] as string,
       shiftId: s['shift_id'] as string,
+      userId: (s['user_id'] as string | null) ?? null,
       customerId: (s['customer_id'] as string | null) ?? null,
       receiptNumber: s['receipt_number'] as string,
       createdAt: new Date(s['created_at'] as string),
@@ -180,15 +201,82 @@ export class RefundsService {
         refundedMinor: BigInt(p['refunded'] as string),
         verification: p['verification'] as string,
         financialAccountId: (p['financial_account_id'] as string | null) ?? null,
+        refundId: (p['refund_id'] as string | null) ?? null,
+        feeMinor: BigInt((p['fee_minor'] as string | null) ?? '0'),
       })),
       activeRefunds: count?.n ?? 0,
     };
   }
 
+  /**
+   * Exchange credit paid back goes to the tenders of the sale the credit came from, pro rata,
+   * never to cash by default (BR-180, FND-504). Nested credit is followed up to three steps;
+   * whatever cannot be traced is paid in cash.
+   */
+  private async creditOrigins(
+    tx: Transaction,
+    refundId: string | null,
+    amountMinor: bigint,
+    depth = 0,
+  ): Promise<NonNullable<Payout['via']>[] & { amountMinor: bigint }[]> {
+    type Via = NonNullable<Payout['via']> & { amountMinor: bigint };
+    const cash = async (): Promise<Via[]> => {
+      const [m] = (
+        await tx.execute(sql`select id, name_en, name_ar from payment_methods where kind = 'cash'`)
+      ).rows as Record<string, string | null>[];
+      return [
+        {
+          kind: 'cash',
+          methodId: m?.['id'] ?? null,
+          nameEn: m?.['name_en'] ?? 'Cash',
+          nameAr: m?.['name_ar'] ?? null,
+          financialAccountId: null,
+          verification: 'manual',
+          amountMinor,
+        },
+      ];
+    };
+    if (!refundId || depth >= 3) return cash();
+    const origins = (
+      await tx.execute(sql`
+        select p.id, p.method_kind, p.payment_method_id, p.method_name_en, p.method_name_ar,
+               p.amount_minor::text as amount, p.financial_account_id, p.verification, p.refund_id
+        from payments p join refunds r on r.id = ${refundId}
+        where p.sale_id = r.sale_id and p.status = 'succeeded' order by p.created_at, p.id`)
+    ).rows as Record<string, unknown>[];
+    if (origins.length === 0) return cash();
+    const shares = Money.ofMinor(amountMinor, CURRENCY)
+      .allocate(origins.map((o) => BigInt(o['amount'] as string)))
+      .map((m) => m.minor);
+    const result: Via[] = [];
+    for (const [i, o] of origins.entries()) {
+      if (shares[i]! === 0n) continue;
+      if (o['method_kind'] === 'exchange') {
+        result.push(
+          ...(await this.creditOrigins(tx, o['refund_id'] as string, shares[i]!, depth + 1)),
+        );
+        continue;
+      }
+      result.push({
+        kind: o['method_kind'] as string,
+        methodId: (o['payment_method_id'] as string | null) ?? null,
+        nameEn: (o['method_name_en'] as string | null) ?? null,
+        nameAr: (o['method_name_ar'] as string | null) ?? null,
+        financialAccountId: (o['financial_account_id'] as string | null) ?? null,
+        verification: o['verification'] as string,
+        amountMinor: shares[i]!,
+      });
+    }
+    return result;
+  }
+
   private compute(
     state: SaleState,
     input: { position: number; quantity: string; restock?: boolean }[],
+    reason?: string,
   ): Computed {
+    // Damaged and defective goods stay out of sellable stock unless the cashier says otherwise (BR-175).
+    const restockDefault = !(reason === 'damaged' || reason === 'defective');
     const lines = input.map((l, i) => {
       const line = state.lines.find((x) => x.position === l.position);
       if (!line)
@@ -224,7 +312,7 @@ export class RefundsService {
         variantId: line.variantId,
         quantityMilli,
         amountMinor: cumulative - line.refundedMinor,
-        restock: l.restock ?? true,
+        restock: l.restock ?? restockDefault,
         unitCostMinor: line.unitCostMinor,
         trackInventory: line.trackInventory,
       };
@@ -279,19 +367,42 @@ export class RefundsService {
     return result;
   }
 
+  /**
+   * Why a refund must wait for a second person (BR-180): above the limit, outside the window,
+   * or a sale the requester rang up themselves. Holding the approve right no longer exempts
+   * anyone from their own refunds (FND-502); only the owner may complete such a refund directly,
+   * flagged as an owner override (D3).
+   */
   private async approvalReasons(
     tx: Transaction,
     actor: MerchantActor,
     state: SaleState,
     totalMinor: bigint,
   ): Promise<string[]> {
-    if (can(actor.access, 'refunds.approve', state.branchId)) return [];
     const settings = await this.sales.getSettingsInTx(tx, actor.merchantId);
     const reasons: string[] = [];
     if (totalMinor > settings.refundApprovalLimitMinor) reasons.push('over_limit');
     const ageDays = (Date.now() - state.createdAt.getTime()) / 86_400_000;
     if (ageDays > settings.refundWindowDays) reasons.push('outside_window');
+    if (settings.refundOwnSalesNeedApproval && state.userId === actor.userId)
+      reasons.push('own_sale');
     return reasons;
+  }
+
+  /** Non-cash pay-backs need their terminal / transfer reference when the company says so (BR-181). */
+  private async assertReferences(tx: Transaction, merchantId: string, allocation: Payout[]) {
+    const settings = await this.sales.getSettingsInTx(tx, merchantId);
+    if (!settings.requireTenderReference) return;
+    const missing = allocation.findIndex(
+      (a) => a.payment.kind !== 'cash' && a.payment.kind !== 'exchange' && !a.reference,
+    );
+    if (missing >= 0)
+      throw new AppError(
+        400,
+        'REFERENCE_REQUIRED',
+        'Enter the reference of each card or transfer pay-back.',
+        [{ path: `allocation.${missing}.reference`, code: 'required', message: 'Required.' }],
+      );
   }
 
   // ------------------------------------------------------------ POS reads
@@ -377,6 +488,7 @@ export class RefundsService {
       if (state.branchId !== branchId) throw AppError.notFound('Sale not found.');
       const computed = this.compute(state, input.lines);
       const reasons = await this.approvalReasons(tx, actor, state, computed.totalMinor);
+      const settings = await this.sales.getSettingsInTx(tx, actor.merchantId);
       return {
         lines: computed.lines.map((l) => ({
           position: l.position,
@@ -388,8 +500,13 @@ export class RefundsService {
           paymentId: a.payment.id,
           kind: a.payment.kind,
           amount: money(a.amountMinor),
+          referenceRequired:
+            settings.requireTenderReference &&
+            a.payment.kind !== 'cash' &&
+            a.payment.kind !== 'exchange',
         })),
-        approvalRequired: reasons.length > 0,
+        // The owner completes directly (flagged as an override); everyone else waits.
+        approvalRequired: reasons.length > 0 && !actor.access.isOwner,
         approvalReasons: reasons,
       };
     });
@@ -437,33 +554,40 @@ export class RefundsService {
         await this.lockSale(tx, input.saleId);
         const state = await this.saleState(tx, input.saleId);
         if (state.branchId !== branchId) throw AppError.notFound('Sale not found.');
-        const computed = this.compute(state, input.lines);
+        const computed = this.compute(state, input.lines, input.reason);
         const allocation = this.allocation(state, computed.totalMinor, input.allocation);
+        await this.assertReferences(tx, actor.merchantId, allocation);
         const reasons = await this.approvalReasons(tx, actor, state, computed.totalMinor);
+        const ownerOverride = reasons.length > 0 && actor.access.isOwner;
+        const waits = reasons.length > 0 && !ownerOverride;
         await this.insertRefund(tx, actor, shift, state, {
           refundId,
           kind: 'refund',
-          status: reasons.length ? 'pending_approval' : 'processing',
+          status: waits ? 'pending_approval' : 'processing',
           reason: input.reason,
           note: input.note,
           computed,
           approvalReasons: reasons,
+          ownerOverride,
+          customerContact: input.customerContact,
           idempotency: { key: input.idempotencyKey, hash },
           exchange: null,
         });
         // Payment allocation is stored with the request so an approver pays out exactly this.
         await this.insertPayments(tx, actor, refundId, shift.id, allocation, 'planned');
-        if (reasons.length === 0) await this.execute(tx, actor, refundId, ip);
+        if (!waits) await this.execute(tx, actor, refundId, ip);
         await this.record(
           tx,
           actor,
-          reasons.length ? 'refund.requested' : 'refund.completed',
+          waits ? 'refund.requested' : 'refund.completed',
           refundId,
           ip,
           {
             saleId: state.id,
             total: Money.ofMinor(computed.totalMinor, CURRENCY).toDecimalString(),
             approvalReasons: reasons,
+            ownerOverride,
+            customerContact: input.customerContact,
           },
         );
       });
@@ -518,6 +642,8 @@ export class RefundsService {
           note: input.note,
           computed,
           approvalReasons: [],
+          ownerOverride: false,
+          customerContact: null,
           idempotency: { key: input.idempotencyKey, hash },
           exchange: null,
         });
@@ -575,9 +701,10 @@ export class RefundsService {
         await this.lockSale(tx, input.saleId);
         const state = await this.saleState(tx, input.saleId);
         if (state.branchId !== branchId) throw AppError.notFound('Sale not found.');
-        const computed = this.compute(state, input.returnLines);
+        const computed = this.compute(state, input.returnLines, input.reason);
         const reasons = await this.approvalReasons(tx, actor, state, computed.totalMinor);
-        if (reasons.length)
+        const ownerOverride = reasons.length > 0 && actor.access.isOwner;
+        if (reasons.length && !ownerOverride)
           throw new AppError(
             403,
             'APPROVAL_REQUIRED',
@@ -593,7 +720,9 @@ export class RefundsService {
           reason: input.reason,
           note: input.note,
           computed,
-          approvalReasons: [],
+          approvalReasons: reasons,
+          ownerOverride,
+          customerContact: null,
           idempotency: { key: input.idempotencyKey, hash },
           exchange: { saleId, creditMinor: creditApplied },
         });
@@ -640,6 +769,8 @@ export class RefundsService {
           saleId: state.id,
           newSaleId: saleId,
           credit: Money.ofMinor(computed.totalMinor, CURRENCY).toDecimalString(),
+          approvalReasons: reasons,
+          ownerOverride,
         });
       });
     } catch (error) {
@@ -671,6 +802,9 @@ export class RefundsService {
       if (refund.userId === actor.userId)
         throw new AppError(403, 'SELF_APPROVAL', 'You cannot approve your own refund request.');
       await this.lockSale(tx, refund.saleId);
+      // The request outlives the requester's shift (BR-180, FND-509): when that shift is
+      // closed and cash is owed, the approver pays it from their own open shift at the branch.
+      const paidFrom = await this.repointShift(tx, actor, refund);
       await tx
         .update(refunds)
         .set({
@@ -682,7 +816,10 @@ export class RefundsService {
         })
         .where(eq(refunds.id, refundId));
       await this.execute(tx, actor, refundId, ip);
-      await this.record(tx, actor, 'refund.approved', refundId, ip, { requestedBy: refund.userId });
+      await this.record(tx, actor, 'refund.approved', refundId, ip, {
+        requestedBy: refund.userId,
+        ...(paidFrom ? { paidFromShiftId: paidFrom } : {}),
+      });
     });
     return this.get(actor, refundId, actor.interface);
   }
@@ -731,6 +868,41 @@ export class RefundsService {
     return this.get(actor, refundId, actor.interface);
   }
 
+  /** Moves a pending cash refund to the approver's open shift when the requester's shift closed. */
+  private async repointShift(
+    tx: Transaction,
+    actor: MerchantActor,
+    refund: typeof refunds.$inferSelect,
+  ): Promise<string | null> {
+    const [cash] = (
+      await tx.execute(
+        sql`select count(*)::int as n from refund_payments where refund_id = ${refund.id} and method_kind = 'cash' and status = 'pending'`,
+      )
+    ).rows as { n: number }[];
+    if ((cash?.n ?? 0) === 0) return null;
+    const [requesterShift] = await tx
+      .select({ status: shifts.status })
+      .from(shifts)
+      .where(eq(shifts.id, refund.shiftId));
+    if (requesterShift?.status === 'open') return null;
+    if (actor.boundBranchId !== refund.branchId)
+      throw new AppError(
+        409,
+        'SHIFT_REQUIRED',
+        'The requesting cashier’s shift is closed: approve this refund from an open shift at the branch so the cash can be paid out.',
+      );
+    const own = await this.shiftsService.lockOwnShift(tx, actor);
+    await tx
+      .update(refunds)
+      .set({ shiftId: own.id, registerId: own.registerId })
+      .where(eq(refunds.id, refund.id));
+    await tx
+      .update(refundPayments)
+      .set({ shiftId: own.id })
+      .where(eq(refundPayments.refundId, refund.id));
+    return own.id;
+  }
+
   private async lockPending(tx: Transaction, refundId: string) {
     const [row] = await tx.select().from(refunds).where(eq(refunds.id, refundId)).for('update');
     if (!row) throw AppError.notFound();
@@ -756,6 +928,8 @@ export class RefundsService {
       note: string | null;
       computed: Computed;
       approvalReasons: string[];
+      ownerOverride: boolean;
+      customerContact: string | null;
       idempotency: { key: string; hash: string };
       exchange: { saleId: string; creditMinor: bigint } | null;
     },
@@ -781,6 +955,8 @@ export class RefundsService {
       exchangeCreditMinor: r.exchange?.creditMinor ?? 0n,
       exchangeSaleId: r.exchange?.saleId ?? null,
       approvalReasons: r.approvalReasons,
+      ownerOverride: r.ownerOverride,
+      customerContact: r.customerContact,
       idempotencyKey: r.idempotency.key,
       requestHash: r.idempotency.hash,
     });
@@ -804,37 +980,40 @@ export class RefundsService {
     actor: MerchantActor,
     refundId: string,
     shiftId: string,
-    allocation: {
-      payment: SaleState['payments'][number];
-      amountMinor: bigint;
-      reference: string | null;
-    }[],
+    allocation: Payout[],
     _state: 'planned',
   ) {
     if (allocation.length === 0) return;
-    const [cashMethod] = (
-      await tx.execute(sql`select id, name_en, name_ar from payment_methods where kind = 'cash'`)
-    ).rows as Record<string, string | null>[];
+    // Exchange credit goes back to the tenders it came from, pro rata (BR-180, FND-504).
+    const rows: Payout[] = [];
+    for (const a of allocation) {
+      if (a.payment.kind !== 'exchange') {
+        rows.push(a);
+        continue;
+      }
+      for (const via of await this.creditOrigins(tx, a.payment.refundId, a.amountMinor))
+        rows.push({ payment: a.payment, amountMinor: via.amountMinor, reference: null, via });
+    }
     await tx.insert(refundPayments).values(
-      allocation.map((a) => {
-        // Exchange credit on the original sale is paid back in cash.
-        const asCash = a.payment.kind === 'exchange';
-        return {
-          id: newId(),
-          merchantId: actor.merchantId,
-          refundId,
-          originalPaymentId: a.payment.id,
-          paymentMethodId: asCash ? (cashMethod?.['id'] ?? null) : a.payment.methodId,
-          methodKind: asCash ? 'cash' : a.payment.kind,
-          methodNameEn: asCash ? (cashMethod?.['name_en'] ?? 'Cash') : a.payment.nameEn,
-          methodNameAr: asCash ? (cashMethod?.['name_ar'] ?? null) : a.payment.nameAr,
-          amountMinor: a.amountMinor,
-          shiftId,
-          status: 'pending',
-          verification: a.payment.verification === 'gateway' ? 'gateway' : 'manual',
-          reference: a.reference,
-        };
-      }),
+      rows.map((a) => ({
+        id: newId(),
+        merchantId: actor.merchantId,
+        refundId,
+        originalPaymentId: a.payment.id,
+        paymentMethodId: a.via ? a.via.methodId : a.payment.methodId,
+        methodKind: a.via ? a.via.kind : a.payment.kind,
+        methodNameEn: a.via ? a.via.nameEn : a.payment.nameEn,
+        methodNameAr: a.via ? a.via.nameAr : a.payment.nameAr,
+        amountMinor: a.amountMinor,
+        shiftId,
+        status: 'pending',
+        verification:
+          (a.via ? a.via.verification : a.payment.verification) === 'gateway'
+            ? 'gateway'
+            : 'manual',
+        reference: a.reference,
+        financialAccountId: a.via ? a.via.financialAccountId : a.payment.financialAccountId,
+      })),
     );
   }
 
@@ -878,39 +1057,76 @@ export class RefundsService {
         waiting = true;
         continue;
       }
-      await tx
-        .update(refundPayments)
-        .set({ status: 'succeeded' })
-        .where(eq(refundPayments.id, p.id));
-      const entry = {
+      const entry: Entry = {
         merchantId: actor.merchantId,
+        accountId: '',
         amountMinor: -p.amountMinor,
-        entryType: 'refund' as const,
+        entryType: 'refund',
         sourceType: 'refund_payment',
         sourceId: p.id,
         description: refund!.refundNumber,
         createdByUserId: actor.userId,
       };
+      let feeReversedMinor = 0n;
       if (p.methodKind === 'cash') {
         // Cash leaves the drawer of the shift paying it out, whichever register took the
-        // sale (ADR-0090) — including an exchange credit paid back in cash.
+        // sale (ADR-0090).
         const [payer] = await tx
           .select({ registerId: shifts.registerId })
           .from(shifts)
           .where(eq(shifts.id, refund!.shiftId));
         const drawer = await registerAccount(tx, payer!.registerId);
         await postEntries(tx, [{ ...entry, accountId: drawer.id, shiftId: refund!.shiftId }]);
-      } else if (p.originalPaymentId) {
-        const [orig] = (
-          await tx.execute(
-            sql`select financial_account_id from payments where id = ${p.originalPaymentId}`,
-          )
-        ).rows as { financial_account_id: string | null }[];
-        if (orig?.financial_account_id)
-          await postEntries(tx, [{ ...entry, accountId: orig.financial_account_id }]);
+      } else {
+        // Non-cash money always leaves a settlement account (BR-181, FND-506).
+        const [orig] = p.originalPaymentId
+          ? ((
+              await tx.execute(sql`
+                select p.financial_account_id, p.amount_minor::text as amount, p.fee_minor::text as fee,
+                       p.method_kind, m.refund_fee_policy
+                from payments p left join payment_methods m on m.id = p.payment_method_id
+                where p.id = ${p.originalPaymentId}`)
+            ).rows as Record<string, string | null>[])
+          : [];
+        const accountId = p.financialAccountId ?? orig?.['financial_account_id'] ?? null;
+        if (!accountId)
+          throw new AppError(
+            409,
+            'SETTLEMENT_ACCOUNT_REQUIRED',
+            'This tender has no settlement account to pay back from.',
+          );
+        const entries = [{ ...entry, accountId }];
+        // The provider's fee comes back pro rata when the method says so (D6); traced exchange
+        // credit carries no fee of its own.
+        if (
+          orig &&
+          orig['method_kind'] === p.methodKind &&
+          orig['refund_fee_policy'] === 'reverse' &&
+          BigInt(orig['fee'] ?? '0') > 0n
+        ) {
+          feeReversedMinor = divideHalfUp(
+            BigInt(orig['fee']!) * p.amountMinor,
+            BigInt(orig['amount']!),
+          );
+          if (feeReversedMinor > 0n)
+            entries.push({ ...entry, accountId, entryType: 'fee', amountMinor: feeReversedMinor });
+        }
+        await postEntries(tx, entries);
       }
+      await tx
+        .update(refundPayments)
+        .set({ status: 'succeeded', feeReversedMinor })
+        .where(eq(refundPayments.id, p.id));
     }
     const lines = await tx.select().from(refundLines).where(eq(refundLines.refundId, refundId));
+    // Returned goods kept out of stock get a custody record until they are disposed of (BR-175).
+    await tx.execute(sql`
+      insert into damaged_returns (id, merchant_id, refund_id, position, branch_id, variant_id, quantity, unit_cost_minor, reason)
+      select gen_random_uuid(), rl.merchant_id, rl.refund_id, rl.sale_position, ${refund!.branchId}, rl.variant_id,
+             rl.quantity, rl.unit_cost_minor, ${refund!.reason}
+      from refund_lines rl join product_variants v on v.id = rl.variant_id join products p on p.id = v.product_id
+      where rl.refund_id = ${refundId} and not rl.restock and p.track_inventory
+      on conflict do nothing`);
     const restock = lines.filter((l) => l.restock);
     if (restock.length > 0) {
       // Stock comes back at the cost it left with; the average cost is updated accordingly.
@@ -984,6 +1200,8 @@ export class RefundsService {
         requestedBy: r['requested_by'] as string,
         decidedBy: (r['decided_by'] as string | null) ?? null,
         decisionNote: (r['decision_note'] as string | null) ?? null,
+        ownerOverride: Boolean(r['owner_override']),
+        customerContact: (r['customer_contact'] as string | null) ?? null,
         createdAt: iso(r['created_at'])!,
         completedAt: iso(r['completed_at']),
         lines: ls.map((l) => ({
@@ -1004,6 +1222,7 @@ export class RefundsService {
           status: p.status as 'succeeded',
           verification: p.verification as 'manual',
           reference: p.reference,
+          feeReversed: money(p.feeReversedMinor),
         })),
         version: r['version'] as number,
       };
@@ -1048,12 +1267,14 @@ export class RefundsService {
     )})`;
   }
 
-  private async tz(tx: Transaction, merchantId: string) {
-    const [m] = (await tx.execute(sql`select timezone from merchants where id = ${merchantId}`))
-      .rows as { timezone: string }[];
-    return m?.timezone ?? 'Asia/Kuwait';
+  private tz(tx: Transaction, merchantId: string) {
+    return merchantTimezone(tx, merchantId);
   }
 
+  /**
+   * Refund register (BR-184): the period is cut on the refund's business date, its completion
+   * time once completed, otherwise its request time, in the merchant's time zone.
+   */
   async list(actor: MerchantActor, query: ListQuery) {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const tz = await this.tz(tx, actor.merchantId);
@@ -1061,16 +1282,18 @@ export class RefundsService {
       if (query.status) c.push(sql`r.status = ${query.status}`);
       if (query.kind) c.push(sql`r.kind = ${query.kind}`);
       if (query.saleId) c.push(sql`r.sale_id = ${query.saleId}`);
-      if (query.from)
-        c.push(sql`r.created_at >= (${query.from}::date)::timestamp at time zone ${tz}`);
-      if (query.to)
-        c.push(sql`r.created_at < ((${query.to}::date + 1)::timestamp at time zone ${tz})`);
+      const businessDate = sql`coalesce(r.completed_at, r.created_at)`;
+      c.push(withinLocalDays(tz, businessDate, query.from, query.to));
       const where = sql.join(c, sql` and `);
       const [total] = (
-        await tx.execute(sql`select count(*)::int as n from refunds r where ${where}`)
-      ).rows as { n: number }[];
+        await tx.execute(sql`select count(*)::int as n,
+            count(*) filter (where r.status = 'completed')::int as completed,
+            coalesce(sum(r.total_minor) filter (where r.status = 'completed'), 0)::text as amount
+          from refunds r where ${where}`)
+      ).rows as { n: number; completed: number; amount: string }[];
       const ids = (
-        await tx.execute(sql`select r.id from refunds r where ${where} order by r.created_at desc, r.id desc
+        await tx.execute(sql`select r.id from refunds r where ${where}
+                             order by ${businessDate} desc, r.id desc
                              limit ${query.pageSize} offset ${(query.page - 1) * query.pageSize}`)
       ).rows as { id: string }[];
       const rows = [];
@@ -1078,26 +1301,32 @@ export class RefundsService {
         const { lines: _l, payments: _p, ...rest } = await this.get(actor, id, 'manager');
         rows.push(rest);
       }
-      return { refunds: rows, total: total?.n ?? 0, page: query.page, pageSize: query.pageSize };
+      return {
+        refunds: rows,
+        total: total?.n ?? 0,
+        page: query.page,
+        pageSize: query.pageSize,
+        totals: {
+          count: total?.n ?? 0,
+          completedCount: total?.completed ?? 0,
+          amount: money(total?.amount ?? '0'),
+        },
+      };
     });
   }
 
-  /** Unusual refund activity: refund rate per employee against their own sales. */
+  /**
+   * Unusual refund activity: refund rate per employee against their own sales. The threshold
+   * and the default window are company policy (BR-186); dates given win over the window.
+   */
   async activity(actor: MerchantActor, query: ActivityQuery): Promise<RefundActivity> {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const tz = await this.tz(tx, actor.merchantId);
-      const range = (col: SQL) =>
-        sql.join(
-          [
-            query.from
-              ? sql`${col} >= (${query.from}::date)::timestamp at time zone ${tz}`
-              : sql`true`,
-            query.to
-              ? sql`${col} < ((${query.to}::date + 1)::timestamp at time zone ${tz})`
-              : sql`true`,
-          ],
-          sql` and `,
-        );
+      const policy = await this.sales.getSettingsInTx(tx, actor.merchantId);
+      const to = query.to ?? todayIn(tz);
+      const from = query.from ?? (query.to ? to : addDays(to, -(policy.unusualActivityDays - 1)));
+      const range = (col: SQL) => withinLocalDays(tz, col, from, to);
+      const threshold = policy.unusualRefundRatePercent;
       const rScope = this.scope(actor, query.branchId, sql`r.branch_id`);
       const sScope = this.scope(actor, query.branchId, sql`s.branch_id`);
       const rows = (
@@ -1109,19 +1338,25 @@ export class RefundsService {
             select r.membership_id, count(*) filter (where r.kind <> 'void')::int as refunds,
                    count(*) filter (where r.kind = 'void')::int as voids,
                    coalesce(sum(r.total_minor), 0) as amount,
-                   count(*) filter (where 'outside_window' = any(r.approval_reasons))::int as outside
+                   count(*) filter (where 'outside_window' = any(r.approval_reasons))::int as outside,
+                   count(*) filter (where r.kind <> 'void'
+                     and r.user_id = (select os.user_id from sales os where os.id = r.sale_id))::int as own_sale
             from refunds r where r.status = 'completed' and ${rScope} and ${range(sql`r.completed_at`)}
             group by r.membership_id)
           select m.id as membership_id, u.full_name, coalesce(s.n, 0) as sales, coalesce(s.amount, 0)::text as sales_amount,
                  coalesce(r.refunds, 0) as refunds, coalesce(r.voids, 0) as voids, coalesce(r.amount, 0)::text as refund_amount,
-                 coalesce(r.outside, 0) as outside
+                 coalesce(r.outside, 0) as outside, coalesce(r.own_sale, 0) as own_sale
           from memberships m join users u on u.id = m.user_id
           left join s on s.membership_id = m.id left join r on r.membership_id = m.id
           where s.membership_id is not null or r.membership_id is not null
           order by coalesce(r.amount, 0) desc`)
       ).rows as Record<string, unknown>[];
+      // Threshold in hundredths of a percent, exact ("12.5" → 1250).
+      const [whole, frac = ''] = threshold.split('.');
+      const thresholdBp = BigInt(whole!) * 100n + BigInt((frac + '00').slice(0, 2));
       return {
-        flagThresholdPercent: FLAG_RATE_PERCENT,
+        flagThresholdPercent: threshold,
+        period: { from, to, timezone: tz },
         byEmployee: rows.map((x) => {
           const salesAmount = BigInt(x['sales_amount'] as string);
           const refundAmount = BigInt(x['refund_amount'] as string);
@@ -1143,7 +1378,8 @@ export class RefundsService {
             refundAmount: money(refundAmount),
             refundRate: rate,
             outsideWindow: x['outside'] as number,
-            flagged: rateBp > BigInt(FLAG_RATE_PERCENT) * 100n || (x['outside'] as number) > 0,
+            ownSaleRefunds: x['own_sale'] as number,
+            flagged: rateBp > thresholdBp || (x['outside'] as number) > 0,
           };
         }),
       };

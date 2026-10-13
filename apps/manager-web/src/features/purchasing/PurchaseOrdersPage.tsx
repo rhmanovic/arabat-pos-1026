@@ -230,6 +230,8 @@ function OrderView({ order }: { order: PurchaseOrder | null }) {
     order?.branchId ?? context.branchId ?? context.branches[0]?.id ?? '',
   );
   const [expectedDate, setExpectedDate] = useState(order?.expectedDate ?? '');
+  // Business date (BR-190): empty = today in the company's zone.
+  const [documentDate, setDocumentDate] = useState(order?.documentDate ?? '');
   const [note, setNote] = useState(order?.note ?? '');
   const [lines, setLines] = useState<DraftLine[]>(
     order?.lines.map((l) => ({
@@ -273,6 +275,7 @@ function OrderView({ order }: { order: PurchaseOrder | null }) {
         supplierId,
         branchId,
         expectedDate: expectedDate || null,
+        ...(documentDate ? { documentDate } : {}),
         note: note.trim() || null,
         lines: lines.map((l) => ({
           variantId: l.variantId,
@@ -395,6 +398,17 @@ function OrderView({ order }: { order: PurchaseOrder | null }) {
                   disabled={!editable}
                   value={expectedDate}
                   onChange={(e) => setExpectedDate(e.target.value)}
+                />
+              )}
+            </Field>
+            <Field label={t('purchasing.documentDate')} hint={t('purchasing.businessDateHint')}>
+              {(p) => (
+                <Input
+                  {...p}
+                  type="date"
+                  disabled={!editable}
+                  value={documentDate}
+                  onChange={(e) => setDocumentDate(e.target.value)}
                 />
               )}
             </Field>
@@ -539,6 +553,9 @@ function OrderView({ order }: { order: PurchaseOrder | null }) {
                     {r.number}
                   </span>{' '}
                   · {formatDateTime(r.createdAt, i18n.language)} · {r.receivedBy}
+                  {r.receivedOn ? (
+                    <span> · {t('purchasing.receivedOnLabel', { date: r.receivedOn })}</span>
+                  ) : null}
                   {r.supplierReference ? <span dir="ltr"> · {r.supplierReference}</span> : null}
                   <span className="block text-fg-muted">
                     {r.lines
@@ -553,7 +570,11 @@ function OrderView({ order }: { order: PurchaseOrder | null }) {
             </ul>
             <p className="mt-2 text-sm">
               {t('purchasing.received')}: <Amount value={order.receivedValue} /> ·{' '}
-              {branchName(order.branchId)}
+              {t('purchasing.paidToDate')}:{' '}
+              <span data-testid="paid-to-date">
+                <Amount value={order.paidToDate} />
+              </span>{' '}
+              · {branchName(order.branchId)}
             </p>
           </Section>
         ) : null}
@@ -583,6 +604,7 @@ function ReceiveDialog({ order, onClose }: { order: PurchaseOrder; onClose: () =
     Object.fromEntries(order.lines.map((l) => [l.position, displayQty(l.remainingQuantity)])),
   );
   const [reference, setReference] = useState('');
+  const [receivedOn, setReceivedOn] = useState('');
   const [key] = useState(() => crypto.randomUUID());
   const lines = order.lines
     .map((l) => ({ position: l.position, quantity: (qty[l.position] ?? '').trim() }))
@@ -591,6 +613,7 @@ function ReceiveDialog({ order, onClose }: { order: PurchaseOrder; onClose: () =
     mutationFn: () =>
       api.purchasing.receive(order.id, {
         idempotencyKey: key,
+        ...(receivedOn ? { receivedOn } : {}),
         supplierReference: reference.trim() || null,
         lines,
       }),
@@ -654,6 +677,16 @@ function ReceiveDialog({ order, onClose }: { order: PurchaseOrder; onClose: () =
               dir="ltr"
               value={reference}
               onChange={(e) => setReference(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('purchasing.receivedOn')} hint={t('purchasing.businessDateHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              type="date"
+              value={receivedOn}
+              onChange={(e) => setReceivedOn(e.target.value)}
             />
           )}
         </Field>

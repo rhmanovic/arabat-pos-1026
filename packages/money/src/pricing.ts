@@ -131,3 +131,15 @@ export function exceedsDiscountLimit(
   const { units, scale } = parseDecimal(limitPercent);
   return discountMinor * 100n * pow10(scale) > units * baseMinor;
 }
+
+/** True when `amountMinor` is strictly less than `percent` % of `baseMinor` (exact compare). */
+export function belowPercentOf(amountMinor: bigint, baseMinor: bigint, percent: string): boolean {
+  const { units, scale } = parseDecimal(percent);
+  return amountMinor * 100n * pow10(scale) < units * baseMinor;
+}
+
+/** True when `amountMinor` is strictly more than `percent` % of `baseMinor` (exact compare). */
+export function abovePercentOf(amountMinor: bigint, baseMinor: bigint, percent: string): boolean {
+  const { units, scale } = parseDecimal(percent);
+  return amountMinor * 100n * pow10(scale) > units * baseMinor;
+}

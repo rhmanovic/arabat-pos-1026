@@ -842,3 +842,423 @@ ADR; supersede it.
   - the dashboard reuses the cash overview for a total-cash card.
 - **Consequences:** Sales, collections and revenue keep reading payments and refunds, so
   transfers and custody moves can never enter them.
+
+## ADR-0093 — Remediation session 1: blind counts, merchant audit log, test-payment guard
+- **Date:** 2026-10-13 · **Status:** Accepted (owner decisions D1, D7 and "audit log to R1" on
+  the remediation plan derived from `docs/audit/BUSINESS_PROCEDURES_MANUAL.md`)
+- **Context:** The Phase 1 audit found that cashiers count against a displayed expected balance
+  (FND-401), that the audit trail is written but unreadable by the company (FND-101), and that
+  the test gateway creates sales and bank entries without money (FND-709).
+- **Decision:**
+  - `sales_settings.blind_cash_count` (default true). The POS endpoints withhold drawer
+    figures from users who lack `shifts.view_all` at the branch: `GET /pos/registers` returns
+    `expectedCash: null, blindCount: true`; `GET /pos/shifts/current`, `POST /pos/shifts` and
+    cash movements return a `PosShift` with `summary: null` and only the opening difference;
+    `POST /pos/shifts` accepts a missing `expectedCash` only under a blind count and skips the
+    opening-note requirement for a blind cashier (the difference is still booked between
+    shifts). Closing returns the full shift. The policy is enforced by the API, not the screen.
+  - `GET /manager/audit` (`audit.read`, company-wide) over the merchant's own rows under RLS,
+    with local-day period, action substring, target type and actor filters, pagination and
+    the distinct action keys; a manager screen `/manager/audit` with a CSV export built from
+    the displayed rows (ADR-0071). Platform-only events keep their separate reader.
+  - The mock gateway stays off by default in production builds (unchanged); when enabled there
+    the API logs a warning at start, and OPERATIONS.md states that staging is the only
+    non-development environment where it may be on (owner decision D7: no production online
+    payments yet).
+  - Controls must not make the system impractical for an owner with one cashier: blind
+    counting never binds the owner, and no second person is required by this session.
+- **Consequences:** Integration tests that read drawer figures through cashier sessions
+  switch the policy off in their fixtures (`showExpectedCash`); e2e flows assert the blind
+  notice and verify the figures through the manager API. Remaining R1 work (cash-out limits,
+  disbursement approvals, deposits in transit, variance follow-up, custody roles) follows in
+  later sessions; thresholds will be per-merchant settings with the owner's defaults.
+
+## ADR-0094 — Remediation session 2: cash-out controls, Treasurer role, controls checklist
+- **Date:** 2026-10-13 · **Status:** Accepted (owner decisions D2 and D3 on the remediation plan)
+- **Context:** Phase 1 found that a cash-out with reason "correction" or "other" removed cash
+  from custody with no counterpart, limit or approval (FND-407), that closing shortages needed
+  no explanation (FND-402), that register tolerance was unbounded (FND-403), and that custody
+  rights were held by nobody but the owner (FND-113, FND-422).
+- **Decision:**
+  - `cash_movements` gains `status` (`posted` | `pending` | `rejected` | `withdrawn`),
+    `corrects_movement_id`, `limit_exceeded`, `owner_override` and the decision columns
+    (migration 0037). Only pending rows change, once, into a final state (trigger
+    `cash_movements_decision`; the runtime role may update only the decision columns);
+    posting on approval requires the shift to be open. Drawer figures, shift totals and the
+    cash reports count only `posted` movements.
+  - Policy columns on `sales_settings`: `cash_out_other_limit_minor` (20.000 KWD),
+    `cash_out_other_shift_limit_minor` (50.000 KWD), `max_register_tolerance_minor`
+    (1.000 KWD), owner-editable per company (D2: never hard-coded).
+  - Pending requests are decided with `POST /manager/shifts/:id/movements/:movementId/decision`
+    (`shifts.view_all`, approver ≠ requester, owner excepted and flagged) and withdrawn with
+    `POST /pos/shifts/current/cash-movements/:movementId/withdraw`. The POS warns before the
+    cashier confirms an amount that will wait, and shows the request's state.
+  - New role template `treasurer`; the template seed adds it to existing companies on the next
+    `db:seed`. `GET /manager/merchant/controls` (`merchant.settings.read`) computes the
+    checklist from live tables.
+  - Practicality for an owner with one cashier: the owner is never blocked (owner override,
+    audited); limits are company settings with sensible defaults.
+- **Consequences:** The remaining custody split (`cash.custody` into count / move / transfer,
+  FND-422) and the cashier acknowledgement of manager cash moves (FND-419) stay open. Variance
+  follow-up (R1.4) and disbursement approvals (R1.2) reuse the pending/decision pattern.
+
+## ADR-0095 — Remediation session 3: disbursement approvals, payout requests, variance follow-up
+- **Date:** 2026-10-13 · **Status:** Accepted (owner decision D2 on the remediation plan)
+- **Context:** Phase 1 found expenses and supplier payments with no limit, approver or link to
+  what is owed (FND-408, FND-602, FND-420) and cash differences with no follow-up or settlement
+  (FND-404, FND-410, FND-421).
+- **Decision:**
+  - Approval limits per company on `sales_settings` (`expense_approval_limit_minor`,
+    `supplier_payment_approval_limit_minor`), owner-editable with the owner's defaults.
+  - At the till the existing pending-movement pattern (ADR-0094) carries expenses and supplier
+    payments above the limit; `cash_movements` keeps `expense_category`, `supplier_id` and
+    `receipt_reference` so approval posts the real disbursement.
+  - From a treasury, `POST /manager/cash/disbursements` answers `APPROVAL_REQUIRED` for a
+    non-owner above the limit; `cash_payout_requests` (migration 0038) holds the request until
+    another custody holder decides it (`…/payout-requests/:id/decision`, approver ≠ requester,
+    owner excepted and flagged); approval calls the ordinary `postDisbursement`. Requests never
+    touch the ledger; a trigger lets a pending row change once, into a final state, and an
+    approved row must point at its disbursement.
+  - Overpayment guard: `ORDER_OVERPAID` when paid-to-date plus the payment exceeds the order's
+    value (Σ quantity × unit cost, net of reversals); the owner may pass `confirmOverpayment`
+    (audited). Purchase orders expose `paidToDate` (read-only cross-module SQL, ADR-0083).
+  - `variance_followups` annotates differences that stay in their source documents; the list
+    `GET /manager/cash/variances` is a union over shifts (close and opening), count entries and
+    branch transfers, joined to the follow-up; `explained` needs `shifts.view_all`, `settled` /
+    `written_off` need `cash.custody`; follow-ups may be revised (audited) but never deleted.
+  - The pure limit helpers live in `cash/approval-limits.ts` so the registers and cash modules
+    share them without a module cycle.
+- **Consequences:** Deposits in transit and bank reconciliation (R1.3) follow; the dashboard
+  checklist now counts pending payout requests and open variances.
+
+## ADR-0096 — Remediation session 4: deposits in transit and manual bank reconciliation
+- **Date:** 2026-10-13 · **Status:** Accepted (remediation plan R1.3)
+- **Context:** Phase 1 found bank balances credited on the depositor's word and never reconciled
+  (FND-406), no visibility of what the bank actually settled (FND-413) and bank accounts that could
+  be deactivated with a balance (FND-414).
+- **Decision:**
+  - One company account of kind `deposit_transit` per merchant (migration 0039, created for
+    existing merchants and in `merchant-defaults`). Every deposit — POS `bank_deposit` movement or
+    `POST /manager/cash/deposits` — posts register/treasury → deposits in transit with
+    `cash_transfers.target_account_id` (the intended bank) and a mandatory slip `reference`
+    (`assertDepositSlip`, contract refinements).
+  - Settlement is a second transfer naming the deposit (`confirms_transfer_id`, unique): origin
+    `deposit_confirmation` (transit → that bank, optional bank reference) or `deposit_return`
+    (transit → the branch treasury, reason required). The database trigger
+    `cash_transfers_direction` enforces the directions, the matching amount and the bank named on
+    the deposit. Settler ≠ depositor; the owner may settle their own deposit (`ownerOverride` in
+    the audit event). Transfers stay append-only, so no row locks: a race ends in the unique
+    settlement index, reported as `DEPOSIT_SETTLED`.
+  - Manual reconciliation: `bank_reconciliations` (statement date, statement / book / cleared
+    balances, difference, note, who) and `bank_reconciliation_items` (each ledger entry ticked
+    once; a trigger keeps items on the reconciled account). `difference ≠ 0` needs a note (also a
+    check constraint). Both tables are RLS-protected and never updated or deleted.
+  - Rights: everything under `cash.deposit` (the Treasurer template holds it); a deposit's branch
+    is the branch of the account it left; reconciliation is a bank-side control open to anyone
+    holding the right at some branch.
+  - `PATCH /manager/financial-accounts/:id` answers `ACCOUNT_IN_USE` when a bank account with a
+    balance, unreconciled entries or a deposit in transit is set inactive.
+  - Visibility: cash overview `depositsInTransitTotal` (not part of cash on hand), the custody
+    report counts deposits net of returns, the checklist counts deposits in transit and bank
+    entries older than a week on no statement, the accounts page shows unreconciled counts and
+    the last reconciliation.
+- **Consequences:** The bank balance in the system is only what a second person confirmed; the
+  owner + one cashier set-up works because the owner is the confirmer with an audited override.
+  Fee settlement per acquirer (FND-413 in full) remains for R3.5 / D6.
+
+## ADR-0097 — Remediation session 5: stock adjustment approvals, blind counts, master-data guards
+- **Date:** 2026-10-13 · **Status:** Accepted (owner decision D2 on the remediation plan)
+- **Context:** Phase 1 found stock adjustments with no approval, limit or segregation (FND-201),
+  counts that were not blind and overwrote intervening movements (FND-202), master-data changes
+  that hid balances (FND-206, FND-207) and branch deactivation with no pre-conditions (FND-109).
+- **Decision:**
+  - `stock_adjustments` (migration 0040) gains `number` (ADJ-, gap-free per merchant through
+    `document_sequences`, back-filled for existing rows), `status` (posted | pending | rejected
+    | withdrawn), `value_minor`, `limit_exceeded`, `owner_override`, decision columns,
+    `started_at` and `movements_acknowledged`. The adjustment approval limit
+    (`sales_settings.adjustment_approval_limit_minor`, default 50 000 fils) and the blind-count
+    policy (`blind_stock_count`) live with the other company thresholds; both are optional on
+    the settings PUT (unchanged when omitted) and are exposed read-only through
+    `GET /manager/inventory/settings` so counters see the policy without company-settings rights.
+  - `InventoryService.createAdjustment` estimates the value at cost from the current balances
+    before posting; above the limit (never for opening stock) a non-owner's document is stored
+    pending with its lines and the balances seen, and nothing goes through the ledger. Approval
+    (`POST …/adjustments/:id/decision`, approver ≠ requester, owner excepted and flagged) runs
+    the same `post()` as a direct document, attributing movements to the requester; rejection
+    needs a note; the requester may withdraw. Database rules: column-level UPDATE grants only,
+    trigger `stock_adjustments_decision` (pending → final once, header otherwise immutable, a
+    final document only receives its posted value) and `stock_adjustment_lines_apply` (lines
+    take their applied figures only while the header is pending).
+  - Counts carry `startedAt`; `assertNoMovementsSince` reports movements of the counted items
+    after that moment (net quantity, count and types per line) until `acknowledgeMovements` is
+    sent. The editor hides the book quantity and the resulting balance under the blind policy.
+  - `assertNoStockOnHand` (catalog) refuses tracking off, goods → service, archiving and
+    variant removal while stock is on hand; `assertAdjustable` lets archived items be written
+    off or counted. `assertBranchIdle` (branches) lists stock, open shifts, cash, open purchase
+    orders, open stock transfers and cash transfers in transit before deactivation.
+  - Checklist and dashboard count pending adjustments.
+- **Consequences:** FND-201, FND-202, FND-218, FND-220, FND-206, FND-207 and FND-109 close.
+  Transfer losses and the in-transit location (R2.3 / R2.4) reuse the same approval limit.
+
+## ADR-0098 — Remediation session 6: transfer losses, surplus, recall, in-transit valuation
+- **Date:** 2026-10-13 · **Status:** Accepted (remediation plan R2.3 / R2.4)
+- **Context:** Phase 1 found transfer shortages written off silently and self-approved (FND-603,
+  FND-211), surplus impossible to record (FND-622), unvalued transfers when the dispatch cost was
+  unknown (FND-623), documentation out of step (FND-613) and in-transit stock unvalued, unaged and
+  irrecoverable (FND-604).
+- **Decision:**
+  - The ledger keeps its shape: `transfer_out` of the full dispatched quantity at the source,
+    `transfer_in` of what arrived at the destination. No synthetic ledger row is written for a
+    loss (it would either double-count the source or create phantom stock at the destination);
+    the loss is an explicit, numbered, approved document (`stock_transfer_losses` +
+    `stock_transfer_loss_lines`, migration 0041) that closes the in-transit quantity and is
+    reported as `transfer_loss` in the inventory report and as written-off quantity and value in
+    the purchasing report.
+  - `receive` creates the loss for the shortage with the receiver's note; the value at dispatch
+    cost decides against the adjustment approval limit (R2.1); the owner posts directly, flagged.
+    `POST /manager/transfers/:id/losses` claims the remaining in-transit quantity later (after a
+    rejection, or when a loss was never created); one pending loss at a time.
+    `POST …/losses/:lossId/decision` needs `inventory.transfer.approve` at the source; claimant
+    ≠ decider unless owner. Database: column-level UPDATE grant and trigger (pending → final once).
+  - Surplus: the receive cap is lifted; any difference needs a note; the line check no longer
+    requires received ≤ dispatched; the signed discrepancy is reported.
+  - `assertCostsKnown` refuses dispatch when a line has neither an average nor a catalog cost.
+  - In transit = dispatched − received − recalled − posted losses per line, computed from the
+    documents (never stored): `GET /manager/transfers/in-transit` (per transfer, age, value,
+    unresolved / pending flags), transfer detail totals, inventory report `inTransit`.
+  - Recall: `POST /manager/transfers/:id/recall` (source right, reason) posts `transfer_in` at
+    the source at dispatch cost, sets `recalled_quantity` (set once) and the final status
+    `recalled` (added to `purchasing_final_states`).
+  - Checklist counts pending losses and unresolved shortages; the dashboard warns.
+- **Consequences:** FND-603, FND-604, FND-211, FND-622, FND-623 and FND-613 close. Transfer
+  losses are not yet listed with the cash variances (BR-167); a stock-side follow-up list is a
+  candidate for R4.
+
+## ADR-0099 — Remediation session 7: valuation as at a date, cost precision, custody of returned goods
+- **Date:** 2026-10-13 · **Status:** Accepted (remediation plan R2.6 / R2.7 / R2.8)
+- **Context:** Phase 1 found no closing stock at a past date, no roll-forward and no reserved
+  quantities (FND-512, FND-213); averages rounded to the fils (FND-203, FND-205), negative
+  balances valued at zero with their cost basis lost (FND-204), unvalued items hidden behind a
+  count (FND-216), two cost concepts unexplained (FND-223); restock defaulting to yes (FND-507),
+  non-restocked returns with no custody record (FND-508) and an increase reason that let stock
+  re-enter outside the refund controls (FND-212).
+- **Decision:**
+  - `stock_levels.avg_cost_micro` and `stock_movements.avg_cost_micro_after` (migration 0042,
+    back-filled × 1000) carry the average at 10⁻⁶ KWD; `avg_cost_minor` stays as the rounded
+    display figure and the fallback for rows that predate the column. The engine
+    (`StockLedgerService.apply`) computes with `weightedAverageCostMicro`: a typed receipt cost
+    is exact fils; outgoing stock and estimates use the micro average; movement values use
+    `quantityValueMicro`. `AppliedLine.valueMinor` is the signed movement value and documents
+    sum it, so an adjustment's value is the ledger's, not a re-rounding.
+  - Negative balances: the average over `onHand + in` when the receipt brings the balance back
+    above zero (retroactive absorption, value = Σ movement values); the previous average is kept
+    while the balance stays negative; stock going negative with no average adopts its outgoing
+    cost. Valuation values every non-zero balance at its average (negatives count negatively).
+  - Inventory report: `asAt` (closing per branch and total at the end of `to`, DISTINCT ON the
+    last movement before the cut-off in the merchant's zone), `rollForward` (opening at the
+    start of `from`, Σ quantity and value per movement type, rounding = closing − opening − Σ
+    values, closing) per branch and in total, `reservedQuantity` and a `reserved` column from
+    active unexpired `stock_reservations`, and `unvalued` items (on hand, no average).
+  - `damaged_returns` (RLS, append-only, held → disposed once through a column-level grant and a
+    trigger) is written by `RefundsService.execute` for every non-restocked tracked line;
+    `GET /manager/inventory/damaged-returns` and `POST …/:id/dispose` (adjust right at the
+    branch, note required). `returnLineInputSchema.restock` is optional and defaults from the
+    reason (damaged / defective → false); the POS box follows the reason until touched.
+  - `customer_return` removed from the increase reasons (contract); existing documents keep it.
+- **Consequences:** FND-512, FND-213, FND-203, FND-204, FND-205, FND-216, FND-223, FND-507,
+  FND-508 and FND-212 close. Gross profit with a costless item (FND-513) stays with R4.3. The
+  plan's reference to FND-219 under R2.6 matches no finding in the register.
+
+## ADR-0100 — Remediation session 8: supervisor overrides on the till, price-change bounds, zero-total sales
+- **Date:** 2026-10-13 · **Status:** Accepted (remediation plan R3.1 / R3.2 / R3.3)
+- **Context:** Phase 1 found no override step on another cashier's till (FND-301): every check was
+  a permission of the person completing the sale, so exceptions migrated to the supervisor's shift
+  and drawer or to permanent cashier rights. Price changes were unbounded, needed no reason and
+  bypassed the discount limit (FND-302); above-limit sales were not flagged and the limit in force
+  was not kept (FND-303); a 100 % discount produced a free sale with no reason, right or report
+  (FND-312).
+- **Decision:**
+  - `sale_overrides` (migration 0043; RLS, append-only, granted → used once through a column-level
+    grant and trigger `sale_overrides_use`): `POST /pos/overrides` takes the supervisor's e-mail
+    and password on the cashier's session, verifies them with the sign-in throttles, loads the
+    supervisor's access for the merchant and issues a ten-minute, single-use grant listing the
+    overridable rights they hold at the branch and the cashier lacks (`OVERRIDE_SELF`,
+    `OVERRIDE_NOT_ALLOWED`, refused attempts audited). Checkout takes `overrideId`; rights are
+    checked inside the sale transaction against the cashier's access first and the grant second,
+    the grant is spent with the `kinds` it supplied, and `sales.override_id` links the sale. The
+    sale keeps the cashier's shift, register and attribution; the supervisor never needs a shift.
+    Rights are therefore checked at completion (`completeSaleInTx`), no longer when parsing the
+    cart, so holding a cart with a discount needs no right.
+  - Price changes (`sales_settings.price_override_floor_percent`, `…_ceiling_percent`,
+    `…_below_cost`): reason required (`REASON_REQUIRED`), bounds enforced for everyone
+    (`PRICE_OUT_OF_BOUNDS`), list-minus-price gap added to the line discount for the limit check
+    on the list gross, zero price always above the limit. `sales.above_limit`,
+    `sales.discount_limit_percent`, `sale_lines.price_override_reason` and
+    `order_lines.price_override_reason` (held carts) are stored.
+  - Zero totals: new permission `sales.zero_total` (supervisor template), `ZERO_TOTAL_DENIED`,
+    `zeroTotalReason` required and stored (`sales.zero_total_reason`, check constraint for POS
+    sales, `NOT VALID` so older rows stay). Flags `zero_total`, `above_limit`,
+    `price_override`, `supervised` on sale summaries, `GET /manager/sales?flag=`, and per-employee
+    counts in the sales report.
+  - POS: discount and price fields are always offered; what exceeds the cashier's rights is
+    shown as "needs a supervisor" and the payment dialog carries the supervisor panel (e-mail,
+    password, note) and the zero-total reason; the server's refusal codes also open the panel.
+- **Consequences:** FND-301, FND-302, FND-303 and FND-312 close. Refund and void approvals keep
+  their own flow until R3.4; the override grant is generic enough to carry them later. The owner
+  decides the bounds in the selling policy; defaults (50 % / 200 %, not below cost) apply to
+  existing companies.
+
+## ADR-0101 — Remediation session 9: refund segregation, tender hygiene, held sales and reprints, combined discount limit
+- **Date:** 2026-10-13 · **Status:** Accepted (remediation plan R3.4 / R3.5 / R3.6 / R3.7, decisions D4 and D6)
+- **Context:** Phase 1 found cashiers refunding their own sales from their own drawer (FND-503),
+  approvers exempt from the limit and window for their own refunds (FND-502), exchange credit
+  paid back in cash (FND-504), pending requests dying with the requester's shift (FND-509),
+  non-cash methods able to settle nowhere and cash fees posted nowhere (FND-304, FND-412,
+  FND-506), self-declared card tenders and pay-backs without a reference (FND-305, FND-505),
+  held sales without expiry or attribution (FND-309), uncounted reprints (FND-310), cleared carts
+  without a trace (FND-311) and a discount limit applied per discount (FND-313, OQ-024).
+- **Decision:**
+  - `approvalReasons` no longer exempts holders of `refunds.approve`; it adds `own_sale` when the
+    requester rang the sale up and `sales_settings.refund_own_sales_need_approval` is on. The
+    owner completes directly with `refunds.owner_override = true` (D3 pattern); exchanges follow
+    the same rule. `refunds.customer_contact` is kept with the request. `insertPayments` traces
+    exchange credit back through `payments.refund_id` to the tenders of the original sale
+    (`creditOrigins`, pro rata, up to three steps, cash as the fallback) and stores the target in
+    `refund_payments.financial_account_id`; `execute` refuses a non-cash pay-back with no account
+    (`SETTLEMENT_ACCOUNT_REQUIRED`). `approve` re-points a pending cash refund to the approver's
+    open shift when the requester's shift is closed (`repointShift`, audited as
+    `paidFromShiftId`); a manager without a shift gets `SHIFT_REQUIRED`. The activity report adds
+    `ownSaleRefunds`.
+  - Payment methods: a non-cash method needs `financial_account_id` (validation) and cash may
+    carry no fee (contract); checkout refuses non-cash methods without an account and ignores
+    any cash fee; `payment_methods.refund_fee_policy` (`keep` | `reverse`, D6) decides whether
+    `execute` posts a pro-rata `fee` entry back and records `refund_payments.fee_reversed_minor`.
+    `sales_settings.require_tender_reference` (default on) makes the reference mandatory on
+    non-cash tenders (`REFERENCE_REQUIRED`) and on non-cash pay-backs of a refund request (the
+    preview marks `referenceRequired`; the POS sends the suggested split with references). The
+    payments report gains `feesReversed` (per method and in the totals, `netAfterFees` adds it
+    back) and an `unreferenced` list (count, amount, up to 200 items).
+  - Held sales: `sales_settings.held_sale_expiry_hours` (default 24); `suspended()` expires stale
+    holds (`orders.status = 'expired'`, `expired_at`, audit `order.expired`) before listing and
+    returns `expiresAt`; completion keeps the held lines and records `completed_by_user_id`,
+    `completed_by_membership_id`, `completed_shift_id`; the sale exposes `heldByName`. Reprints:
+    `receipt_reprints` (RLS, insert-only), `POST /pos/sales/:id/reprints` (audit
+    `sale.reprinted`), `reprintCount` on the sale and a "COPY n" line on the receipt;
+    `GET /pos/sales/lookup?receipt=` finds any receipt of the branch. Cleared carts:
+    `pos_cart_events` (RLS, insert-only) through `POST /pos/cart-events`, logged at or above
+    `sales_settings.cart_clear_log_threshold_minor` (default 5.000) with audit `cart.cleared` /
+    `cart.line_removed`; the POS sends them on clear and on line removal.
+  - Combined limit (D4): per line, `lineDiscount + allocated orderDiscount + list-price gap` is
+    compared with the list gross; the separate order-level check is gone. The POS mirror
+    (`requiredRights`) applies the same rule.
+- **Consequences:** FND-502, FND-503, FND-504, FND-509, FND-304, FND-305, FND-505, FND-412,
+  FND-506, FND-309, FND-310, FND-311 and FND-313 close; OQ-016 and OQ-024 are resolved. Test
+  fixtures that have one person sell and refund switch the two new rules off explicitly
+  (`allowOwnSaleRefunds`); the rules themselves are covered by `refunds-controls.int.test.ts`
+  and `sales-controls.int.test.ts`. Acquirer-statement reconciliation (matching references to
+  settlements) is not built; the unreferenced list is the bridge until a terminal is integrated.
+
+## ADR-0102 — Remediation session 10: one cut-off rule, profit with uncosted share, report access log, dashboard KPIs, supplier statement
+- **Status:** Accepted (2026-10-13). Remediation plan R4.1, R4.3, R4.4, R4.5.
+- **Context:** The audit found three date bases for refunds, UTC-day filters on cash variances
+  and disbursements beside local-day filters elsewhere, statements without a period, a fixed
+  time zone nobody could set, gross profit hidden for the whole period by one costless item,
+  a by-employee breakdown that left online sales out, no trace of who read or exported which
+  report, a dashboard with a stale "no sales yet" banner, a hard-coded unusual-activity
+  threshold with an all-time default window, and no view of what a supplier is owed.
+- **Decision:**
+  - One cut-off rule (BR-184) in `apps/api/src/kernel/time/period.ts`: `merchantTimezone`,
+    `withinLocalDays`, `dayStart`/`dayEnd`, `localDay`, `todayIn`, `localDayStart`, `addDays`.
+    Sales, refunds, cash variances, disbursements, statements, audit, inventory movements,
+    shifts and reports all cut through it. The refund register filters on
+    `coalesce(completed_at, created_at)` and returns totals; the sales history's `refunded`
+    total is the refunds completed in the period and scope. `GET /manager/cash/accounts/:id/entries`
+    takes `from`/`to` and returns `period`, `openingBalance`, `totalIn`, `totalOut`,
+    `closingBalance`. The branch time zone column stays but is unused (FND-306: one company,
+    one clock). `merchants.timezone` is accepted at registration (`company.timezone`) and on
+    `PATCH /manager/merchant` (validated with `Intl`), stamped in `timezone_changed_at` and
+    audited as `merchant.timezone_changed`.
+  - Gross profit (BR-185): `profit` is always computed with `reports.financial`; it carries
+    `uncostedSales`, `uncostedSharePercent`, and `available` now only says whether every sale
+    and restocked return had a cost. `byEmployee` gains an `online` row (`membershipId: 'online'`).
+  - Report access (BR-187): `ReportsService` writes `report.viewed` inside each report
+    transaction; `POST /manager/reports/exports` records `report.exported` for CSVs built in
+    the browser (the web's `ReportTable` and the audit page call it). Server-side CSV
+    rendering was not built: the export is still the displayed table, the log is the control.
+  - Dashboard (BR-187): `GET /manager/reports/today` (`reports.sales`) returns today and
+    yesterday in the merchant's zone, open shifts and `hasSales`; the dashboard shows it and
+    drops the fixed banner.
+  - Activity review (BR-186): `sales_settings.unusual_refund_rate_percent` (10) and
+    `unusual_activity_days` (30) replace the constant; `GET /manager/refunds/activity` returns
+    `period` and defaults to the last N local days.
+  - Supplier statement (BR-188): `GET /manager/suppliers/:id/statement?from&to`
+    (`purchasing.read`, branch-scoped) unions purchase receipts valued at order cost with
+    supplier payments and reversals, computes the running balance over every line and shows
+    the period's lines with the balance brought forward.
+- **Consequences:** FND-317, FND-411, FND-511, FND-522, FND-306, FND-523, FND-513, FND-514,
+  FND-518, FND-517, FND-520 close; FND-525 moves to a tested bridge (supplier ledger with
+  invoices stays R6). Migration 0045 adds three columns only. Existing expectations changed:
+  `profit` for a complete period now carries `uncostedSales: 0.000`, the costless-item case
+  shows `grossProfit 0.000` with `marginPercent null` instead of nulls everywhere, and the
+  refunds list carries `totals`.
+
+## ADR-0103 — Remediation session 11: period close pack and the lock on document dates
+- **Status:** Accepted (2026-10-13). Remediation plan R4.2 (BP-525, FND-619).
+- **Context:** An external accountant could not close a month from the reports alone and nothing
+  stopped a late delivery or order from landing in a month already reported (BP-525, FND-619).
+- **Decision:**
+  - `period_closes` (migration 0046): one row per merchant and month ('YYYY-MM'), with the local
+    day bounds, the time zone, the closer, an optional note and the pack as JSONB; RLS; no
+    update or delete for the application role (a close is final, BR-189).
+  - `PeriodsService` (`apps/api/src/modules/periods`): `list` (months since registration with
+    status closed / closable / open / current), `get` (stored pack or live preview), `close`
+    (sequential, ended months only, `PERIOD_NOT_CLOSABLE` otherwise, audited `period.closed`).
+    The pack is assembled from `ReportsService.sales / payments / inventory` for the month plus
+    direct ledger queries (cash by place as at the cut-off, refunds owed, open items, supplier
+    received − paid, document counts). Reading needs `reports.financial`; closing the new
+    merchant-scoped permission `periods.close` (owner implicit, Company Manager template) and
+    every report right company-wide, so a pack is never partial.
+  - `assertPeriodOpen(tx, merchantId, date)` is the lock; `purchase_orders.document_date` and
+    `purchase_receipts.received_on` (BR-190, defaulted and bounded in `businessDate`) are the
+    dates it checks. Posting times stay the ledger times.
+  - Manager: `/periods` page (list, pack, close dialog with a warning and a note); purchase
+    order form and receive dialog take the business dates.
+- **Consequences:** FND-619 closes; BP-525's gap (no period lock or sign-off) closes for the
+  retail scope. Not built: reopening a month (by design), server-rendered pack export (the
+  page is the pack), business dates on other document types (they are posted at entry).
+
+## ADR-0104 — Remediation session 12: ownership transfer and freeze, audit detail and price history, account hygiene
+- **Status:** Accepted (2026-10-13). Remediation plan R5.2, R5.3, R5.4.
+- **Context:** BR-020 promised an audited ownership transfer that did not exist (FND-102); no
+  self-service password change or session overview (FND-103); invitation grants authorised at
+  invitation time only (FND-108); anyone could lock an account by guessing an e-mail with no
+  notice to its holder (FND-110); branch reactivation silently revived grants (FND-116); profile,
+  branch, employee, role, catalog, supplier and draft-order edits were audited without values
+  (FND-105, FND-208, FND-620); price history lived only in the audit log (FND-222).
+- **Decision:**
+  - `ownership_transfers` (migration 0047, RLS, status moves once out of `pending`) and
+    `OwnershipService` (`start` / `cancel` / `accept` for the owner flow with an e-mailed token;
+    `transfer()` shared with the platform). `merchants.owner_frozen_at / _reason` with
+    `POST /platform/merchants/:id/owner-freeze|owner-release` (support, super admin) and
+    `POST /platform/merchants/:id/ownership-transfer` (super admin). The session resolver and
+    the login flow refuse a frozen owner (`OWNER_FROZEN`), reading the merchant row inside the
+    merchant context (RLS).
+  - `diffFields` (`apps/api/src/kernel/audit-diff.ts`) gives `{ field: { from, to } }` for the
+    changed fields; `price_history` (RLS, insert-only) is written from `saveVariants` and read
+    through `GET /manager/products/:id/price-history`.
+  - `AccountService` (`POST /auth/manager/password`, `GET /auth/manager/sessions`,
+    `DELETE /auth/manager/sessions/:id`, `POST /auth/manager/sessions/revoke-others`); the
+    password change relies on `users.password_changed_at` to end other sessions and re-issues
+    the current one. Manager actions `POST /manager/employees/:id/sessions/revoke` and
+    `/unlock`. `InvitationAcceptanceService` re-evaluates each grant with `canGrant` against the
+    inviter's current access. `branchStatusSchema.dormantGrants` (`keep` | `clear`) with
+    `GRANTS_NEED_CONFIRMATION`. `LoginService` e-mails the account holder when the failure
+    counter reaches the limit (`RateLimiterService.hitAndCheck`).
+  - Manager: `/account` page (password, devices), ownership section on the company settings
+    page, employee actions, dormant-grants dialog on the branches page, price history on the
+    product page. Platform: owner freeze / release / transfer dialogs on the merchant page.
+- **Consequences:** FND-102, FND-103, FND-105, FND-108, FND-110, FND-116, FND-208, FND-222 and
+  FND-620 close. Not built: scheduled or effective-dated prices, progressive delays instead of
+  the hard lock (the lock stays at 10 wrong passwords / 15 minutes; the holder is told and a
+  manager can clear it), e-mail verification at self-registration (FND-104, owner decision).
+

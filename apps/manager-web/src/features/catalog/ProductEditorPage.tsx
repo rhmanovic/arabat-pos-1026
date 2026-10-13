@@ -5,6 +5,7 @@ import {
   Button,
   Checkbox,
   ConfirmDialog,
+  DataTable,
   Field,
   Input,
   PageHeader,
@@ -19,7 +20,9 @@ import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useBranchContext, useSession } from '../../app/context.js';
+import { formatDateTime } from '../inventory/AdjustmentsPage.js';
 import { categoriesKey } from './CategoriesPage.js';
+import { formatAmount } from './ProductsPage.js';
 import { productsKey } from './ProductsPage.js';
 
 interface VariantDraft {
@@ -405,7 +408,15 @@ function Editor({ product }: { product: Product | undefined }) {
                   )}
                 </Field>
                 {canPrice ? (
-                  <Field label={`${t('catalog.cost')} (KWD)`} error={priceError(v.cost)}>
+                  <Field
+                    label={`${t('catalog.cost')} (KWD)`}
+                    error={priceError(v.cost)}
+                    hint={
+                      draft.trackInventory && !v.cost.trim()
+                        ? t('catalog.costMissingHint')
+                        : t('catalog.costHint')
+                    }
+                  >
                     {(p) => (
                       <Input
                         {...p}
@@ -508,6 +519,8 @@ function Editor({ product }: { product: Product | undefined }) {
         </div>
       </fieldset>
 
+      {product ? <PriceHistorySection productId={product.id} /> : null}
+
       <Section title={t('catalog.images')} description={t('catalog.imagesHint')}>
         {product ? (
           <div className="flex flex-wrap gap-4">
@@ -567,5 +580,67 @@ function Editor({ product }: { product: Product | undefined }) {
         }}
       />
     </div>
+  );
+}
+
+/** Price and cost history of the product (BR-191): who changed what, from what, when. */
+function PriceHistorySection({ productId }: { productId: string }) {
+  const { t, i18n } = useTranslation();
+  const api = useApi();
+  const history = useQuery({
+    queryKey: [...productsKey, 'price-history', productId],
+    queryFn: () => api.catalog.priceHistory(productId),
+  });
+  const amount = (m: { amount: string; currency: string } | null) =>
+    m ? formatAmount(m, i18n.language) : '—';
+  return (
+    <Section title={t('catalog.priceHistory')} description={t('catalog.priceHistoryHint')}>
+      <DataTable
+        caption={t('catalog.priceHistory')}
+        loading={history.isPending}
+        rows={history.data?.entries}
+        rowKey={(e) => e.id}
+        empty={t('catalog.noPriceHistory')}
+        columns={[
+          {
+            key: 'when',
+            header: t('catalog.changedAt'),
+            cell: (e) => formatDateTime(e.changedAt, i18n.language),
+          },
+          {
+            key: 'what',
+            header: t('catalog.changedWhat'),
+            cell: (e) => (
+              <span>
+                {t(`catalog.history_${e.kind}`)}
+                {e.variantNameEn || e.variantNameAr ? (
+                  <span className="block text-xs text-fg-muted">
+                    {localizedName(
+                      { nameEn: e.variantNameEn, nameAr: e.variantNameAr },
+                      i18n.language,
+                    )}
+                  </span>
+                ) : null}
+              </span>
+            ),
+          },
+          {
+            key: 'change',
+            header: t('catalog.fromTo'),
+            cell: (e) => (
+              <span dir="ltr" className="tabular-nums">
+                {e.source === 'created' ? amount(e.to) : `${amount(e.from)} → ${amount(e.to)}`}
+              </span>
+            ),
+          },
+          {
+            key: 'who',
+            header: t('catalog.changedBy'),
+            hideBelow: 'sm',
+            cell: (e) => e.changedBy ?? '—',
+          },
+        ]}
+      />
+    </Section>
   );
 }

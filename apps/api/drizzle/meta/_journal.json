@@ -253,6 +253,90 @@
       "when": 1791841719286,
       "tag": "0035_cash_disbursements_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1791849830714,
+      "tag": "0036_blind_cash_count",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1791856098762,
+      "tag": "0037_cash_out_controls",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1791862619125,
+      "tag": "0038_disbursement_approvals_variances",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1791865678091,
+      "tag": "0039_deposits_in_transit_reconciliation",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1791867840351,
+      "tag": "0040_adjustment_approvals_blind_counts",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1791869395553,
+      "tag": "0041_transfer_losses_in_transit",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1791871079842,
+      "tag": "0042_cost_precision_damaged_returns",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1791873051338,
+      "tag": "0043_sale_overrides_price_bounds",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1791874775905,
+      "tag": "0044_refund_segregation_tender_hygiene",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1791886079458,
+      "tag": "0045_period_cutoff_dashboard",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1791887979894,
+      "tag": "0046_period_close",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1791889192890,
+      "tag": "0047_ownership_hygiene_history",
+      "breakpoints": true
     }
   ]
 }

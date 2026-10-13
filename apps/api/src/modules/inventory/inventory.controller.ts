@@ -1,11 +1,15 @@
 import {
   type Adjustment,
+  type DamagedReturn,
   type InventorySettings,
   type InventorySummary,
   type PosAvailability,
   type VariantStock,
   adjustmentListQuerySchema,
   createAdjustmentSchema,
+  damagedReturnQuerySchema,
+  decideAdjustmentSchema,
+  disposeDamagedReturnSchema,
   movementQuerySchema,
   posAvailabilityQuerySchema,
   setThresholdSchema,
@@ -118,6 +122,48 @@ export class InventoryController {
     @Req() req: FastifyRequest,
   ): Promise<Adjustment> {
     return this.inventory.createAdjustment(actor, body, req.ip);
+  }
+
+  @RequirePermission('manager', 'inventory.adjust')
+  @Post('adjustments/:id/decision')
+  decide(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Body(new ZodPipe(decideAdjustmentSchema)) body: z.output<typeof decideAdjustmentSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<Adjustment> {
+    return this.inventory.decideAdjustment(actor, id, body, req.ip);
+  }
+
+  @RequirePermission('manager', 'inventory.adjust')
+  @Post('adjustments/:id/withdraw')
+  withdraw(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Req() req: FastifyRequest,
+  ): Promise<Adjustment> {
+    return this.inventory.withdrawAdjustment(actor, id, req.ip);
+  }
+
+  @RequirePermission('manager', 'inventory.read')
+  @Get('damaged-returns')
+  damagedReturns(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Query(new ZodPipe(damagedReturnQuerySchema)) query: z.output<typeof damagedReturnQuerySchema>,
+  ) {
+    return this.inventory.listDamagedReturns(actor, query);
+  }
+
+  @RequirePermission('manager', 'inventory.adjust')
+  @Post('damaged-returns/:id/dispose')
+  dispose(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Body(new ZodPipe(disposeDamagedReturnSchema))
+    body: z.output<typeof disposeDamagedReturnSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<DamagedReturn> {
+    return this.inventory.disposeDamagedReturn(actor, id, body, req.ip);
   }
 
   @RequirePermission('manager', 'inventory.read')

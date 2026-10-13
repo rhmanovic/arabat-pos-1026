@@ -25,6 +25,8 @@ test('payment fee setup, a full POS shift with cash movements, and the managerâ€
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Name (English)').fill('Deema Pay');
   await dialog.getByLabel('Type').selectOption('custom');
+  // A non-cash method must settle into an account (BR-181).
+  await dialog.getByLabel('Settles into').selectOption({ label: 'Bank account 1' });
   await dialog.getByLabel('Processing fee').selectOption('fixed_plus_percentage');
   await dialog.getByLabel('Fixed fee (KWD)').fill('0.100');
   await dialog.getByLabel('Percentage (%)').fill('2');
@@ -73,6 +75,12 @@ test('payment fee setup, a full POS shift with cash movements, and the managerâ€
 
   await page.getByRole('button', { name: 'Close shift' }).click();
   await page.getByRole('dialog').getByLabel('Counted cash (KWD)').fill('22');
+  // The owner sees the expected figure, so a difference beyond the tolerance needs a note (BR-164).
+  await expect(page.getByTestId('close-difference')).toContainText('KWD -0.250');
+  await expect(
+    page.getByRole('dialog').getByRole('button', { name: 'Close shift' }),
+  ).toBeDisabled();
+  await page.getByRole('dialog').getByLabel('Note (optional)').fill('coins missing');
   await page.getByRole('dialog').getByRole('button', { name: 'Close shift' }).click();
   await expect(page.getByTestId('discrepancy')).toHaveText('KWD -0.250');
   await expect(page.getByTestId('close-result')).toContainText('Short');

@@ -6,6 +6,7 @@ import {
   productStatusSchema,
   saveCategorySchema,
   saveProductSchema,
+  type PriceHistory,
 } from '@arabat/contracts';
 import {
   Body,
@@ -93,6 +94,16 @@ export class CatalogController {
     @Param('id', uuid) id: string,
   ): Promise<Product> {
     return this.catalog.getProduct(actor, id);
+  }
+
+  /** Price and cost history of the product's variants (BR-191). */
+  @RequirePermission('manager', 'catalog.read')
+  @Get('products/:id/price-history')
+  priceHistory(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+  ): Promise<PriceHistory> {
+    return this.catalog.priceHistory(actor, id);
   }
 
   @RequirePermission('manager', 'catalog.manage')

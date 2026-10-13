@@ -111,8 +111,27 @@ export const platformAr: PlatformResources = {
     suspend: 'إيقاف',
     reactivate: 'إعادة التفعيل',
     close: 'إغلاق نهائي',
+    freezeOwner: 'تجميد المالك',
+    releaseOwner: 'رفع التجميد عن المالك',
+    transferOwner: 'نقل الملكية',
+    ownerFrozen: 'المالك مجمَّد منذ {{when}}',
     yes: 'نعم',
     no: 'لا',
+  },
+  ownerDialog: {
+    freeze: 'تجميد مالك {{name}}',
+    release: 'رفع التجميد عن مالك {{name}}',
+    transfer: 'نقل ملكية {{name}}',
+    freezeHint:
+      'يُسجَّل خروج المالك من كل مكان ولا يستطيع الدخول حتى رفع التجميد؛ يواصل الموظفون العمل. يُستخدم عند اختراق حساب المالك أو نزاع عليه.',
+    releaseHint: 'يستطيع المالك تسجيل الدخول مجدداً.',
+    transferHint:
+      'يصبح العضو المحدد مالكاً فوراً بكل الصلاحيات، ويصبح المالك الحالي عضواً عادياً. يُبلَّغ الطرفان بالبريد. لمديري النظام الأعلى فقط.',
+    newOwner: 'المالك الجديد',
+    chooseMember: 'اختر عضواً…',
+    freezeDone: 'جُمِّد المالك',
+    releaseDone: 'رُفع التجميد',
+    transferDone: 'نُقلت الملكية',
   },
   statusDialog: {
     suspend: 'إيقاف {{name}}',

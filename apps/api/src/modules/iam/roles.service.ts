@@ -120,6 +120,7 @@ export class RolesService {
       await tx.delete(roles).where(eq(roles.id, roleId));
       await this.record(tx, actor, 'role.deleted', roleId, ip, {
         name: current.nameEn ?? current.nameAr,
+        permissions: current.permissions,
       });
     });
   }

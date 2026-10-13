@@ -63,6 +63,11 @@ export const PERMISSIONS = {
     group: 'sales',
     description: 'Cancel an open or same-shift sale',
   },
+  'sales.zero_total': {
+    scope: 'branch',
+    group: 'sales',
+    description: 'Complete a sale with nothing to pay (complimentary)',
+  },
 
   // Refunds
   'refunds.create': {
@@ -208,6 +213,11 @@ export const PERMISSIONS = {
     scope: 'branch',
     group: 'reports',
     description: 'Inventory reports and valuation',
+  },
+  'periods.close': {
+    scope: 'merchant',
+    group: 'reports',
+    description: 'Close accounting periods (month-end pack and lock)',
   },
 
   // Payment settings

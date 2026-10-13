@@ -5,10 +5,11 @@ import type {
   MerchantInterface,
   SelectMerchantRequest,
 } from '@arabat/contracts';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { eq, sql } from 'drizzle-orm';
 import { DatabaseService } from '../../database/database.service.js';
 import { AppError } from '../../kernel/errors/app-error.js';
+import { Mailer } from '../../kernel/mail/mailer.js';
 import { AuditService } from '../audit/audit.service.js';
 import {
   AccessRepository,
@@ -18,6 +19,7 @@ import {
   toMerchantOption,
 } from '../iam/access.repository.js';
 import { users } from '../iam/iam.schema.js';
+import { merchants } from '../merchants/merchants.schema.js';
 import { PasswordService } from './password.service.js';
 import { AUTH_LIMITS, RateLimiterService } from './rate-limiter.service.js';
 import { INTERFACE_HOME } from './session-policy.js';
@@ -37,6 +39,8 @@ export interface LoginOutcome {
 /** Merchant sign-in for /manager and /pos (AUTH.md §2). */
 @Injectable()
 export class LoginService {
+  private readonly logger = new Logger(LoginService.name);
+
   constructor(
     private readonly database: DatabaseService,
     private readonly passwords: PasswordService,
@@ -45,6 +49,7 @@ export class LoginService {
     private readonly tickets: TicketService,
     private readonly access: AccessRepository,
     private readonly audit: AuditService,
+    private readonly mailer: Mailer,
   ) {}
 
   async login(input: LoginRequest & { email: string }, client: ClientInfo): Promise<LoginOutcome> {
@@ -55,7 +60,10 @@ export class LoginService {
     const [user] = await this.database.db.select().from(users).where(eq(users.email, input.email));
     const passwordOk = await this.passwords.verify(user?.passwordHash ?? null, input.password);
     if (!user || !passwordOk) {
-      await this.limiter.hit(failureKey, AUTH_LIMITS.loginFailuresPerEmail);
+      const { justLocked } = await this.limiter.hitAndCheck(
+        failureKey,
+        AUTH_LIMITS.loginFailuresPerEmail,
+      );
       await this.audit.record({
         merchantId: null,
         actorType: 'anonymous',
@@ -63,6 +71,8 @@ export class LoginService {
         ip: client.ip,
         details: { email: input.email, interface: input.interface },
       });
+      // The account holder learns of a lock-out at once (BR-193, FND-110); the caller does not.
+      if (justLocked && user) await this.notifyLocked(user.email, user.fullName, client.ip);
       throw AppError.invalidCredentials();
     }
     await this.limiter.reset(failureKey);
@@ -137,6 +147,21 @@ export class LoginService {
     client: ClientInfo,
     action = 'auth.login.succeeded',
   ): Promise<LoginOutcome> {
+    if (membership.access.isOwner) {
+      // Read inside the merchant context: RLS hides the merchant row otherwise.
+      const [m] = await this.database.withMerchantTx(membership.merchantId, (tx) =>
+        tx
+          .select({ frozen: merchants.ownerFrozenAt })
+          .from(merchants)
+          .where(eq(merchants.id, membership.merchantId)),
+      );
+      if (m?.frozen)
+        throw new AppError(
+          403,
+          'OWNER_FROZEN',
+          'The owner account of this company is frozen by the platform.',
+        );
+    }
     const session = await this.database.withMerchantTx(membership.merchantId, async (tx) => {
       const created = await this.sessions.create(
         {
@@ -174,6 +199,32 @@ export class LoginService {
       },
       session: { interface: appInterface, token: session.token },
     };
+  }
+
+  private async notifyLocked(email: string, fullName: string, ip: string) {
+    const minutes = this.limiter.windowMinutes(AUTH_LIMITS.loginFailuresPerEmail);
+    await this.audit.record({
+      merchantId: null,
+      actorType: 'anonymous',
+      action: 'auth.account_locked',
+      ip,
+      details: { email, minutes },
+    });
+    try {
+      await this.mailer.send({
+        to: email,
+        subject: 'قفل تسجيل الدخول مؤقتاً | Sign-in temporarily locked',
+        text: [
+          `مرحباً ${fullName}،`,
+          `جرى إدخال كلمة مرور خاطئة عدة مرات لحسابك، فأُوقف تسجيل الدخول ${minutes} دقيقة. إن لم تكن أنت، غيّر كلمة المرور بعد انتهاء المهلة أو اطلب من مديرك فك القفل.`,
+          '',
+          `Hello ${fullName},`,
+          `Several wrong passwords were entered for your account, so sign-in is paused for ${minutes} minutes. If this was not you, change your password once the pause ends or ask your manager to clear the lock.`,
+        ].join('\n'),
+      });
+    } catch (error) {
+      this.logger.error(`Lock-out e-mail failed: ${(error as Error).message}`);
+    }
   }
 }
 

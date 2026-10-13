@@ -164,6 +164,32 @@ export async function inTransitAccount(tx: Transaction, merchantId: string): Pro
   return row!.id;
 }
 
+/** The company account holding cash deposited but not yet confirmed by the bank (BR-168). */
+export async function ensureDepositTransitAccount(
+  tx: Transaction,
+  merchantId: string,
+): Promise<void> {
+  await tx
+    .insert(financialAccounts)
+    .values({
+      id: newId(),
+      merchantId,
+      kind: 'deposit_transit',
+      nameAr: 'إيداعات في الطريق',
+      nameEn: 'Deposits in transit',
+    })
+    .onConflictDoNothing();
+}
+
+export async function depositTransitAccount(tx: Transaction, merchantId: string): Promise<string> {
+  await ensureDepositTransitAccount(tx, merchantId);
+  const [row] = await tx
+    .select({ id: financialAccounts.id })
+    .from(financialAccounts)
+    .where(eq(financialAccounts.kind, 'deposit_transit'));
+  return row!.id;
+}
+
 export async function ensureRegisterAccount(
   tx: Transaction,
   merchantId: string,
@@ -184,8 +210,9 @@ export async function ensureRegisterAccount(
 }
 
 /**
- * Moves cash between two custody accounts (register ↔ treasury, into a bank, or through the
- * in-transit account): a transfer record and its two ledger entries. The caller holds the locks and has checked the source balance.
+ * Moves cash between two custody accounts (register ↔ treasury, into deposits in transit and on
+ * to a bank, or through the in-transit account): a transfer record and its two ledger entries.
+ * The caller holds the locks and has checked the source balance.
  */
 export async function postTransfer(
   tx: Transaction,
@@ -194,9 +221,19 @@ export async function postTransfer(
     fromAccountId: string;
     toAccountId: string;
     amountMinor: bigint;
-    origin: 'pos_movement' | 'manager' | 'deposit' | 'branch_transfer';
+    origin:
+      | 'pos_movement'
+      | 'manager'
+      | 'deposit'
+      | 'branch_transfer'
+      | 'deposit_confirmation'
+      | 'deposit_return';
     cashMovementId?: string | null;
     branchTransferId?: string | null;
+    /** Deposits: the bank the cash is meant for. */
+    targetAccountId?: string | null;
+    /** Confirmations and returns: the deposit in transit being settled. */
+    confirmsTransferId?: string | null;
     reference?: string | null;
     note?: string | null;
     idempotencyKey?: string | null;
@@ -216,6 +253,8 @@ export async function postTransfer(
     origin: args.origin,
     cashMovementId: args.cashMovementId ?? null,
     branchTransferId: args.branchTransferId ?? null,
+    targetAccountId: args.targetAccountId ?? null,
+    confirmsTransferId: args.confirmsTransferId ?? null,
     reference: args.reference ?? null,
     note: args.note ?? null,
     idempotencyKey: args.idempotencyKey ?? null,

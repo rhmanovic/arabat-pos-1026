@@ -54,7 +54,14 @@ engineering defaults pending owner confirmation.
 
 - **BR-020** The owner always has full access to all branches and both merchant
   interfaces; the owner cannot be removed, demoted or deactivated by another
-  tenant user. Ownership transfer is an explicit, audited action.
+  tenant user. Ownership transfer is an explicit, audited action (R5.2): the owner names
+  an active member and re-enters their password, the member confirms with a code e-mailed
+  to them within 72 hours (one pending transfer at a time, cancellable by the owner), or a
+  platform super administrator transfers with a recorded reason. The old owner becomes a
+  plain member without implicit rights and their sessions on the company end; both are
+  notified. A platform operator may **freeze** the owner's access in an emergency (sessions
+  ended, sign-in refused with `OWNER_FROZEN`, employees unaffected) and release it later;
+  both are reasoned and audited.
 - **BR-021** Non-owner users only see and act on branches they are assigned to.
 - **BR-022** A POS session operates on exactly one branch at a time.
 - **BR-023** Deactivating a user immediately revokes all their sessions.
@@ -63,6 +70,9 @@ engineering defaults pending owner confirmation.
 - **BR-025** A user can never grant a permission they do not hold.
 - **BR-026** Actions beyond a cashier's permissions (void, refund, discount
   above limit, price override) require a manager override, which is audited.
+  Implemented for selling exceptions by BR-177 (supervisor override on the
+  cashier's till); refunds and voids still follow the approval flows of BR-09x
+  until R3.4.
 - **BR-027** One open shift per register; sales require an open shift.
 
 - **BR-049** Products are never deleted, only archived; archived products are hidden
@@ -145,10 +155,13 @@ engineering defaults pending owner confirmation.
 - **BR-080** Pricing: line amount = price × quantity rounded half-up to the fils; item
   discounts (percent or amount, never more than the line); a sale discount on the
   remaining amount is shared across the items exactly; the total is the sum of the items.
-- **BR-081** Discounts need `sales.discount`; above the merchant's limit (default 10 %,
-  per item and per sale) they need `sales.discount.override_limit` (supervisor).
-- **BR-082** Price changes at the till need `sales.price_override`; the original price
-  and the change are kept on the sale and in the audit log.
+- **BR-081** Discounts need `sales.discount`; above the merchant's limit (default 10 %)
+  they need `sales.discount.override_limit` (supervisor). The limit is compared with the
+  **combined** effective discount of each line: item discount + its share of the sale
+  discount + any gap under the list price (BR-183, decision D4).
+- **BR-082** Price changes at the till need `sales.price_override`; the original price,
+  the change and its reason are kept on the sale and in the audit log, within the company
+  bounds of BR-178.
 - **BR-083** A sale is completed only when the payments equal the total exactly; only
   cash may be over-tendered (the difference is change). Split payments are allowed.
 - **BR-084** Selling requires the cashier's own open shift; every sale records merchant,
@@ -187,7 +200,8 @@ engineering defaults pending owner confirmation.
   leaves the source and is "in transit") and received at the destination. A source can
   never send more than it holds.
 - **BR-104** If less arrives than was sent, the receiver must explain it; the missing
-  quantity is recorded as a discrepancy and written off.
+  quantity is recorded as a discrepancy and written off through an explicit transfer loss
+  (BR-172).
 
 - **BR-110** A sale may name a registered, active customer or be a walk-in sale (no
   customer). Choosing a customer at the till needs `customers.read`; creating a basic
@@ -230,6 +244,243 @@ Security hardening (Prompt 18):
   their own account.
 - **BR-161** A payment confirmed after its order was cancelled or failed is recorded (never
   ignored) and the order is flagged "needs attention" for a refund at the provider.
+
+Remediation session 1 (2026-10-13, owner decisions D1 and the audit-log change; see
+`docs/audit/REMEDIATION_PLAN.md`):
+- **BR-162** Cash counts are **blind** by default: a user without `shifts.view_all` at the branch
+  is shown no expected drawer balance before counting at opening or closing, needs no
+  "expected" figure to open, and is not asked to explain an opening difference they cannot see
+  (it is still booked between shifts and shown to them once recorded); the expected cash and
+  the difference appear after the count. Owners and supervisors who monitor shifts keep seeing
+  the figures. The owner may switch the policy off in the selling policy (`merchant.settings.update`);
+  cashiers can never change it.
+- **BR-163** The company's audit trail is readable by holders of `audit.read` in the management
+  application (filters: period in local days, action, record type, actor; CSV export of the
+  displayed rows). Entries without a company (failed sign-ins, platform-only actions) are not
+  shown; entries can never be edited or deleted.
+
+Remediation session 2 (2026-10-13, owner decisions D2 and D3):
+- **BR-164** Cash-out controls. A **correction** at the till only reverses a posted "other"
+  movement (or an earlier correction) of the same shift, the opposite way, up to what is left of
+  it, and needs a note; drops, top-ups, deposits and disbursements are reversed by their own
+  opposite record. An **"other" cash-out** above the company's per-movement limit, or taking the
+  shift's "other" cash-outs above the per-shift limit (owner-set in the selling policy; defaults
+  20.000 and 50.000 KWD), is recorded **pending**: no cash leaves the books until a holder of
+  `shifts.view_all` at the branch approves it in management; nobody approves their own request;
+  rejecting needs a reason; the cashier may withdraw it; a shift cannot be closed by its cashier
+  while a request is pending, and a manager's forced close rejects what is pending. The **owner**
+  posts such a cash-out directly: the movement is flagged *above the limit / owner override* and
+  the audit entry says so. A register's tolerance can never exceed the owner-set company
+  maximum (default 1.000 KWD), and whoever closes a shift while seeing the expected figure must
+  explain a difference beyond the tolerance (a blind cashier is not asked).
+- **BR-165** Cash custody outside the owner. A default **Treasurer** role (manager access, cash
+  custody, bank deposits, shift monitoring, financial reports, supplier and branch reading; no
+  selling, master data or employee administration) exists in every company. The dashboard shows
+  an internal-control checklist to holders of company-settings reading: no treasurer other than
+  the owner, active employees without any role, registers above the tolerance maximum, and
+  cash-outs awaiting approval.
+
+Remediation session 3 (2026-10-13, owner decision D2):
+- **BR-166** Disbursement approvals. An expense above the company's expense limit, or a supplier
+  payment above the supplier-payment limit (owner-set in the selling policy; defaults 20.000 and
+  100.000 KWD), must carry a receipt or invoice reference and waits for a second person: at the
+  till it is a pending drawer movement decided by a holder of `shifts.view_all`; from a treasury
+  it is a **payout request** decided by another holder of `cash.custody` at the branch, and the
+  disbursement is created only on approval. Nobody decides their own request; rejecting needs a
+  reason; the requester may withdraw. The owner pays directly and the exception is recorded. A
+  supplier payment that names a purchase order may not take the order's payments beyond its
+  value unless the owner confirms the overpayment on purpose (audited); the order shows its
+  **paid to date** net of reversals.
+- **BR-167** Follow-up of cash differences. Every recorded difference — a shift closed beyond
+  its tolerance, an opening difference between shifts, a count of a drawer or treasury, a branch
+  transfer received short or over — is listed from its source document with the accountable
+  person, until management records a follow-up: *explained* (anyone who monitors shifts),
+  *settled* or *written off* (cash custody at the branch). Follow-ups are audited; the dashboard
+  counts the differences still open.
+- **BR-168** Bank deposits in transit and bank reconciliation. A bank deposit (from a drawer at
+  the POS or from a treasury) always carries its **deposit slip number** and moves the cash into
+  the company's **deposits in transit** account, which is neither cash on hand nor the bank. A
+  **second person** holding the deposit right at that branch confirms it on the bank side (the
+  amount reaches the bank account, with the bank's reference) or returns it to the branch
+  treasury with a reason; nobody settles their own deposit except the owner, whose override is
+  audited. Each bank account is **reconciled by hand**: on a statement date the reconciler ticks
+  the ledger entries that appear on the statement and enters the statement balance; the cleared
+  balance is everything ticked so far and a difference from the statement must be explained.
+  Reconciliations are append-only. A bank account with a balance, with entries no statement has
+  confirmed, or with a deposit on its way cannot be deactivated.
+- **BR-169** Approval of stock adjustments. Every stock document carries a number (ADJ-000001).
+  A document whose value at cost (Σ |change| × unit cost, the current average for outgoing
+  stock) exceeds the company's **adjustment approval limit** (owner-set, default KWD 50) is
+  *pending*: nothing moves until a **different** holder of the adjust right at that branch
+  approves it (the movements then post, attributed to the requester) or rejects it with a
+  reason; the requester may withdraw it. The owner posts above the limit directly and the
+  override is audited. Opening stock is the initial load and is exempt. Increases by users
+  without the price right are valued at the current average cost, never at a typed cost.
+- **BR-170** Blind stock counts. Under the **blind stock count** policy (default on) the count
+  sheet shows no book quantity and no resulting balance; the difference appears after posting.
+  A count sheet records when it was started; stock that moved at the branch after that moment
+  is reported (`STOCK_MOVED_SINCE_COUNT`) and the counter must acknowledge it before the count
+  posts against the current balance, so a count never silently overwrites a sale or receipt.
+  Count differences above the adjustment approval limit wait for approval like any document.
+- **BR-171** No balance disappears silently. Switching stock tracking off, turning goods into a
+  service, archiving a product or removing a variant is refused (`STOCK_ON_HAND`) while any
+  branch still holds stock of it; the error names the branches and quantities. Archived items
+  can still be written off or counted (never increased). A branch is not deactivated
+  (`BRANCH_IN_USE`) while it holds stock, cash in a register or treasury, an open shift, an
+  open purchase order, an open stock transfer or a cash transfer in transit; the error says what
+  to settle first.
+- **BR-172** Transfer losses. A shortage at receipt is never silent: it becomes a numbered
+  **transfer loss** (TL-000001) with the receiver's explanation, valued at dispatch cost. Within
+  the adjustment approval limit it is posted at once; above it the loss waits for a holder of
+  the transfer-approval right **at the source branch** (claimant ≠ decider, owner excepted and
+  flagged) who approves the write-off or rejects it with a reason. Until a loss is posted the
+  quantity stays "on the road" and visible; a rejected or unclaimed shortage can be claimed
+  again by the destination. Surplus at receipt is allowed, must be explained and is received
+  at dispatch cost. An item with neither an average nor a catalog cost cannot be dispatched
+  (`COST_UNKNOWN`). The source ledger keeps the full `transfer_out`; the destination books only
+  what arrived; the loss document explains the difference and appears in the inventory report
+  (as `transfer_loss`) and in the transfer summary of the purchasing report.
+- **BR-173** Stock in transit is a valued location. What was dispatched and neither received,
+  recalled nor written off is "in transit": listed per transfer with its age in days, valued at
+  dispatch cost, totalled on the transfers page and in the inventory report, and counted in no
+  branch. A transfer in transit can be **recalled** by the source (reason required): the goods
+  return to the source branch at dispatch cost and the transfer becomes final (`recalled`).
+- **BR-174** Cost precision and negative stock. The moving average is carried at micro
+  precision (thousandths of a fils) and rounded to the fils only for display, so items kept in
+  grams or millilitres keep their cost; movement values and valuation use the precise figure. A
+  balance that goes below zero (negative-stock policy) keeps its cost basis and is valued
+  negatively; the next receipt first absorbs the negative units at that basis, so the value of a
+  balance always equals the sum of its movement values. Stock that goes negative with no average
+  adopts the cost it left at. The small rounding of averages is published as its own line of the
+  stock roll-forward, never hidden. Items in stock with no cost at all are listed on the
+  inventory report and flagged on the product screen, which also explains the catalog cost (the
+  standard cost of new stock) against the moving average (what stock is valued at).
+- **BR-175** Custody of returned goods. Damaged and defective returns stay out of sellable stock
+  unless the cashier decides otherwise; other reasons restock by default. Every returned item
+  kept out of stock gets a **custody record** (held) with its refund, quantity and cost, until
+  someone with the adjust right at the branch records what was done with it (disposed, returned
+  to the supplier, …) with a note, once. The "customer return (outside POS)" increase reason no
+  longer exists: returned goods re-enter stock only through a refund.
+- **BR-176** Valuation as at a date and roll-forward. The inventory report reconstructs the
+  closing stock at the end of its period (and the opening stock at its start) from the ledger,
+  using the balance and average cost after the last movement before the cut-off, per branch and
+  in total. A roll-forward shows opening value, each movement type's quantity and value in the
+  period, the rounding of averages and the closing value, and must agree with the valuation.
+  Quantities held for unpaid online orders are shown per item and in total.
+- **BR-177** Supervisor override on the cashier's till. When a cart needs a selling right the
+  cashier lacks (`sales.discount`, `sales.discount.override_limit`, `sales.price_override`,
+  `sales.zero_total`), a second person proves their identity on the cashier's screen with their
+  own e-mail and password. If they hold, at that branch, overridable rights the cashier lacks,
+  a single-use grant valid for ten minutes is issued (`sale_overrides`), bound to the cashier's
+  membership, shift and branch. The sale that spends it stays on the cashier's shift and drawer
+  and is attributed to the cashier; it records the grant and the rights it actually supplied;
+  both the grant and the sale are audited (`sale.override_granted`, `sale.completed` with
+  `override`); refused attempts are audited and throttled like sign-ins. Nobody can override
+  for themselves; the owner may authorise like any supervisor. Bounds that the owner sets
+  (BR-178) are not overridable by anyone.
+- **BR-178** Price-change bounds and the limit in force. A changed price needs a reason, stays
+  between the company floor and ceiling as a percentage of the list price (defaults 50 % and
+  200 %; either may be switched off) and may not go below the item's cost unless the owner
+  allows it; these are hard limits for everyone. The gap between the list price and a lower
+  changed price counts as a discount for the discount limit (so a price change cannot hide a
+  discount the person may not give), and a zero price always counts as above the limit. Every
+  POS sale stores the discount limit in force and whether a discount or price change above it
+  was allowed (`above_limit`); the audit entry carries the same.
+- **BR-179** Zero-total sales. A sale with nothing to pay needs the dedicated right
+  `sales.zero_total` (supervisor by default; a cashier obtains it through BR-177) and a stored
+  reason; the database refuses a free POS sale without one. Unusual sales (free, above the
+  limit, with a changed price, or completed with a supervisor override) are flagged in the
+  sales history, filterable, and counted per employee in the sales report.
+- **BR-180** Refund segregation. A refund of a sale the requester rang up themselves waits
+  for a second person whatever the amount (company switch, default on); holding the approve
+  right exempts nobody from the limit, the window or the own-sale rule for their own refunds;
+  only the owner may complete such a refund directly, and it is flagged and audited as an
+  owner override. A customer phone or name may be captured on refunds that wait. Exchange
+  credit paid back goes to the tenders of the sale the credit came from, pro rata, never to
+  cash by default. A pending request survives the requester's shift close: the approver pays
+  the cash part from their own open shift at the branch (a manager without a shift cannot).
+  The activity report counts each employee's refunds of their own sales.
+- **BR-181** Non-cash tender hygiene. Every non-cash payment method has a settlement account
+  (refused otherwise, at set-up and at the till), cash never carries a processing fee, and
+  card or transfer tenders and pay-backs need their terminal or transfer reference (company
+  switch, default on); tenders recorded without one are listed in the payments report. The
+  processing fee comes back on a refund only under the method's policy (`keep` or `reverse`
+  pro rata, decision D6), posted as a fee entry and shown as fees given back.
+- **BR-182** Held sales, reprints and cleared carts. A held sale expires after the company's
+  limit (default 24 hours, 0 = never) and is discarded, audited, when the list is read; the
+  held lines are kept as held and the completing cashier, shift and register are recorded
+  when they differ from the holder; the sale names who held it. Any receipt of the branch
+  can be found by number at the till; every print after the first is a numbered copy,
+  logged and audited. Clearing a cart, or removing a line, worth at least the company
+  threshold (default KWD 5.000) leaves an append-only trace and an audit entry.
+- **BR-183** Combined discount limit (D4). The limit applies to the combined effective
+  discount of each line (see BR-081); a cashier can no longer stack an item discount and a
+  sale discount to roughly double the limit.
+- **BR-184** One cut-off rule (R4.1). Every list, statement and report cuts its periods on
+  the merchant's local calendar days in the company's single time zone (`merchants.timezone`,
+  set once at registration, default Asia/Kuwait); the branch time zone is not used. A sale
+  belongs to the day it was completed; a refund to the day it was completed (its request
+  day while pending); cash movements, disbursements, variances and ledger entries to the day
+  they were posted. The sales history's "net" is sales of the period minus refunds completed
+  in the period (not the refunds of the listed sales), so it equals the report's "net after
+  refunds". Cash statements and the supplier statement take a period and bring the balance
+  forward. Changing the time zone re-cuts every past day: it is allowed only to
+  `merchant.settings.update`, stamped (`timezone_changed_at`), audited
+  (`merchant.timezone_changed`, from → to) and warned about in the UI.
+- **BR-185** Gross profit with missing costs (R4.3). Gross profit is always computed for the
+  costed part of the period; sales (and their refunds) without a known cost are set aside as
+  the *uncosted share* (amount and % of net after refunds) and shown beside the figure
+  instead of hiding it. The margin is on the costed net. Sales by employee carry the online
+  store as its own row so the breakdown adds up to net sales.
+- **BR-186** Unusual-activity review (R4.4). The refund-rate threshold that flags an employee
+  (`unusual_refund_rate_percent`, default 10 %) and the default review window
+  (`unusual_activity_days`, default 30) are company policy, changed by
+  `merchant.settings.update` and audited; dates chosen on the screen win over the window.
+- **BR-187** Report access log and dashboard (R4.4). Every report view is written to the audit
+  log (`report.viewed`: report, period, branches, employee) and every CSV export built in the
+  browser is reported and logged (`report.exported`: report, section, period, rows). The
+  dashboard shows today's and yesterday's sale count, net sales, refunds and net after
+  refunds in the merchant's time zone, and the open shifts, to holders of `reports.sales`
+  for their branches; a company with no sales yet is told so instead of being shown zeros.
+- **BR-188** Supplier statement (R4.5, bridge until supplier accounts payable). Per supplier:
+  goods received at order cost (receipt by receipt), cash payments and their reversals, in
+  date order with the running "received − paid" (positive = still owed to the supplier),
+  with a period and the balance brought forward; limited to the branches the viewer may
+  read purchasing for.
+- **BR-189** Period close (R4.2). A calendar month of the merchant's time zone is closed once,
+  in order (the registration month first, then each following month), only after it has
+  ended, by a holder of `periods.close` who also holds every report right company-wide. The
+  close stores the month-end pack as computed at that moment (net sales, discounts, refunds,
+  gross profit with the uncosted share, collections and fees by tender, unreferenced tenders,
+  cash by place at month end, closing stock value, refunds owed, open items, supplier balance,
+  document counts) and is audited (`period.closed`). A closed month is never reopened or
+  edited; it accepts no document dated inside it (`PERIOD_CLOSED`). An open month shows the
+  same pack computed live. Reading packs needs `reports.financial`.
+- **BR-190** Document dates (R4.2, FND-619). Purchase orders carry a document date and
+  deliveries a delivery date, set at entry to today in the merchant's zone unless the user
+  gives a date at most 7 days back and never ahead; a backdated date is written to the audit
+  entry. The posting time stays the ledger time and the basis of the stock and purchasing
+  reports; the business date is what the period lock checks. Sales, refunds, cash and stock
+  movements are stamped at posting and cannot be backdated, so the lock does not apply to
+  them.
+- **BR-191** Audit detail (R5.3). Edits of the company profile, branches, employee
+  profiles, categories, products (attributes and per-variant price / cost), suppliers and
+  draft purchase orders (header and lines) record the changed fields with their old and new
+  values; role deletion records the permission set. Every change of a variant's selling
+  price or cost is also appended to `price_history` (with the creation values), shown on the
+  product as a history tab; cost rows are visible only with `catalog.prices.manage`.
+- **BR-192** Dormant grants (R5.4). Role assignments at a deactivated branch stay dormant.
+  Reactivating the branch requires the manager to say whether they are kept or cleared
+  (`GRANTS_NEED_CONFIRMATION` lists them otherwise); the decision and the grants concerned
+  go into the `branch.activated` audit entry.
+- **BR-193** Account hygiene (R5.4). A signed-in user can change their own password (current
+  password required; every other session of the account ends, the current device is
+  re-issued) and see and end their sessions. A manager can end every session of an employee
+  they manage and clear an employee's sign-in lock, without deactivating them. Ten wrong
+  passwords pause sign-in for 15 minutes and the account holder is told by e-mail at once.
+  Invitation grants are re-checked at acceptance against the inviter's authority as it
+  stands then (grants the inviter can no longer give are dropped and recorded); deactivating
+  an inviter revokes their pending invitations.
 
 Platform and subscriptions (Prompt 17):
 - **BR-150** Every merchant has exactly one subscription to a plan. New merchants start on
@@ -303,7 +554,8 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
 - **BR-124** *Paid back* = settled refund payments of refunds completed in the period,
   per method; gateway refunds still waiting are listed separately and not counted.
 - **BR-125** *Processing fees* = fees stored on each payment from the method's settings;
-  not reversed on refunds (OQ-016). *Net cash* = cash sales − cash refunds + cash in −
+  on a refund the fee comes back pro rata only when the method's policy says so (D6,
+  BR-181), shown as *fees given back*. *Net cash* = cash sales − cash refunds + cash in −
   cash out (the same entries as the drawer's expected cash).
 - **BR-126** *Cash difference* of a shift = counted − expected at closing; balanced when
   within the register's tolerance, otherwise over or short.
@@ -317,8 +569,9 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
   *Expenses report* = cash expenses by category, branch, source and day, and supplier payments
   by supplier, each reversal subtracted on its own date (`reports.financial`). The dashboard
   shows total cash on hand (treasuries + drawers + in transit) to `cash.custody` holders.
-- **BR-127** *Gross profit* — see ADR-0070; never shown when costs are missing or to users
-  without `reports.financial`.
+- **BR-127** *Gross profit* — see ADR-0070; never shown to users without
+  `reports.financial`; with missing costs the costed part is shown with the uncosted share
+  flagged (BR-185).
 - **BR-128** *Inventory value* = current quantity × weighted-average cost per item and
   branch; items without a known cost are counted, not valued. Purchase values are
   Σ quantity × order unit cost (half-up per line); transfer values use the cost at
@@ -361,12 +614,12 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
 | OQ-012 | Number display: Latin digits (0-9) or Arabic-Indic (٠-٩) by default? (engineering default: Latin, configurable) | M0 UI |
 | OQ-014 | Costing method: weighted average (implemented default) or FIFO required for accounting? | Reports / accounting |
 | OQ-015 | Blind closing: should cashiers count the drawer without seeing the expected amount first? (implemented: expected is shown) | POS shifts |
-| OQ-016 | Should card processing fees be reversed on refunds (depends on the acquirer contract)? Implemented: not reversed. | Refunds / reports |
+| OQ-016 | ~~Fee reversal on refunds~~ **Resolved (D6):** per payment method, `keep` or `reverse` pro rata, never assumed (BR-181). | — |
 | OQ-017 | Returns without a receipt or at another branch: allowed? Implemented: receipt required, same branch. | Refunds |
 | OQ-019 | Loyalty points, store credit and promotions: rules (earning rate, expiry, use as payment)? Also: should customers be able to request erasure of their personal data (anonymisation while keeping sales)? Not implemented. | Customers |
 | OQ-020 | Restaurant: service charge or tips? Courses/fire timing? Printing tickets on kitchen printers (vs. screen)? Table reservations? Not implemented. | Restaurant |
 | OQ-023 | Restaurant bills: charge the item price at ordering time or at payment time? Implemented: modifiers at ordering, item at payment (audit F3). | Restaurant |
-| OQ-024 | Discount limit: per discount (implemented: item and sale discounts checked separately, so 10 % + 10 % passes) or combined? | Sales |
+| OQ-024 | ~~Discount limit per discount or combined~~ **Resolved (D4):** combined per line (BR-183). | — |
 | OQ-026 | Actual processing fees per method (KNET, Visa/Mastercard, payment link, WAMD) and which bank account each settles into. Defaults: no fees; KNET, link and WAMD → bank 1, Visa/Mastercard → bank 2. Cash custody is decided (ADR-0090, ADR-0091). | Payments |
 | OQ-025 | Verify the owner's e-mail at self-registration (blocks squatting someone's address)? Not implemented. | Auth |
 | OQ-022 | Subscription pricing and billing: prices per plan, billing provider, invoices/VAT, what happens automatically when a subscription lapses (grace period, read-only, suspension), and data retention after closing? Implemented: no billing, lapse never blocks, closing keeps data. | Platform |

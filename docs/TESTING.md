@@ -66,6 +66,259 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after remediation session 12 (2026-10-13, local run)
+
+`pnpm verify` green (184 unit/web tests, including the new manager `account.test.tsx` (devices
+listed with "this device", one signed out by id, the password form disabled until the current
+password and a matching new one are typed, the request body; the dormant-roles dialog on branch
+reactivation after the API's `GRANTS_NEED_CONFIRMATION`, listing the grants and re-posting with
+`clear`; the owner's hand-over form posting the member and password and then showing the pending
+transfer, and the named member's acceptance box posting the code) and the platform case
+(support sees "Freeze owner" but not "Transfer ownership", freezes with a reason and version,
+then sees "Release owner" and the reason)); `pnpm test:integration` 218 passed, including the
+three new cases in `ownership.int.test.ts` (start refused for a non-owner and for a wrong
+password; the named member sees the transfer as theirs, a wrong code and another member are
+refused, acceptance makes them owner, ends the old owner's session and leaves them a plain
+member who can no longer sign in to the management app, two audit entries and three e-mails;
+a second transfer replaces the first, cancellation, no second cancellation; support freezes the
+owner (session gone, `OWNER_FROZEN` at sign-in, employees unaffected, no double freeze),
+releases them, cannot transfer, and a super administrator transfers with a reason, both
+notified), the four in `account-hygiene.int.test.ts` (sessions listed and ended by id, wrong
+current password and an unchanged password refused, a change ends every other session and
+re-issues the current one, "sign out everywhere else"; a manager ends a cashier's sessions and
+clears the lock after ten wrong passwords that e-mailed the holder once; invitation grants
+dropped when the inviter lost authority at that branch, recorded in the audit entry, and an
+inviter's deactivation revokes their pending invitations; dormant grants listed on reactivation
+and cleared or kept with the audit entry naming them, plus branch edits with before / after
+values) and the one in `audit-detail.int.test.ts` (profile, category, product attributes and
+variant price / cost diffs, the price history with creation and manual rows and cost rows
+hidden without the price right, supplier and draft-order header and line diffs, employee
+profile diff, role deletion with its permissions); `pnpm test:e2e` 35 passed on the first full
+run. Migration 0047 applied on the dev database without incident.
+
+### Results after remediation session 11 (2026-10-13, local run)
+
+`pnpm verify` green (180 unit/web tests, including the new `periods.test.tsx` (months listed
+with their status and the closer's note, the first non-current month's pack shown by default
+with net after refunds, margin, closing stock, the unreferenced-tender line, the collections
+table, open items and the supplier balance; the close dialog warns, takes a note and posts it,
+the list then shows the month closed and no further close button; no close button without
+`periods.close`)); `pnpm test:integration` 210 passed, including the three new cases in
+`periods.int.test.ts` (a company three months old with one sale rung up in the middle of last
+month: the list shows current / open / closable in order, the live pack of last month carries
+that sale, its cash collection and its gross profit while cash and stock as at month end are
+zero; closing last month before the one before it is refused, the current month is refused, the
+registration month closes with a note, then last month closes with the owner named and the
+stored pack is returned unchanged afterwards, a second close is refused, `period.closed` is
+audited twice, and the application role can neither delete nor update the row; a branch
+manager without financial reports gets no list, no pack and no close while a company manager
+closes; purchase orders default to today's business date, keep a date three days back and
+audit it, refuse a future date and ten days back, deliveries carry a delivery date and refuse a
+future one, and with the current month closed directly in the database both an order and a
+delivery are refused with `PERIOD_CLOSED` while a sale still posts); `pnpm test:e2e` 35 passed
+after migration 0046's backfill was made to pass over final orders (the `purchase_orders_final`
+trigger is disabled for that one statement; the first dev-database migration had failed on it).
+
+### Results after remediation session 10 (2026-10-13, local run)
+
+`pnpm verify` green (178 unit/web tests, including the new manager cases in `reports.test.tsx`
+(gross profit shown on the costed part with the uncosted share flagged, the "Online store" row
+in sales by employee kept out of the employee filter, a CSV export reported to
+`POST /manager/reports/exports` with report, section, period and row count; the dashboard's
+today / yesterday figures and the "no sales yet" notice for a company that never sold) and in
+`purchasing.test.tsx` (supplier statement dialog: received vs. paid, reversal line, running
+difference, period sent as local days)); `pnpm test:integration` 207 passed, including the four
+new cases in `period-controls.int.test.ts` (a sale rung up at 23:30 local the day before and
+refunded today: the sales history counts the refund today and its net equals the report, the
+refund register cuts on the completion day with totals, disbursements of 01:30 local land on the
+local day not the UTC day, a treasury statement with a period brings the balance forward and
+closes exactly, no period gives the current balance; time zone at registration, an unknown zone
+refused, an unchanged profile save leaves it alone, a change is stamped and audited from → to and
+re-cuts the reports; gross profit with one costless service sale (uncosted 2.000, 66.7 % of net,
+margin 60.0 % on the costed part), today's KPIs and the refusal of a POS session, a fresh company
+with `hasSales false`, `report.viewed` with period and `report.exported` with rows, the activity
+review's default 30-day window and 10 % threshold, both changed by policy and audited, explicit
+dates winning over the window; the supplier statement with receipt, payment, reversal and second
+payment in running order, totals, a future period bringing 3.000 forward, branch scope leaving a
+second-branch manager with no lines, 404 for an unknown supplier) and the e-commerce suite's new
+assertion that the online row makes sales by employee add up; `pnpm test:e2e` 35 passed after
+`cash-payouts.spec` was pointed at the supplier statement (the "Payments" dialog it clicked is
+now the statement). Existing expectations adapted: the complete-period profit carries
+`uncostedSales 0.000` / `0.0 %`, and the costless-item case shows `grossProfit 0.000` with
+`marginPercent null` instead of hiding the block.
+
+### Results after remediation session 9 (2026-10-13, local run)
+
+`pnpm verify` green (175 unit/web tests; the manager `cash.test.tsx` method case now picks a
+settlement account and a refund-fee policy and checks both in the request body, the POS settings
+fixture carries the four new policy fields); `pnpm test:integration` 203 passed, including the
+three new cases in `refunds-controls.int.test.ts` (a cashier's refund of their own sale held
+`pending_approval` with `own_sale`, the approver cannot be the requester, the owner override
+recorded on the refund and in the audit, the `ownSaleRefunds` activity count, the policy switch
+that lets a one-person shop refund its own sales; exchange credit traced pro rata to the original
+tenders and an approval on a closed requester shift re-pointed to the approver's own shift;
+`REFERENCE_REQUIRED` and `SETTLEMENT_ACCOUNT_REQUIRED`, fee reversal per method policy posted as
+a positive fee entry and reported as `feesReversed`, the unreferenced-tender list of the payments
+report) and the three new cases in `sales-controls.int.test.ts` (combined line + order discount
+measured against the limit, a held sale completed by a second cashier keeps its lines and records
+the completer and shift, expiry after the configured hours, receipt lookup at the till, numbered
+reprints audited and counted on the sale, cart-clear events above the threshold); `pnpm test:e2e`
+35 passed after one fix: the payment-method dialog hid the fee preview until an account was
+chosen, so the preview now depends on the fee inputs only and `shifts.spec` picks "Bank account 1"
+before saving. Existing tests adapted to the new rules: non-cash tenders carry a reference and the
+methods an account; owner fixtures disable the own-sale approval and the reference policy with
+`allowOwnSaleRefunds()` where the scenario is not about them; the supervisor's own refund case in
+`refunds.int.test.ts` now goes through approval.
+
+### Results after remediation session 8 (2026-10-13, local run)
+
+`pnpm verify` green (175 unit/web tests, including the new POS case in `app.test.tsx` (a cashier
+without any discount right enters a 15 % sale discount, pays, is blocked until a supervisor
+authorises it in the payment dialog with their own credentials, the checkout then carries the
+grant) and the new manager `sales.test.tsx` (unusual-sales filter, flags on the row, the
+exceptions block of a sale: above-limit note, free-sale reason, supervisor override with the
+rights supplied, price-change reason)); `pnpm test:integration` 197 passed, including the four
+new cases in `sales-overrides.int.test.ts` (override refused for a wrong password, for the
+cashier themself and for a colleague with nothing more to lend; grant issued by a supervisor
+without a shift, unusable by another cashier, spent by one sale that stays on the cashier's
+shift and drawer with `aboveLimit`, the limit in force and the approver recorded, single use,
+audit of grant / sale / refusals, `flag=supervised` filter and per-employee counts; grant expiry
+and the owner as approver; price change without a reason refused, floor / ceiling / cost bounds,
+a 5 % change not flagged and a 40 % change flagged, a price-only role unable to hide a discount
+in a price, relaxed bounds, floor above ceiling refused, bounds visible to the POS,
+`flag=price_override` and `flag=above_limit`; a free sale refused without `sales.zero_total`,
+a zero price refused by the floor, reason required, free sale by a supervisor and by a cashier
+through an override naming both rights, `flag=zero_total`, report counts, and the database
+check refusing a free POS sale without a reason); `pnpm test:e2e` 35 passed on the first full run. Existing
+checkout tests adapted: the 100 % discount case now gives a reason and checks the flags, the
+price-override case gives a reason and expects the above-limit flag and the reason in the audit
+entry.
+
+### Results after remediation session 7 (2026-10-13, local run)
+
+`pnpm verify` green (173 unit/web tests, including the micro-precision average cases in
+`quantity.test.ts` (fractions of a fils kept, negative basis absorbed, previous average kept
+while still negative) and the new `returns.test.tsx` (held returned goods listed, disposal
+recorded with a mandatory note)); `pnpm test:integration` 193 passed, including the three new
+cases in `inventory-valuation.int.test.ts` (saffron by the gram averaged at 2.5 fils exactly and
+issued at that cost; negative rice valued at its basis then absorbed by a receipt so the
+roll-forward closes with zero rounding; items without cost listed; closing stock as at yesterday
+and today reconstructed from the ledger with matching roll-forward; an online reservation shown
+per item and in total; damaged return kept out of stock by default with a held custody record,
+"changed mind" restocked, disposal by a cashier refused, note required, recorded once, audited;
+the removed "customer return" reason refused); `pnpm test:e2e` 35 passed on the first full run.
+Existing valuation and report expectations unchanged (positive balances value identically).
+
+### Results after remediation session 6 (2026-10-13, local run)
+
+`pnpm verify` green (171 unit/web tests, including the new `transfers.test.tsx`: in-transit
+summary with age, value and the pending-loss badge, the loss list on the transfer with the
+approve / reject dialog, and the recall dialog that needs a reason; the controls fixture carries
+`pendingTransferLosses` and `unresolvedTransferShortages`); `pnpm test:integration` 190 passed,
+including the three new cases in `transfers-controls.int.test.ts` (small shortage written off at
+once as TL-000001 with the receiver's note and its value; large shortage held pending with the
+quantity still in transit, valued and aged, checklist counts, destination manager and claimant
+refused, rejection needs a reason and reopens the shortage, `LOSS_DECIDED`, re-claim, one pending
+loss at a time, approval by the source manager closes the shortage, purchasing report written-off
+quantity and value, inventory report `transfer_loss` line and in-transit block, audit actions,
+surplus refused without a note and recorded with one as a negative discrepancy; dispatch of an
+item with no cost refused with `COST_UNKNOWN`; in-transit value and report KPI, recall refused
+without a reason or from the destination, recall returns the goods to the source at dispatch
+cost and makes the transfer final); `pnpm test:e2e` 35 passed on a clean run. Existing tests
+adapted: over-receipt is a surplus needing a note (was refused), the received transfer carries
+its posted loss; `purchasing.spec` checks the transfer loss on the page and uses the new
+difference label; `refunds.spec` now waits for the sale to reload after a refund before typing
+the exchange quantity (a race that produced timeouts under the parallel full run in sessions 5
+and 6).
+
+### Results after remediation session 5 (2026-10-13, local run)
+
+`pnpm verify` green (169 unit/web tests, including the blind count sheet that hides the book
+quantity, lists the stock that moved since the sheet was opened and posts only once the counter
+acknowledges it, and the pending-adjustment detail page with its approve / reject dialog; the
+POS settings fixture carries the two new policy fields, the controls fixture
+`pendingAdjustments`); `pnpm test:integration` 187 passed, including the three new cases in
+`inventory-controls.int.test.ts` (ADJ numbering, documents within the limit posted at once,
+above it held pending with nothing moved, list filter and checklist count, self-approval and
+cashier refused, owner approval posting the movements attributed to the requester,
+`ADJUSTMENT_DECIDED` on a second decision, withdraw by the requester only, rejection needs a
+note, owner override flagged in the audit log, company limit change through the selling policy
+and exposed through inventory settings, increase without the price right valued at the average
+and a typed cost refused; count sheet reporting `STOCK_MOVED_SINCE_COUNT` with the net quantity
+and posting against the current balance once acknowledged; `STOCK_ON_HAND` on tracking off,
+goods → service, variant removal and archiving while stock remains, archiving after a write-off,
+archived item counted but not increased, `BRANCH_IN_USE` naming stock, then cash, then cash in
+transit, and deactivation once settled); `pnpm test:e2e` 35 passed on a clean run (a first run
+had one 30-second timeout in `refunds.spec` at the POS search box, unrelated to this session,
+which passed alone and on the repeated full run).
+
+### Results after remediation session 4 (2026-10-13, local run)
+
+`pnpm verify` green (167 unit/web tests, including the deposit dialog with its mandatory slip
+number, the deposits-in-transit list with the confirm / return dialog, and the bank
+reconciliation dialog that ticks statement entries, shows the cleared balance and the
+difference and demands an explanation before saving; overview and checklist fixtures carry
+`depositsInTransitTotal`, `depositsInTransit` and `unreconciledBankEntries`);
+`pnpm test:integration` 184 passed, including the three new cases in `bank.int.test.ts`
+(manager deposit refused without a slip number, lands in transit, treasury down and bank
+unchanged, overview and checklist counts; confirmation by another treasurer with a bank
+reference, `DEPOSIT_SETTLED` on a second attempt, self-confirmation refused, return to the
+treasury needs a reason, owner override flagged in the audit log, custody without the deposit
+right refused; POS deposit needs the slip, waits in transit and reaches the bank on the owner's
+confirmation; reconciliation state, balanced reconciliation of two entries, double tick
+refused, unexplained difference refused and explained one recorded with history and audit,
+`ACCOUNT_IN_USE` on deactivating a bank with a balance, an idle bank deactivated, a bank with
+a deposit in transit refused, cashier refused); `pnpm test:e2e` 35 passed (`cash-payouts.spec`
+now waits for the slip number, confirms the deposit in the bank from the custody page and
+reconciles the bank account to a balanced statement). Existing tests adapted: deposits carry
+a slip reference and expect the transit account instead of the bank.
+
+### Results after remediation session 3 (2026-10-13, local run)
+
+`pnpm verify` green (165 unit/web tests, including the treasury payout-request approval dialog
+and the follow-up-of-differences tab with its resolve dialog; POS and purchasing fixtures carry
+the new policy fields and `paidToDate`); `pnpm test:integration` 181 passed, including the two
+new cases in `cash-payouts.int.test.ts` (treasurer payments within and above the limit, receipt
+required, `APPROVAL_REQUIRED`, request → list → self-approval refused → rejection needs a reason →
+approval by another treasurer pays from the treasury, withdraw by the requester only, owner
+override flagged in the audit log, checklist count; overpayment of a purchase order refused,
+owner-confirmed and audited, paid to date net of a reversal), the POS case in
+`shifts.int.test.ts` (expense above the limit held with its category and reference, posted as
+a disbursement on approval) and `cash-variances.int.test.ts` (shift-close and treasury-count
+differences listed from their sources with the accountable person, explained by a branch
+manager, settled only with custody, resolved filter, checklist count, audit, cashiers refused);
+`pnpm test:e2e` 35 passed. Existing tests adapted: every settings helper sends the two
+approval limits; the treasury "more than it holds" case carries a receipt reference.
+
+### Results after remediation session 2 (2026-10-13, local run)
+
+`pnpm verify` green (163 unit/web tests, including the POS pending cash-out flow with withdraw
+and the limit warning, the manager decision dialog and the dashboard controls checklist);
+`pnpm test:integration` 177 passed, including the three cash-out control cases in
+`shifts.int.test.ts` (corrections bound to a posted "other" movement up to what is left;
+pending above the per-movement and per-shift limits, withdraw, close refused, approval by a
+manager only — never the requester —, rejection needs a reason, owner override flagged on the
+movement and in the audit log, forced close rejects pending requests; tolerance cap on register
+save and the note on a visible closing difference) and `controls.int.test.ts` (Treasurer template
+with least privilege, checklist: treasurer, members without roles, registers above the tolerance
+cap, permission); `pnpm test:e2e` 35 passed (`shifts.spec` now explains the closing shortage).
+Existing tests adapted: `cash-reports` uses an "other" cash-out instead of a free correction;
+`reports` and `shifts.spec` add a closing note; `auth` expects the Treasurer template.
+
+### Results after remediation session 1 (2026-10-13, local run)
+
+`pnpm verify` green (160 unit/web tests, including `audit.test.tsx` — merchant audit log page,
+details summary, nav visibility — and the two blind-count cases in the POS `app.test.tsx`);
+`pnpm test:integration` 173 passed, including `audit.int.test.ts` (own-company events with
+who/what/when and before/after values, isolation from another company, local-day period, record
+type and pagination filters, `audit.read` for company managers only) and the blind-count case in
+`shifts.int.test.ts` (no expected balance for cashiers, open without `expectedCash`, summary
+withheld, supervisor sees the figures, closing reveals them, between-shift difference booked
+without a note, policy switched off restores the stale-balance and note rules); `pnpm test:e2e`
+35 passed (`checkout.spec` and `refunds.spec` assert the blind notice and read the drawer
+figures through the manager API). Fixtures that read drawer figures through cashier sessions
+call `showExpectedCash()`.
+
 ### Results after cash custody phase C (2026-10-12, local run)
 
 `pnpm verify` green (155 unit/web tests, including the dashboard cash card);

@@ -139,6 +139,15 @@ export const commonEn = {
     INVALID_DISCOUNT: 'Invalid discount.',
     DISCOUNT_LIMIT_EXCEEDED: 'This discount is above your limit. Ask a supervisor.',
     PRICE_OVERRIDE_DENIED: 'You are not allowed to change prices.',
+    PRICE_OUT_OF_BOUNDS: 'This price is outside the limits set by the company for price changes.',
+    ZERO_TOTAL_DENIED: 'A sale with nothing to pay needs a supervisor.',
+    REASON_REQUIRED: 'A reason is required for this.',
+    OVERRIDE_INVALID: 'The supervisor approval has expired or was already used. Ask again.',
+    OVERRIDE_SELF: 'A supervisor override must come from another person.',
+    OVERRIDE_NOT_ALLOWED: 'This person cannot authorise anything beyond your own rights here.',
+    REFERENCE_REQUIRED: 'Enter the terminal or transfer reference for this payment.',
+    SETTLEMENT_ACCOUNT_REQUIRED:
+      'This payment method has no settlement account. Ask a manager to link one before using it.',
     PAYMENT_TOTAL_MISMATCH: 'The payments do not add up to the total.',
     TOTAL_CHANGED: 'Prices changed. Review the sale and try again.',
     PAYMENT_NOT_VERIFIED: 'This payment cannot be verified yet.',
@@ -151,6 +160,26 @@ export const commonEn = {
     NOT_VOIDABLE: 'Only sales of your open shift without returns can be cancelled.',
     SELF_APPROVAL: 'You cannot approve your own refund.',
     APPROVAL_REQUIRED: 'This needs a supervisor’s approval.',
+    DEPOSIT_SETTLED: 'This deposit was already confirmed or returned.',
+    ACCOUNT_IN_USE:
+      'This bank account still has a balance, unreconciled entries or a deposit in transit. Settle them first.',
+    ADJUSTMENT_DECIDED: 'This adjustment was already decided.',
+    STOCK_MOVED_SINCE_COUNT:
+      'Stock moved while you were counting. Review the movements and confirm the count.',
+    OWNER_FROZEN: 'The owner account of this company is frozen by the platform. Contact support.',
+    TRANSFER_INVALID:
+      'This ownership transfer is invalid, expired, cancelled or already completed.',
+    GRANTS_NEED_CONFIRMATION:
+      'Dormant role assignments at this branch would come back into force. Confirm keeping or clearing them.',
+    PERIOD_CLOSED: 'This date falls in a closed period. Closed periods accept no new documents.',
+    PERIOD_NOT_CLOSABLE:
+      'This month cannot be closed yet: it has not ended, or an earlier month is still open.',
+    STOCK_ON_HAND:
+      'This item still has stock on hand. Write it off or transfer it before archiving it or switching tracking off.',
+    BRANCH_IN_USE:
+      'This branch still has stock, cash, open shifts or open documents. Settle them before deactivating it.',
+    COST_UNKNOWN: 'Some items have no cost yet. Set a cost on the product before dispatching them.',
+    LOSS_DECIDED: 'This transfer loss was already decided.',
     PAYLOAD_TOO_LARGE: 'The file is too large.',
     STORE_CLOSED: 'This store is not taking orders right now.',
     GATEWAY_NOT_CONFIGURED: 'Online payment is not available yet. Choose another method.',

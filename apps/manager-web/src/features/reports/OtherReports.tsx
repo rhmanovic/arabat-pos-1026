@@ -41,7 +41,18 @@ export function PaymentsTab({ query, onPeriod }: TabProps) {
           previous={minorOf(r.totals.previousCollected)}
         />
         <Kpi label={t('reports.paidBack')} value={<Amount value={r.totals.refunded} />} />
-        <Kpi testId="kpi-fees" label={t('reports.fees')} value={<Amount value={r.totals.fees} />} />
+        <Kpi
+          testId="kpi-fees"
+          label={t('reports.fees')}
+          value={<Amount value={r.totals.fees} />}
+          hint={
+            minorOf(r.totals.feesReversed) > 0n ? (
+              <>
+                {t('reports.feesReversed')}: <Amount value={r.totals.feesReversed} />
+              </>
+            ) : undefined
+          }
+        />
         <Kpi
           label={t('reports.netAfterFees')}
           value={<Amount value={r.totals.netAfterFees} />}
@@ -115,6 +126,13 @@ export function PaymentsTab({ query, onPeriod }: TabProps) {
           },
           { key: 'fees', header: t('reports.fees'), money: true, value: (x) => x.fees.amount },
           {
+            key: 'feesBack',
+            header: t('reports.feesReversed'),
+            money: true,
+            hideBelow: 'lg',
+            value: (x) => x.feesReversed.amount,
+          },
+          {
             key: 'out',
             header: t('reports.paidBack'),
             money: true,
@@ -141,6 +159,41 @@ export function PaymentsTab({ query, onPeriod }: TabProps) {
             value: (x) => t(`reports.payStatus_${x.status}`, { defaultValue: x.status }),
           },
           { key: 'count', header: t('reports.payments'), value: (x) => String(x.count) },
+          {
+            key: 'amount',
+            header: t('reports.amount'),
+            money: true,
+            value: (x) => x.amount.amount,
+          },
+        ]}
+      />
+      <ReportTable
+        title={t('reports.unreferenced', { count: r.unreferenced.count })}
+        description={t('reports.unreferencedHint')}
+        filename={`unreferenced-tenders-${query.from}-${query.to}`}
+        rows={r.unreferenced.items}
+        rowKey={(x) => x.id}
+        empty={t('reports.unreferencedNone')}
+        columns={[
+          { key: 'doc', header: t('reports.document'), value: (x) => x.document },
+          {
+            key: 'kind',
+            header: t('reports.kind'),
+            value: (x) => t(`reports.unref_${x.kind}`),
+          },
+          { key: 'method', header: t('reports.method'), value: (x) => name({ ...x, kind: '' }) },
+          {
+            key: 'employee',
+            header: t('reports.employee'),
+            hideBelow: 'md',
+            value: (x) => x.employeeName ?? '',
+          },
+          {
+            key: 'when',
+            header: t('reports.when'),
+            hideBelow: 'md',
+            value: (x) => formatDateTime(x.createdAt, i18n.language),
+          },
           {
             key: 'amount',
             header: t('reports.amount'),
@@ -364,7 +417,98 @@ export function InventoryTab({ query, onPeriod }: TabProps) {
         />
         <Kpi label={t('reports.lowStock')} value={low} />
         <Kpi label={t('reports.outOfStock')} value={out} />
+        <Kpi
+          testId="kpi-closing-stock"
+          label={t('reports.closingStockAt', { date: r.asAt.date })}
+          value={<Amount value={r.asAt.total.value} />}
+          hint={t('reports.reservedHint', { quantity: displayQty(r.reservedQuantity) })}
+        />
+        <Kpi
+          testId="kpi-in-transit"
+          label={t('reports.inTransit')}
+          value={<Amount value={r.inTransit.value} />}
+          hint={t('reports.inTransitHint', {
+            count: r.inTransit.transfers,
+            quantity: displayQty(r.inTransit.quantity),
+          })}
+        />
       </div>
+      <ReportTable
+        title={t('reports.asAtTitle', { date: r.asAt.date })}
+        description={t('reports.asAtHint')}
+        filename={`closing-stock-${r.asAt.date}`}
+        rows={[
+          ...r.asAt.valuation,
+          {
+            branchId: '__total',
+            items: 0,
+            quantity: r.asAt.total.quantity,
+            value: r.asAt.total.value,
+          },
+        ]}
+        rowKey={(x) => x.branchId}
+        columns={[
+          {
+            key: 'branch',
+            header: t('reports.branch'),
+            value: (x) =>
+              x.branchId === '__total' ? t('reports.total') : (branchName(x.branchId) ?? ''),
+          },
+          { key: 'qty', header: t('reports.quantity'), value: (x) => displayQty(x.quantity) },
+          { key: 'value', header: t('reports.value'), money: true, value: (x) => x.value.amount },
+        ]}
+      />
+      <ReportTable
+        title={t('reports.rollForward')}
+        description={t('reports.rollForwardHint')}
+        filename={`stock-roll-forward-${query.from}-${query.to}`}
+        rows={[
+          { key: 'opening', label: t('reports.openingStock'), ...r.rollForward.total.opening },
+          ...r.rollForward.total.movements.map((m) => ({
+            key: m.movementType,
+            label: t(`reports.move_${m.movementType}`, { defaultValue: m.movementType }),
+            quantity: m.quantity,
+            value: m.value,
+          })),
+          {
+            key: 'rounding',
+            label: t('reports.rounding'),
+            quantity: '0.000',
+            value: r.rollForward.total.rounding,
+          },
+          { key: 'closing', label: t('reports.closingStock'), ...r.rollForward.total.closing },
+        ]}
+        rowKey={(x) => x.key}
+        columns={[
+          { key: 'line', header: t('reports.line'), value: (x) => x.label },
+          {
+            key: 'qty',
+            header: t('reports.quantity'),
+            value: (x) => (x.key === 'rounding' ? '' : displayQty(x.quantity)),
+          },
+          { key: 'value', header: t('reports.value'), money: true, value: (x) => x.value.amount },
+        ]}
+      />
+      {r.unvalued.length > 0 ? (
+        <ReportTable
+          title={t('reports.unvaluedTitle', { count: r.unvalued.length })}
+          description={t('reports.unvaluedHint')}
+          filename="items-without-cost"
+          rows={r.unvalued}
+          rowKey={(x) => `${x.branchId}-${x.variantId}`}
+          columns={[
+            { key: 'name', header: t('reports.product'), value: name },
+            { key: 'sku', header: 'SKU', value: (x) => x.sku ?? '', hideBelow: 'lg' },
+            {
+              key: 'branch',
+              header: t('reports.branch'),
+              value: (x) => branchName(x.branchId) ?? '',
+              hideBelow: 'md',
+            },
+            { key: 'qty', header: t('reports.onHand'), value: (x) => displayQty(x.onHand) },
+          ]}
+        />
+      ) : null}
       <ReportTable
         title={t('reports.valuation')}
         description={t('reports.valuationHint')}
@@ -411,6 +555,12 @@ export function InventoryTab({ query, onPeriod }: TabProps) {
             hideBelow: 'md',
           },
           { key: 'qty', header: t('reports.onHand'), value: (x) => displayQty(x.onHand) },
+          {
+            key: 'reserved',
+            header: t('reports.reserved'),
+            value: (x) => (x.reserved === '0.000' ? '' : displayQty(x.reserved)),
+            hideBelow: 'lg',
+          },
           {
             key: 'threshold',
             header: t('reports.threshold'),
@@ -647,6 +797,19 @@ export function PurchasingTab({ query, onPeriod }: TabProps) {
             header: t('reports.missingValue'),
             money: true,
             value: (x) => x.missingValue.amount,
+          },
+          { key: 'lost', header: t('reports.lost'), value: (x) => displayQty(x.lost) },
+          {
+            key: 'lvalue',
+            header: t('reports.lostValue'),
+            money: true,
+            value: (x) => x.lostValue.amount,
+          },
+          {
+            key: 'pending',
+            header: t('reports.pendingLosses'),
+            value: (x) => String(x.pendingLosses),
+            hideBelow: 'lg',
           },
         ]}
       />

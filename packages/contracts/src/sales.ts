@@ -17,14 +17,55 @@ export const discountInputSchema = z.discriminatedUnion('type', [
 ]);
 export type DiscountInput = z.infer<typeof discountInputSchema>;
 
+const reason = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .nullish()
+    .transform((v) => (v == null || v === '' ? null : v));
+
 export const cartLineInputSchema = z.object({
   variantId: z.uuid(),
   quantity: quantitySchema,
-  /** New unit price; requires `sales.price_override`. */
+  /** New unit price; requires `sales.price_override` and stays within the company bounds (BR-178). */
   priceOverride: moneyAmountSchema.nullish().transform((v) => v ?? null),
+  /** Why the price was changed; required whenever the price differs from the list price. */
+  priceOverrideReason: reason(120),
   discount: discountInputSchema.nullish().transform((v) => v ?? null),
 });
 export type CartLineInput = z.input<typeof cartLineInputSchema>;
+
+/** Exceptions a supervisor may authorise on a cashier's till (BR-177). */
+export const OVERRIDABLE_PERMISSIONS = [
+  'sales.discount',
+  'sales.discount.override_limit',
+  'sales.price_override',
+  'sales.zero_total',
+] as const;
+export type OverridablePermission = (typeof OVERRIDABLE_PERMISSIONS)[number];
+
+/** A supervisor enters their own credentials on the cashier's screen. */
+export const requestOverrideSchema = z.object({
+  email: z.email().trim().toLowerCase().max(254),
+  password: z.string().min(1).max(200),
+  note: reason(160),
+});
+export type RequestOverride = z.input<typeof requestOverrideSchema>;
+
+/** A short-lived, single-use authorisation bound to the cashier's session branch. */
+export const saleOverrideGrantSchema = z.object({
+  id: z.string(),
+  approverName: z.string(),
+  /** Overridable rights the approver holds at the branch and the cashier lacks. */
+  permissions: z.array(z.enum(OVERRIDABLE_PERMISSIONS)),
+  expiresAt: z.string(),
+});
+export type SaleOverrideGrant = z.infer<typeof saleOverrideGrantSchema>;
+
+/** Why a sale is listed as unusual (BR-179). */
+export const SALE_FLAGS = ['zero_total', 'above_limit', 'price_override', 'supervised'] as const;
+export type SaleFlag = (typeof SALE_FLAGS)[number];
 
 const cartFields = {
   lines: z.array(cartLineInputSchema).min(1).max(200),
@@ -70,6 +111,13 @@ export const checkoutSchema = z.object({
   payments: z.array(paymentInputSchema).max(10),
   /** The total the cashier saw; the server refuses the sale if its own total differs. */
   expectedTotal: moneyAmountSchema,
+  /** Supervisor authorisation obtained with `POST /pos/overrides` (BR-177). */
+  overrideId: z
+    .uuid()
+    .nullish()
+    .transform((v) => v ?? null),
+  /** Required when the total is zero (BR-179). */
+  zeroTotalReason: reason(160),
 });
 export type Checkout = z.input<typeof checkoutSchema>;
 
@@ -97,6 +145,7 @@ export const saleLineSchema = z.object({
   listUnitPrice: moneySchema,
   unitPrice: moneySchema,
   priceOverridden: z.boolean(),
+  priceOverrideReason: z.string().nullable().default(null),
   gross: moneySchema,
   discount: discountInputSchema.nullable(),
   lineDiscount: moneySchema,
@@ -160,6 +209,27 @@ export const saleSchema = z.object({
   restaurantOrderId: z.string().nullable().default(null),
   /** pos | online (Prompt 16). */
   channel: z.enum(['pos', 'online']).default('pos'),
+  /** A discount or price change beyond the limit in force was allowed (BR-178). */
+  aboveLimit: z.boolean().default(false),
+  /** The company discount limit when the sale was made; null for online sales. */
+  discountLimitPercent: z.string().nullable().default(null),
+  /** Set on every sale whose total is zero (BR-179). */
+  zeroTotalReason: z.string().nullable().default(null),
+  /** Cashier who held the cart when somebody else completed it (BR-182). */
+  heldByName: z.string().nullable().default(null),
+  /** Receipt copies printed after the first (BR-182). */
+  reprintCount: z.number().int().default(0),
+  /** Supervisor override used on the cashier's till (BR-177). */
+  override: z
+    .object({
+      id: z.string(),
+      approverName: z.string(),
+      /** Rights the supervisor supplied that the cashier lacked. */
+      kinds: z.array(z.string()),
+      note: z.string().nullable(),
+    })
+    .nullable()
+    .default(null),
 });
 export type Sale = z.infer<typeof saleSchema>;
 
@@ -176,6 +246,7 @@ export const saleSummarySchema = z.object({
   customerName: z.string().nullable(),
   serviceType: z.enum(['dine_in', 'takeaway', 'pickup']).nullable().default(null),
   channel: z.enum(['pos', 'online']).default('pos'),
+  flags: z.array(z.enum(SALE_FLAGS)).default([]),
 });
 export type SaleSummary = z.infer<typeof saleSummarySchema>;
 export const saleListSchema = z.object({
@@ -183,6 +254,11 @@ export const saleListSchema = z.object({
   total: z.number().int(),
   page: z.number().int(),
   pageSize: z.number().int(),
+  /**
+   * One cut-off rule (BR-184): `amount` is the total of the listed sales, `refunded` the
+   * completed refunds whose completion falls in the same period and scope (not the refunds of
+   * the listed sales), so `net` equals the sales report's "net after refunds".
+   */
   totals: z.object({
     count: z.number().int(),
     amount: moneySchema,
@@ -198,6 +274,8 @@ export const saleListQuerySchema = z.object({
   /** retail = no restaurant service type. */
   serviceType: z.enum(['retail', 'dine_in', 'takeaway', 'pickup']).optional(),
   channel: z.enum(['pos', 'online']).optional(),
+  /** Unusual sales only (BR-179). */
+  flag: z.enum(SALE_FLAGS).optional(),
   q: z.string().trim().max(40).optional(),
   from: isoDate.optional(),
   to: isoDate.optional(),
@@ -236,11 +314,14 @@ export const suspendedOrderSchema = z.object({
       variantId: z.string(),
       quantity: z.string(),
       priceOverride: moneySchema.nullable(),
+      priceOverrideReason: z.string().nullable().default(null),
       discount: discountInputSchema.nullable(),
     }),
   ),
   orderDiscount: discountInputSchema.nullable(),
   customer: saleCustomerSchema.nullable(),
+  /** When the held sale is discarded automatically; null = never (BR-182). */
+  expiresAt: z.string().nullable().default(null),
   version: z.number().int(),
 });
 export type SuspendedOrder = z.infer<typeof suspendedOrderSchema>;
@@ -250,9 +331,48 @@ export const salesSettingsSchema = z.object({
   maxDiscountPercent: z.string(),
   refundWindowDays: z.number().int(),
   refundApprovalLimit: moneySchema,
+  /** Cashiers count the drawer without seeing the expected balance (BR-162). */
+  blindCashCount: z.boolean(),
+  /** "Other" cash-out above this amount waits for a manager (BR-164). */
+  cashOutOtherLimit: moneySchema,
+  /** "Other" cash-outs of one shift above this total wait for a manager (BR-164). */
+  cashOutOtherShiftLimit: moneySchema,
+  /** Largest discrepancy tolerance a register may be given (BR-164). */
+  maxRegisterTolerance: moneySchema,
+  /** Expenses above this amount wait for a second person (BR-166). */
+  expenseApprovalLimit: moneySchema,
+  /** Supplier payments above this amount wait for a second person (BR-166). */
+  supplierPaymentApprovalLimit: moneySchema,
+  /** Stock adjustments above this value at cost wait for a second person (BR-169). */
+  adjustmentApprovalLimit: moneySchema,
+  /** Count sheets hide the expected quantity (BR-170). */
+  blindStockCount: z.boolean(),
+  /** Lowest price change as a % of the list price; null = no floor (BR-178). */
+  priceOverrideFloorPercent: z.string().nullable(),
+  /** Highest price change as a % of the list price; null = no ceiling (BR-178). */
+  priceOverrideCeilingPercent: z.string().nullable(),
+  /** Whether a price change may go below the item's cost (BR-178). */
+  priceOverrideBelowCost: z.boolean(),
+  /** A refund of a sale the requester rang up waits for a second person (BR-180). */
+  refundOwnSalesNeedApproval: z.boolean(),
+  /** Card and transfer tenders and pay-backs need a terminal / transfer reference (BR-181). */
+  requireTenderReference: z.boolean(),
+  /** Held sales are discarded after this many hours; 0 = never (BR-182). */
+  heldSaleExpiryHours: z.number().int(),
+  /** Clearing a cart worth at least this much is logged (BR-182). */
+  cartClearLogThreshold: moneySchema,
+  /** Employees whose refund rate is above this % of their sales are flagged (BR-186). */
+  unusualRefundRatePercent: z.string().default('10'),
+  /** Default window of the unusual-activity review in days (BR-186). */
+  unusualActivityDays: z.number().int().default(30),
   version: z.number().int(),
 });
 export type SalesSettings = z.infer<typeof salesSettingsSchema>;
+
+const boundPercent = z
+  .string()
+  .trim()
+  .regex(/^\d{1,3}(\.\d{1,2})?$/, { error: 'Percent: 0–999, up to 2 decimals.' });
 export const updateSalesSettingsSchema = z.object({
   maxDiscountPercent: z
     .string()
@@ -260,5 +380,32 @@ export const updateSalesSettingsSchema = z.object({
     .regex(/^(100(\.0{1,2})?|\d{1,2}(\.\d{1,2})?)$/),
   refundWindowDays: z.number().int().min(0).max(3650),
   refundApprovalLimit: moneyAmountSchema,
+  blindCashCount: z.boolean(),
+  cashOutOtherLimit: moneyAmountSchema,
+  cashOutOtherShiftLimit: moneyAmountSchema,
+  maxRegisterTolerance: moneyAmountSchema,
+  expenseApprovalLimit: moneyAmountSchema,
+  supplierPaymentApprovalLimit: moneyAmountSchema,
+  /** Omitted = unchanged. */
+  adjustmentApprovalLimit: moneyAmountSchema.optional(),
+  blindStockCount: z.boolean().optional(),
+  /** Omitted = unchanged; null = no bound. */
+  priceOverrideFloorPercent: boundPercent.nullable().optional(),
+  priceOverrideCeilingPercent: boundPercent.nullable().optional(),
+  priceOverrideBelowCost: z.boolean().optional(),
+  refundOwnSalesNeedApproval: z.boolean().optional(),
+  requireTenderReference: z.boolean().optional(),
+  heldSaleExpiryHours: z.number().int().min(0).max(720).optional(),
+  cartClearLogThreshold: moneyAmountSchema.optional(),
+  unusualRefundRatePercent: boundPercent.optional(),
+  unusualActivityDays: z.number().int().min(1).max(366).optional(),
   version: z.number().int().positive(),
 });
+
+/** A cart cleared or a line removed after a total was shown (BR-182, FND-311). */
+export const cartEventSchema = z.object({
+  kind: z.enum(['cleared', 'line_removed']),
+  amount: moneyAmountSchema,
+  lineCount: z.number().int().min(0).max(1000),
+});
+export type CartEvent = z.input<typeof cartEventSchema>;

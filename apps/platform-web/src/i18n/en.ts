@@ -109,8 +109,27 @@ export const platformEn = {
     suspend: 'Suspend',
     reactivate: 'Reactivate',
     close: 'Close permanently',
+    freezeOwner: 'Freeze owner',
+    releaseOwner: 'Release owner',
+    transferOwner: 'Transfer ownership',
+    ownerFrozen: 'Owner frozen since {{when}}',
     yes: 'Yes',
     no: 'No',
+  },
+  ownerDialog: {
+    freeze: 'Freeze the owner of {{name}}',
+    release: 'Release the owner of {{name}}',
+    transfer: 'Transfer the ownership of {{name}}',
+    freezeHint:
+      'The owner is signed out everywhere and cannot sign in until released; employees keep working. Use it for a compromised or disputed owner account.',
+    releaseHint: 'The owner can sign in again.',
+    transferHint:
+      'The named member becomes the owner at once with every right; the current owner becomes a plain member. Both are notified by e-mail. Super administrators only.',
+    newOwner: 'New owner',
+    chooseMember: 'Choose a member…',
+    freezeDone: 'Owner frozen',
+    releaseDone: 'Owner released',
+    transferDone: 'Ownership transferred',
   },
   statusDialog: {
     suspend: 'Suspend {{name}}',

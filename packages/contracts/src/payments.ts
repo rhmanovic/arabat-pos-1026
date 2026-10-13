@@ -30,6 +30,9 @@ export const financialAccountSchema = z.object({
   currency: z.string(),
   status: z.enum(['active', 'inactive', 'archived']),
   balance: moneySchema,
+  /** Bank accounts: ledger entries that appeared on no statement yet (BR-168). */
+  unreconciledEntries: z.number().int(),
+  lastReconciledAt: z.string().nullable(),
   version: z.number().int(),
 });
 export type FinancialAccount = z.infer<typeof financialAccountSchema>;
@@ -49,6 +52,8 @@ export type SaveFinancialAccount = z.input<typeof saveFinancialAccountSchema>;
 export const PAYMENT_METHOD_KINDS = ['cash', 'card', 'bank_transfer', 'custom'] as const;
 export type PaymentMethodKind = (typeof PAYMENT_METHOD_KINDS)[number];
 export const FEE_TYPES = ['none', 'fixed', 'percentage', 'fixed_plus_percentage'] as const;
+/** What happens to the processing fee when a payment is refunded (owner decision D6). */
+export const REFUND_FEE_POLICIES = ['keep', 'reverse'] as const;
 export const GATEWAY_PROVIDERS = ['tap', 'upayments', 'hesabe', 'bookeey', 'mock'] as const;
 
 export const paymentMethodSchema = z.object({
@@ -64,6 +69,8 @@ export const paymentMethodSchema = z.object({
   feePercent: z.string(),
   financialAccountId: z.string().nullable(),
   gatewayProvider: z.enum(GATEWAY_PROVIDERS).nullable(),
+  /** keep: the provider keeps the fee on refunds; reverse: it is given back pro rata. */
+  refundFeePolicy: z.enum(REFUND_FEE_POLICIES).default('keep'),
   /** Always false until a gateway integration is implemented and approved. */
   gatewayLive: z.literal(false),
   sortOrder: z.number().int(),
@@ -91,6 +98,7 @@ export const savePaymentMethodSchema = z
       .enum(GATEWAY_PROVIDERS)
       .nullish()
       .transform((v) => v ?? null),
+    refundFeePolicy: z.enum(REFUND_FEE_POLICIES).default('keep'),
     sortOrder: z.number().int().min(0).max(1000).default(0),
     version: z.number().int().positive().optional(),
   })
@@ -98,6 +106,11 @@ export const savePaymentMethodSchema = z
   .refine((m) => m.kind !== 'cash' || m.gatewayProvider === null, {
     error: 'Cash cannot use a payment gateway.',
     path: ['gatewayProvider'],
+  })
+  // Fees are a card-network charge: cash never carries one (BR-181, FND-412).
+  .refine((m) => m.kind !== 'cash' || m.feeType === 'none', {
+    error: 'Cash cannot carry a processing fee.',
+    path: ['feeType'],
   });
 export type SavePaymentMethod = z.input<typeof savePaymentMethodSchema>;
 
@@ -171,6 +184,8 @@ export const CASH_EXPENSE_CATEGORIES = [
 ] as const;
 export type CashExpenseCategory = (typeof CASH_EXPENSE_CATEGORIES)[number];
 
+/** posted moved cash; pending waits for a manager; rejected / withdrawn never moved cash (BR-164). */
+export const CASH_MOVEMENT_STATUSES = ['posted', 'pending', 'rejected', 'withdrawn'] as const;
 export const cashMovementSchema = z.object({
   id: z.string(),
   kind: z.enum(['cash_in', 'cash_out']),
@@ -178,9 +193,32 @@ export const cashMovementSchema = z.object({
   reason: z.string(),
   note: z.string().nullable(),
   createdBy: z.string(),
+  createdByUserId: z.string(),
   createdAt: z.string(),
+  status: z.enum(CASH_MOVEMENT_STATUSES),
+  /** correction: the movement it reverses. */
+  correctsMovementId: z.string().nullable(),
+  /** Above the company's cash-out limit when recorded (BR-164). */
+  limitExceeded: z.boolean(),
+  /** Posted by the owner despite the limit (audited exception, D2). */
+  ownerOverride: z.boolean(),
+  decidedBy: z.string().nullable(),
+  decidedAt: z.string().nullable(),
+  decisionNote: z.string().nullable(),
 });
 export type CashMovement = z.infer<typeof cashMovementSchema>;
+
+/** A manager's decision on a pending cash-out (BR-164). */
+export const decideCashMovementSchema = z
+  .object({
+    decision: z.enum(['approve', 'reject']),
+    note: text(500),
+  })
+  .refine((d) => d.decision !== 'reject' || Boolean(d.note), {
+    error: 'Explain why the movement is rejected.',
+    path: ['note'],
+  });
+export type DecideCashMovement = z.input<typeof decideCashMovementSchema>;
 
 export const denominationSchema = z.object({
   value: moneyAmountSchema,
@@ -230,6 +268,19 @@ export const shiftSchema = z.object({
   version: z.number().int(),
 });
 export type Shift = z.infer<typeof shiftSchema>;
+
+/**
+ * The cashier's own view of an open shift (BR-162): under the blind-count policy the drawer
+ * figures are withheld (`summary` null) from users without `shifts.view_all`; closing still
+ * returns the full shift once the count is submitted.
+ */
+export const posShiftSchema = shiftSchema.extend({
+  summary: shiftSummarySchema.nullable(),
+  blindCount: z.boolean(),
+  /** counted − expected at opening, revealed after the count (null on a first count). */
+  openingDiscrepancy: moneySchema.nullable(),
+});
+export type PosShift = z.infer<typeof posShiftSchema>;
 
 export const shiftSummaryRowSchema = shiftSchema.omit({ movements: true, countedBreakdown: true });
 export type ShiftRow = z.infer<typeof shiftSummaryRowSchema>;
@@ -330,7 +381,8 @@ export type DiscrepancyReport = z.infer<typeof discrepancyReportSchema>;
 export const openShiftSchema = z.object({
   registerId: z.uuid(),
   countedCash: moneyAmountSchema,
-  expectedCash: moneyAmountSchema,
+  /** Omitted only under the blind-count policy (the cashier was shown no balance). */
+  expectedCash: moneyAmountSchema.optional(),
   breakdown: z.array(denominationSchema).max(30).optional(),
   note: text(500),
 });
@@ -347,9 +399,20 @@ export const recordCashMovementSchema = z
     category: z.enum(CASH_EXPENSE_CATEGORIES).optional(),
     /** supplier_payment: the supplier paid. */
     supplierId: z.uuid().optional(),
+    /** Expenses and payments: receipt or invoice number; bank_deposit: the deposit slip number. */
     receiptReference: text(80),
     /** bank_deposit: the bank account the cash is deposited into. */
     bankAccountId: z.uuid().optional(),
+    /** correction: the posted "other" movement (or earlier correction) being reversed (BR-164). */
+    correctsMovementId: z.uuid().optional(),
+  })
+  .refine((m) => m.reason !== 'correction' || Boolean(m.correctsMovementId), {
+    error: 'Choose the movement this correction reverses.',
+    path: ['correctsMovementId'],
+  })
+  .refine((m) => m.reason !== 'correction' || Boolean(m.note), {
+    error: 'Explain the correction.',
+    path: ['note'],
   })
   .refine(
     (m) =>
@@ -377,6 +440,10 @@ export const recordCashMovementSchema = z
   .refine((m) => m.reason !== 'bank_deposit' || Boolean(m.bankAccountId), {
     error: 'Choose the bank account.',
     path: ['bankAccountId'],
+  })
+  .refine((m) => m.reason !== 'bank_deposit' || Boolean(m.receiptReference), {
+    error: 'Enter the deposit slip number.',
+    path: ['receiptReference'],
   });
 export type RecordCashMovement = z.input<typeof recordCashMovementSchema>;
 
@@ -404,8 +471,10 @@ export const posRegisterSchema = z.object({
   nameEn: z.string().nullable(),
   nameAr: z.string().nullable(),
   defaultOpeningFloat: moneySchema,
-  /** The drawer balance carried from the last shift (ADR-0090). */
-  expectedCash: moneySchema,
+  /** The drawer balance carried from the last shift (ADR-0090); null under a blind count. */
+  expectedCash: moneySchema.nullable(),
+  /** The cashier counts blind (BR-162): no expected balance is shown before the count. */
+  blindCount: z.boolean(),
   /** The drawer has no verified count yet: the opening sets its balance. */
   needsCount: z.boolean(),
   /** free | mine | occupied */
@@ -413,4 +482,4 @@ export const posRegisterSchema = z.object({
   occupiedBy: z.string().nullable(),
 });
 export const posRegisterListSchema = z.object({ registers: z.array(posRegisterSchema) });
-export const currentShiftSchema = z.object({ shift: shiftSchema.nullable() });
+export const currentShiftSchema = z.object({ shift: posShiftSchema.nullable() });

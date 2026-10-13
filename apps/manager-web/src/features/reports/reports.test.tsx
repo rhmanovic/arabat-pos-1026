@@ -134,6 +134,143 @@ describe('reports page', () => {
     vi.unstubAllGlobals();
   });
 
+  it('shows gross profit with the uncosted share, the online row, and logs CSV exports', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockImplementation(() => 'blob:x');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    const report = {
+      ...salesReport,
+      byEmployee: [
+        {
+          membershipId: 'm1',
+          name: 'Rana',
+          saleCount: 2,
+          discounts: money('0.000'),
+          netSales: money('4.500'),
+          refunds: money('1.000'),
+          priceOverrides: 0,
+          aboveLimitSales: 0,
+          zeroTotalSales: 0,
+          supervisedSales: 0,
+        },
+        {
+          membershipId: 'online',
+          name: 'online',
+          saleCount: 1,
+          discounts: money('0.000'),
+          netSales: money('2.000'),
+          refunds: money('0.000'),
+          priceOverrides: 0,
+          aboveLimitSales: 0,
+          zeroTotalSales: 0,
+          supervisedSales: 0,
+        },
+      ],
+      profit: {
+        available: false,
+        missingCostSales: 1,
+        uncostedSales: money('2.000'),
+        uncostedSharePercent: '36.4',
+        costOfSales: money('1.400'),
+        restockedCost: money('0.000'),
+        grossProfit: money('2.100'),
+        marginPercent: '60.0',
+      },
+    };
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', [
+        'manager.access',
+        'reports.sales',
+        'reports.financial',
+        'branches.read',
+      ]),
+      routes: {
+        'GET /manager/branches': () => ({ status: 200, body: branches }),
+        'GET /manager/reports/sales': () => ({ status: 200, body: report }),
+        'POST /manager/reports/exports': () => ({ status: 204, body: undefined }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/reports', fetch });
+    // Profit is shown on the costed part with the uncosted share flagged, never hidden (BR-185).
+    const profit = await screen.findByTestId('kpi-profit');
+    expect(profit).toHaveTextContent('KWD 2.100');
+    expect(profit).toHaveTextContent('Margin: 60.0%');
+    expect(profit).toHaveTextContent(
+      '1 sale or return has no cost: KWD 2.000 (36.4% of net) left out',
+    );
+    // The online store is its own row, named, and not offered as an employee filter.
+    const table = screen.getByRole('table', { name: 'Sales by employee' });
+    expect(within(table).getByText('Online store')).toBeInTheDocument();
+    expect(within(table).getByText('Rana')).toBeInTheDocument();
+    const employeeFilter = screen.getByLabelText('Employee') as HTMLSelectElement;
+    expect([...employeeFilter.options].map((o) => o.textContent)).not.toContain('Online store');
+    // Exporting a table reports the export for the audit log (BR-187).
+    await userEvent.click(
+      within(table.closest('section')!).getByRole('button', { name: 'Export CSV' }),
+    );
+    const logged = await vi.waitFor(() => {
+      const c = fetch.calls.find(
+        (x) => x.method === 'POST' && x.path === '/manager/reports/exports',
+      );
+      if (!c) throw new Error('not yet');
+      return c;
+    });
+    expect(logged.body).toMatchObject({
+      report: 'sales',
+      section: 'sales-by-employee',
+      rows: 2,
+    });
+    expect(logged.body).toHaveProperty('from');
+    expect(logged.body).toHaveProperty('to');
+  });
+
+  it('shows today’s figures on the dashboard to holders of reports.sales', async () => {
+    const todaySummary = {
+      date: '2026-10-13',
+      timezone: 'Asia/Kuwait',
+      today: {
+        saleCount: 3,
+        netSales: money('6.500'),
+        refundCount: 1,
+        refunds: money('1.000'),
+        netAfterRefunds: money('5.500'),
+      },
+      yesterday: {
+        saleCount: 2,
+        netSales: money('4.000'),
+        refundCount: 0,
+        refunds: money('0.000'),
+        netAfterRefunds: money('4.000'),
+      },
+      openShifts: 1,
+      hasSales: true,
+    };
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'reports.sales']),
+      routes: { 'GET /manager/reports/today': () => ({ status: 200, body: todaySummary }) },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/', fetch });
+    const kpis = await screen.findByTestId('dashboard-today');
+    expect(kpis).toHaveTextContent('Today (2026-10-13)');
+    expect(kpis).toHaveTextContent('Net sales today (3 sales)');
+    expect(kpis).toHaveTextContent('KWD 6.500');
+    expect(kpis).toHaveTextContent('Yesterday: KWD 4.000');
+    expect(kpis).toHaveTextContent('Refunds today (1 refund)');
+    expect(kpis).toHaveTextContent('KWD 5.500');
+    expect(kpis).toHaveTextContent('Days cut at midnight Asia/Kuwait');
+    // A company that never sold anything is told so instead of being shown zeros.
+    const fresh = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'reports.sales']),
+      routes: {
+        'GET /manager/reports/today': () => ({
+          status: 200,
+          body: { ...todaySummary, hasSales: false },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/', fetch: fresh });
+    expect(await screen.findByText(/No sales yet/)).toBeInTheDocument();
+  });
+
   it('denies the page without any report permission', async () => {
     const fetch = fakeApiFetch({
       session: makeSession('manager', ['manager.access']),

@@ -1,6 +1,7 @@
 import { ROLE_TEMPLATES } from '@arabat/permissions';
 import type { Transaction } from '../../database/database.service.js';
 import { newId } from '../../kernel/ids.js';
+import { assertTimezone } from '../../kernel/time/period.js';
 import { branches } from '../branches/branches.schema.js';
 import { memberships, rolePermissions, roles } from '../iam/iam.schema.js';
 import { ensureDefaultPaymentSetup, ensureDefaultRegister } from '../payments/merchant-defaults.js';
@@ -23,6 +24,8 @@ export async function provisionMerchant(
     contactEmail: string | null;
     contactPhone?: string | null;
     defaultLanguage: 'ar' | 'en';
+    /** Set once at registration (BR-184); Asia/Kuwait when omitted. */
+    timezone?: string;
   },
 ): Promise<{ branchId: string }> {
   const { merchantId } = input;
@@ -34,6 +37,7 @@ export async function provisionMerchant(
     contactEmail: input.contactEmail,
     contactPhone: input.contactPhone ?? null,
     defaultLanguage: input.defaultLanguage,
+    timezone: input.timezone ? assertTimezone(input.timezone) : 'Asia/Kuwait',
   });
   const branchId = newId();
   await tx.insert(branches).values({

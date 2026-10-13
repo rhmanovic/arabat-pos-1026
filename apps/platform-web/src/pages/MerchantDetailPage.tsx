@@ -29,6 +29,7 @@ export function MerchantDetailPage() {
   const { can } = useRole();
   const { merchantId = '' } = useParams();
   const [statusTarget, setStatusTarget] = useState<MerchantStatus | null>(null);
+  const [ownerAction, setOwnerAction] = useState<'freeze' | 'release' | 'transfer' | null>(null);
   const [editing, setEditing] = useState(false);
   const detail = useQuery({
     queryKey: [...platformKey, 'merchant', merchantId],
@@ -70,6 +71,22 @@ export function MerchantDetailPage() {
                   </Button>
                 )
               ) : null}
+              {can('platform.super_admin', 'platform.support') ? (
+                m.ownerFrozenAt ? (
+                  <Button onClick={() => setOwnerAction('release')}>
+                    {t('detail.releaseOwner')}
+                  </Button>
+                ) : (
+                  <Button variant="secondary" onClick={() => setOwnerAction('freeze')}>
+                    {t('detail.freezeOwner')}
+                  </Button>
+                )
+              ) : null}
+              {can('platform.super_admin') ? (
+                <Button variant="secondary" onClick={() => setOwnerAction('transfer')}>
+                  {t('detail.transferOwner')}
+                </Button>
+              ) : null}
               {can('platform.super_admin') ? (
                 <Button variant="danger" onClick={() => setStatusTarget('closed')}>
                   {t('detail.close')}
@@ -79,6 +96,11 @@ export function MerchantDetailPage() {
           )
         }
       />
+      {m.ownerFrozenAt ? (
+        <Alert tone="warning" title={t('detail.ownerFrozen', { when: f.date(m.ownerFrozenAt) })}>
+          {m.ownerFrozenReason}
+        </Alert>
+      ) : null}
       <div className="grid gap-4 lg:grid-cols-2">
         <Section title={t('detail.profile')}>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
@@ -196,6 +218,9 @@ export function MerchantDetailPage() {
       </div>
       {statusTarget ? (
         <StatusDialog merchant={m} target={statusTarget} onClose={() => setStatusTarget(null)} />
+      ) : null}
+      {ownerAction ? (
+        <OwnerDialog merchant={m} action={ownerAction} onClose={() => setOwnerAction(null)} />
       ) : null}
       {editing ? <SubscriptionDialog merchant={m} onClose={() => setEditing(false)} /> : null}
     </div>
@@ -432,6 +457,86 @@ function SubscriptionDialog({
             {message(save.error)}
           </Alert>
         ) : null}
+      </div>
+    </Dialog>
+  );
+}
+
+/** Emergency freeze / release of the owner, or a transfer of ownership with a recorded reason (BR-020). */
+function OwnerDialog({
+  merchant,
+  action,
+  onClose,
+}: {
+  merchant: PlatformMerchantDetail;
+  action: 'freeze' | 'release' | 'transfer';
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const api = useApi();
+  const f = useFormat();
+  const notify = useNotify();
+  const message = useErrorMessage();
+  const queryClient = useQueryClient();
+  const [reason, setReason] = useState('');
+  const [toMembershipId, setTo] = useState('');
+  const run = useMutation({
+    mutationFn: () =>
+      action === 'transfer'
+        ? api.platform.transferOwnership(merchant.id, {
+            toMembershipId,
+            reason,
+            version: merchant.version,
+          })
+        : action === 'freeze'
+          ? api.platform.freezeOwner(merchant.id, { reason, version: merchant.version })
+          : api.platform.releaseOwner(merchant.id, { reason, version: merchant.version }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: platformKey });
+      notify.ok(t(`ownerDialog.${action}Done`));
+      onClose();
+    },
+  });
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => (!o ? onClose() : undefined)}
+      title={t(`ownerDialog.${action}`, { name: f.name(merchant) })}
+      footer={
+        <Button
+          variant={action === 'release' ? 'primary' : 'danger'}
+          loading={run.isPending}
+          disabled={reason.trim().length < 3 || (action === 'transfer' && !toMembershipId)}
+          onClick={() => run.mutate()}
+        >
+          {t('statusDialog.confirm')}
+        </Button>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        <Alert tone={action === 'release' ? 'info' : 'warning'}>
+          {t(`ownerDialog.${action}Hint`)}
+        </Alert>
+        {action === 'transfer' ? (
+          <Field label={t('ownerDialog.newOwner')}>
+            {(p) => (
+              <Select {...p} value={toMembershipId} onChange={(e) => setTo(e.target.value)}>
+                <option value="">{t('ownerDialog.chooseMember')}</option>
+                {merchant.members
+                  .filter((x) => !x.isOwner)
+                  .map((x) => (
+                    <option key={x.membershipId} value={x.membershipId}>
+                      {x.fullName} ({x.email})
+                    </option>
+                  ))}
+              </Select>
+            )}
+          </Field>
+        ) : null}
+        <Field label={t('statusDialog.reason')}>
+          {(p) => <Textarea {...p} value={reason} onChange={(e) => setReason(e.target.value)} />}
+        </Field>
+        {run.isError ? <Alert tone="danger">{message(run.error)}</Alert> : null}
       </div>
     </Dialog>
   );

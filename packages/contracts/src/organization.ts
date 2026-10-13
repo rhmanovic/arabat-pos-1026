@@ -62,7 +62,15 @@ export const updateBranchSchema = z
   });
 export type UpdateBranch = z.input<typeof updateBranchSchema>;
 
-export const branchStatusSchema = z.object({ status: z.enum(['active', 'inactive']) });
+export const branchStatusSchema = z.object({
+  status: z.enum(['active', 'inactive']),
+  /**
+   * On reactivation, what to do with the role assignments that were dormant at the branch
+   * (BR-192): required when any exist; `GRANTS_NEED_CONFIRMATION` lists them otherwise.
+   */
+  dormantGrants: z.enum(['keep', 'clear']).optional(),
+});
+export type BranchStatus = z.input<typeof branchStatusSchema>;
 
 // ---------------------------------------------------------------- roles & permissions
 export const permissionInfoSchema = z.object({

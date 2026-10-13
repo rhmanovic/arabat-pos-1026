@@ -102,7 +102,7 @@ export function SuppliersPage() {
           },
           {
             key: 'payments',
-            header: <span className="sr-only">{t('purchasing.payments')}</span>,
+            header: <span className="sr-only">{t('purchasing.statement')}</span>,
             cell: (s) => (
               <Button
                 size="sm"
@@ -112,7 +112,7 @@ export function SuppliersPage() {
                   setPayments(s);
                 }}
               >
-                {t('purchasing.payments')}
+                {t('purchasing.statement')}
               </Button>
             ),
           },
@@ -128,7 +128,7 @@ export function SuppliersPage() {
         ]}
       />
       {payments ? (
-        <SupplierPaymentsDialog supplier={payments} onClose={() => setPayments(null)} />
+        <SupplierStatementDialog supplier={payments} onClose={() => setPayments(null)} />
       ) : null}
       {editing ? (
         <SupplierDialog
@@ -249,8 +249,12 @@ function SupplierDialog({ supplier, onClose }: { supplier: Supplier | null; onCl
   );
 }
 
-/** Cash paid to the supplier (ADR-0091): payments from registers and treasuries. */
-function SupplierPaymentsDialog({
+/**
+ * Supplier statement (BR-188): goods received at order cost against cash paid, newest first,
+ * with the running "received − paid" (positive = still owed to the supplier). A period cuts on
+ * the merchant's local days with the balance brought forward (BR-184).
+ */
+function SupplierStatementDialog({
   supplier,
   onClose,
 }: {
@@ -259,47 +263,108 @@ function SupplierPaymentsDialog({
 }) {
   const { t, i18n } = useTranslation();
   const api = useApi();
-  const payments = useQuery({
-    queryKey: [...suppliersKey, supplier.id, 'payments'],
-    queryFn: () => api.cash.supplierPayments(supplier.id),
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const DATE = /^\d{4}-\d{2}-\d{2}$/;
+  const query = { ...(DATE.test(from) ? { from } : {}), ...(DATE.test(to) ? { to } : {}) };
+  const statement = useQuery({
+    queryKey: [...suppliersKey, supplier.id, 'statement', query],
+    queryFn: () => api.cash.supplierStatement(supplier.id, query),
   });
+  const amount = (m: { amount: string; currency: string }) => formatAmount(m, i18n.language);
+  const d = statement.data;
   return (
     <Dialog
       open
       size="lg"
       onOpenChange={(open) => !open && onClose()}
-      title={t('purchasing.paymentsTitle', { name: localizedName(supplier, i18n.language) })}
+      title={t('purchasing.statementTitle', { name: localizedName(supplier, i18n.language) })}
     >
-      {payments.data ? (
-        <p className="mb-3 text-sm" data-testid="supplier-total-paid">
-          {t('purchasing.totalPaid')}{' '}
-          <span dir="ltr" className="font-semibold tabular-nums">
-            {formatAmount(payments.data.totalPaid, i18n.language)}
-          </span>
-        </p>
+      <div className="mb-3 flex flex-wrap items-end gap-3">
+        <Field label={t('purchasing.periodFrom')}>
+          {(p) => (
+            <Input
+              {...p}
+              type="date"
+              className="w-40"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('purchasing.periodTo')}>
+          {(p) => (
+            <Input
+              {...p}
+              type="date"
+              className="w-40"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+            />
+          )}
+        </Field>
+      </div>
+      {d ? (
+        <dl
+          className="mb-3 grid grid-cols-2 gap-2 rounded-md bg-surface-muted p-3 text-sm sm:grid-cols-5"
+          data-testid="supplier-statement-summary"
+        >
+          {d.period ? (
+            <div>
+              <dt className="text-fg-muted">{t('purchasing.openingBalance')}</dt>
+              <dd dir="ltr" className="font-medium tabular-nums">
+                {amount(d.openingBalance)}
+              </dd>
+            </div>
+          ) : null}
+          <div>
+            <dt className="text-fg-muted">{t('purchasing.receivedValue')}</dt>
+            <dd dir="ltr" className="font-medium tabular-nums">
+              {amount(d.totals.received)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-fg-muted">{t('purchasing.paid')}</dt>
+            <dd dir="ltr" className="font-medium tabular-nums">
+              {amount(d.totals.paid)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-fg-muted">{t('purchasing.reversed')}</dt>
+            <dd dir="ltr" className="font-medium tabular-nums">
+              {amount(d.totals.reversed)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-fg-muted">{t('purchasing.balanceOwed')}</dt>
+            <dd dir="ltr" className="font-semibold tabular-nums" data-testid="supplier-balance">
+              {amount(d.totals.closingBalance)}
+            </dd>
+          </div>
+        </dl>
       ) : null}
       <DataTable
-        caption={t('purchasing.payments')}
-        loading={payments.isPending}
+        caption={t('purchasing.statement')}
+        loading={statement.isPending}
         error={
-          payments.isError ? (
-            <ErrorState error={payments.error} onRetry={() => void payments.refetch()} />
+          statement.isError ? (
+            <ErrorState error={statement.error} onRetry={() => void statement.refetch()} />
           ) : null
         }
-        rows={payments.data?.payments}
-        rowKey={(p) => p.id}
-        empty={t('purchasing.noPayments')}
+        rows={d?.lines}
+        rowKey={(l) => l.id}
+        empty={t('purchasing.noStatementLines')}
         columns={[
           {
             key: 'when',
             header: t('purchasing.date'),
-            cell: (p) => (
+            cell: (l) => (
               <span>
-                {new Date(p.createdAt).toLocaleDateString(i18n.language, {
+                {new Date(l.occurredAt).toLocaleDateString(i18n.language, {
                   numberingSystem: 'latn',
                 })}
                 <span className="block text-xs text-fg-muted" dir="ltr">
-                  {p.number}
+                  {l.document}
                 </span>
               </span>
             ),
@@ -307,24 +372,36 @@ function SupplierPaymentsDialog({
           {
             key: 'detail',
             header: t('purchasing.paymentDetail'),
-            cell: (p) =>
-              [
-                p.purchaseOrder?.number,
-                p.description,
-                p.receiptReference,
-                p.reversesId ? t('purchasing.paymentReversal') : null,
-                p.reversedById ? t('purchasing.paymentReversed') : null,
-              ]
+            cell: (l) =>
+              [t(`purchasing.statementKind_${l.kind}`), l.orderNumber, l.reference]
                 .filter(Boolean)
-                .join(' · ') || '—',
+                .join(' · '),
           },
           {
-            key: 'amount',
-            header: t('purchasing.amount'),
-            cell: (p) => (
+            key: 'received',
+            header: t('purchasing.receivedValue'),
+            hideBelow: 'sm',
+            cell: (l) => (
               <span dir="ltr" className="tabular-nums">
-                {p.reversesId ? '−' : ''}
-                {formatAmount(p.amount, i18n.language)}
+                {l.kind === 'receipt' ? amount(l.received) : ''}
+              </span>
+            ),
+          },
+          {
+            key: 'paid',
+            header: t('purchasing.paid'),
+            cell: (l) => (
+              <span dir="ltr" className="tabular-nums">
+                {l.kind === 'receipt' ? '' : amount(l.paid)}
+              </span>
+            ),
+          },
+          {
+            key: 'balance',
+            header: t('purchasing.balanceOwed'),
+            cell: (l) => (
+              <span dir="ltr" className="tabular-nums">
+                {amount(l.balance)}
               </span>
             ),
           },

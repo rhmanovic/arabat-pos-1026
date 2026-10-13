@@ -214,6 +214,7 @@ test('restaurant: setup, table order with modifiers, kitchen display, split bill
   await bill.getByRole('button', { name: /^Pay/ }).click();
   pay = pos.getByRole('dialog');
   await pay.getByRole('button', { name: 'Card (KNET)' }).click();
+  await pay.getByLabel(/^Reference/).fill('KNET-77');
   await pay.getByRole('button', { name: 'Add payment' }).click();
   await pay.getByRole('button', { name: 'Complete sale' }).click();
   await expect(pos.getByRole('dialog').getByTestId('receipt')).toBeVisible();

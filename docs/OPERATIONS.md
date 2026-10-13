@@ -124,7 +124,7 @@ Variables of the web service:
 | `MFA_ENCRYPTION_SECRET` | random string ≥ 40 characters (keep a copy: losing it locks operators out) |
 | `TRUST_PROXY` | `1` (Railway's edge proxy) |
 | `PUBLIC_MANAGER_URL` / `PUBLIC_POS_URL` / `PUBLIC_STORE_URL` | `https://${{RAILWAY_PUBLIC_DOMAIN}}/manager` / `/pos` / `/store` |
-| `PAYMENT_MOCK_ENABLED`, `PAYMENT_MOCK_SECRET` | `true` and a random string (staging only: sandbox payments) |
+| `PAYMENT_MOCK_ENABLED`, `PAYMENT_MOCK_SECRET` | `true` and a random string **on staging only**: test payments create sales and bank entries without money (FND-709); the API logs a warning when it is on in a production build, and it must never be set for an environment used by a real merchant (owner decision D7) |
 | `SMTP_URL`, `MAIL_FROM` | optional; without them password reset and invitation e-mails are not delivered |
 
 Generate a public domain under the web service's Networking settings. Railway injects

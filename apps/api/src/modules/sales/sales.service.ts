@@ -1,10 +1,13 @@
 import type {
   DiscountInput,
+  OverridablePermission,
   Receipt,
   Sale,
+  SaleFlag,
   SaleSummary,
   SalesSettings,
   SuspendedOrder,
+  cartEventSchema,
   checkoutSchema,
   saleListQuerySchema,
   suspendOrderSchema,
@@ -14,6 +17,9 @@ import {
   type Discount,
   Money,
   PricingError,
+  abovePercentOf,
+  belowPercentOf,
+  divideHalfUp,
   exceedsDiscountLimit,
   formatQuantity,
   parseQuantity,
@@ -31,6 +37,7 @@ import { assertCan } from '../../kernel/access/assert.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
+import { merchantTimezone, withinLocalDays } from '../../kernel/time/period.js';
 import { AuditService } from '../audit/audit.service.js';
 import { isUniqueViolation } from '../auth/registration.service.js';
 import { versionConflict } from '../branches/branches.service.js';
@@ -39,10 +46,13 @@ import { postEntries, registerAccount } from '../payments/cash-ledger.js';
 import { financialAccountEntries } from '../payments/payments.schema.js';
 import { parseAmount } from '../payments/payments.service.js';
 import { ShiftsService } from '../registers/shifts.service.js';
+import { OverridesService } from './overrides.service.js';
 import {
   orderLines,
   orders,
   payments,
+  posCartEvents,
+  receiptReprints,
   saleLineModifiers,
   saleLines,
   sales,
@@ -51,6 +61,7 @@ import {
 import { consumptionCosts, stockConsumption } from '../inventory/consumption.js';
 
 type CheckoutInput = z.output<typeof checkoutSchema>;
+type CartEventInput = z.output<typeof cartEventSchema>;
 type SuspendInput = z.output<typeof suspendOrderSchema>;
 type CartLine = CheckoutInput['lines'][number];
 type ListQuery = z.output<typeof saleListQuerySchema>;
@@ -113,6 +124,18 @@ function trimDecimal(value: string): string {
   return value.includes('.') ? value.replace(/\.?0+$/, '') : value;
 }
 
+/** Sales listed as unusual (BR-179): flagged by what was allowed on them, computed in SQL. */
+const flagSql: Record<SaleFlag, SQL> = {
+  zero_total: sql`(s.channel = 'pos' and s.total_minor = 0)`,
+  above_limit: sql`s.above_limit`,
+  price_override: sql`exists (select 1 from sale_lines fl where fl.sale_id = s.id and fl.price_overridden)`,
+  supervised: sql`s.override_id is not null`,
+};
+const flagsSql = sql`array_remove(array[${sql.join(
+  (Object.keys(flagSql) as SaleFlag[]).map((f) => sql`case when ${flagSql[f]} then ${f} end`),
+  sql`, `,
+)}], null)`;
+
 function fromStored(type: string | null, value: string | null): DiscountInput | null {
   if (!type || value === null) return null;
   return { type: type as 'percent' | 'amount', value };
@@ -134,6 +157,7 @@ export class SalesService {
     private readonly audit: AuditService,
     private readonly ledger: StockLedgerService,
     private readonly shifts: ShiftsService,
+    private readonly overrides: OverridesService,
   ) {}
 
   // ------------------------------------------------------------ settings
@@ -152,6 +176,31 @@ export class SalesService {
       maxDiscountPercent: trimDecimal(row?.maxDiscountPercent ?? '10'),
       refundWindowDays: row?.refundWindowDays ?? 30,
       refundApprovalLimit: money(row?.refundApprovalLimitMinor ?? 20000n),
+      blindCashCount: row?.blindCashCount ?? true,
+      cashOutOtherLimit: money(row?.cashOutOtherLimitMinor ?? 20000n),
+      cashOutOtherShiftLimit: money(row?.cashOutOtherShiftLimitMinor ?? 50000n),
+      maxRegisterTolerance: money(row?.maxRegisterToleranceMinor ?? 1000n),
+      expenseApprovalLimit: money(row?.expenseApprovalLimitMinor ?? 20000n),
+      supplierPaymentApprovalLimit: money(row?.supplierPaymentApprovalLimitMinor ?? 100000n),
+      adjustmentApprovalLimit: money(row?.adjustmentApprovalLimitMinor ?? 50000n),
+      blindStockCount: row?.blindStockCount ?? true,
+      priceOverrideFloorPercent: row
+        ? row.priceOverrideFloorPercent === null
+          ? null
+          : trimDecimal(row.priceOverrideFloorPercent)
+        : '50',
+      priceOverrideCeilingPercent: row
+        ? row.priceOverrideCeilingPercent === null
+          ? null
+          : trimDecimal(row.priceOverrideCeilingPercent)
+        : '200',
+      priceOverrideBelowCost: row?.priceOverrideBelowCost ?? false,
+      refundOwnSalesNeedApproval: row?.refundOwnSalesNeedApproval ?? true,
+      requireTenderReference: row?.requireTenderReference ?? true,
+      heldSaleExpiryHours: row?.heldSaleExpiryHours ?? 24,
+      cartClearLogThreshold: money(row?.cartClearLogThresholdMinor ?? 5000n),
+      unusualRefundRatePercent: trimDecimal(row?.unusualRefundRatePercent ?? '10'),
+      unusualActivityDays: row?.unusualActivityDays ?? 30,
       version: row?.version ?? 1,
     };
   }
@@ -163,6 +212,19 @@ export class SalesService {
   ): Promise<SalesSettings> {
     assertCan(actor, 'merchant.settings.update', null);
     const limitMinor = parseAmount(input.refundApprovalLimit, 'refundApprovalLimit');
+    const cashLimits = {
+      cashOutOtherLimitMinor: parseAmount(input.cashOutOtherLimit, 'cashOutOtherLimit'),
+      cashOutOtherShiftLimitMinor: parseAmount(
+        input.cashOutOtherShiftLimit,
+        'cashOutOtherShiftLimit',
+      ),
+      maxRegisterToleranceMinor: parseAmount(input.maxRegisterTolerance, 'maxRegisterTolerance'),
+      expenseApprovalLimitMinor: parseAmount(input.expenseApprovalLimit, 'expenseApprovalLimit'),
+      supplierPaymentApprovalLimitMinor: parseAmount(
+        input.supplierPaymentApprovalLimit,
+        'supplierPaymentApprovalLimit',
+      ),
+    };
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const [row] = await tx
         .select()
@@ -170,6 +232,59 @@ export class SalesService {
         .where(eq(salesSettings.merchantId, actor.merchantId))
         .for('update');
       if ((row?.version ?? 1) !== input.version) throw versionConflict();
+      // Stock controls (BR-169 / BR-170): unchanged when omitted.
+      const stockPolicy = {
+        adjustmentApprovalLimitMinor:
+          input.adjustmentApprovalLimit === undefined
+            ? (row?.adjustmentApprovalLimitMinor ?? 50000n)
+            : parseAmount(input.adjustmentApprovalLimit, 'adjustmentApprovalLimit'),
+        blindStockCount: input.blindStockCount ?? row?.blindStockCount ?? true,
+      };
+      // Price-change bounds (BR-178): unchanged when omitted, null = no bound.
+      const priceBounds = {
+        priceOverrideFloorPercent:
+          input.priceOverrideFloorPercent === undefined
+            ? row
+              ? row.priceOverrideFloorPercent
+              : '50'
+            : input.priceOverrideFloorPercent,
+        priceOverrideCeilingPercent:
+          input.priceOverrideCeilingPercent === undefined
+            ? row
+              ? row.priceOverrideCeilingPercent
+              : '200'
+            : input.priceOverrideCeilingPercent,
+        priceOverrideBelowCost:
+          input.priceOverrideBelowCost ?? row?.priceOverrideBelowCost ?? false,
+      };
+      // Selling controls of session 9 (BR-180 to BR-182): unchanged when omitted.
+      const controls = {
+        refundOwnSalesNeedApproval:
+          input.refundOwnSalesNeedApproval ?? row?.refundOwnSalesNeedApproval ?? true,
+        requireTenderReference: input.requireTenderReference ?? row?.requireTenderReference ?? true,
+        heldSaleExpiryHours: input.heldSaleExpiryHours ?? row?.heldSaleExpiryHours ?? 24,
+        cartClearLogThresholdMinor:
+          input.cartClearLogThreshold === undefined
+            ? (row?.cartClearLogThresholdMinor ?? 5000n)
+            : parseAmount(input.cartClearLogThreshold, 'cartClearLogThreshold'),
+        // Unusual-activity review (BR-186): unchanged when omitted.
+        unusualRefundRatePercent:
+          input.unusualRefundRatePercent ?? row?.unusualRefundRatePercent ?? '10',
+        unusualActivityDays: input.unusualActivityDays ?? row?.unusualActivityDays ?? 30,
+      };
+      if (
+        priceBounds.priceOverrideFloorPercent !== null &&
+        priceBounds.priceOverrideCeilingPercent !== null &&
+        Number(priceBounds.priceOverrideFloorPercent) >
+          Number(priceBounds.priceOverrideCeilingPercent)
+      )
+        throw new AppError(400, 'VALIDATION_FAILED', 'The price floor is above the ceiling.', [
+          {
+            path: 'priceOverrideFloorPercent',
+            code: 'invalid',
+            message: 'The floor must not exceed the ceiling.',
+          },
+        ]);
       if (row) {
         await tx
           .update(salesSettings)
@@ -177,6 +292,11 @@ export class SalesService {
             maxDiscountPercent: input.maxDiscountPercent,
             refundWindowDays: input.refundWindowDays,
             refundApprovalLimitMinor: limitMinor,
+            blindCashCount: input.blindCashCount,
+            ...cashLimits,
+            ...stockPolicy,
+            ...priceBounds,
+            ...controls,
             version: sql`${salesSettings.version} + 1`,
             updatedAt: sql`now()`,
           })
@@ -187,6 +307,11 @@ export class SalesService {
           maxDiscountPercent: input.maxDiscountPercent,
           refundWindowDays: input.refundWindowDays,
           refundApprovalLimitMinor: limitMinor,
+          blindCashCount: input.blindCashCount,
+          ...cashLimits,
+          ...stockPolicy,
+          ...priceBounds,
+          ...controls,
           version: 2,
         });
       }
@@ -208,6 +333,68 @@ export class SalesService {
             from: (row?.refundApprovalLimitMinor ?? 20000n).toString(),
             to: limitMinor.toString(),
           },
+          blindCashCount: { from: row?.blindCashCount ?? true, to: input.blindCashCount },
+          cashOutOtherLimit: {
+            from: (row?.cashOutOtherLimitMinor ?? 20000n).toString(),
+            to: cashLimits.cashOutOtherLimitMinor.toString(),
+          },
+          cashOutOtherShiftLimit: {
+            from: (row?.cashOutOtherShiftLimitMinor ?? 50000n).toString(),
+            to: cashLimits.cashOutOtherShiftLimitMinor.toString(),
+          },
+          maxRegisterTolerance: {
+            from: (row?.maxRegisterToleranceMinor ?? 1000n).toString(),
+            to: cashLimits.maxRegisterToleranceMinor.toString(),
+          },
+          expenseApprovalLimit: {
+            from: (row?.expenseApprovalLimitMinor ?? 20000n).toString(),
+            to: cashLimits.expenseApprovalLimitMinor.toString(),
+          },
+          supplierPaymentApprovalLimit: {
+            from: (row?.supplierPaymentApprovalLimitMinor ?? 100000n).toString(),
+            to: cashLimits.supplierPaymentApprovalLimitMinor.toString(),
+          },
+          adjustmentApprovalLimit: {
+            from: (row?.adjustmentApprovalLimitMinor ?? 50000n).toString(),
+            to: stockPolicy.adjustmentApprovalLimitMinor.toString(),
+          },
+          blindStockCount: { from: row?.blindStockCount ?? true, to: stockPolicy.blindStockCount },
+          priceOverrideFloorPercent: {
+            from: row ? row.priceOverrideFloorPercent : '50',
+            to: priceBounds.priceOverrideFloorPercent,
+          },
+          priceOverrideCeilingPercent: {
+            from: row ? row.priceOverrideCeilingPercent : '200',
+            to: priceBounds.priceOverrideCeilingPercent,
+          },
+          priceOverrideBelowCost: {
+            from: row?.priceOverrideBelowCost ?? false,
+            to: priceBounds.priceOverrideBelowCost,
+          },
+          refundOwnSalesNeedApproval: {
+            from: row?.refundOwnSalesNeedApproval ?? true,
+            to: controls.refundOwnSalesNeedApproval,
+          },
+          requireTenderReference: {
+            from: row?.requireTenderReference ?? true,
+            to: controls.requireTenderReference,
+          },
+          heldSaleExpiryHours: {
+            from: row?.heldSaleExpiryHours ?? 24,
+            to: controls.heldSaleExpiryHours,
+          },
+          cartClearLogThreshold: {
+            from: (row?.cartClearLogThresholdMinor ?? 5000n).toString(),
+            to: controls.cartClearLogThresholdMinor.toString(),
+          },
+          unusualRefundRatePercent: {
+            from: trimDecimal(row?.unusualRefundRatePercent ?? '10'),
+            to: trimDecimal(controls.unusualRefundRatePercent),
+          },
+          unusualActivityDays: {
+            from: row?.unusualActivityDays ?? 30,
+            to: controls.unusualActivityDays,
+          },
         },
       });
       return this.settings(tx, actor.merchantId);
@@ -223,10 +410,17 @@ export class SalesService {
     return {
       refundWindowDays: row?.refundWindowDays ?? 30,
       refundApprovalLimitMinor: row?.refundApprovalLimitMinor ?? 20000n,
+      refundOwnSalesNeedApproval: row?.refundOwnSalesNeedApproval ?? true,
+      requireTenderReference: row?.requireTenderReference ?? true,
+      unusualRefundRatePercent: trimDecimal(row?.unusualRefundRatePercent ?? '10'),
+      unusualActivityDays: row?.unusualActivityDays ?? 30,
     };
   }
 
-  /** Parses and permission-checks cart lines (shared with exchanges). */
+  /**
+   * Parses cart lines (shared with exchanges and restaurant bills). Rights are checked when
+   * the sale is completed, where a supervisor override may supply them (BR-177).
+   */
   parseCart(
     actor: MerchantActor,
     input: { lines: CartLine[]; orderDiscount: DiscountInput | null },
@@ -236,10 +430,9 @@ export class SalesService {
 
   // ------------------------------------------------------------ checkout
   private parseLines(
-    actor: MerchantActor,
+    _actor: MerchantActor,
     input: { lines: CartLine[]; orderDiscount: DiscountInput | null },
   ) {
-    const branchId = actor.boundBranchId!;
     const lines: ParsedLine[] = input.lines.map((l, i) => ({
       variantId: l.variantId,
       quantityMilli: parseQuantity(l.quantity),
@@ -256,16 +449,6 @@ export class SalesService {
           { path: `lines.${i}.quantity`, code: 'too_small', message: 'Quantity must be positive.' },
         ]);
     });
-    if (
-      (orderDiscount || lines.some((l) => l.discount)) &&
-      !can(actor.access, 'sales.discount', branchId)
-    )
-      throw new AppError(403, 'DISCOUNT_LIMIT_EXCEEDED', 'You are not allowed to give discounts.');
-    if (
-      lines.some((l) => l.priceOverrideMinor !== null) &&
-      !can(actor.access, 'sales.price_override', branchId)
-    )
-      throw new AppError(403, 'PRICE_OVERRIDE_DENIED', 'You are not allowed to change prices.');
     return { lines, orderDiscount };
   }
 
@@ -298,6 +481,8 @@ export class SalesService {
           idempotency: { key: input.idempotencyKey, hash: requestHash },
           exchange: null,
           customer: { id: input.customerId, inherited: false },
+          overrideId: input.overrideId,
+          zeroTotalReason: input.zeroTotalReason,
           ip,
         });
       });
@@ -334,6 +519,10 @@ export class SalesService {
       customer: { id: string | null; inherited: boolean };
       /** Restaurant bill: the order it pays and its service type. */
       restaurant?: { orderId: string; serviceType: string } | null;
+      /** Supervisor override obtained on this till (BR-177). */
+      overrideId?: string | null;
+      /** Required when the total is zero (BR-179). */
+      zeroTotalReason?: string | null;
       ip: string;
     },
   ): Promise<{ totalMinor: bigint; receiptNumber: string }> {
@@ -346,6 +535,24 @@ export class SalesService {
       args.customer.id,
       args.customer.inherited,
     );
+    // Rights come from the cashier, or from a supervisor's single-use grant (BR-177); the
+    // grant records which rights it actually supplied.
+    const override = args.overrideId
+      ? await this.overrides.authority(tx, actor, args.overrideId, branchId)
+      : null;
+    const supplied = new Set<OverridablePermission>();
+    const allowed = (permission: OverridablePermission) => {
+      if (can(actor.access, permission, branchId)) return true;
+      if (override?.permissions.includes(permission)) {
+        supplied.add(permission);
+        return true;
+      }
+      return false;
+    };
+    if ((orderDiscount || lines.some((l) => l.discount)) && !allowed('sales.discount'))
+      throw new AppError(403, 'DISCOUNT_LIMIT_EXCEEDED', 'You are not allowed to give discounts.');
+    if (lines.some((l) => l.priceOverrideMinor !== null) && !allowed('sales.price_override'))
+      throw new AppError(403, 'PRICE_OVERRIDE_DENIED', 'You are not allowed to change prices.');
     // 2. Authoritative prices and availability from the catalog.
     const items = await this.loadItems(
       tx,
@@ -393,21 +600,71 @@ export class SalesService {
       throw error;
     }
 
-    // 3. Discount limit (exact comparison) unless the cashier may exceed it.
-    const { maxDiscountPercent } = await this.settings(tx, actor.merchantId);
-    if (!can(actor.access, 'sales.discount.override_limit', branchId)) {
-      const overLine = priced.lines.findIndex((p) =>
-        exceedsDiscountLimit(p.lineDiscountMinor, p.grossMinor, maxDiscountPercent),
+    // 3a. Price changes (BR-178): a reason, and the company's floor, ceiling and cost bounds.
+    const policy = await this.settings(tx, actor.merchantId);
+    const { maxDiscountPercent } = policy;
+    const changed = (l: ParsedLine) =>
+      l.priceOverrideMinor !== null && l.priceOverrideMinor !== items.get(l.variantId)!.priceMinor;
+    lines.forEach((l, i) => {
+      if (!changed(l)) return;
+      const item = items.get(l.variantId)!;
+      const price = l.priceOverrideMinor!;
+      if (!l.input.priceOverrideReason)
+        throw new AppError(400, 'REASON_REQUIRED', 'Give a reason for the price change.', [
+          { path: `lines.${i}.priceOverrideReason`, code: 'required', message: 'Required.' },
+        ]);
+      const outOfBounds =
+        (policy.priceOverrideFloorPercent !== null &&
+          belowPercentOf(price, item.priceMinor, policy.priceOverrideFloorPercent)) ||
+        (policy.priceOverrideCeilingPercent !== null &&
+          abovePercentOf(price, item.priceMinor, policy.priceOverrideCeilingPercent)) ||
+        (!policy.priceOverrideBelowCost && item.costMinor !== null && price < item.costMinor);
+      if (outOfBounds)
+        throw new AppError(
+          400,
+          'PRICE_OUT_OF_BOUNDS',
+          'This price is outside the limits set for price changes.',
+          [{ path: `lines.${i}.priceOverride`, code: 'out_of_bounds', message: 'Out of bounds.' }],
+        );
+    });
+
+    // 3b. Discount limit (exact comparison), combined per line (D4, BR-183): the line
+    // discount, the share of the sale discount allocated to the line and the gap between the
+    // list price and a lowered price are added up and compared with the list gross; a zero
+    // price always counts as above the limit (BR-178).
+    const aboveLimit = priced.lines.some((p, i) => {
+      const l = lines[i]!;
+      const list = items.get(l.variantId)!.priceMinor + extraOf(l);
+      const listGross = divideHalfUp(list * l.quantityMilli, 1000n);
+      const gap = listGross > p.grossMinor ? listGross - p.grossMinor : 0n;
+      if (changed(l) && l.priceOverrideMinor === 0n) return true;
+      return exceedsDiscountLimit(
+        p.lineDiscountMinor + p.orderDiscountMinor + gap,
+        listGross,
+        maxDiscountPercent,
       );
-      const orderBase = priced.subtotalMinor - priced.lineDiscountsMinor;
-      if (
-        overLine >= 0 ||
-        exceedsDiscountLimit(priced.orderDiscountMinor, orderBase, maxDiscountPercent)
-      )
+    });
+    if (aboveLimit && !allowed('sales.discount.override_limit'))
+      throw new AppError(
+        403,
+        'DISCOUNT_LIMIT_EXCEEDED',
+        `Discounts above ${maxDiscountPercent}% need a manager.`,
+      );
+
+    // 3c. Nothing to pay (BR-179): a dedicated right and a reason.
+    if (priced.totalMinor === 0n) {
+      if (!allowed('sales.zero_total'))
         throw new AppError(
           403,
-          'DISCOUNT_LIMIT_EXCEEDED',
-          `Discounts above ${maxDiscountPercent}% need a manager.`,
+          'ZERO_TOTAL_DENIED',
+          'A sale with nothing to pay needs a supervisor.',
+        );
+      if (!args.zeroTotalReason)
+        throw new AppError(
+          400,
+          'REASON_REQUIRED',
+          'Give a reason for a sale with nothing to pay.',
+          [{ path: 'zeroTotalReason', code: 'required', message: 'Required.' }],
         );
     }
 
@@ -421,7 +678,12 @@ export class SalesService {
         ? args.exchange.creditMinor
         : priced.totalMinor
       : 0n;
-    const paid = await this.preparePayments(tx, args.payments, priced.totalMinor - creditMinor);
+    const paid = await this.preparePayments(
+      tx,
+      args.payments,
+      priced.totalMinor - creditMinor,
+      policy.requireTenderReference,
+    );
 
     // 6. The order: complete a suspended one, or create it completed.
     const orderId = await this.completeOrder(tx, actor, shift, { ...args, customerId });
@@ -491,7 +753,8 @@ export class SalesService {
         quantity: formatQuantity(l.quantityMilli),
         listUnitPriceMinor: item.priceMinor + extra,
         unitPriceMinor: (l.priceOverrideMinor ?? item.priceMinor) + extra,
-        priceOverridden: l.priceOverrideMinor !== null && l.priceOverrideMinor !== item.priceMinor,
+        priceOverridden: changed(l),
+        priceOverrideReason: changed(l) ? l.input.priceOverrideReason : null,
         grossMinor: p.grossMinor,
         discountType: l.input.discount?.type ?? null,
         discountValue: l.input.discount?.value ?? null,
@@ -527,7 +790,13 @@ export class SalesService {
       changeMinor: totals.change,
       feesMinor: totals.fees,
       costMinor,
+      aboveLimit,
+      discountLimitPercent: maxDiscountPercent,
+      zeroTotalReason: priced.totalMinor === 0n ? (args.zeroTotalReason ?? null) : null,
+      overrideId: override?.id ?? null,
     });
+    // The grant is spent by this sale alone, with the rights it actually supplied.
+    if (override) await this.overrides.spend(tx, override.id, [...supplied]);
     await tx.insert(saleLines).values(lineRows);
     const modifierRows = lines.flatMap((l, position) =>
       l.modifiers.map((m) => ({
@@ -630,11 +899,26 @@ export class SalesService {
             variantId: l.variantId,
             from: Money.ofMinor(l.listUnitPriceMinor, CURRENCY).toDecimalString(),
             to: Money.ofMinor(l.unitPriceMinor, CURRENCY).toDecimalString(),
+            reason: l.priceOverrideReason,
           })),
         discounts: Money.ofMinor(
           priced.lineDiscountsMinor + priced.orderDiscountMinor,
           CURRENCY,
         ).toDecimalString(),
+        aboveLimit,
+        discountLimitPercent: maxDiscountPercent,
+        ...(args.orderId ? { heldOrderId: args.orderId } : {}),
+        ...(priced.totalMinor === 0n ? { zeroTotalReason: args.zeroTotalReason ?? null } : {}),
+        ...(override
+          ? {
+              override: {
+                id: override.id,
+                approverUserId: override.approverUserId,
+                approverMembershipId: override.approverMembershipId,
+                kinds: [...supplied],
+              },
+            }
+          : {}),
       },
     });
     return { totalMinor: priced.totalMinor, receiptNumber };
@@ -912,6 +1196,7 @@ export class SalesService {
     tx: Transaction,
     input: CheckoutInput['payments'],
     totalMinor: bigint,
+    requireReference = true,
   ) {
     if (input.length === 0) {
       if (totalMinor === 0n) return [];
@@ -944,6 +1229,19 @@ export class SalesService {
           'PAYMENT_NOT_VERIFIED',
           'This payment needs gateway verification, which is not available.',
         );
+      // Tender hygiene (BR-181): non-cash money must have somewhere to settle, and a card
+      // or transfer tender needs its terminal / transfer reference when the company says so.
+      if (m['kind'] !== 'cash' && !m['financial_account_id'])
+        throw new AppError(
+          409,
+          'SETTLEMENT_ACCOUNT_REQUIRED',
+          'This payment method has no settlement account.',
+          [{ path: `payments.${i}.methodId`, code: 'no_account', message: 'No account.' }],
+        );
+      if (m['kind'] !== 'cash' && requireReference && !p.reference)
+        throw new AppError(400, 'REFERENCE_REQUIRED', 'Enter the payment reference.', [
+          { path: `payments.${i}.reference`, code: 'required', message: 'Required.' },
+        ]);
       const amountMinor = parseAmount(p.amount, `payments.${i}.amount`);
       if (amountMinor <= 0n)
         throw new AppError(400, 'PAYMENT_TOTAL_MISMATCH', 'Payment amounts must be positive.');
@@ -966,11 +1264,15 @@ export class SalesService {
         changeMinor = tenderedMinor - amountMinor;
       }
       sum += amountMinor;
-      const feeMinor = processingFee(amountMinor, {
-        type: m['fee_type'] as FeeType,
-        fixedMinor: BigInt(m['fee_fixed_minor'] as string),
-        percent: m['fee_percent'] as string,
-      });
+      // Fees are a card-network charge: cash never carries one (BR-181, FND-412).
+      const feeMinor =
+        m['kind'] === 'cash'
+          ? 0n
+          : processingFee(amountMinor, {
+              type: m['fee_type'] as FeeType,
+              fixedMinor: BigInt(m['fee_fixed_minor'] as string),
+              percent: m['fee_percent'] as string,
+            });
       return {
         id: newId(),
         method: {
@@ -1024,6 +1326,7 @@ export class SalesService {
         variantId: l.variantId,
         quantity: formatQuantity(l.quantityMilli),
         priceOverrideMinor: l.priceOverrideMinor,
+        priceOverrideReason: l.priceOverrideMinor === null ? null : l.input.priceOverrideReason,
         discountType: l.input.discount?.type ?? null,
         discountValue: l.input.discount?.value ?? null,
       }));
@@ -1038,10 +1341,10 @@ export class SalesService {
         throw new AppError(
           409,
           'ORDER_NOT_SUSPENDED',
-          'This order was already completed or cancelled.',
+          'This order was already completed, cancelled or expired.',
         );
-      await tx.delete(orderLines).where(eq(orderLines.orderId, order.id));
-      await tx.insert(orderLines).values(lineValues(order.id));
+      // The held lines stay as they were held (the sale lines are the final cart); who
+      // completed the cart is recorded when it is not the holder (BR-182).
       await tx
         .update(orders)
         .set({
@@ -1051,6 +1354,9 @@ export class SalesService {
           requestHash: args.idempotency?.hash ?? null,
           orderDiscountType: args.orderDiscountInput?.type ?? null,
           orderDiscountValue: args.orderDiscountInput?.value ?? null,
+          completedByUserId: actor.userId,
+          completedByMembershipId: actor.membershipId,
+          completedShiftId: shift.id,
           completedAt: sql`now()`,
           updatedAt: sql`now()`,
           version: sql`${orders.version} + 1`,
@@ -1132,6 +1438,7 @@ export class SalesService {
           variantId: l.variantId,
           quantity: formatQuantity(l.quantityMilli),
           priceOverrideMinor: l.priceOverrideMinor,
+          priceOverrideReason: l.priceOverrideMinor === null ? null : l.input.priceOverrideReason,
           discountType: l.input.discount?.type ?? null,
           discountValue: l.input.discount?.value ?? null,
         })),
@@ -1144,9 +1451,40 @@ export class SalesService {
         targetType: 'order',
         targetId: id,
         ip,
+        details: {
+          label: input.label,
+          lineCount: lines.length,
+          quantities: lines.map((l) => ({
+            variantId: l.variantId,
+            quantity: formatQuantity(l.quantityMilli),
+          })),
+          customerId,
+        },
       });
     });
     return (await this.suspended(actor)).find((o) => o.id === id)!;
+  }
+
+  /** Held sales older than the company's expiry are discarded, once, when the list is read (BR-182). */
+  private async expireHeld(tx: Transaction, merchantId: string, branchId: string) {
+    const { heldSaleExpiryHours } = await this.settings(tx, merchantId);
+    if (heldSaleExpiryHours <= 0) return;
+    const expired = (
+      await tx.execute(sql`
+        update orders set status = 'expired', expired_at = now(), updated_at = now(), version = version + 1
+        where branch_id = ${branchId} and status = 'suspended'
+          and created_at < now() - make_interval(hours => ${heldSaleExpiryHours})
+        returning id, label, user_id`)
+    ).rows as { id: string; label: string | null; user_id: string }[];
+    for (const o of expired)
+      await this.audit.recordIn(tx, {
+        merchantId,
+        actorType: 'system',
+        action: 'order.expired',
+        targetType: 'order',
+        targetId: o.id,
+        details: { label: o.label, heldByUserId: o.user_id, afterHours: heldSaleExpiryHours },
+      });
   }
 
   /** Suspended carts at the POS branch (any cashier there may resume them). */
@@ -1154,6 +1492,8 @@ export class SalesService {
     const branchId = actor.boundBranchId;
     if (!branchId) throw AppError.forbidden();
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      await this.expireHeld(tx, actor.merchantId, branchId);
+      const { heldSaleExpiryHours } = await this.settings(tx, actor.merchantId);
       const rows = (
         await tx.execute(sql`
           select o.*, u.full_name, c.code as customer_code, c.full_name as customer_name
@@ -1177,6 +1517,7 @@ export class SalesService {
             variantId: l.variantId,
             quantity: l.quantity,
             priceOverride: l.priceOverrideMinor === null ? null : money(l.priceOverrideMinor),
+            priceOverrideReason: l.priceOverrideReason,
             discount: fromStored(l.discountType, l.discountValue),
           })),
           orderDiscount: fromStored(
@@ -1184,11 +1525,107 @@ export class SalesService {
             o['order_discount_value'] as string | null,
           ),
           customer: customerOf(o),
+          expiresAt:
+            heldSaleExpiryHours > 0
+              ? new Date(
+                  new Date(o['created_at'] as string).getTime() + heldSaleExpiryHours * 3_600_000,
+                ).toISOString()
+              : null,
           version: o['version'] as number,
         });
       }
       return result;
     });
+  }
+
+  // ------------------------------------------------------------ till traces (BR-182)
+  /** A cart cleared or a line removed after a total was shown, above the company threshold. */
+  async recordCartEvent(actor: MerchantActor, input: CartEventInput, ip: string): Promise<void> {
+    const branchId = actor.boundBranchId;
+    if (!branchId) throw AppError.forbidden();
+    const amountMinor = parseAmount(input.amount, 'amount');
+    await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const shift = await this.shifts.lockOwnShift(tx, actor);
+      const policy = await this.settings(tx, actor.merchantId);
+      if (amountMinor < BigInt(policy.cartClearLogThreshold.amount.replace('.', ''))) return;
+      await tx.insert(posCartEvents).values({
+        id: newId(),
+        merchantId: actor.merchantId,
+        branchId,
+        shiftId: shift.id,
+        membershipId: actor.membershipId,
+        userId: actor.userId,
+        kind: input.kind,
+        amountMinor,
+        lineCount: input.lineCount,
+      });
+      await this.audit.recordIn(tx, {
+        merchantId: actor.merchantId,
+        actorType: 'user',
+        actorId: actor.userId,
+        action: input.kind === 'cleared' ? 'cart.cleared' : 'cart.line_removed',
+        targetType: 'shift',
+        targetId: shift.id,
+        ip,
+        details: {
+          amount: Money.ofMinor(amountMinor, CURRENCY).toDecimalString(),
+          lineCount: input.lineCount,
+        },
+      });
+    });
+  }
+
+  /** A receipt copy: logged, audited and counted on the receipt itself (BR-182, FND-310). */
+  async reprint(actor: MerchantActor, saleId: string, ip: string): Promise<Receipt> {
+    const branchId = actor.boundBranchId;
+    if (!branchId) throw AppError.forbidden();
+    await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const [sale] = (
+        await tx.execute(
+          sql`select id, receipt_number from sales where id = ${saleId} and branch_id = ${branchId}`,
+        )
+      ).rows as { id: string; receipt_number: string }[];
+      if (!sale) throw AppError.notFound();
+      const [shift] = (
+        await tx.execute(
+          sql`select id from shifts where membership_id = ${actor.membershipId} and status = 'open'`,
+        )
+      ).rows as { id: string }[];
+      await tx.insert(receiptReprints).values({
+        id: newId(),
+        merchantId: actor.merchantId,
+        saleId,
+        userId: actor.userId,
+        shiftId: shift?.id ?? null,
+      });
+      await this.audit.recordIn(tx, {
+        merchantId: actor.merchantId,
+        actorType: 'user',
+        actorId: actor.userId,
+        action: 'sale.reprinted',
+        targetType: 'sale',
+        targetId: saleId,
+        ip,
+        details: { receiptNumber: sale.receipt_number, shiftId: shift?.id ?? null },
+      });
+    });
+    return this.receipt(actor, saleId, 'pos');
+  }
+
+  /** Receipt lookup by number at the till, read-only, limited to the session branch (BR-182). */
+  async lookup(actor: MerchantActor, receipt: string): Promise<Sale> {
+    const branchId = actor.boundBranchId;
+    if (!branchId) throw AppError.forbidden();
+    const id = await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const [row] = (
+        await tx.execute(
+          sql`select id from sales where upper(receipt_number) = upper(${receipt.trim()}) and branch_id = ${branchId}`,
+        )
+      ).rows as { id: string }[];
+      if (!row) throw AppError.notFound('No sale with this receipt number at this branch.');
+      return row.id;
+    });
+    return this.getSale(actor, id, 'pos');
   }
 
   async cancelSuspended(actor: MerchantActor, orderId: string, ip: string): Promise<void> {
@@ -1233,8 +1670,13 @@ export class SalesService {
           sql`select s.*, u.full_name,
                      (select coalesce(sum(r.total_minor), 0) from refunds r
                       where r.sale_id = s.id and r.status = 'completed')::text as refunded,
-                     c.code as customer_code, c.full_name as customer_name
+                     c.code as customer_code, c.full_name as customer_name,
+                     o.kinds as override_kinds, o.note as override_note, a.full_name as approver_name,
+                     case when ord.membership_id <> s.membership_id then h.full_name end as held_by_name,
+                     (select count(*) from receipt_reprints rp where rp.sale_id = s.id)::int as reprint_count
               from sales s left join users u on u.id = s.user_id left join customers c on c.id = s.customer_id
+              left join sale_overrides o on o.id = s.override_id left join users a on a.id = o.approver_user_id
+              left join orders ord on ord.id = s.order_id left join users h on h.id = ord.user_id
               where s.id = ${id}`,
         )
       ).rows as Record<string, unknown>[];
@@ -1278,6 +1720,22 @@ export class SalesService {
         customer: customerOf(s),
         serviceType: (s['service_type'] as Sale['serviceType']) ?? null,
         restaurantOrderId: (s['restaurant_order_id'] as string | null) ?? null,
+        aboveLimit: s['above_limit'] as boolean,
+        discountLimitPercent:
+          s['discount_limit_percent'] === null
+            ? null
+            : trimDecimal(s['discount_limit_percent'] as string),
+        zeroTotalReason: (s['zero_total_reason'] as string | null) ?? null,
+        heldByName: (s['held_by_name'] as string | null) ?? null,
+        reprintCount: Number(s['reprint_count'] ?? 0),
+        override: s['override_id']
+          ? {
+              id: s['override_id'] as string,
+              approverName: (s['approver_name'] as string | null) ?? '',
+              kinds: (s['override_kinds'] as string[] | null) ?? [],
+              note: (s['override_note'] as string | null) ?? null,
+            }
+          : null,
         lines: ls.map((l) => ({
           position: l.position,
           variantId: l.variantId,
@@ -1291,6 +1749,7 @@ export class SalesService {
           listUnitPrice: money(l.listUnitPriceMinor),
           unitPrice: money(l.unitPriceMinor),
           priceOverridden: l.priceOverridden,
+          priceOverrideReason: l.priceOverrideReason,
           gross: money(l.grossMinor),
           discount: fromStored(l.discountType, l.discountValue),
           lineDiscount: money(l.lineDiscountMinor),
@@ -1403,14 +1862,12 @@ export class SalesService {
       }
     }
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
-      const [m] = (
-        await tx.execute(sql`select timezone from merchants where id = ${actor.merchantId}`)
-      ).rows as { timezone: string }[];
-      const tz = m?.timezone ?? 'Asia/Kuwait';
+      const tz = await merchantTimezone(tx, actor.merchantId);
       const conditions: SQL[] = [scope ?? sql`true`];
       if (query.shiftId) conditions.push(sql`s.shift_id = ${query.shiftId}`);
       if (query.customerId) conditions.push(sql`s.customer_id = ${query.customerId}`);
       if (query.channel) conditions.push(sql`s.channel = ${query.channel}`);
+      if (query.flag) conditions.push(flagSql[query.flag]);
       if (query.serviceType)
         conditions.push(
           query.serviceType === 'retail'
@@ -1421,18 +1878,16 @@ export class SalesService {
         conditions.push(
           sql`s.receipt_number ilike ${`%${query.q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`}`,
         );
-      if (query.from)
-        conditions.push(sql`s.created_at >= (${query.from}::date)::timestamp at time zone ${tz}`);
-      if (query.to)
-        conditions.push(
-          sql`s.created_at < ((${query.to}::date + 1)::timestamp at time zone ${tz})`,
-        );
-      const where = sql.join(conditions, sql` and `);
+      // One cut-off rule (BR-184): sales by their own local day, refunds by their completion
+      // day, both in the merchant's time zone, so "net" here equals the report's figure.
+      const scopeWhere = sql.join(conditions, sql` and `);
+      const where = sql`${scopeWhere} and ${withinLocalDays(tz, sql`s.created_at`, query.from, query.to)}`;
       const [agg] = (
         await tx.execute(
           sql`select count(*)::int as n, coalesce(sum(total_minor), 0)::text as amount,
-                     coalesce((select sum(r.total_minor) from refunds r
-                               where r.status = 'completed' and r.sale_id in (select s.id from sales s where ${where})), 0)::text as refunded
+                     coalesce((select sum(r.total_minor) from refunds r join sales s on s.id = r.sale_id
+                               where r.status = 'completed' and ${scopeWhere}
+                                 and ${withinLocalDays(tz, sql`r.completed_at`, query.from, query.to)}), 0)::text as refunded
               from sales s where ${where}`,
         )
       ).rows as { n: number; amount: string; refunded: string }[];
@@ -1471,7 +1926,7 @@ export class SalesService {
                (select coalesce(array_agg(distinct p.method_kind), '{}') from payments p where p.sale_id = s.id) as kinds,
                (select coalesce(sum(r.total_minor), 0) from refunds r
                 where r.sale_id = s.id and r.status = 'completed')::text as refunded,
-               c.full_name as customer_name
+               c.full_name as customer_name, ${flagsSql} as flags
         from sales s left join users u on u.id = s.user_id left join customers c on c.id = s.customer_id
         where ${where}
         order by s.created_at desc, s.id desc limit ${limit} offset ${offset}`)
@@ -1489,6 +1944,7 @@ export class SalesService {
       customerName: (r['customer_name'] as string | null) ?? null,
       serviceType: (r['service_type'] as SaleSummary['serviceType']) ?? null,
       channel: r['channel'] as SaleSummary['channel'],
+      flags: r['flags'] as SaleFlag[],
     }));
   }
 }
