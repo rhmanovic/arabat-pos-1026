@@ -66,6 +66,21 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after remediation session 2 (2026-10-13, local run)
+
+`pnpm verify` green (163 unit/web tests, including the POS pending cash-out flow with withdraw
+and the limit warning, the manager decision dialog and the dashboard controls checklist);
+`pnpm test:integration` 177 passed, including the three cash-out control cases in
+`shifts.int.test.ts` (corrections bound to a posted "other" movement up to what is left;
+pending above the per-movement and per-shift limits, withdraw, close refused, approval by a
+manager only — never the requester —, rejection needs a reason, owner override flagged on the
+movement and in the audit log, forced close rejects pending requests; tolerance cap on register
+save and the note on a visible closing difference) and `controls.int.test.ts` (Treasurer template
+with least privilege, checklist: treasurer, members without roles, registers above the tolerance
+cap, permission); `pnpm test:e2e` 35 passed (`shifts.spec` now explains the closing shortage).
+Existing tests adapted: `cash-reports` uses an "other" cash-out instead of a free correction;
+`reports` and `shifts.spec` add a closing note; `auth` expects the Treasurer template.
+
 ### Results after remediation session 1 (2026-10-13, local run)
 
 `pnpm verify` green (160 unit/web tests, including `audit.test.tsx` — merchant audit log page,

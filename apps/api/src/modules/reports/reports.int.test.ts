@@ -169,7 +169,7 @@ async function scenario() {
   const closed = await s.req(
     'POST',
     '/pos/shifts/current/close',
-    { countedCash: '14.750', version: current.version },
+    { countedCash: '14.750', version: current.version, note: 'coins missing' },
     a,
   );
   if (closed.statusCode !== 201 && closed.statusCode !== 200) throw new Error(closed.body);

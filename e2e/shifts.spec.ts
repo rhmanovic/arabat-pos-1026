@@ -73,6 +73,12 @@ test('payment fee setup, a full POS shift with cash movements, and the managerâ€
 
   await page.getByRole('button', { name: 'Close shift' }).click();
   await page.getByRole('dialog').getByLabel('Counted cash (KWD)').fill('22');
+  // The owner sees the expected figure, so a difference beyond the tolerance needs a note (BR-164).
+  await expect(page.getByTestId('close-difference')).toContainText('KWD -0.250');
+  await expect(
+    page.getByRole('dialog').getByRole('button', { name: 'Close shift' }),
+  ).toBeDisabled();
+  await page.getByRole('dialog').getByLabel('Note (optional)').fill('coins missing');
   await page.getByRole('dialog').getByRole('button', { name: 'Close shift' }).click();
   await expect(page.getByTestId('discrepancy')).toHaveText('KWD -0.250');
   await expect(page.getByTestId('close-result')).toContainText('Short');
