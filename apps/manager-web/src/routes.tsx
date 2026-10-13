@@ -39,6 +39,7 @@ import { AdjustmentEditorPage } from './features/inventory/AdjustmentEditorPage.
 import { AdjustmentDetailPage, AdjustmentsPage } from './features/inventory/AdjustmentsPage.js';
 import { InventoryPage } from './features/inventory/InventoryPage.js';
 import { MovementsPage } from './features/inventory/MovementsPage.js';
+import { DamagedReturnsPage } from './features/inventory/DamagedReturnsPage.js';
 import { RolesPage } from './features/roles/RolesPage.js';
 import {
   ForgotPasswordPage,
@@ -100,6 +101,7 @@ export const routes: RouteObject[] = [
         element: guard('inventory.read', <AdjustmentDetailPage />),
       },
       { path: 'inventory/movements', element: guard('inventory.read', <MovementsPage />) },
+      { path: 'inventory/returns', element: guard('inventory.read', <DamagedReturnsPage />) },
       { path: 'sales', element: guard('sales.read', <SalesPage />) },
       { path: 'sales/:saleId', element: guard('sales.read', <SaleDetailPage />) },
       { path: 'refunds', element: guard('sales.read', <RefundsPage />) },

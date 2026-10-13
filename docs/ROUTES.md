@@ -22,7 +22,7 @@ the permission.
 | `/` | Dashboard | `manager.access` |
 | `/products`, `/products/new`, `/products/:productId` | Products, editor (variants, barcodes, images, prices) | `catalog.read` / `catalog.manage` |
 | `/categories` | Categories | `catalog.read` |
-| `/inventory`, `/inventory/adjustments`, `/inventory/adjustments/new`, `/inventory/adjustments/:id`, `/inventory/movements` | Stock levels, adjustments, movement ledger | `inventory.read` / `inventory.adjust` |
+| `/inventory`, `/inventory/adjustments`, `/inventory/adjustments/new`, `/inventory/adjustments/:id`, `/inventory/movements`, `/inventory/returns` | Stock levels, adjustments, movement ledger, returned goods kept out of stock | `inventory.read` / `inventory.adjust` |
 | `/transfers`, `/transfers/new`, `/transfers/:transferId` | Branch transfers | `inventory.read` / `inventory.transfer` |
 | `/suppliers`, `/purchasing`, `/purchasing/new`, `/purchasing/:orderId` | Suppliers, purchase orders, receiving | `purchasing.read` / `purchasing.manage` |
 | `/sales`, `/sales/:saleId` | Sales (POS + online, channel filter), detail and receipt | `sales.read` |
@@ -125,6 +125,7 @@ branch availability, images, archive), `/manager/categories`.
 | `GET /manager/inventory/adjustments?status=`, `GET /manager/inventory/adjustments/:id` | `inventory.read` (value at cost only with cost rights) |
 | `POST /manager/inventory/adjustments` | `inventory.adjust` at the branch (+ `catalog.prices.manage` to enter unit costs) |
 | `POST /manager/inventory/adjustments/:id/decision`, `POST …/:id/withdraw` | `inventory.adjust` at the branch; approver ≠ requester (owner excepted, flagged); withdraw by the requester (BR-169) |
+| `GET /manager/inventory/damaged-returns?branchId=&status=`, `POST /manager/inventory/damaged-returns/:id/dispose` | `inventory.read` (branch-scoped) / `inventory.adjust` at the branch, note required (BR-175) |
 | `GET /manager/inventory/settings` / `PUT …/settings` | `inventory.read` / `merchant.settings.update` |
 | `GET /pos/inventory/availability?variantIds=` | POS `catalog.read` at the bound branch (no costs) |
 

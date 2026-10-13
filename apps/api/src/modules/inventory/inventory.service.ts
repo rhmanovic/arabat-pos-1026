@@ -10,8 +10,11 @@ import {
   type PosAvailability,
   type StockLevel,
   type VariantStock,
+  type DamagedReturn,
   type adjustmentListQuerySchema,
   type createAdjustmentSchema,
+  type damagedReturnQuerySchema,
+  type disposeDamagedReturnSchema,
   type decideAdjustmentSchema,
   type movementQuerySchema,
   type setThresholdSchema,
@@ -19,12 +22,13 @@ import {
   type updateInventorySettingsSchema,
 } from '@arabat/contracts';
 import {
+  MICRO_PER_MINOR,
   Money,
   MoneyError,
   QuantityError,
   formatQuantity,
   parseQuantity,
-  quantityValue,
+  quantityValueMicro,
 } from '@arabat/money';
 import { can, permissionBranchScope } from '@arabat/permissions';
 import { Injectable } from '@nestjs/common';
@@ -44,6 +48,7 @@ import { branches } from '../branches/branches.schema.js';
 import { stockPolicy } from '../cash/approval-limits.js';
 import { merchants } from '../merchants/merchants.schema.js';
 import {
+  damagedReturns,
   inventorySettings,
   stockAdjustmentLines,
   stockAdjustments,
@@ -53,6 +58,8 @@ import { StockLedgerService, stockStatus } from './stock-ledger.service.js';
 
 type CreateAdjustmentInput = z.output<typeof createAdjustmentSchema>;
 type DecisionInput = z.output<typeof decideAdjustmentSchema>;
+type DamagedQuery = z.output<typeof damagedReturnQuerySchema>;
+type DisposeInput = z.output<typeof disposeDamagedReturnSchema>;
 type PlannedLine = { variantId: string; quantityMilli: bigint; unitCostMinor: bigint | null };
 type LevelQuery = z.output<typeof stockLevelQuerySchema>;
 type MovementQuery = z.output<typeof movementQuerySchema>;
@@ -334,8 +341,7 @@ export class InventoryService {
       })),
     );
     let valueMinor = 0n;
-    for (const a of applied)
-      if (a.unitCostMinor !== null) valueMinor += quantityValue(abs(a.deltaMilli), a.unitCostMinor);
+    for (const a of applied) if (a.valueMinor !== null) valueMinor += abs(a.valueMinor);
     if (doc.insertLines)
       await tx.insert(stockAdjustmentLines).values(
         applied.map((a, i) => ({
@@ -380,7 +386,7 @@ export class InventoryService {
     const rows = (
       await tx.execute(sql`
         select v.id, v.cost_minor::text as cost, coalesce(l.on_hand, 0)::text as on_hand,
-               l.avg_cost_minor::text as avg
+               coalesce(l.avg_cost_micro, l.avg_cost_minor * 1000)::text as avg
         from product_variants v
         left join stock_levels l on l.variant_id = v.id and l.branch_id = ${branchId}
         where v.id in (${sql.join(
@@ -400,9 +406,10 @@ export class InventoryService {
             ? -l.quantityMilli
             : l.quantityMilli;
       const avg = r?.avg ? BigInt(r.avg) : null;
-      const catalog = r?.cost ? BigInt(r.cost) : null;
-      const cost = deltaMilli > 0n ? (l.unitCostMinor ?? avg ?? catalog) : (avg ?? catalog);
-      if (cost !== null) valueMinor += quantityValue(abs(deltaMilli), cost);
+      const catalog = r?.cost ? BigInt(r.cost) * MICRO_PER_MINOR : null;
+      const typed = l.unitCostMinor === null ? null : l.unitCostMinor * MICRO_PER_MINOR;
+      const cost = deltaMilli > 0n ? (typed ?? avg ?? catalog) : (avg ?? catalog);
+      if (cost !== null) valueMinor += quantityValueMicro(abs(deltaMilli), cost);
       return { variantId: l.variantId, previousMilli, deltaMilli };
     });
     return { valueMinor, lines: planned };
@@ -854,7 +861,8 @@ export class InventoryService {
       const rows = (
         await tx.execute(sql`
           select b.id, b.name_en, b.name_ar, coalesce(l.on_hand, 0)::text as on_hand,
-                 l.low_stock_threshold::text as threshold, l.avg_cost_minor::text as avg_cost
+                 l.low_stock_threshold::text as threshold, l.avg_cost_minor::text as avg_cost,
+                 coalesce(l.avg_cost_micro, l.avg_cost_minor * 1000)::text as avg_micro
           from branches b
           left join stock_levels l on l.branch_id = b.id and l.variant_id = ${variantId}
           where ${branchIn(sql`b.id`, scope) ?? sql`true`} and (b.status = 'active' or coalesce(l.on_hand, 0) <> 0)
@@ -875,6 +883,7 @@ export class InventoryService {
           total += onHand;
           const threshold = milli(r['threshold'] ?? null);
           const avg = r['avg_cost'] ? BigInt(r['avg_cost']) : null;
+          const avgMicro = r['avg_micro'] ? BigInt(r['avg_micro']) : null;
           return {
             branchId: r['id']!,
             nameEn: r['name_en'] ?? null,
@@ -885,7 +894,9 @@ export class InventoryService {
             ...(costVisible
               ? {
                   avgCost: money(avg),
-                  value: money(avg === null || onHand <= 0n ? 0n : quantityValue(onHand, avg)),
+                  value: money(
+                    avgMicro === null || onHand === 0n ? 0n : quantityValueMicro(onHand, avgMicro),
+                  ),
                 }
               : {}),
           };
@@ -1003,6 +1014,116 @@ export class InventoryService {
       }));
       return { movements, total: total?.n ?? 0, page: query.page, pageSize: query.pageSize };
     });
+  }
+
+  // ------------------------------------------------------------ returned goods (BR-175)
+  async listDamagedReturns(actor: MerchantActor, query: DamagedQuery) {
+    const scope = this.readScope(actor, query.branchId);
+    const costVisible = this.costVisible(actor, scope);
+    return this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const where = and(
+        branchIn(sql`d.branch_id`, scope),
+        query.status === 'all' ? undefined : sql`d.status = ${query.status}`,
+      );
+      const rows = (
+        await tx.execute(sql`
+          select d.*, d.quantity::text as qty, d.unit_cost_minor::text as cost, r.refund_number,
+                 p.name_en, p.name_ar, v.name_en as v_en, v.name_ar as v_ar, v.sku, u.full_name
+          from damaged_returns d
+          join refunds r on r.id = d.refund_id
+          join product_variants v on v.id = d.variant_id join products p on p.id = v.product_id
+          left join users u on u.id = d.disposed_by_user_id
+          where ${where ?? sql`true`}
+          order by d.status desc, d.created_at desc limit 500`)
+      ).rows as Record<string, unknown>[];
+      const [held] = (
+        await tx.execute(sql`select count(*)::int as n from damaged_returns d
+          where d.status = 'held' and ${branchIn(sql`d.branch_id`, scope) ?? sql`true`}`)
+      ).rows as { n: number }[];
+      return {
+        returns: rows.map((r) => this.damagedReturn(r, costVisible)),
+        heldCount: Number(held?.n ?? 0),
+      };
+    });
+  }
+
+  /** Records what was done with returned goods kept out of stock (held → disposed, once). */
+  async disposeDamagedReturn(
+    actor: MerchantActor,
+    id: string,
+    input: DisposeInput,
+    ip: string,
+  ): Promise<DamagedReturn> {
+    await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(damagedReturns)
+        .where(eq(damagedReturns.id, id))
+        .for('update');
+      if (!row) throw AppError.notFound();
+      assertCan(actor, 'inventory.adjust', row.branchId);
+      if (row.status !== 'held')
+        throw new AppError(409, 'INVALID_STATE', 'These goods were already disposed of.');
+      await tx
+        .update(damagedReturns)
+        .set({
+          status: 'disposed',
+          disposedByUserId: actor.userId,
+          disposedAt: sql`now()`,
+          disposalNote: input.note,
+        })
+        .where(eq(damagedReturns.id, id));
+      await this.audit.recordIn(tx, {
+        merchantId: actor.merchantId,
+        actorType: 'user',
+        actorId: actor.userId,
+        action: 'inventory.damaged_return_disposed',
+        targetType: 'damaged_return',
+        targetId: id,
+        ip,
+        details: {
+          refundId: row.refundId,
+          variantId: row.variantId,
+          quantity: formatQuantity(parseQuantity(row.quantity)),
+          note: input.note,
+        },
+      });
+    });
+    const scope = this.readScope(actor);
+    return this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const [r] = (
+        await tx.execute(sql`
+          select d.*, d.quantity::text as qty, d.unit_cost_minor::text as cost, r.refund_number,
+                 p.name_en, p.name_ar, v.name_en as v_en, v.name_ar as v_ar, v.sku, u.full_name
+          from damaged_returns d join refunds r on r.id = d.refund_id
+          join product_variants v on v.id = d.variant_id join products p on p.id = v.product_id
+          left join users u on u.id = d.disposed_by_user_id where d.id = ${id}`)
+      ).rows as Record<string, unknown>[];
+      return this.damagedReturn(r!, this.costVisible(actor, scope));
+    });
+  }
+
+  private damagedReturn(r: Record<string, unknown>, costVisible: boolean): DamagedReturn {
+    return {
+      id: r['id'] as string,
+      refundId: r['refund_id'] as string,
+      refundNumber: r['refund_number'] as string,
+      branchId: r['branch_id'] as string,
+      variantId: r['variant_id'] as string,
+      nameEn: (r['name_en'] as string | null) ?? null,
+      nameAr: (r['name_ar'] as string | null) ?? null,
+      variantNameEn: (r['v_en'] as string | null) ?? null,
+      variantNameAr: (r['v_ar'] as string | null) ?? null,
+      sku: (r['sku'] as string | null) ?? null,
+      quantity: formatQuantity(parseQuantity(r['qty'] as string)),
+      ...(costVisible ? { unitCost: money((r['cost'] as string | null) ?? null) } : {}),
+      reason: r['reason'] as string,
+      status: r['status'] as 'held' | 'disposed',
+      createdAt: iso(r['created_at'])!,
+      disposedBy: (r['full_name'] as string | null) ?? null,
+      disposedAt: iso(r['disposed_at']),
+      disposalNote: (r['disposal_note'] as string | null) ?? null,
+    };
   }
 
   // ------------------------------------------------------------ settings
@@ -1146,9 +1267,11 @@ function levelsBase(scope: BranchScope): { from: SQL; where: SQL } {
                max(l.low_stock_threshold) as threshold,
                max(l.avg_cost_minor) as avg_cost,
                bool_or(l.low_stock_threshold is not null and l.on_hand <= l.low_stock_threshold) as any_low,
-               sum(case when l.on_hand > 0 and l.avg_cost_minor is not null
-                        then round(l.on_hand * l.avg_cost_minor) else 0 end) as value_minor,
-               bool_or(l.on_hand > 0 and l.avg_cost_minor is null) as unvalued,
+               -- Balances are valued at the micro-precision average; a negative balance keeps
+               -- its cost basis and counts negatively (BR-174).
+               sum(case when l.on_hand <> 0 and coalesce(l.avg_cost_micro, l.avg_cost_minor * 1000) is not null
+                        then round(l.on_hand * coalesce(l.avg_cost_micro, l.avg_cost_minor * 1000) / 1000) else 0 end) as value_minor,
+               bool_or(l.on_hand <> 0 and l.avg_cost_minor is null) as unvalued,
                max(l.last_movement_at) as last_movement_at
         from stock_levels l
         where l.variant_id = v.id ${scoped ? sql`and ${scoped}` : sql``}

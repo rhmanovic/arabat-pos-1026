@@ -196,4 +196,6 @@ Stock adjustments above the company limit at cost are `pending` until a second h
 approves (ADR-0097); master data that still holds stock cannot be untracked, archived or deactivated (BR-171).
 Transfer shortages are explicit `stock_transfer_losses` documents (approved at the source above the limit); in-transit
 stock is computed from transfer lines, never stored, and a transfer in transit can be recalled (ADR-0098).
+The moving average is carried in `avg_cost_micro` (fils × 1000); `avg_cost_minor` is display only (ADR-0099).
+Non-restocked refund lines become `damaged_returns` custody records (held → disposed once).
 See `docs/PROGRESS.md` for the current state and `docs/ROADMAP.md` for next steps.

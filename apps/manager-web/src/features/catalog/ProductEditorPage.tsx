@@ -405,7 +405,15 @@ function Editor({ product }: { product: Product | undefined }) {
                   )}
                 </Field>
                 {canPrice ? (
-                  <Field label={`${t('catalog.cost')} (KWD)`} error={priceError(v.cost)}>
+                  <Field
+                    label={`${t('catalog.cost')} (KWD)`}
+                    error={priceError(v.cost)}
+                    hint={
+                      draft.trackInventory && !v.cost.trim()
+                        ? t('catalog.costMissingHint')
+                        : t('catalog.costHint')
+                    }
+                  >
                     {(p) => (
                       <Input
                         {...p}

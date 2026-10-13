@@ -48,6 +48,7 @@ export function InventoryTabs() {
     { to: '/inventory', label: t('inventory.tabStock'), end: true },
     { to: '/inventory/adjustments', label: t('inventory.tabAdjustments'), end: false },
     { to: '/inventory/movements', label: t('inventory.tabMovements'), end: false },
+    { to: '/inventory/returns', label: t('inventory.tabReturns'), end: false },
   ];
   return (
     <nav aria-label={t('inventory.title')} className="mb-6 flex gap-1 border-b border-border">

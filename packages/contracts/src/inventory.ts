@@ -13,7 +13,8 @@ export type AdjustmentKind = (typeof ADJUSTMENT_KINDS)[number];
 /** Allowed reasons per adjustment kind (BR-063). "other" requires a note. */
 export const ADJUSTMENT_REASONS = {
   opening: ['opening'],
-  increase: ['found', 'customer_return', 'received_other', 'correction', 'other'],
+  // "customer_return" was removed (BR-175): returned goods come back only through a refund.
+  increase: ['found', 'received_other', 'correction', 'other'],
   decrease: ['damaged', 'expired', 'lost', 'theft', 'internal_use', 'correction', 'other'],
   count: ['stock_count'],
 } as const satisfies Record<AdjustmentKind, readonly string[]>;
@@ -37,6 +38,42 @@ export type StockStatus = (typeof STOCK_STATUSES)[number];
 export const COSTING_METHOD = 'weighted_average' as const;
 
 // ---------------------------------------------------------------- levels
+/** A returned item kept out of sellable stock (BR-175). */
+export const damagedReturnSchema = z.object({
+  id: z.string(),
+  refundId: z.string(),
+  refundNumber: z.string(),
+  branchId: z.string(),
+  variantId: z.string(),
+  nameEn: z.string().nullable(),
+  nameAr: z.string().nullable(),
+  variantNameEn: z.string().nullable(),
+  variantNameAr: z.string().nullable(),
+  sku: z.string().nullable(),
+  quantity: z.string(),
+  unitCost: moneySchema.nullable().optional(),
+  reason: z.string(),
+  status: z.enum(['held', 'disposed']),
+  createdAt: z.string(),
+  disposedBy: z.string().nullable(),
+  disposedAt: z.string().nullable(),
+  disposalNote: z.string().nullable(),
+});
+export type DamagedReturn = z.infer<typeof damagedReturnSchema>;
+export const damagedReturnListSchema = z.object({
+  returns: z.array(damagedReturnSchema),
+  heldCount: z.number().int(),
+});
+export const damagedReturnQuerySchema = z.object({
+  branchId: z.uuid().optional(),
+  status: z.enum(['held', 'disposed', 'all']).default('held'),
+});
+export type DamagedReturnQuery = z.input<typeof damagedReturnQuerySchema>;
+export const disposeDamagedReturnSchema = z.object({
+  note: z.string().trim().min(1).max(500),
+});
+export type DisposeDamagedReturn = z.input<typeof disposeDamagedReturnSchema>;
+
 export const stockLevelSchema = z.object({
   variantId: z.string(),
   productId: z.string(),

@@ -6,7 +6,7 @@ not yet re-verified by the audit), **Tested** (fixed and covered by automated te
 **Deferred** (outside the current retail scope or waiting for an owner decision). Update this file
 in the same session as the code.
 
-Last update: 2026-10-13 (remediation session 6). Totals: Deferred 49, Fixed 5, In Progress 3, Open 99, Tested 24.
+Last update: 2026-10-13 (remediation session 7). Totals: Deferred 49, Fixed 6, In Progress 3, Open 89, Tested 33.
 
 | Id | Finding | Severity | Ch. | Package | Status | Note |
 |---|---|---|---|---|---|---|
@@ -19,7 +19,7 @@ Last update: 2026-10-13 (remediation session 6). Totals: Deferred 49, Fixed 5, I
 | FND-407 | Cash out "correction" / "other" removes cash from custody with no destination and no approval | High | D | R1.1 | Tested | Session 2: corrections bound to a movement; "other" cash-outs capped and pending above the limit (`shifts.int.test.ts`, `app.test.tsx`) |
 | FND-408 | Disbursements have no limits, no approval and no link to what is owed | High | D | R1.2 | Tested | Session 3: approval limits per company, pending till movements and treasury payout requests with a second custody holder, owner override audited (`cash-payouts.int.test.ts`, `shifts.int.test.ts`) |
 | FND-501 | Gateway refunds can never be confirmed; stock is restocked while revenue stays unreduced | High | E | R7.2 | Open |  |
-| FND-512 | Inventory valuation is only available "as of now"; no closing stock at period end | High | E | R2.6 | Open |  |
+| FND-512 | Inventory valuation is only available "as of now"; no closing stock at period end | High | E | R2.6 | Tested | Session 7: closing stock at the end of the report period and opening at its start, reconstructed from the ledger, with a roll-forward that agrees (`inventory-valuation.int.test.ts`) |
 | FND-601 | No supplier invoice and no three-way match; delivery price cannot differ from the order | High | F | R6.1 | Deferred | Supplier invoices and payables deferred (D5) |
 | FND-602 | Supplier payments are unbounded and unmatched: overpayment, duplicate and prepayment risk | High | F | R1.2, R6.2 | Tested | Session 3: payment above the order value refused unless the owner confirms; paid to date on the order; payables themselves deferred (D5) |
 | FND-603 | Transfer discrepancy write-off is self-approved and never posted | High | F | R2.3 | Tested | Session 6: numbered transfer loss with the receiver's explanation, approved by the source approver above the limit (claimant never decides), owner override audited, reported in inventory and purchasing reports (`transfers-controls.int.test.ts`, `transfers.test.tsx`, `purchasing.spec.ts`) |
@@ -41,13 +41,13 @@ Last update: 2026-10-13 (remediation session 6). Totals: Deferred 49, Fixed 5, I
 | FND-110 | Account lock-out by failed attempts can be triggered by anyone who knows an e-mail | Medium | A | R5.4 | Open |  |
 | FND-113 | Default templates concentrate cash custody in the owner and leave segregation choices implicit | Medium | A | R1.6 | Tested | Session 2: Treasurer template + dashboard warning when only the owner holds custody (`controls.int.test.ts`) |
 | FND-202 | Stock counts are not blind, overwrite intervening movements and have no variance sign-off | Medium | B | R2.2 | Tested | Session 5: blind count sheet (policy), movements since the sheet started must be acknowledged, count differences above the limit wait for approval (`inventory-controls.int.test.ts`, `inventory.test.tsx`) |
-| FND-203 | Average unit cost is limited to whole fils, distorting costs of low-value units | Medium | B | R2.7 | Open |  |
-| FND-204 | Negative balances are valued at zero and their cost basis is discarded on replenishment | Medium | B | R2.7 | Open |  |
+| FND-203 | Average unit cost is limited to whole fils, distorting costs of low-value units | Medium | B | R2.7 | Tested | Session 7: average carried at thousandths of a fils, rounded only for display (`quantity.test.ts`, `inventory-valuation.int.test.ts`) |
+| FND-204 | Negative balances are valued at zero and their cost basis is discarded on replenishment | Medium | B | R2.7 | Tested | Session 7: negatives valued at their basis; the next receipt absorbs them so value = Σ movement values (`inventory-valuation.int.test.ts`) |
 | FND-206 | Stock held by archived variants/products or at inactive branches is frozen | Medium | B | R2.5 | Tested | Session 5: archiving and deactivation refused while stock remains; archived items can still be written off or counted (`inventory-controls.int.test.ts`) |
 | FND-210 | Restaurant waste bypasses the adjustment document, reason catalogue and adjustments report | Medium | B | — | Open |  |
 | FND-211 | Transfer shortfalls leave the ledger without a write-off movement (shared with the Transfers chapter) | Medium | B | R2.3 | Tested | Session 6: the shortfall is an explicit loss document closing the in-transit quantity and listed as `transfer_loss` in the inventory report; ADR-0098 records why no synthetic ledger row is written (`transfers-controls.int.test.ts`) |
-| FND-212 | "Customer return (outside POS)" lets stock re-enter outside the refund controls | Medium | B | R2.8 | Open |  |
-| FND-213 | No point-in-time valuation, roll-forward or reserved-quantity visibility | Medium | B | R2.6 | Open |  |
+| FND-212 | "Customer return (outside POS)" lets stock re-enter outside the refund controls | Medium | B | R2.8 | Tested | Session 7: reason removed from the increase reasons; returns re-enter stock only through a refund (`inventory-valuation.int.test.ts`) |
+| FND-213 | No point-in-time valuation, roll-forward or reserved-quantity visibility | Medium | B | R2.6 | Tested | Session 7: as-at valuation, roll-forward with a rounding line, reserved per item and in total (`inventory-valuation.int.test.ts`) |
 | FND-301 | No supervisory override on another cashier's till | Medium | C | R3.1 | Open |  |
 | FND-302 | Price override is not bounded and bypasses the discount limit | Medium | C | R3.2 | Open |  |
 | FND-304 | Non-cash payments can settle nowhere; cash fees are stored but never posted | Medium | C | R3.5 | Open |  |
@@ -69,8 +69,8 @@ Last update: 2026-10-13 (remediation session 6). Totals: Deferred 49, Fixed 5, I
 | FND-503 | Cashiers can refund their own sales within the limit with cash from their own drawer and no customer verification | Medium | E | R3.4 | Open |  |
 | FND-504 | Exchange credit is paid back in cash: a card-to-cash conversion path | Medium | E | R3.4 | Open |  |
 | FND-505 | Manual card and transfer refunds are recorded as paid immediately, with an optional reference and no acquirer reconciliation | Medium | E | R3.5 | Open |  |
-| FND-507 | Restock defaults to "yes" regardless of the return reason | Medium | E | R2.8 | Open |  |
-| FND-508 | Returned goods not restocked have no custody record or write-off document | Medium | E | R2.8 | Open |  |
+| FND-507 | Restock defaults to "yes" regardless of the return reason | Medium | E | R2.8 | Tested | Session 7: damaged / defective returns stay out of stock unless the cashier says otherwise, API and POS (`inventory-valuation.int.test.ts`) |
+| FND-508 | Returned goods not restocked have no custody record or write-off document | Medium | E | R2.8 | Tested | Session 7: held custody record per non-restocked line, disposal recorded once with a note (`inventory-valuation.int.test.ts`, `returns.test.tsx`) |
 | FND-511 | Three different date bases for refunds and no period-based refund register | Medium | E | R4.1 | Open |  |
 | FND-513 | One item without a cost hides gross profit for the whole period | Medium | E | R4.3 | Open |  |
 | FND-521 | Refunding an online order requires a POS session with an open shift at the branch | Medium | E | R7.3 | Open |  |
@@ -111,15 +111,15 @@ Last update: 2026-10-13 (remediation session 6). Totals: Deferred 49, Fixed 5, I
 | FND-115 | Operator lifecycle beyond creation is manual | Low | A | — | Open |  |
 | FND-116 | Reactivating a branch silently restores all dormant grants | Low | A | R5.4 | Open |  |
 | FND-117 | Members with no role assignments remain active, invisible to branch managers, and count against plan capacity | Low | A | R1.6 | Fixed | Session 2: members without roles listed in the controls checklist; plan-capacity counting unchanged |
-| FND-205 | Valuation can drift from the sum of movement values because the average is rounded | Low | B | R2.7 | Open |  |
+| FND-205 | Valuation can drift from the sum of movement values because the average is rounded | Low | B | R2.7 | Tested | Session 7: micro-precision average and the rounding line of the roll-forward (`inventory-valuation.int.test.ts`) |
 | FND-208 | Catalog audit entries do not record most attribute changes | Low | B | R5.3 | Open |  |
 | FND-209 | The "sale void" movement type exists in the schema and the screen filter but is never produced | Low | B | — | Open |  |
 | FND-214 | Balance-equals-ledger integrity relies on code discipline only | Low | B | — | Open |  |
-| FND-216 | Items can be stocked with no cost at all; the gap is reported only as "unvalued" | Low | B | R2.7 | Open |  |
+| FND-216 | Items can be stocked with no cost at all; the gap is reported only as "unvalued" | Low | B | R2.7 | Tested | Session 7: unvalued items listed on the inventory report with what to do; missing cost flagged on the product screen (`inventory-valuation.int.test.ts`) |
 | FND-218 | Increases by users without the price right are valued at a cost that may not be actual | Low | B | R2.1 | Tested | Session 5: valued at the current average (typed costs refused without the price right), above the limit the document waits for approval (`inventory-controls.int.test.ts`) |
 | FND-220 | Adjustment documents have no human-readable document number | Low | B | R2.1 | Tested | Session 5: ADJ-000001 per merchant, back-filled (`inventory-controls.int.test.ts`) |
 | FND-222 | Price and cost history exists only in the audit log | Low | B | R5.3 | Open |  |
-| FND-223 | Two cost concepts (catalog standard cost vs moving average) are not explained to users | Low | B | R2.7 | Open |  |
+| FND-223 | Two cost concepts (catalog standard cost vs moving average) are not explained to users | Low | B | R2.7 | Fixed | Session 7: explained under the cost field of the product editor (BR-174) |
 | FND-303 | Above-limit discounts are not flagged and the limit in force is not kept | Low | C | R3.2 | Open |  |
 | FND-306 | Cut-off follows a fixed merchant time zone; branch time zone is unused | Low | C | R4.1 | Open |  |
 | FND-307 | Staff can attach their own or a colleague's customer profile | Low | C | — | Open |  |

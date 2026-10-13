@@ -32,8 +32,11 @@ export const returnLineInputSchema = z.object({
   /** Position of the line on the original sale. */
   position: z.number().int().min(0),
   quantity: quantitySchema,
-  /** Put the item back into sellable stock (false for damaged goods). */
-  restock: z.boolean().default(true),
+  /**
+   * Put the item back into sellable stock. Omitted = decided by the refund reason: damaged and
+   * defective goods stay out of stock (BR-175).
+   */
+  restock: z.boolean().optional(),
 });
 
 export const refundAllocationSchema = z.object({

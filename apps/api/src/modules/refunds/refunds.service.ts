@@ -188,7 +188,10 @@ export class RefundsService {
   private compute(
     state: SaleState,
     input: { position: number; quantity: string; restock?: boolean }[],
+    reason?: string,
   ): Computed {
+    // Damaged and defective goods stay out of sellable stock unless the cashier says otherwise (BR-175).
+    const restockDefault = !(reason === 'damaged' || reason === 'defective');
     const lines = input.map((l, i) => {
       const line = state.lines.find((x) => x.position === l.position);
       if (!line)
@@ -224,7 +227,7 @@ export class RefundsService {
         variantId: line.variantId,
         quantityMilli,
         amountMinor: cumulative - line.refundedMinor,
-        restock: l.restock ?? true,
+        restock: l.restock ?? restockDefault,
         unitCostMinor: line.unitCostMinor,
         trackInventory: line.trackInventory,
       };
@@ -437,7 +440,7 @@ export class RefundsService {
         await this.lockSale(tx, input.saleId);
         const state = await this.saleState(tx, input.saleId);
         if (state.branchId !== branchId) throw AppError.notFound('Sale not found.');
-        const computed = this.compute(state, input.lines);
+        const computed = this.compute(state, input.lines, input.reason);
         const allocation = this.allocation(state, computed.totalMinor, input.allocation);
         const reasons = await this.approvalReasons(tx, actor, state, computed.totalMinor);
         await this.insertRefund(tx, actor, shift, state, {
@@ -575,7 +578,7 @@ export class RefundsService {
         await this.lockSale(tx, input.saleId);
         const state = await this.saleState(tx, input.saleId);
         if (state.branchId !== branchId) throw AppError.notFound('Sale not found.');
-        const computed = this.compute(state, input.returnLines);
+        const computed = this.compute(state, input.returnLines, input.reason);
         const reasons = await this.approvalReasons(tx, actor, state, computed.totalMinor);
         if (reasons.length)
           throw new AppError(
@@ -911,6 +914,14 @@ export class RefundsService {
       }
     }
     const lines = await tx.select().from(refundLines).where(eq(refundLines.refundId, refundId));
+    // Returned goods kept out of stock get a custody record until they are disposed of (BR-175).
+    await tx.execute(sql`
+      insert into damaged_returns (id, merchant_id, refund_id, position, branch_id, variant_id, quantity, unit_cost_minor, reason)
+      select gen_random_uuid(), rl.merchant_id, rl.refund_id, rl.sale_position, ${refund!.branchId}, rl.variant_id,
+             rl.quantity, rl.unit_cost_minor, ${refund!.reason}
+      from refund_lines rl join product_variants v on v.id = rl.variant_id join products p on p.id = v.product_id
+      where rl.refund_id = ${refundId} and not rl.restock and p.track_inventory
+      on conflict do nothing`);
     const restock = lines.filter((l) => l.restock);
     if (restock.length > 0) {
       // Stock comes back at the cost it left with; the average cost is updated accordingly.

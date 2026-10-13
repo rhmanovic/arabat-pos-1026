@@ -276,10 +276,50 @@ export const shiftsReportSchema = z.object({
 export type ShiftsReport = z.infer<typeof shiftsReportSchema>;
 
 // ---------------------------------------------------------------- inventory
+const stockPosition = z.object({ quantity: z.string(), value: moneySchema });
+/** Opening → movements → closing for one branch (or the whole scope), from the ledger (BR-176). */
+export const stockRollForwardSchema = z.object({
+  branchId: z.string().nullable(),
+  opening: stockPosition,
+  movements: z.array(
+    z.object({ movementType: z.string(), quantity: z.string(), value: moneySchema }),
+  ),
+  closing: stockPosition,
+  /** closing − opening − Σ movement values: the rounding of averages, published (FND-205). */
+  rounding: moneySchema,
+});
+export type StockRollForward = z.infer<typeof stockRollForwardSchema>;
 export const inventoryReportSchema = z.object({
   period: reportPeriodSchema,
   /** Goods in transit between branches right now, at dispatch cost (BR-173). */
   inTransit: z.object({ transfers: z.number().int(), quantity: z.string(), value: moneySchema }),
+  /** Closing stock at the end of `period.to`, reconstructed from the ledger (BR-176). */
+  asAt: z.object({
+    date: z.string(),
+    valuation: z.array(
+      z.object({ branchId: z.string(), items: z.number().int(), ...stockPosition.shape }),
+    ),
+    total: stockPosition,
+  }),
+  rollForward: z.object({
+    branches: z.array(stockRollForwardSchema),
+    total: stockRollForwardSchema,
+  }),
+  /** Quantities held for unpaid online orders right now (BR-176). */
+  reservedQuantity: z.string(),
+  /** Items in stock with no cost at all (FND-216): value them by setting a product cost. */
+  unvalued: z.array(
+    z.object({
+      variantId: z.string(),
+      productId: z.string(),
+      branchId: z.string(),
+      ...named,
+      variantNameEn: z.string().nullable(),
+      variantNameAr: z.string().nullable(),
+      sku: z.string().nullable(),
+      onHand: z.string(),
+    }),
+  ),
   /** Current values (not period-bound). */
   valuation: z.array(
     z.object({
@@ -299,6 +339,8 @@ export const inventoryReportSchema = z.object({
       variantNameAr: z.string().nullable(),
       sku: z.string().nullable(),
       onHand: z.string(),
+      /** Held for unpaid online orders (BR-176). */
+      reserved: z.string(),
       lowStockThreshold: z.string().nullable(),
       averageCost: moneySchema.nullable(),
       value: moneySchema.nullable(),

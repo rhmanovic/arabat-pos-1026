@@ -1,5 +1,13 @@
 import type { MovementType, StockStatus } from '@arabat/contracts';
-import { formatQuantity, parseQuantity, quantityValue, weightedAverageCost } from '@arabat/money';
+import {
+  MICRO_PER_MINOR,
+  formatQuantity,
+  microToMinor,
+  parseQuantity,
+  quantityValue,
+  quantityValueMicro,
+  weightedAverageCostMicro,
+} from '@arabat/money';
 import { Injectable } from '@nestjs/common';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { Transaction } from '../../database/database.service.js';
@@ -54,7 +62,17 @@ export interface AppliedLine {
   deltaMilli: bigint;
   balanceMilli: bigint;
   unitCostMinor: bigint | null;
+  /** Signed value of the movement at its (micro-precision) unit cost; null when unknown. */
+  valueMinor: bigint | null;
   movementId: string | null;
+}
+
+/** Incoming stock at a typed cost is exact fils; everything else values at the micro cost. */
+function movementValue(deltaMilli: bigint, unitCostMicro: bigint | null): bigint | null {
+  if (unitCostMicro === null) return null;
+  return unitCostMicro % MICRO_PER_MINOR === 0n
+    ? quantityValue(deltaMilli, unitCostMicro / MICRO_PER_MINOR)
+    : quantityValueMicro(deltaMilli, unitCostMicro);
 }
 
 export function stockStatus(onHandMilli: bigint, thresholdMilli: bigint | null): StockStatus {
@@ -105,7 +123,8 @@ export class StockLedgerService {
     }
     const tracked = variantIds.filter((id) => variantMap.get(id)!.trackInventory);
 
-    // Lock (creating when missing) every affected balance in a deterministic order.
+    // Lock (creating when missing) every affected balance in a deterministic order. The
+    // average is carried at micro precision (BR-174); rows from before it are promoted.
     const levels = new Map<string, { onHand: bigint; avg: bigint | null }>();
     if (tracked.length > 0) {
       await tx
@@ -123,13 +142,17 @@ export class StockLedgerService {
           variantId: stockLevels.variantId,
           onHand: stockLevels.onHand,
           avg: stockLevels.avgCostMinor,
+          avgMicro: stockLevels.avgCostMicro,
         })
         .from(stockLevels)
         .where(and(eq(stockLevels.branchId, ctx.branchId), inArray(stockLevels.variantId, tracked)))
         .orderBy(stockLevels.variantId)
         .for('update');
       for (const l of locked)
-        levels.set(l.variantId, { onHand: parseQuantity(l.onHand), avg: l.avg });
+        levels.set(l.variantId, {
+          onHand: parseQuantity(l.onHand),
+          avg: l.avgMicro ?? (l.avg === null ? null : l.avg * MICRO_PER_MINOR),
+        });
     }
 
     if (ctx.requireNoHistory && tracked.length > 0) {
@@ -166,7 +189,7 @@ export class StockLedgerService {
         : new Map<string, bigint>();
 
     // Compute everything first so a shortage on any line rejects the whole document.
-    const planned: (AppliedLine & { avgAfter: bigint | null })[] = [];
+    const planned: (AppliedLine & { avgAfter: bigint | null; unitCostMicro: bigint | null })[] = [];
     const shortages: { index: number; variantId: string; available: bigint; requested: bigint }[] =
       [];
     lines.forEach((line, index) => {
@@ -180,6 +203,8 @@ export class StockLedgerService {
           deltaMilli: 0n,
           balanceMilli: 0n,
           unitCostMinor: null,
+          unitCostMicro: null,
+          valueMinor: null,
           movementId: null,
           avgAfter: null,
         });
@@ -197,14 +222,23 @@ export class StockLedgerService {
           requested: -delta,
         });
       }
-      let unitCost: bigint | null;
+      // Costs in micro units (BR-174); a typed cost is exact fils, an average may carry
+      // fractions of a fils.
+      let unitCostMicro: bigint | null;
       let avgAfter = level.avg;
+      const catalogMicro = variant.costMinor === null ? null : variant.costMinor * MICRO_PER_MINOR;
       if (delta > 0n) {
-        unitCost = line.unitCostMinor ?? level.avg ?? variant.costMinor ?? null;
-        if (unitCost !== null) avgAfter = weightedAverageCost(previous, level.avg, delta, unitCost);
+        unitCostMicro =
+          line.unitCostMinor != null
+            ? line.unitCostMinor * MICRO_PER_MINOR
+            : (level.avg ?? catalogMicro);
+        if (unitCostMicro !== null)
+          avgAfter = weightedAverageCostMicro(previous, level.avg, delta, unitCostMicro);
       } else {
         // Outgoing stock leaves at the current average cost; the average itself is unchanged.
-        unitCost = level.avg ?? variant.costMinor ?? null;
+        // Stock that goes negative with no average yet adopts the cost it left at as its basis.
+        unitCostMicro = level.avg ?? catalogMicro;
+        if (avgAfter === null && balance < 0n) avgAfter = unitCostMicro;
       }
       level.onHand = balance;
       level.avg = avgAfter;
@@ -214,7 +248,9 @@ export class StockLedgerService {
         previousMilli: previous,
         deltaMilli: delta,
         balanceMilli: balance,
-        unitCostMinor: unitCost,
+        unitCostMinor: unitCostMicro === null ? null : microToMinor(unitCostMicro),
+        unitCostMicro,
+        valueMinor: movementValue(delta, unitCostMicro),
         movementId: delta === 0n ? null : newId(),
         avgAfter,
       });
@@ -246,9 +282,9 @@ export class StockLedgerService {
           quantity: formatQuantity(p.deltaMilli),
           balanceAfter: formatQuantity(p.balanceMilli),
           unitCostMinor: p.unitCostMinor,
-          valueMinor:
-            p.unitCostMinor === null ? null : quantityValue(p.deltaMilli, p.unitCostMinor),
-          avgCostAfterMinor: p.avgAfter,
+          valueMinor: p.valueMinor,
+          avgCostAfterMinor: p.avgAfter === null ? null : microToMinor(p.avgAfter),
+          avgCostMicroAfter: p.avgAfter,
           sourceType: ctx.sourceType,
           sourceId: ctx.sourceId,
           note: ctx.note ?? null,
@@ -263,13 +299,14 @@ export class StockLedgerService {
         .update(stockLevels)
         .set({
           onHand: formatQuantity(level.onHand),
-          avgCostMinor: level.avg,
+          avgCostMinor: level.avg === null ? null : microToMinor(level.avg),
+          avgCostMicro: level.avg,
           lastMovementAt: sql`now()`,
           updatedAt: sql`now()`,
         })
         .where(and(eq(stockLevels.branchId, ctx.branchId), eq(stockLevels.variantId, variantId)));
     }
-    return planned.map(({ avgAfter: _avgAfter, ...rest }) => rest);
+    return planned.map(({ avgAfter: _avgAfter, unitCostMicro: _micro, ...rest }) => rest);
   }
 
   /** Active, unexpired reservations per variant at a branch (milli-units). */

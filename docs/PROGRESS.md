@@ -469,6 +469,23 @@ Verified: see `TESTING.md` (results after remediation session 6). Not done (next
 valuation as at a date and stock roll-forward (R2.6), cost edge cases (R2.7), damaged returns
 (R2.8), custody-right split (FND-422), stock-side follow-up list for losses.
 
+### 2026-10-13 — Remediation session 7 (R2.6 valuation as at a date, R2.7 cost edge cases, R2.8 returned goods)
+Implemented (ADR-0099, BR-174 to BR-176):
+- **Closing stock as at a date and roll-forward** in the inventory report: opening and closing
+  per branch and in total reconstructed from the ledger, movement values by type, the rounding
+  of averages as its own line; reserved quantities per item and in total; items without cost
+  listed.
+- **Cost precision**: the average is carried at thousandths of a fils (display in fils);
+  negative balances keep their cost basis and are valued; a receipt that brings a negative
+  balance back absorbs it at that basis; product screen explains catalog cost vs average and
+  flags a missing cost.
+- **Returned goods**: damaged / defective returns stay out of stock by default; every
+  non-restocked return is a held custody record (Inventory → Returned goods) until its disposal
+  is recorded with a note; the "customer return (outside POS)" increase reason is gone.
+Verified: see `TESTING.md` (results after remediation session 7). Not done (next sessions):
+till overrides (R3.1), price bounds (R3.2), zero-total sales (R3.3), custody-right split
+(FND-422), gross profit with a costless item (R4.3).
+
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025
 before any production launch.

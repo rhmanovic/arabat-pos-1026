@@ -1033,3 +1033,38 @@ ADR; supersede it.
 - **Consequences:** FND-603, FND-604, FND-211, FND-622, FND-623 and FND-613 close. Transfer
   losses are not yet listed with the cash variances (BR-167); a stock-side follow-up list is a
   candidate for R4.
+
+## ADR-0099 — Remediation session 7: valuation as at a date, cost precision, custody of returned goods
+- **Date:** 2026-10-13 · **Status:** Accepted (remediation plan R2.6 / R2.7 / R2.8)
+- **Context:** Phase 1 found no closing stock at a past date, no roll-forward and no reserved
+  quantities (FND-512, FND-213); averages rounded to the fils (FND-203, FND-205), negative
+  balances valued at zero with their cost basis lost (FND-204), unvalued items hidden behind a
+  count (FND-216), two cost concepts unexplained (FND-223); restock defaulting to yes (FND-507),
+  non-restocked returns with no custody record (FND-508) and an increase reason that let stock
+  re-enter outside the refund controls (FND-212).
+- **Decision:**
+  - `stock_levels.avg_cost_micro` and `stock_movements.avg_cost_micro_after` (migration 0042,
+    back-filled × 1000) carry the average at 10⁻⁶ KWD; `avg_cost_minor` stays as the rounded
+    display figure and the fallback for rows that predate the column. The engine
+    (`StockLedgerService.apply`) computes with `weightedAverageCostMicro`: a typed receipt cost
+    is exact fils; outgoing stock and estimates use the micro average; movement values use
+    `quantityValueMicro`. `AppliedLine.valueMinor` is the signed movement value and documents
+    sum it, so an adjustment's value is the ledger's, not a re-rounding.
+  - Negative balances: the average over `onHand + in` when the receipt brings the balance back
+    above zero (retroactive absorption, value = Σ movement values); the previous average is kept
+    while the balance stays negative; stock going negative with no average adopts its outgoing
+    cost. Valuation values every non-zero balance at its average (negatives count negatively).
+  - Inventory report: `asAt` (closing per branch and total at the end of `to`, DISTINCT ON the
+    last movement before the cut-off in the merchant's zone), `rollForward` (opening at the
+    start of `from`, Σ quantity and value per movement type, rounding = closing − opening − Σ
+    values, closing) per branch and in total, `reservedQuantity` and a `reserved` column from
+    active unexpired `stock_reservations`, and `unvalued` items (on hand, no average).
+  - `damaged_returns` (RLS, append-only, held → disposed once through a column-level grant and a
+    trigger) is written by `RefundsService.execute` for every non-restocked tracked line;
+    `GET /manager/inventory/damaged-returns` and `POST …/:id/dispose` (adjust right at the
+    branch, note required). `returnLineInputSchema.restock` is optional and defaults from the
+    reason (damaged / defective → false); the POS box follows the reason until touched.
+  - `customer_return` removed from the increase reasons (contract); existing documents keep it.
+- **Consequences:** FND-512, FND-213, FND-203, FND-204, FND-205, FND-216, FND-223, FND-507,
+  FND-508 and FND-212 close. Gross profit with a costless item (FND-513) stays with R4.3. The
+  plan's reference to FND-219 under R2.6 matches no finding in the register.

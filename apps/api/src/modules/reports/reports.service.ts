@@ -8,6 +8,7 @@ import type {
   SalesSummary,
   ShiftsReport,
   reportQuerySchema,
+  StockRollForward,
 } from '@arabat/contracts';
 import { Money, formatQuantity, parseQuantity } from '@arabat/money';
 import { type PermissionKey, can, permissionBranchScope } from '@arabat/permissions';
@@ -931,13 +932,16 @@ export class ReportsService {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const c = await this.context(tx, actor, 'reports.inventory', query);
       const levelScope = this.branches(c, sql.raw('l.branch_id'));
+      // Balances are valued at the micro-precision average; negatives keep their cost basis
+      // and count negatively (BR-174).
+      const avgMicro = sql.raw('coalesce(l.avg_cost_micro, l.avg_cost_minor * 1000)');
       const valuation = (
         await this.rows(
           tx,
           sql`select l.branch_id, count(*)::int as items, coalesce(sum(l.on_hand), 0)::text as qty,
-                     coalesce(sum(case when l.on_hand > 0 and l.avg_cost_minor is not null
-                                       then round(l.on_hand * l.avg_cost_minor) else 0 end), 0)::text as value,
-                     count(*) filter (where l.on_hand > 0 and l.avg_cost_minor is null)::int as unvalued
+                     coalesce(sum(case when l.on_hand <> 0 and ${avgMicro} is not null
+                                       then round(l.on_hand * ${avgMicro} / 1000) else 0 end), 0)::text as value,
+                     count(*) filter (where l.on_hand <> 0 and l.avg_cost_minor is null)::int as unvalued
               from stock_levels l join product_variants v on v.id = l.variant_id
               join products p on p.id = v.product_id
               where p.track_inventory and ${levelScope} group by l.branch_id`,
@@ -954,7 +958,10 @@ export class ReportsService {
           tx,
           sql`select l.variant_id, l.branch_id, p.name_en, p.name_ar, v.name_en as vn_en, v.name_ar as vn_ar,
                      v.sku, l.on_hand::text as on_hand, l.low_stock_threshold::text as threshold,
-                     l.avg_cost_minor::text as avg
+                     l.avg_cost_minor::text as avg, ${avgMicro}::text as avg_micro,
+                     coalesce((select sum(sr.quantity) from stock_reservations sr
+                               where sr.branch_id = l.branch_id and sr.variant_id = l.variant_id
+                                 and sr.status = 'active' and sr.expires_at > now()), 0)::text as reserved
               from stock_levels l join product_variants v on v.id = l.variant_id
               join products p on p.id = v.product_id
               where p.track_inventory and ${levelScope}
@@ -969,6 +976,7 @@ export class ReportsService {
         const onHand = parseQuantity(r['on_hand'] as string);
         const threshold = r['threshold'] === null ? null : parseQuantity(r['threshold'] as string);
         const avg = r['avg'] === null ? null : big(r['avg']);
+        const micro = r['avg_micro'] === null ? null : big(r['avg_micro']);
         return {
           variantId: r['variant_id'] as string,
           branchId: r['branch_id'] as string,
@@ -978,9 +986,10 @@ export class ReportsService {
           variantNameAr: (r['vn_ar'] as string | null) ?? null,
           sku: (r['sku'] as string | null) ?? null,
           onHand: formatQuantity(onHand),
+          reserved: qty(r['reserved']),
           lowStockThreshold: threshold === null ? null : formatQuantity(threshold),
           averageCost: avg === null ? null : money(avg),
-          value: avg === null ? null : money(onHand > 0n ? divHalfUp(onHand * avg, 1000n) : 0n),
+          value: micro === null ? null : money(divHalfUp(onHand * micro, 1_000_000n)),
           status: (onHand < 0n
             ? 'negative'
             : onHand === 0n
@@ -1103,6 +1112,113 @@ export class ReportsService {
         .sort((a, b) => desc(a.k, b.k))
         .slice(0, 1000)
         .map(({ k: _k, ...rest }) => rest);
+      // Closing stock at the end of the period and opening stock at its start, from the ledger
+      // (BR-176): the last movement before the cut-off carries the balance and the average.
+      const position = (cutoff: SQL) => sql`
+        select x.branch_id, x.variant_id, x.balance_after, x.avg
+        from (
+          select distinct on (m.branch_id, m.variant_id) m.branch_id, m.variant_id, m.balance_after,
+                 coalesce(m.avg_cost_micro_after, m.avg_cost_after_minor * 1000) as avg
+          from stock_movements m
+          where m.created_at < ${cutoff} and ${this.branches(c, sql.raw('m.branch_id'))}
+          order by m.branch_id, m.variant_id, m.created_at desc, m.id desc
+        ) x`;
+      const closingCutoff = sql`((${c.to}::date + 1)::timestamp at time zone ${c.tz})`;
+      const openingCutoff = sql`((${c.from}::date)::timestamp at time zone ${c.tz})`;
+      const positions = async (cutoff: SQL) =>
+        (
+          await this.rows(
+            tx,
+            sql`select x.branch_id, count(*) filter (where x.balance_after <> 0)::int as items,
+                       coalesce(sum(x.balance_after), 0)::text as qty,
+                       coalesce(sum(case when x.balance_after <> 0 and x.avg is not null
+                                         then round(x.balance_after * x.avg / 1000) else 0 end), 0)::text as value
+                from (${position(cutoff)}) x group by x.branch_id order by x.branch_id`,
+          )
+        ).map((r) => ({
+          branchId: r['branch_id'] as string,
+          items: int(r['items']),
+          quantity: qty(r['qty']),
+          value: money(big(r['value'])),
+          quantityMilli: parseQuantity(r['qty'] as string),
+          valueMinor: big(r['value']),
+        }));
+      const closingRows = await positions(closingCutoff);
+      const openingRows = await positions(openingCutoff);
+      const periodMoves = (
+        await this.rows(
+          tx,
+          sql`select m.branch_id, m.movement_type, coalesce(sum(m.quantity), 0)::text as qty,
+                     coalesce(sum(m.value_minor), 0)::text as value
+              from stock_movements m where ${movementScope}
+              group by m.branch_id, m.movement_type order by m.branch_id, m.movement_type`,
+        )
+      ).map((r) => ({
+        branchId: r['branch_id'] as string,
+        movementType: r['movement_type'] as string,
+        quantityMilli: parseQuantity(r['qty'] as string),
+        valueMinor: big(r['value']),
+      }));
+      const branchIds = [
+        ...new Set([...closingRows, ...openingRows, ...periodMoves].map((r) => r.branchId)),
+      ].sort();
+      const rollFor = (branchId: string | null): StockRollForward => {
+        const pick = <T extends { branchId: string }>(rows: T[]) =>
+          branchId === null ? rows : rows.filter((r) => r.branchId === branchId);
+        const sumQ = (rows: { quantityMilli: bigint }[]) =>
+          rows.reduce((s, r) => s + r.quantityMilli, 0n);
+        const sumV = (rows: { valueMinor: bigint }[]) =>
+          rows.reduce((s, r) => s + r.valueMinor, 0n);
+        const opening = pick(openingRows);
+        const closing = pick(closingRows);
+        const byType = new Map<string, { quantityMilli: bigint; valueMinor: bigint }>();
+        for (const m of pick(periodMoves)) {
+          const cur = byType.get(m.movementType) ?? { quantityMilli: 0n, valueMinor: 0n };
+          cur.quantityMilli += m.quantityMilli;
+          cur.valueMinor += m.valueMinor;
+          byType.set(m.movementType, cur);
+        }
+        const movedValue = [...byType.values()].reduce((s, r) => s + r.valueMinor, 0n);
+        return {
+          branchId,
+          opening: { quantity: formatQuantity(sumQ(opening)), value: money(sumV(opening)) },
+          movements: [...byType.entries()]
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([movementType, r]) => ({
+              movementType,
+              quantity: formatQuantity(r.quantityMilli),
+              value: money(r.valueMinor),
+            })),
+          closing: { quantity: formatQuantity(sumQ(closing)), value: money(sumV(closing)) },
+          rounding: money(sumV(closing) - sumV(opening) - movedValue),
+        };
+      };
+      const [reserved] = await this.rows(
+        tx,
+        sql`select coalesce(sum(sr.quantity), 0)::text as qty from stock_reservations sr
+            where sr.status = 'active' and sr.expires_at > now() and ${this.branches(c, sql.raw('sr.branch_id'))}`,
+      );
+      const unvalued = (
+        await this.rows(
+          tx,
+          sql`select l.variant_id, p.id as product_id, l.branch_id, p.name_en, p.name_ar,
+                     v.name_en as vn_en, v.name_ar as vn_ar, v.sku, l.on_hand::text as on_hand
+              from stock_levels l join product_variants v on v.id = l.variant_id
+              join products p on p.id = v.product_id
+              where p.track_inventory and l.on_hand <> 0 and l.avg_cost_minor is null and ${levelScope}
+              order by coalesce(lower(p.name_en), p.name_ar) limit 200`,
+        )
+      ).map((r) => ({
+        variantId: r['variant_id'] as string,
+        productId: r['product_id'] as string,
+        branchId: r['branch_id'] as string,
+        nameEn: (r['name_en'] as string | null) ?? null,
+        nameAr: (r['name_ar'] as string | null) ?? null,
+        variantNameEn: (r['vn_en'] as string | null) ?? null,
+        variantNameAr: (r['vn_ar'] as string | null) ?? null,
+        sku: (r['sku'] as string | null) ?? null,
+        onHand: qty(r['on_hand']),
+      }));
       return {
         period: this.period(c),
         inTransit: {
@@ -1110,6 +1226,17 @@ export class ReportsService {
           quantity: qty(transit!['qty']),
           value: money(big(transit!['value'])),
         },
+        asAt: {
+          date: c.to,
+          valuation: closingRows.map(({ quantityMilli: _q, valueMinor: _v, ...r }) => r),
+          total: {
+            quantity: formatQuantity(closingRows.reduce((s, r) => s + r.quantityMilli, 0n)),
+            value: money(closingRows.reduce((s, r) => s + r.valueMinor, 0n)),
+          },
+        },
+        rollForward: { branches: branchIds.map((b) => rollFor(b)), total: rollFor(null) },
+        reservedQuantity: qty(reserved!['qty']),
+        unvalued,
         valuation,
         stock,
         movements,

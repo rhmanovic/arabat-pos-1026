@@ -66,6 +66,21 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after remediation session 7 (2026-10-13, local run)
+
+`pnpm verify` green (173 unit/web tests, including the micro-precision average cases in
+`quantity.test.ts` (fractions of a fils kept, negative basis absorbed, previous average kept
+while still negative) and the new `returns.test.tsx` (held returned goods listed, disposal
+recorded with a mandatory note)); `pnpm test:integration` 193 passed, including the three new
+cases in `inventory-valuation.int.test.ts` (saffron by the gram averaged at 2.5 fils exactly and
+issued at that cost; negative rice valued at its basis then absorbed by a receipt so the
+roll-forward closes with zero rounding; items without cost listed; closing stock as at yesterday
+and today reconstructed from the ledger with matching roll-forward; an online reservation shown
+per item and in total; damaged return kept out of stock by default with a held custody record,
+"changed mind" restocked, disposal by a cashier refused, note required, recorded once, audited;
+the removed "customer return" reason refused); `pnpm test:e2e` 35 passed on the first full run.
+Existing valuation and report expectations unchanged (positive balances value identically).
+
 ### Results after remediation session 6 (2026-10-13, local run)
 
 `pnpm verify` green (171 unit/web tests, including the new `transfers.test.tsx`: in-transit

@@ -332,6 +332,28 @@ Remediation session 3 (2026-10-13, owner decision D2):
   dispatch cost, totalled on the transfers page and in the inventory report, and counted in no
   branch. A transfer in transit can be **recalled** by the source (reason required): the goods
   return to the source branch at dispatch cost and the transfer becomes final (`recalled`).
+- **BR-174** Cost precision and negative stock. The moving average is carried at micro
+  precision (thousandths of a fils) and rounded to the fils only for display, so items kept in
+  grams or millilitres keep their cost; movement values and valuation use the precise figure. A
+  balance that goes below zero (negative-stock policy) keeps its cost basis and is valued
+  negatively; the next receipt first absorbs the negative units at that basis, so the value of a
+  balance always equals the sum of its movement values. Stock that goes negative with no average
+  adopts the cost it left at. The small rounding of averages is published as its own line of the
+  stock roll-forward, never hidden. Items in stock with no cost at all are listed on the
+  inventory report and flagged on the product screen, which also explains the catalog cost (the
+  standard cost of new stock) against the moving average (what stock is valued at).
+- **BR-175** Custody of returned goods. Damaged and defective returns stay out of sellable stock
+  unless the cashier decides otherwise; other reasons restock by default. Every returned item
+  kept out of stock gets a **custody record** (held) with its refund, quantity and cost, until
+  someone with the adjust right at the branch records what was done with it (disposed, returned
+  to the supplier, …) with a note, once. The "customer return (outside POS)" increase reason no
+  longer exists: returned goods re-enter stock only through a refund.
+- **BR-176** Valuation as at a date and roll-forward. The inventory report reconstructs the
+  closing stock at the end of its period (and the opening stock at its start) from the ledger,
+  using the balance and average cost after the last movement before the cut-off, per branch and
+  in total. A roll-forward shows opening value, each movement type's quantity and value in the
+  period, the rounding of averages and the closing value, and must agree with the valuation.
+  Quantities held for unpaid online orders are shown per item and in total.
 
 Platform and subscriptions (Prompt 17):
 - **BR-150** Every merchant has exactly one subscription to a plan. New merchants start on

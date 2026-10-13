@@ -31,7 +31,8 @@ function milli(value: string): bigint | null {
 
 interface Selection {
   quantity: string;
-  restock: boolean;
+  /** Undefined = follow the refund reason (BR-175). */
+  restock?: boolean;
 }
 
 /** Find a sale, choose what comes back, then refund, exchange or (same shift) cancel. */
@@ -139,16 +140,19 @@ function ReturnForm({
     enabled: valid,
     queryFn: () => api.refunds.preview({ saleId: sale.saleId, lines: previewLines }),
   });
+  // Damaged and defective goods stay out of sellable stock unless the cashier says otherwise
+  // (BR-175); the box follows the reason until it is touched.
+  const restockDefault = !(reason === 'damaged' || reason === 'defective');
   const setQty = (
     position: number,
     quantity: string,
-    restock = selection[position]?.restock ?? true,
+    restock: boolean | undefined = selection[position]?.restock,
   ) => setSelection((s) => ({ ...s, [position]: { quantity, restock } }));
 
   const refundLines = chosen.map((x) => ({
     position: x.line.position,
     quantity: x.sel!.quantity.trim(),
-    restock: x.sel!.restock && x.line.trackInventory,
+    restock: (x.sel!.restock ?? restockDefault) && x.line.trackInventory,
   }));
   const refund = useMutation({
     mutationFn: () =>
@@ -270,7 +274,7 @@ function ReturnForm({
                   <input
                     type="checkbox"
                     className="size-5 accent-primary"
-                    checked={sel?.restock ?? true}
+                    checked={sel?.restock ?? restockDefault}
                     onChange={(e) => setQty(l.position, sel?.quantity ?? '', e.target.checked)}
                   />
                   {t('returns.restock')}

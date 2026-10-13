@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  microToMinor,
+  quantityValueMicro,
+  weightedAverageCostMicro,
   QuantityError,
   formatQuantity,
   parseQuantity,
@@ -42,5 +45,18 @@ describe('quantity', () => {
     expect(weightedAverageCost(-2000n, 900n, 5000n, 1200n)).toBe(1200n);
     expect(weightedAverageCost(2000n, null, 5000n, 1200n)).toBe(1200n);
     expect(() => weightedAverageCost(0n, null, 0n, 1n)).toThrow(QuantityError);
+  });
+
+  it('keeps fractions of a fils in the average and the cost basis of negative stock (BR-174)', () => {
+    // 2.500 KWD per kg received by the gram: 0.0025 KWD = 2.5 fils per gram, kept exactly.
+    expect(weightedAverageCostMicro(0n, null, 1_000_000n, 2500n)).toBe(2500n);
+    expect(microToMinor(2500n)).toBe(3n);
+    expect(quantityValueMicro(400_000n, 2500n)).toBe(1000n);
+    // Balance −5 at 1.000, receipt 10 at 2.000: value −5 + 20 = 15 over 5 units → 3.000.
+    expect(weightedAverageCostMicro(-5000n, 1_000_000n, 10000n, 2_000_000n)).toBe(3_000_000n);
+    // Still negative after the receipt: the previous average is kept.
+    expect(weightedAverageCostMicro(-10000n, 1_000_000n, 5000n, 2_000_000n)).toBe(1_000_000n);
+    // Ordinary case unchanged: 10 @ 1.000 + 10 @ 2.000 → 1.500.
+    expect(weightedAverageCostMicro(10000n, 1_000_000n, 10000n, 2_000_000n)).toBe(1_500_000n);
   });
 });

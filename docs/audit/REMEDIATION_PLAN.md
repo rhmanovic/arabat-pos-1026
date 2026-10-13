@@ -147,20 +147,20 @@ not a commitment).
   deactivating a branch while any balance ≠ 0 or any open order/transfer/shift exists; the screen
   explains what must be written off or transferred first.
 
-### R2.6 Valuation as at a date and stock roll-forward — **M**
+### R2.6 Valuation as at a date and stock roll-forward — **M** — *done in session 7 (FND-219 is not in the register)*
 - Closes: FND-512, FND-213, FND-219
 - Build: inventory valuation for any past date computed from the ledger; a roll-forward per item
   and branch (opening + receipts + transfers in + returns + increases − sales − transfers out −
   write-offs = closing) that must agree with the valuation; reserved quantities visible.
 - Depends on: R2.4 (in-transit line).
 
-### R2.7 Cost edge cases — **S**
+### R2.7 Cost edge cases — **S** — *done in session 7*
 - Closes: FND-204, FND-216, FND-203, FND-205, FND-223
 - Build: keep the cost basis when a balance crosses zero under the negative-stock policy; "items
   without cost" alert on the inventory page; store average cost with higher internal precision
   (display in fils); explain catalog standard cost vs moving average on the product screen.
 
-### R2.8 Custody of returned goods not restocked — **S/M**
+### R2.8 Custody of returned goods not restocked — **S/M** — *done in session 7*
 - Closes: FND-508, FND-507, FND-212
 - Build: restock default derived from the return reason (damaged → no); goods not restocked post
   to a "damaged returns" location or create a write-off document; "customer return (outside POS)"
@@ -323,8 +323,8 @@ records without money.
 | 4 | R1.3 deposits in transit and bank reconciliation | **Done 2026-10-13** |
 | 5 | R2.1 adjustment approvals, R2.2 blind counts with sign-off, R2.5 master-data guards | **Done 2026-10-13** |
 | 6 | R2.3 transfer losses, R2.4 in-transit location | **Done 2026-10-13** |
-| 7 | R2.6 valuation as at date, R2.7 cost edge cases, R2.8 damaged returns | Next |
-| 8 | R3.1 till overrides, R3.2 price bounds, R3.3 zero-total sales | |
+| 7 | R2.6 valuation as at date, R2.7 cost edge cases, R2.8 damaged returns | **Done 2026-10-13** |
+| 8 | R3.1 till overrides, R3.2 price bounds, R3.3 zero-total sales | Next |
 | 9 | R3.4 refund segregation, R3.5 tender hygiene (fee reversal per method, D6), R3.6 held sales, R3.7 combined limit (D4) | |
 | 10 | R4.1 one cut-off rule, R4.3, R4.4, R4.5 supplier statement | |
 | 11 | R4.2 period close pack | |

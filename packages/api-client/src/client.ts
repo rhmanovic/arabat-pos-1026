@@ -118,7 +118,11 @@ import {
   shiftSchema,
   type AdjustmentListQuery,
   type CreateAdjustment,
+  type DamagedReturnQuery,
   type DecideAdjustment,
+  type DisposeDamagedReturn,
+  damagedReturnListSchema,
+  damagedReturnSchema,
   type MovementQuery,
   type StockLevelQuery,
   adjustmentListSchema,
@@ -500,6 +504,15 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('POST', `/manager/inventory/adjustments/${id}/withdraw`, {
           body: {},
           schema: adjustmentSchema,
+        }),
+      damagedReturns: (query: DamagedReturnQuery = {}) =>
+        request('GET', `/manager/inventory/damaged-returns?${toParams(query)}`, {
+          schema: damagedReturnListSchema,
+        }),
+      disposeDamagedReturn: (id: string, body: DisposeDamagedReturn) =>
+        request('POST', `/manager/inventory/damaged-returns/${id}/dispose`, {
+          body,
+          schema: damagedReturnSchema,
         }),
       settings: () =>
         request('GET', '/manager/inventory/settings', { schema: inventorySettingsSchema }),

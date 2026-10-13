@@ -295,6 +295,13 @@
       "when": 1791869395553,
       "tag": "0041_transfer_losses_in_transit",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1791871079842,
+      "tag": "0042_cost_precision_damaged_returns",
+      "breakpoints": true
     }
   ]
 }

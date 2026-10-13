@@ -45,8 +45,10 @@ export const stockLevels = pgTable(
     branchId: uuid().notNull(),
     variantId: uuid().notNull(),
     onHand: quantity().notNull().default('0'),
-    /** Moving weighted-average unit cost in minor units (BR-061); null until known. */
+    /** Moving weighted-average unit cost in minor units (BR-061, display); null until known. */
     avgCostMinor: bigint({ mode: 'bigint' }),
+    /** The same average at micro precision (10⁻⁶ KWD), the figure the engine carries (BR-174). */
+    avgCostMicro: bigint({ mode: 'bigint' }),
     lowStockThreshold: quantity(),
     lastMovementAt: timestamp({ withTimezone: true }),
     updatedAt: updatedAt(),
@@ -175,6 +177,7 @@ export const stockMovements = pgTable(
     /** Signed value of the movement at unit cost (minor units), null when the cost is unknown. */
     valueMinor: bigint({ mode: 'bigint' }),
     avgCostAfterMinor: bigint({ mode: 'bigint' }),
+    avgCostMicroAfter: bigint({ mode: 'bigint' }),
     sourceType: text().notNull(),
     sourceId: uuid().notNull(),
     note: text(),
@@ -198,5 +201,46 @@ export const stockMovements = pgTable(
     index('stock_movements_level_idx').on(t.merchantId, t.branchId, t.variantId, t.createdAt),
     index('stock_movements_branch_time_idx').on(t.merchantId, t.branchId, t.createdAt),
     index('stock_movements_source_idx').on(t.merchantId, t.sourceType, t.sourceId),
+  ],
+);
+
+/**
+ * Returned goods that were not put back into sellable stock (BR-175, remediation R2.8): a
+ * custody record per refund line, held until someone with the adjust right records what was
+ * done with them (disposed, returned to the supplier, …). Append-only: held → disposed once.
+ */
+export const damagedReturns = pgTable(
+  'damaged_returns',
+  {
+    id: id(),
+    merchantId: merchantId(),
+    refundId: uuid().notNull(),
+    position: integer().notNull(),
+    branchId: uuid().notNull(),
+    variantId: uuid().notNull(),
+    quantity: quantity().notNull(),
+    unitCostMinor: bigint({ mode: 'bigint' }),
+    /** The refund reason (damaged, defective, …). */
+    reason: text().notNull(),
+    /** held | disposed */
+    status: text().notNull().default('held'),
+    disposedByUserId: uuid().references(() => users.id),
+    disposedAt: timestamp({ withTimezone: true }),
+    disposalNote: text(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('damaged_returns_line_key').on(t.merchantId, t.refundId, t.position),
+    foreignKey({
+      columns: [t.merchantId, t.branchId],
+      foreignColumns: [branches.merchantId, branches.id],
+    }),
+    foreignKey({
+      columns: [t.merchantId, t.variantId],
+      foreignColumns: [productVariants.merchantId, productVariants.id],
+    }),
+    check('damaged_returns_status_valid', sql`${t.status} in ('held', 'disposed')`),
+    check('damaged_returns_quantity_positive', sql`${t.quantity} > 0`),
+    index('damaged_returns_branch_idx').on(t.merchantId, t.branchId, t.status),
   ],
 );
