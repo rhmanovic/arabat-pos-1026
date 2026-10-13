@@ -66,6 +66,27 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after remediation session 4 (2026-10-13, local run)
+
+`pnpm verify` green (167 unit/web tests, including the deposit dialog with its mandatory slip
+number, the deposits-in-transit list with the confirm / return dialog, and the bank
+reconciliation dialog that ticks statement entries, shows the cleared balance and the
+difference and demands an explanation before saving; overview and checklist fixtures carry
+`depositsInTransitTotal`, `depositsInTransit` and `unreconciledBankEntries`);
+`pnpm test:integration` 184 passed, including the three new cases in `bank.int.test.ts`
+(manager deposit refused without a slip number, lands in transit, treasury down and bank
+unchanged, overview and checklist counts; confirmation by another treasurer with a bank
+reference, `DEPOSIT_SETTLED` on a second attempt, self-confirmation refused, return to the
+treasury needs a reason, owner override flagged in the audit log, custody without the deposit
+right refused; POS deposit needs the slip, waits in transit and reaches the bank on the owner's
+confirmation; reconciliation state, balanced reconciliation of two entries, double tick
+refused, unexplained difference refused and explained one recorded with history and audit,
+`ACCOUNT_IN_USE` on deactivating a bank with a balance, an idle bank deactivated, a bank with
+a deposit in transit refused, cashier refused); `pnpm test:e2e` 35 passed (`cash-payouts.spec`
+now waits for the slip number, confirms the deposit in the bank from the custody page and
+reconciles the bank account to a balanced statement). Existing tests adapted: deposits carry
+a slip reference and expect the transit account instead of the bank.
+
 ### Results after remediation session 3 (2026-10-13, local run)
 
 `pnpm verify` green (165 unit/web tests, including the treasury payout-request approval dialog
