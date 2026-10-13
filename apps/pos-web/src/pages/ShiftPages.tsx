@@ -2,6 +2,7 @@ import {
   CASH_EXPENSE_CATEGORIES,
   CASH_IN_REASONS,
   CASH_OUT_REASONS,
+  type PosShift,
   type Shift,
 } from '@arabat/contracts';
 import { formatMoney } from '@arabat/i18n';
@@ -203,9 +204,11 @@ export function OpenShiftPage() {
   const count = useCashCount();
   const free = registers.data?.registers.filter((r) => r.availability !== 'occupied') ?? [];
   const selected = registers.data?.registers.find((r) => r.id === registerId);
-  const expectedMinor = selected ? minor(selected.expectedCash.amount)! : 0n;
+  // Blind count (BR-162): the cashier is shown no balance and learns the difference afterwards.
+  const blind = Boolean(selected?.blindCount || !selected?.expectedCash);
+  const expectedMinor = selected?.expectedCash ? minor(selected.expectedCash.amount)! : 0n;
   const difference =
-    selected && count.countedMinor !== null ? count.countedMinor - expectedMinor : null;
+    selected && !blind && count.countedMinor !== null ? count.countedMinor - expectedMinor : null;
   // The drawer's first count sets its balance; later differences need an explanation.
   const needsNote = Boolean(selected && !selected.needsCount && difference && !note.trim());
   const open = useMutation({
@@ -213,11 +216,14 @@ export function OpenShiftPage() {
       api.shifts.open({
         registerId: registerId!,
         ...count.payload(),
-        expectedCash: selected!.expectedCash.amount,
+        ...(selected?.expectedCash ? { expectedCash: selected.expectedCash.amount } : {}),
         note: note.trim() || null,
       }),
-    onSuccess: async () => {
-      notify.ok(t('shift.opened'));
+    onSuccess: async (opened) => {
+      const diff = opened.openingDiscrepancy;
+      if (blind && diff && minor(diff.amount) !== 0n)
+        notify.ok(t('shift.openedWithDifference', { amount: fmt(diff) }));
+      else notify.ok(t('shift.opened'));
       await queryClient.invalidateQueries({ queryKey: shiftKey });
     },
     onError: async (error) => {
@@ -261,6 +267,10 @@ export function OpenShiftPage() {
         <div className="grid gap-4 rounded-lg bg-surface p-4">
           {selected.needsCount ? (
             <Alert tone="info">{t('shift.firstCount')}</Alert>
+          ) : blind || !selected.expectedCash ? (
+            <Alert tone="info">
+              <span data-testid="blind-count">{t('shift.blindOpen')}</span>
+            </Alert>
           ) : (
             <div className="flex items-baseline justify-between gap-3 text-lg">
               <span>{t('shift.expectedInDrawer')}</span>
@@ -431,30 +441,37 @@ export function ShiftPage() {
           {t('shift.back')}
         </Link>
       </div>
-      <div className="rounded-lg bg-surface p-4">
-        <p className="text-sm text-fg-muted">{t('shift.expected')}</p>
-        <p className="text-3xl font-semibold tabular-nums" dir="ltr" data-testid="expected-cash">
-          {fmt(s.expectedCash)}
-        </p>
-        <dl className="mt-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-5">
-          {(
-            [
-              ['openingCash', s.openingFloat],
-              ['cashIn', s.cashIn],
-              ['cashOut', s.cashOut],
-              ['cashSales', s.cashSales],
-              ['cashRefunds', s.cashRefunds],
-            ] as const
-          ).map(([k, v]) => (
-            <div key={k}>
-              <dt className="text-fg-muted">{t(`shift.${k}`)}</dt>
-              <dd className="tabular-nums" dir="ltr">
-                {fmt(v)}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </div>
+      {s ? (
+        <div className="rounded-lg bg-surface p-4">
+          <p className="text-sm text-fg-muted">{t('shift.expected')}</p>
+          <p className="text-3xl font-semibold tabular-nums" dir="ltr" data-testid="expected-cash">
+            {fmt(s.expectedCash)}
+          </p>
+          <dl className="mt-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-5">
+            {(
+              [
+                ['openingCash', s.openingFloat],
+                ['cashIn', s.cashIn],
+                ['cashOut', s.cashOut],
+                ['cashSales', s.cashSales],
+                ['cashRefunds', s.cashRefunds],
+              ] as const
+            ).map(([k, v]) => (
+              <div key={k}>
+                <dt className="text-fg-muted">{t(`shift.${k}`)}</dt>
+                <dd className="tabular-nums" dir="ltr">
+                  {fmt(v)}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      ) : (
+        // Blind count (BR-162): the drawer figures appear only on the closing result.
+        <Alert tone="info">
+          <span data-testid="blind-count">{t('shift.blindShift')}</span>
+        </Alert>
+      )}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {hasPermission('cash.move') ? (
           <>
@@ -718,7 +735,7 @@ function CloseDialog({
   onClose,
   onClosed,
 }: {
-  shift: Shift;
+  shift: PosShift;
   onClose: () => void;
   onClosed: (s: Shift) => void;
 }) {

@@ -146,4 +146,5 @@ export const NAV: readonly NavItem[] = [
     available: true,
     section: 'organization',
   },
+  { key: 'audit', to: '/audit', anyOf: ['audit.read'], available: true, section: 'organization' },
 ];

@@ -16,3 +16,4 @@ export * from './reports.js';
 export * from './restaurant.js';
 export * from './ecommerce.js';
 export * from './platform.js';
+export * from './audit.js';

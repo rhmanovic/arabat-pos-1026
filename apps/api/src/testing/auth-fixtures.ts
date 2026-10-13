@@ -279,5 +279,26 @@ export async function createCompany(
     return treasury.accountId as string;
   }
 
-  return { client, ...o, main, second, roles, hire, ownerPos, countTreasury };
+  /**
+   * Switches the blind-count policy off (BR-162) so tests about drawer figures can read them
+   * through a cashier's own session.
+   */
+  async function showExpectedCash() {
+    const current = (
+      await client.request('GET', '/manager/sales-settings', { cookies: o.cookies })
+    ).json();
+    const res = await client.request('PUT', '/manager/sales-settings', {
+      cookies: o.cookies,
+      body: {
+        maxDiscountPercent: current.maxDiscountPercent,
+        refundWindowDays: current.refundWindowDays,
+        refundApprovalLimit: current.refundApprovalLimit.amount,
+        blindCashCount: false,
+        version: current.version,
+      },
+    });
+    if (res.statusCode !== 200) throw new Error(`settings failed ${res.statusCode} ${res.body}`);
+  }
+
+  return { client, ...o, main, second, roles, hire, ownerPos, countTreasury, showExpectedCash };
 }

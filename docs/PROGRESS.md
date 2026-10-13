@@ -362,6 +362,28 @@ New companies (and, once, existing ones without balances) get cash on hand («ا
 and Cash / KNET / Visa-Mastercard / payment link / WAMD linked to them (BR-086). Open: real
 fee rates and cash-to-bank transfers (OQ-026).
 
+### 2026-10-13 — Remediation session 1 (audit Phase 1 → retail remediation plan)
+Owner approved `docs/audit/REMEDIATION_PLAN.md` with decisions D1–D7 (blind counts, per-merchant
+approval thresholds, treasurer role, combined discount limit, payables deferred, fees per provider,
+online store deferred) and moved the audit-log screen into R1. Implemented (ADR-0093):
+- **Blind cash counts (BR-162, FND-401):** `sales_settings.blind_cash_count` (migration 0036,
+  default on, switch in the selling policy). POS endpoints withhold drawer figures from users
+  without `shifts.view_all`: no expected balance at opening (`expectedCash` optional, no
+  opening-note requirement for a blind cashier), no summary during the shift, figures and
+  difference after the count; owners and supervisors unaffected.
+- **Merchant audit log (BR-163, FND-101):** `GET /manager/audit` (`audit.read`) with local-day
+  period, action, record type and actor filters, pagination and distinct actions; screen
+  `/manager/audit` with CSV export; nav entry under Organization.
+- **Test gateway guard (FND-709):** warning at start when the mock gateway is on in a production
+  build; OPERATIONS rule (staging only).
+- Tracking: `docs/audit/FINDINGS_STATUS.md` (180 findings: 2 tested, 1 fixed, 128 open, 49 deferred).
+Verified: `pnpm verify` green (160 unit/web tests), `pnpm test:integration` 173 passed (incl. new
+`audit.int.test.ts` and the blind-count case in `shifts.int.test.ts`), `pnpm test:e2e` 35 passed
+(`checkout.spec` and `refunds.spec` now assert the blind notice and verify drawer figures through
+the manager API). Not done (next sessions): cash-out limits and corrections (R1.1), custody roles
+(R1.6), disbursement approvals with per-merchant thresholds (R1.2), variance follow-up (R1.4),
+deposits in transit and bank reconciliation (R1.3).
+
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025
 before any production launch.

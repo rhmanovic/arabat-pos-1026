@@ -15,21 +15,44 @@ not a commitment).
 
 ---
 
-## Decisions needed from the owner before or during the work
+## Owner decisions (approved 2026-10-13)
 
-| # | Decision | Needed by package | Default if no answer |
-|---|---|---|---|
-| D1 | Blind closing: should cashiers count without seeing the expected amount? (OQ-015) | R1.5 | Blind closing **on** by default, per-register switch |
-| D2 | Approval thresholds: amount above which an expense, supplier payment or stock adjustment needs a second person; and who that person is per role | R1.2, R2.1 | 20.000 KWD per expense/payment, 50.000 KWD stock value per adjustment; approver = anyone with the approve right who is not the creator |
-| D3 | Cash custody roles: who besides the owner counts treasuries and deposits to the bank? | R1.6 | New default role "Treasurer" (branch-scoped) holding custody + deposit |
-| D4 | Discount limit combined (item + sale together) or per discount? (OQ-024) | R3.7 | Combined |
-| D5 | Supplier payables: do we build supplier invoices and balances now? (OQ-018) | R6 | Deferred; R4.5 supplier statement is the bridge |
-| D6 | Card fee reversal on refunds and the real fee rates per method (OQ-016, OQ-026) | R3.5 | Keep "not reversed"; rates stay owner-entered |
-| D7 | Is the online store part of the current retail offer? | R7 | Only go-live prerequisites now |
+| # | Decision | Owner's answer |
+|---|---|---|
+| D1 | Blind closing | **Approved.** Blind counting on by default; the cashier never sees the expected balance before submitting a count. Owners configure the policy; cashiers cannot. |
+| D2 | Approval thresholds | **Configurable per merchant, never hard-coded.** Defaults: expenses KWD 20, supplier payments KWD 100, inventory adjustments KWD 50 at cost. Above the threshold a separate approver is required; nobody approves their own transaction except through an explicit, documented and audited **owner override**. |
+| D3 | Cash custody roles | **Approved.** Default "Treasurer" role with custody and deposit rights, least privilege. |
+| D4 | Discount limit | **Combined** effective discount (item + sale), not per discount. |
+| D5 | Supplier payables | **Deferred** (invoices, three-way match, accounts payable) to a later phase. |
+| D6 | Card fees and their reversal | **Per payment provider's terms**: configurable per method, never assumed refundable or non-refundable. |
+| D7 | Online store | **Production activation deferred.** Test gateways disabled outside development (staging excepted, documented). |
+
+### Required changes to this plan (owner, 2026-10-13)
+
+1. The merchant audit-log screen and API move from R5 to **R1** (package **R1.0**): financial
+   actions, approvals, overrides, stock adjustments and cash movements must be reviewable before
+   production.
+2. The system must stay practical for a shop with **one owner and one cashier**: controls add
+   approvals and limits, but the owner can always complete an action alone, with the exception
+   recorded in the audit log (owner override).
+3. Strong internal control without unnecessary operational complexity; no general ledger in
+   these phases; restaurant stays out of scope.
+4. Every session is a full vertical slice (migration where needed, API, UI, automated tests that
+   ran, documentation), preserves existing behaviour, tenant isolation, permissions and the
+   append-only financial records, names the procedures and findings it touches, and updates
+   `FINDINGS_STATUS.md`.
+5. One session at a time; after each: what was implemented, findings resolved, tests and results,
+   outstanding risks, next recommended session.
 
 ---
 
 ## Phase R1 — Cash integrity (do first; prerequisite for any real money)
+
+### R1.0 Merchant audit log screen (moved from R5.1) — **M** — *done in session 1*
+- Closes: FND-101 (FND-114 and FND-111 remain for R5.3/R5.4)
+- Built: `GET /manager/audit` for holders of the audit right over the company's own events
+  (local-day period, action, record type and actor filters, pagination, distinct actions) and
+  the management screen `/manager/audit` with CSV export; platform-only events stay separate.
 
 ### R1.1 Cash-out corrections and limits — **M**
 - Closes: FND-407, FND-402, FND-403 (cap), FND-419
@@ -43,7 +66,7 @@ not a commitment).
 
 ### R1.2 Approval of expenses and supplier payments — **M**
 - Closes: FND-408, FND-602 (payment side), FND-420
-- Build: owner-set thresholds per role; above the threshold a disbursement is created as *pending*
+- Build: per-merchant thresholds (defaults D2: expenses KWD 20, supplier payments KWD 100) editable by the owner; above the threshold a disbursement is created as *pending*
   (no cash leaves) and must be approved by a different person with the approve right before it
   posts; receipt reference mandatory above the threshold; optional receipt image through the
   existing file storage; on a purchase order show *ordered value / received value / paid to date*
@@ -68,11 +91,12 @@ not a commitment).
   report; branch cash transfer differences assigned to the sending or receiving branch explicitly.
 - Depends on: nothing.
 
-### R1.5 Blind closing switch — **S**
-- Closes: FND-401 (owner decision), FND-418
-- Build: per-register setting "cashier counts blind" (default per D1); denomination breakdown in
-  the management count dialog.
-- Decision: D1.
+### R1.5 Blind counts — **S** — *done in session 1 (policy); FND-418 open*
+- Closes: FND-401 (D1 approved); FND-418 stays for R1.4
+- Built: company policy `blindCashCount` (default on, in the selling policy): users without
+  `shifts.view_all` see no expected balance at opening or closing and no drawer figures during
+  the shift; the API withholds the figures, the screens only follow; the difference is revealed
+  after the count. Owners and supervisors keep the figures. Test gateway warning (R7.5) added.
 
 ### R1.6 Custody roles and set-up checklist — **S**
 - Closes: FND-113, FND-422, FND-416, FND-117
@@ -88,8 +112,8 @@ not a commitment).
 
 ### R2.1 Approval of stock adjustments — **M**
 - Closes: FND-201, FND-218, FND-220
-- Build: adjustments above an owner-set quantity or value threshold are *pending* until approved by
-  a different person with the adjust right (owner exempt); human-readable adjustment numbers
+- Build: adjustments above the per-merchant value threshold (default D2: KWD 50 at cost) are *pending* until approved by
+  a different person with the adjust right (owner override recorded and audited); human-readable adjustment numbers
   (ADJ-); increases by users without the price right must use the current average cost (no
   self-entered cost) or go to pending.
 - Decision: D2.
@@ -222,7 +246,7 @@ not a commitment).
 
 ## Phase R5 — Access, audit trail and continuity
 
-### R5.1 Merchant audit log screen — **M**
+### R5.1 Merchant audit log screen — moved to R1.0 (done)
 - Closes: FND-101, FND-114, FND-111
 - Build: management screen and API for holders of the audit right: filter by date, actor, action,
   target, branch; export; refused privileged actions logged; owner sees failed sign-ins for member
@@ -289,23 +313,23 @@ records without money.
 
 ---
 
-## Suggested delivery order and grouping into sessions
+## Delivery order (one session at a time; each session ends with a report to the owner)
 
-| Session | Packages | Why this grouping |
+| Session | Packages | Status |
 |---|---|---|
-| 1 | R1.1, R1.5, R1.6, R7.5 | Cash-out controls, blind closing, custody roles; all touch registers/shifts |
-| 2 | R1.2, R1.4 | Pending/approval pattern for disbursements, reused by variances |
-| 3 | R1.3 | Deposits in transit and bank reconciliation |
-| 4 | R2.1, R2.2, R2.5 | Adjustment approvals, blind counts, master-data guards |
-| 5 | R2.3, R2.4 | Transfer losses and in-transit location |
-| 6 | R2.6, R2.7, R2.8 | Valuation as at date, cost edge cases, damaged returns |
-| 7 | R3.1, R3.2, R3.3 | Till overrides and bounds |
-| 8 | R3.4, R3.5, R3.6, R3.7 | Refund segregation, tender hygiene, held sales |
-| 9 | R5.1, R5.3 | Audit log screen and audit detail (unlocks detective controls for everything above) |
-| 10 | R4.1, R4.3, R4.4, R4.5 | Cut-off rule, reports |
-| 11 | R4.2 | Period close pack |
-| 12 | R5.2, R5.4 | Ownership transfer and account hygiene |
-| 13+ | R6.1, R6.2 | After decision D5 |
+| 1 | R1.0 audit log, R1.5 blind counts, R7.5 test-gateway guard | **Done 2026-10-13** |
+| 2 | R1.1 cash-out corrections and limits, R1.6 custody roles and set-up checklist | Next |
+| 3 | R1.2 disbursement approvals (per-merchant thresholds, owner override), R1.4 variance follow-up | |
+| 4 | R1.3 deposits in transit and bank reconciliation | |
+| 5 | R2.1 adjustment approvals, R2.2 blind counts with sign-off, R2.5 master-data guards | |
+| 6 | R2.3 transfer losses, R2.4 in-transit location | |
+| 7 | R2.6 valuation as at date, R2.7 cost edge cases, R2.8 damaged returns | |
+| 8 | R3.1 till overrides, R3.2 price bounds, R3.3 zero-total sales | |
+| 9 | R3.4 refund segregation, R3.5 tender hygiene (fee reversal per method, D6), R3.6 held sales, R3.7 combined limit (D4) | |
+| 10 | R4.1 one cut-off rule, R4.3, R4.4, R4.5 supplier statement | |
+| 11 | R4.2 period close pack | |
+| 12 | R5.2 ownership transfer, R5.3 audit detail, R5.4 account hygiene | |
+| 13+ | R6 supplier side (after D5), R7 online go-live (after D7), platform items | |
 
 After each session: update `docs/BUSINESS_RULES.md`, `docs/DECISIONS.md` and the finding status in
 a new `docs/audit/FINDINGS_STATUS.md` (finding id → package → status → verification test), so that

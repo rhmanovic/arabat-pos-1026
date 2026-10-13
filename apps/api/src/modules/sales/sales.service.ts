@@ -152,6 +152,7 @@ export class SalesService {
       maxDiscountPercent: trimDecimal(row?.maxDiscountPercent ?? '10'),
       refundWindowDays: row?.refundWindowDays ?? 30,
       refundApprovalLimit: money(row?.refundApprovalLimitMinor ?? 20000n),
+      blindCashCount: row?.blindCashCount ?? true,
       version: row?.version ?? 1,
     };
   }
@@ -177,6 +178,7 @@ export class SalesService {
             maxDiscountPercent: input.maxDiscountPercent,
             refundWindowDays: input.refundWindowDays,
             refundApprovalLimitMinor: limitMinor,
+            blindCashCount: input.blindCashCount,
             version: sql`${salesSettings.version} + 1`,
             updatedAt: sql`now()`,
           })
@@ -187,6 +189,7 @@ export class SalesService {
           maxDiscountPercent: input.maxDiscountPercent,
           refundWindowDays: input.refundWindowDays,
           refundApprovalLimitMinor: limitMinor,
+          blindCashCount: input.blindCashCount,
           version: 2,
         });
       }
@@ -208,6 +211,7 @@ export class SalesService {
             from: (row?.refundApprovalLimitMinor ?? 20000n).toString(),
             to: limitMinor.toString(),
           },
+          blindCashCount: { from: row?.blindCashCount ?? true, to: input.blindCashCount },
         },
       });
       return this.settings(tx, actor.merchantId);

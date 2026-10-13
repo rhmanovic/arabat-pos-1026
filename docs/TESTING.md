@@ -66,6 +66,20 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after remediation session 1 (2026-10-13, local run)
+
+`pnpm verify` green (160 unit/web tests, including `audit.test.tsx` — merchant audit log page,
+details summary, nav visibility — and the two blind-count cases in the POS `app.test.tsx`);
+`pnpm test:integration` 173 passed, including `audit.int.test.ts` (own-company events with
+who/what/when and before/after values, isolation from another company, local-day period, record
+type and pagination filters, `audit.read` for company managers only) and the blind-count case in
+`shifts.int.test.ts` (no expected balance for cashiers, open without `expectedCash`, summary
+withheld, supervisor sees the figures, closing reveals them, between-shift difference booked
+without a note, policy switched off restores the stale-balance and note rules); `pnpm test:e2e`
+35 passed (`checkout.spec` and `refunds.spec` assert the blind notice and read the drawer
+figures through the manager API). Fixtures that read drawer figures through cashier sessions
+call `showExpectedCash()`.
+
 ### Results after cash custody phase C (2026-10-12, local run)
 
 `pnpm verify` green (155 unit/web tests, including the dashboard cash card);

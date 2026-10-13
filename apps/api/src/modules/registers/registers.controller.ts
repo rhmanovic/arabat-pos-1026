@@ -1,5 +1,6 @@
 import {
   type DiscrepancyReport,
+  type PosShift,
   type Register,
   type Shift,
   closeShiftSchema,
@@ -132,7 +133,7 @@ export class PosShiftsController {
 
   @RequirePermission('pos', 'shifts.operate')
   @Get('shifts/current')
-  async current(@CurrentMerchantActor() actor: MerchantActor): Promise<{ shift: Shift | null }> {
+  async current(@CurrentMerchantActor() actor: MerchantActor): Promise<{ shift: PosShift | null }> {
     return { shift: await this.shifts.currentShift(actor) };
   }
 
@@ -142,7 +143,7 @@ export class PosShiftsController {
     @CurrentMerchantActor() actor: MerchantActor,
     @Body(new ZodPipe(openShiftSchema)) body: z.output<typeof openShiftSchema>,
     @Req() req: FastifyRequest,
-  ): Promise<Shift> {
+  ): Promise<PosShift> {
     return this.shifts.openShift(actor, body, req.ip);
   }
 
@@ -152,7 +153,7 @@ export class PosShiftsController {
     @CurrentMerchantActor() actor: MerchantActor,
     @Body(new ZodPipe(recordCashMovementSchema)) body: z.output<typeof recordCashMovementSchema>,
     @Req() req: FastifyRequest,
-  ): Promise<Shift> {
+  ): Promise<PosShift> {
     return this.shifts.recordCashMovement(actor, body, req.ip);
   }
 

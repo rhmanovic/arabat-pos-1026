@@ -40,6 +40,7 @@ the permission.
 | `/roles` | Roles and permissions | `employees.read` |
 | `/subscription` | Own plan, usage and limits | `merchant.settings.read` |
 | `/settings` | Company profile | `merchant.settings.read` |
+| `/audit` | Audit log: the company's recorded events (period, action, record type filters; CSV) | `audit.read` |
 
 ## 2. `/pos` — pos-web
 
@@ -50,7 +51,7 @@ cashier, clock, language, Lock and Sign out.
 | Route | Screen | Permission |
 |---|---|---|
 | `/` | Register: shift strip, search/scan, categories, product grid, cart with customer, discounts, held carts, recent sales, payment (cash/card/split), receipt | `sales.create` (open shift) |
-| `/shift` | Open shift (count against the expected drawer), cash in/out (drop to / top-up from treasury), count and close, X/Z summary | `shifts.operate` / `cash.move` |
+| `/shift` | Open shift (count the drawer; blind for cashiers under BR-162, otherwise against the expected balance), cash in/out (drop to / top-up from treasury), count and close, X/Z summary | `shifts.operate` / `cash.move` |
 | `/returns` | Find sale, return lines, refund / exchange / void, refund receipt | `refunds.create` |
 | `/tables`, `/tables/orders/:orderId` | Restaurant floor and order (module enabled) | `restaurant.orders` |
 | `/kitchen` | Kitchen display | `kitchen.access` |
@@ -152,6 +153,7 @@ per-branch breakdown, settings dialog), `/manager/inventory/adjustments`,
 | `GET /pos/cash/suppliers` / `GET /pos/cash/bank-accounts` | POS `cash.move` / `cash.deposit` |
 | `GET /pos/payment-methods` | POS `sales.create` (active POS methods, no fees) |
 | `GET /pos/registers`, `GET /pos/shifts/current`, `POST /pos/shifts`, `POST /pos/shifts/current/close` | POS `shifts.operate` at the bound branch + register access |
+| `GET /manager/audit?from=&to=&action=&targetType=&actorId=&page=&pageSize=` | `audit.read` (company-wide; ADR-0093) |
 | `POST /pos/shifts/current/cash-movements` | POS `cash.move` (own open shift) |
 
 Screens: `/manager/payments` (methods + internal balances, fee preview),

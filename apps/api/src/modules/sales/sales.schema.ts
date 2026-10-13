@@ -38,6 +38,11 @@ export const salesSettings = pgTable('sales_settings', {
   refundApprovalLimitMinor: bigint({ mode: 'bigint' })
     .notNull()
     .default(sql`20000`),
+  /**
+   * Blind counts (BR-162, remediation R1.5): cashiers without `shifts.view_all` count the
+   * drawer at opening and closing without seeing the expected balance first.
+   */
+  blindCashCount: boolean().notNull().default(true),
   version: integer().notNull().default(1),
   updatedAt: updatedAt(),
 });

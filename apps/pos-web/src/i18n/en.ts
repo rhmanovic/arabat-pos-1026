@@ -279,6 +279,12 @@ export const posEn = {
     firstCount: 'First count of this register: what you count now becomes its balance.',
     expectedInDrawer: 'Expected in the drawer',
     openingDifference: 'Difference from expected: {{amount}}',
+    openedWithDifference:
+      'Shift opened. Difference found at opening: {{amount}} (recorded between shifts).',
+    blindOpen:
+      'Count the cash in the drawer. The expected amount is not shown; any difference is recorded after your count.',
+    blindShift:
+      'Drawer figures are not shown during your shift. You will see the expected cash and the difference after you count at closing.',
     noteRequired: 'Explain the difference.',
     movementHint_petty_expense: 'Recorded as an expense paid from this drawer.',
     movementHint_supplier_payment: 'Recorded as a payment to the supplier from this drawer.',

@@ -231,6 +231,19 @@ export const shiftSchema = z.object({
 });
 export type Shift = z.infer<typeof shiftSchema>;
 
+/**
+ * The cashier's own view of an open shift (BR-162): under the blind-count policy the drawer
+ * figures are withheld (`summary` null) from users without `shifts.view_all`; closing still
+ * returns the full shift once the count is submitted.
+ */
+export const posShiftSchema = shiftSchema.extend({
+  summary: shiftSummarySchema.nullable(),
+  blindCount: z.boolean(),
+  /** counted − expected at opening, revealed after the count (null on a first count). */
+  openingDiscrepancy: moneySchema.nullable(),
+});
+export type PosShift = z.infer<typeof posShiftSchema>;
+
 export const shiftSummaryRowSchema = shiftSchema.omit({ movements: true, countedBreakdown: true });
 export type ShiftRow = z.infer<typeof shiftSummaryRowSchema>;
 export const shiftListSchema = z.object({
@@ -330,7 +343,8 @@ export type DiscrepancyReport = z.infer<typeof discrepancyReportSchema>;
 export const openShiftSchema = z.object({
   registerId: z.uuid(),
   countedCash: moneyAmountSchema,
-  expectedCash: moneyAmountSchema,
+  /** Omitted only under the blind-count policy (the cashier was shown no balance). */
+  expectedCash: moneyAmountSchema.optional(),
   breakdown: z.array(denominationSchema).max(30).optional(),
   note: text(500),
 });
@@ -404,8 +418,10 @@ export const posRegisterSchema = z.object({
   nameEn: z.string().nullable(),
   nameAr: z.string().nullable(),
   defaultOpeningFloat: moneySchema,
-  /** The drawer balance carried from the last shift (ADR-0090). */
-  expectedCash: moneySchema,
+  /** The drawer balance carried from the last shift (ADR-0090); null under a blind count. */
+  expectedCash: moneySchema.nullable(),
+  /** The cashier counts blind (BR-162): no expected balance is shown before the count. */
+  blindCount: z.boolean(),
   /** The drawer has no verified count yet: the opening sets its balance. */
   needsCount: z.boolean(),
   /** free | mine | occupied */
@@ -413,4 +429,4 @@ export const posRegisterSchema = z.object({
   occupiedBy: z.string().nullable(),
 });
 export const posRegisterListSchema = z.object({ registers: z.array(posRegisterSchema) });
-export const currentShiftSchema = z.object({ shift: shiftSchema.nullable() });
+export const currentShiftSchema = z.object({ shift: posShiftSchema.nullable() });

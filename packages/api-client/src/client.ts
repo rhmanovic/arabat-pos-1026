@@ -50,6 +50,9 @@ import {
   saleSchema,
   saleSummarySchema,
   salesSettingsSchema,
+  type AuditListQuery,
+  auditListSchema,
+  posShiftSchema,
   suspendedOrderListSchema,
   suspendedOrderSchema,
   type CloseShift,
@@ -569,6 +572,10 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('GET', '/pos/cash/bank-accounts', { schema: bankAccountOptionsSchema }),
       posSuppliers: () => request('GET', '/pos/cash/suppliers', { schema: supplierOptionsSchema }),
     },
+    audit: {
+      list: (query: AuditListQuery = {}) =>
+        request('GET', `/manager/audit?${toParams(query)}`, { schema: auditListSchema }),
+    },
     registers: {
       list: (branchId?: string | null) =>
         request('GET', `/manager/registers?${toParams({ branchId })}`, {
@@ -596,9 +603,9 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('POST', `/manager/shifts/${id}/force-close`, { body, schema: shiftSchema }),
       posRegisters: () => request('GET', '/pos/registers', { schema: posRegisterListSchema }),
       current: () => request('GET', '/pos/shifts/current', { schema: currentShiftSchema }),
-      open: (body: OpenShift) => request('POST', '/pos/shifts', { body, schema: shiftSchema }),
+      open: (body: OpenShift) => request('POST', '/pos/shifts', { body, schema: posShiftSchema }),
       cashMovement: (body: RecordCashMovement) =>
-        request('POST', '/pos/shifts/current/cash-movements', { body, schema: shiftSchema }),
+        request('POST', '/pos/shifts/current/cash-movements', { body, schema: posShiftSchema }),
       close: (body: CloseShift) =>
         request('POST', '/pos/shifts/current/close', { body, schema: shiftSchema }),
     },
@@ -627,6 +634,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
         maxDiscountPercent: string;
         refundWindowDays: number;
         refundApprovalLimit: string;
+        blindCashCount: boolean;
         version: number;
       }) => request('PUT', '/manager/sales-settings', { body, schema: salesSettingsSchema }),
     },

@@ -33,6 +33,8 @@ type Cookies = Co['cookies'];
 /** A company with a product in stock and its payment methods and main register. */
 async function store() {
   const c = await createCompany(app, db, mailer);
+  // These tests read drawer figures through cashier sessions: counts are not blind here.
+  await c.showExpectedCash();
   const product = (
     await c.client.request('POST', '/manager/products', {
       cookies: c.cookies,

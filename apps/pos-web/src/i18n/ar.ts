@@ -281,6 +281,10 @@ export const posAr: PosResources = {
     firstCount: 'أول جرد لهذا الصندوق: المبلغ الذي تعدّه الآن يصبح رصيده.',
     expectedInDrawer: 'المتوقع في الصندوق',
     openingDifference: 'الفرق عن المتوقع: {{amount}}',
+    openedWithDifference: 'تم فتح الوردية. وُجد فرق عند الفتح: {{amount}} (سُجّل بين الورديات).',
+    blindOpen: 'عُدّ النقد الموجود في الدرج. المبلغ المتوقع لا يُعرض؛ ويُسجَّل أي فرق بعد عدّك.',
+    blindShift:
+      'أرقام الدرج لا تُعرض أثناء ورديتك. سترى النقد المتوقع والفرق بعد العدّ عند الإغلاق.',
     noteRequired: 'اكتب سبب الفرق.',
     movementHint_petty_expense: 'يُسجَّل مصروفاً مدفوعاً من هذا الدرج.',
     movementHint_supplier_payment: 'يُسجَّل دفعة للمورد من هذا الدرج.',

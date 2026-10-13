@@ -253,6 +253,13 @@
       "when": 1791841719286,
       "tag": "0035_cash_disbursements_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1791849830714,
+      "tag": "0036_blind_cash_count",
+      "breakpoints": true
     }
   ]
 }

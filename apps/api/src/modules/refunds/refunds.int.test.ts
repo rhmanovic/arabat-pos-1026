@@ -33,6 +33,8 @@ type Cookies = Co['cookies'];
 
 async function setup() {
   const c = await createCompany(app, db, mailer);
+  // These tests read drawer figures through cashier sessions: counts are not blind here.
+  await c.showExpectedCash();
   const mk = async (nameEn: string, price: string, cost: string) => {
     const p = (
       await c.client.request('POST', '/manager/products', {

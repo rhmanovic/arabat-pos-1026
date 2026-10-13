@@ -1,6 +1,7 @@
 import type {
   CashMovement,
   DiscrepancyReport,
+  PosShift,
   Register,
   Shift,
   ShiftRow,
@@ -28,6 +29,7 @@ import { versionConflict } from '../branches/branches.service.js';
 import { branches } from '../branches/branches.schema.js';
 import { merchants } from '../merchants/merchants.schema.js';
 import { suppliers } from '../purchasing/purchasing.schema.js';
+import { salesSettings } from '../sales/sales.schema.js';
 import {
   accountBalance,
   activeBankAccount,
@@ -317,6 +319,7 @@ export class ShiftsService {
   async posRegisters(actor: MerchantActor) {
     const branchId = this.posBranch(actor);
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const blind = await this.blindFor(tx, actor, branchId);
       const rows = await tx
         .select()
         .from(registers)
@@ -336,7 +339,11 @@ export class ShiftsService {
           nameEn: r.nameEn,
           nameAr: r.nameAr,
           defaultOpeningFloat: money(r.defaultOpeningFloatMinor),
-          expectedCash: money(await accountBalance(tx, (await registerAccount(tx, r.id)).id)),
+          // Blind counts (BR-162): the cashier learns the expected balance only after counting.
+          expectedCash: blind
+            ? null
+            : money(await accountBalance(tx, (await registerAccount(tx, r.id)).id)),
+          blindCount: blind,
           needsCount: r.needsCount,
           availability: !open
             ? ('free' as const)
@@ -350,7 +357,7 @@ export class ShiftsService {
     });
   }
 
-  async currentShift(actor: MerchantActor): Promise<Shift | null> {
+  async currentShift(actor: MerchantActor): Promise<PosShift | null> {
     const branchId = this.posBranch(actor);
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const [row] = await tx
@@ -360,8 +367,38 @@ export class ShiftsService {
       if (!row) return null;
       // An open shift at another branch is not usable from this POS session.
       if (row.branchId !== branchId) return null;
-      return this.toShift(tx, row);
+      return this.toPosShift(tx, actor, row);
     });
+  }
+
+  /**
+   * Blind-count policy (BR-162): on by default per company; it binds users who may not
+   * monitor shifts (`shifts.view_all`) at the branch, so the owner and supervisors still
+   * see drawer figures while cashiers count without a target.
+   */
+  private async blindFor(tx: Transaction, actor: MerchantActor, branchId: string) {
+    if (can(actor.access, 'shifts.view_all', branchId)) return false;
+    const [row] = await tx
+      .select({ blind: salesSettings.blindCashCount })
+      .from(salesSettings)
+      .where(eq(salesSettings.merchantId, actor.merchantId));
+    return row?.blind ?? true;
+  }
+
+  /** The cashier's own view: drawer figures withheld under a blind count. */
+  private async toPosShift(
+    tx: Transaction,
+    actor: MerchantActor,
+    row: ShiftRecord,
+  ): Promise<PosShift> {
+    const blind = await this.blindFor(tx, actor, row.branchId);
+    const shift = await this.toShift(tx, row);
+    return {
+      ...shift,
+      summary: blind ? null : shift.summary,
+      blindCount: blind,
+      openingDiscrepancy: shift.summary.openingDiscrepancy,
+    };
   }
 
   /**
@@ -369,14 +406,21 @@ export class ShiftsService {
    * and confirms the count; a stale balance (someone moved cash meanwhile) is refused so the
    * count is always against what the system holds now.
    */
-  async openShift(actor: MerchantActor, input: OpenShiftInput, ip: string): Promise<Shift> {
+  async openShift(actor: MerchantActor, input: OpenShiftInput, ip: string): Promise<PosShift> {
     const branchId = this.posBranch(actor);
     assertCan(actor, 'shifts.operate', branchId);
     const countedMinor = parseAmount(input.countedCash, 'countedCash');
-    const shownMinor = parseAmount(input.expectedCash, 'expectedCash');
+    const shownMinor =
+      input.expectedCash === undefined ? null : parseAmount(input.expectedCash, 'expectedCash');
     checkBreakdown(input.breakdown, countedMinor);
     try {
       return await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+        const blind = await this.blindFor(tx, actor, branchId);
+        // Outside a blind count the client must say which balance the cashier was shown.
+        if (!blind && shownMinor === null)
+          throw AppError.validation([
+            { path: 'expectedCash', code: 'required', message: 'Expected cash is required.' },
+          ]);
         const register = await this.findRegister(tx, input.registerId);
         if (register.branchId !== branchId) throw AppError.notFound('Register not found.');
         if (register.status !== 'active')
@@ -407,7 +451,7 @@ export class ShiftsService {
             'Another shift is already open on this register.',
           );
         const expectedMinor = await accountBalance(tx, drawer.id);
-        if (shownMinor !== expectedMinor)
+        if (shownMinor !== null && shownMinor !== expectedMinor)
           throw new AppError(409, 'EXPECTED_CHANGED', 'The drawer balance changed. Count again.');
         // Whose difference is it? After a forced close without a count, the earlier shift's;
         // on the drawer's first verified count, nobody's (it sets the balance).
@@ -421,7 +465,14 @@ export class ShiftsService {
           last && last.closeType === 'forced_uncounted' && !last.legacyOpen ? last.id : null;
         const initial = !followsShiftId && register.needsCount;
         const differenceMinor = countedMinor - expectedMinor;
-        if (!initial && !input.note && abs(differenceMinor) > register.discrepancyToleranceMinor)
+        // A blind cashier cannot know there is a difference: it is booked between shifts and
+        // explained in the manager's follow-up, not refused here (BR-162).
+        if (
+          !blind &&
+          !initial &&
+          !input.note &&
+          abs(differenceMinor) > register.discrepancyToleranceMinor
+        )
           throw AppError.validation([
             {
               path: 'note',
@@ -466,9 +517,10 @@ export class ShiftsService {
           difference: Money.ofMinor(differenceMinor, CURRENCY).toDecimalString(),
           initialCount: initial,
           followsShiftId,
+          blindCount: blind,
         });
         const [row] = await tx.select().from(shifts).where(eq(shifts.id, id));
-        return this.toShift(tx, row!);
+        return this.toPosShift(tx, actor, row!);
       });
     } catch (error) {
       if (isUniqueViolation(error, 'shifts_one_open_per_register'))
@@ -506,7 +558,7 @@ export class ShiftsService {
     actor: MerchantActor,
     input: CashMovementInput,
     ip: string,
-  ): Promise<Shift> {
+  ): Promise<PosShift> {
     const branchId = this.posBranch(actor);
     assertCan(actor, 'cash.move', branchId);
     const amountMinor = parseAmount(input.amount, 'amount');
@@ -523,7 +575,7 @@ export class ShiftsService {
             .where(eq(cashMovements.idempotencyKey, input.idempotencyKey));
           if (done) {
             const [row] = await tx.select().from(shifts).where(eq(shifts.id, done.shiftId));
-            return this.toShift(tx, row!);
+            return this.toPosShift(tx, actor, row!);
           }
         }
         const shift = await this.lockOwnShift(tx, actor);
@@ -581,7 +633,7 @@ export class ShiftsService {
           amount: Money.ofMinor(amountMinor, CURRENCY).toDecimalString(),
           reason: input.reason,
         });
-        return this.toShift(tx, shift);
+        return this.toPosShift(tx, actor, shift);
       });
     } catch (error) {
       if (input.idempotencyKey && isUniqueViolation(error, 'cash_movements_idempotency_key'))

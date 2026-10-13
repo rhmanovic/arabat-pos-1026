@@ -143,8 +143,10 @@ test('cashier refunds and exchanges at the POS; a large refund waits for manager
     await (await page.request.get(`/api/v1/manager/inventory/variants/${lamp}`)).json()
   ).branches[0].onHand;
   expect(lampStock).toBe('18.500');
+  // 50 + 30 + 2 (exchange) + 30 − 10 − 25 = 77 — visible to the manager, blind for the cashier.
   await pos.goto('/pos/shift');
-  // 50 + 30 + 2 (exchange) + 30 − 10 − 25 = 77
-  await expect(pos.getByTestId('expected-cash')).toHaveText('KWD 77.000');
+  await expect(pos.getByTestId('blind-count')).toBeVisible();
+  const openShifts = await (await page.request.get('/api/v1/manager/shifts?status=open')).json();
+  expect(openShifts.shifts[0].summary.expectedCash.amount).toBe('77.000');
   await ctx.close();
 });

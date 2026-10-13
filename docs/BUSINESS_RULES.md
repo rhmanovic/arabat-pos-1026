@@ -231,6 +231,20 @@ Security hardening (Prompt 18):
 - **BR-161** A payment confirmed after its order was cancelled or failed is recorded (never
   ignored) and the order is flagged "needs attention" for a refund at the provider.
 
+Remediation session 1 (2026-10-13, owner decisions D1 and the audit-log change; see
+`docs/audit/REMEDIATION_PLAN.md`):
+- **BR-162** Cash counts are **blind** by default: a user without `shifts.view_all` at the branch
+  is shown no expected drawer balance before counting at opening or closing, needs no
+  "expected" figure to open, and is not asked to explain an opening difference they cannot see
+  (it is still booked between shifts and shown to them once recorded); the expected cash and
+  the difference appear after the count. Owners and supervisors who monitor shifts keep seeing
+  the figures. The owner may switch the policy off in the selling policy (`merchant.settings.update`);
+  cashiers can never change it.
+- **BR-163** The company's audit trail is readable by holders of `audit.read` in the management
+  application (filters: period in local days, action, record type, actor; CSV export of the
+  displayed rows). Entries without a company (failed sign-ins, platform-only actions) are not
+  shown; entries can never be edited or deleted.
+
 Platform and subscriptions (Prompt 17):
 - **BR-150** Every merchant has exactly one subscription to a plan. New merchants start on
   the default plan (trial when the plan has trial days). Plans can be archived, never

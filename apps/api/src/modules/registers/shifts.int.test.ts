@@ -558,3 +558,129 @@ describe('registers and shifts', () => {
     expect(closed).toMatchObject({ discrepancy: { amount: '0.200' }, outcome: 'balanced' });
   });
 });
+
+describe('blind cash counts (BR-162)', () => {
+  async function settings(c: Co, blindCashCount: boolean) {
+    const current = (
+      await c.client.request('GET', '/manager/sales-settings', { cookies: c.cookies })
+    ).json();
+    const res = await c.client.request('PUT', '/manager/sales-settings', {
+      cookies: c.cookies,
+      body: {
+        maxDiscountPercent: current.maxDiscountPercent,
+        refundWindowDays: current.refundWindowDays,
+        refundApprovalLimit: current.refundApprovalLimit.amount,
+        blindCashCount,
+        version: current.version,
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    return res.json();
+  }
+
+  it('hides drawer figures from cashiers until they count, not from supervisors, and can be switched off', async () => {
+    const c = await company();
+    const [register] = await registersAt(c, c.main);
+    expect((await settings(c, true)).blindCashCount).toBe(true);
+    const cashierCookies = async () =>
+      (await c.hire([{ roleId: c.roles.cashier, branchId: c.main }], 'pos')).cookies;
+    const open = (cookies: Cookies, body: Record<string, unknown>) =>
+      c.client.request('POST', '/pos/shifts', {
+        cookies,
+        body: { registerId: register!.id, ...body },
+      });
+
+    // The cashier is shown no balance and needs no "expected" figure to open.
+    const oneCookies = await cashierCookies();
+    const one = pos(c, oneCookies);
+    expect((await one.registers()).json().registers[0]).toMatchObject({
+      expectedCash: null,
+      blindCount: true,
+      needsCount: true,
+    });
+    const opened = await open(oneCookies, { countedCash: '20.000' });
+    expect(opened.statusCode).toBe(201);
+    expect(opened.json()).toMatchObject({
+      summary: null,
+      blindCount: true,
+      openingDiscrepancy: null,
+    });
+    expect((await one.current()).json().shift.summary).toBeNull();
+
+    // A supervisor monitors shifts (shifts.view_all): the figures stay visible to them.
+    const sup = pos(
+      c,
+      (await c.hire([{ roleId: c.roles.supervisor, branchId: c.main }], 'pos')).cookies,
+    );
+    expect((await sup.registers()).json().registers[0]).toMatchObject({
+      expectedCash: { amount: '20.000' },
+      blindCount: false,
+      availability: 'occupied',
+    });
+
+    // Closing reveals expected, counted and the difference — after the count.
+    const closed = await one.close({ countedCash: '19.500', version: opened.json().version });
+    expect(closed.statusCode).toBe(201);
+    expect(closed.json()).toMatchObject({
+      summary: { expectedCash: { amount: '20.000' } },
+      countedCash: { amount: '19.500' },
+      discrepancy: { amount: '-0.500' },
+      outcome: 'short',
+    });
+
+    // The next cashier cannot know there is a difference: it is booked between shifts
+    // without a note and revealed to them once recorded.
+    const twoCookies = await cashierCookies();
+    const two = pos(c, twoCookies);
+    const second = await open(twoCookies, { countedCash: '19.000' });
+    expect(second.statusCode).toBe(201);
+    expect(second.json()).toMatchObject({
+      summary: null,
+      blindCount: true,
+      openingDiscrepancy: { amount: '-0.500' },
+    });
+    // The manager's view of the same shift carries the full figures.
+    const managed = (
+      await c.client.request('GET', `/manager/shifts/${second.json().id}`, {
+        cookies: c.cookies,
+      })
+    ).json();
+    expect(managed.summary).toMatchObject({
+      openingExpected: { amount: '19.500' },
+      openingDiscrepancy: { amount: '-0.500' },
+      expectedCash: { amount: '19.000' },
+    });
+
+    // The owner switches the policy off: cashiers see the figures and must count against them.
+    await settings(c, false);
+    expect((await two.current()).json().shift).toMatchObject({
+      blindCount: false,
+      summary: { expectedCash: { amount: '19.000' } },
+    });
+    expect(
+      (await two.close({ countedCash: '19.000', version: second.json().version })).json().outcome,
+    ).toBe('balanced');
+    const threeCookies = await cashierCookies();
+    const three = pos(c, threeCookies);
+    expect((await three.registers()).json().registers[0]).toMatchObject({
+      expectedCash: { amount: '19.000' },
+      blindCount: false,
+    });
+    expect((await open(threeCookies, { countedCash: '18.000' })).statusCode).toBe(400);
+    expect(
+      (await open(threeCookies, { countedCash: '18.000', expectedCash: '17.000' })).json().code,
+    ).toBe('EXPECTED_CHANGED');
+    expect(
+      (await open(threeCookies, { countedCash: '18.000', expectedCash: '19.000' })).statusCode,
+    ).toBe(400);
+    expect(
+      (
+        await open(threeCookies, {
+          countedCash: '18.000',
+          expectedCash: '19.000',
+          note: 'one dinar short at opening',
+        })
+      ).statusCode,
+    ).toBe(201);
+  });
+});

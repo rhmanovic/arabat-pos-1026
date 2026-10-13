@@ -8,6 +8,7 @@ import {
 import type { ReactNode } from 'react';
 import type { RouteObject } from 'react-router';
 import { ManagerLayout } from './layouts/ManagerLayout.js';
+import { AuditLogPage } from './features/audit/AuditLogPage.js';
 import { BranchesPage } from './features/branches/BranchesPage.js';
 import { CategoriesPage } from './features/catalog/CategoriesPage.js';
 import { ProductEditorPage } from './features/catalog/ProductEditorPage.js';
@@ -118,6 +119,7 @@ export const routes: RouteObject[] = [
       { path: 'transfers/new', element: guard('inventory.transfer', <NewTransferPage />) },
       { path: 'transfers/:transferId', element: guard('inventory.read', <TransferDetailPage />) },
       { path: 'cash', element: guard('cash.custody', <CashCustodyPage />) },
+      { path: 'audit', element: guard('audit.read', <AuditLogPage />) },
       { path: 'payments', element: guard('payments.settings', <PaymentsPage />) },
       {
         path: 'accounts',

@@ -44,6 +44,8 @@ const SHIFT = {
   closingNote: null,
   movements: [],
   version: 1,
+  blindCount: false,
+  openingDiscrepancy: money('0.000'),
 };
 const group = {
   id: '0190a000-0000-7000-8000-00000000b001',

@@ -842,3 +842,34 @@ ADR; supersede it.
   - the dashboard reuses the cash overview for a total-cash card.
 - **Consequences:** Sales, collections and revenue keep reading payments and refunds, so
   transfers and custody moves can never enter them.
+
+## ADR-0093 — Remediation session 1: blind counts, merchant audit log, test-payment guard
+- **Date:** 2026-10-13 · **Status:** Accepted (owner decisions D1, D7 and "audit log to R1" on
+  the remediation plan derived from `docs/audit/BUSINESS_PROCEDURES_MANUAL.md`)
+- **Context:** The Phase 1 audit found that cashiers count against a displayed expected balance
+  (FND-401), that the audit trail is written but unreadable by the company (FND-101), and that
+  the test gateway creates sales and bank entries without money (FND-709).
+- **Decision:**
+  - `sales_settings.blind_cash_count` (default true). The POS endpoints withhold drawer
+    figures from users who lack `shifts.view_all` at the branch: `GET /pos/registers` returns
+    `expectedCash: null, blindCount: true`; `GET /pos/shifts/current`, `POST /pos/shifts` and
+    cash movements return a `PosShift` with `summary: null` and only the opening difference;
+    `POST /pos/shifts` accepts a missing `expectedCash` only under a blind count and skips the
+    opening-note requirement for a blind cashier (the difference is still booked between
+    shifts). Closing returns the full shift. The policy is enforced by the API, not the screen.
+  - `GET /manager/audit` (`audit.read`, company-wide) over the merchant's own rows under RLS,
+    with local-day period, action substring, target type and actor filters, pagination and
+    the distinct action keys; a manager screen `/manager/audit` with a CSV export built from
+    the displayed rows (ADR-0071). Platform-only events keep their separate reader.
+  - The mock gateway stays off by default in production builds (unchanged); when enabled there
+    the API logs a warning at start, and OPERATIONS.md states that staging is the only
+    non-development environment where it may be on (owner decision D7: no production online
+    payments yet).
+  - Controls must not make the system impractical for an owner with one cashier: blind
+    counting never binds the owner, and no second person is required by this session.
+- **Consequences:** Integration tests that read drawer figures through cashier sessions
+  switch the policy off in their fixtures (`showExpectedCash`); e2e flows assert the blind
+  notice and verify the figures through the manager API. Remaining R1 work (cash-out limits,
+  disbursement approvals, deposits in transit, variance follow-up, custody roles) follows in
+  later sessions; thresholds will be per-merchant settings with the owner's defaults.
+

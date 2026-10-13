@@ -38,6 +38,8 @@ const SHIFT = {
   closingNote: null,
   movements: [],
   version: 1,
+  blindCount: false,
+  openingDiscrepancy: money('0.000'),
 };
 
 beforeEach(async () => {
@@ -84,6 +86,7 @@ describe('pos app', () => {
                 nameAr: null,
                 defaultOpeningFloat: money('25.000'),
                 expectedCash: money('25.000'),
+                blindCount: false,
                 needsCount: false,
                 availability: 'free',
                 occupiedBy: null,
@@ -95,6 +98,7 @@ describe('pos app', () => {
                 nameAr: null,
                 defaultOpeningFloat: money('0.000'),
                 expectedCash: money('0.000'),
+                blindCount: false,
                 needsCount: true,
                 availability: 'occupied',
                 occupiedBy: 'Sara',
@@ -130,6 +134,76 @@ describe('pos app', () => {
       expectedCash: '25.000',
       note: 'one note missing',
     });
+  });
+
+  it('counts blind when the company policy hides the expected balance (BR-162)', async () => {
+    let shift: unknown = null;
+    const fetch = fakeApiFetch({
+      session: makeSession('pos', ['pos.access', 'shifts.operate']),
+      routes: {
+        'GET /pos/shifts/current': () => ({ status: 200, body: { shift } }),
+        'GET /pos/registers': () => ({
+          status: 200,
+          body: {
+            registers: [
+              {
+                id: SHIFT.registerId,
+                code: 'R1',
+                nameEn: 'Register 1',
+                nameAr: null,
+                defaultOpeningFloat: money('25.000'),
+                expectedCash: null,
+                blindCount: true,
+                needsCount: false,
+                availability: 'free',
+                occupiedBy: null,
+              },
+            ],
+          },
+        }),
+        'POST /pos/shifts': () => {
+          shift = {
+            ...SHIFT,
+            summary: null,
+            blindCount: true,
+            openingDiscrepancy: money('-1.000'),
+          };
+          return { status: 201, body: shift };
+        },
+      },
+    });
+    renderApp({ routes, appInterface: 'pos', i18n, fetch });
+    await userEvent.click(await screen.findByRole('radio', { name: /Register 1/ }));
+    // No expected balance, no live difference, no note demanded before the count.
+    expect(screen.getByTestId('blind-count')).toBeInTheDocument();
+    expect(screen.queryByTestId('open-expected')).not.toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('Counted cash (KWD)'), '24');
+    expect(screen.queryByTestId('open-difference')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open shift' })).toBeEnabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Open shift' }));
+    expect(await screen.findByRole('heading', { name: 'Products' })).toBeInTheDocument();
+    const body = fetch.calls.find((c) => c.method === 'POST' && c.path === '/pos/shifts')?.body as
+      Record<string, unknown> | undefined;
+    expect(body).toMatchObject({ registerId: SHIFT.registerId, countedCash: '24.000' });
+    expect(body).not.toHaveProperty('expectedCash');
+    // The difference is revealed only after the count was recorded.
+    expect(await screen.findByText(/Difference found at opening: KWD -1\.000/)).toBeInTheDocument();
+  });
+
+  it('withholds drawer figures on the shift page under a blind count', async () => {
+    const fetch = fakeApiFetch({
+      session: makeSession('pos', ['pos.access', 'shifts.operate']),
+      routes: {
+        'GET /pos/shifts/current': () => ({
+          status: 200,
+          body: { shift: { ...SHIFT, summary: null, blindCount: true } },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'pos', i18n, fetch, path: '/shift' });
+    expect(await screen.findByTestId('blind-count')).toBeInTheDocument();
+    expect(screen.queryByTestId('expected-cash')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Close shift' })).toBeEnabled();
   });
 
   it('counts the drawer by notes and coins when closing', async () => {

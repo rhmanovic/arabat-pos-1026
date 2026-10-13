@@ -2,6 +2,7 @@ import type { SaleListQuery } from '@arabat/contracts';
 import {
   Badge,
   Button,
+  Checkbox,
   DataTable,
   Dialog,
   Field,
@@ -222,6 +223,8 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
   const [value, setValue] = useState<string | null>(null);
   const [days, setDays] = useState<string | null>(null);
   const [limit, setLimit] = useState<string | null>(null);
+  const [blind, setBlind] = useState<boolean | null>(null);
+  const blindCashCount = blind ?? settings.data?.blindCashCount ?? true;
   const current = value ?? settings.data?.maxDiscountPercent ?? '';
   const windowDays = days ?? String(settings.data?.refundWindowDays ?? '');
   const approvalLimit = limit ?? settings.data?.refundApprovalLimit.amount ?? '';
@@ -235,6 +238,7 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
         maxDiscountPercent: current.trim(),
         refundWindowDays: Number.parseInt(windowDays.trim(), 10),
         refundApprovalLimit: approvalLimit.trim(),
+        blindCashCount,
         version: settings.data!.version,
       }),
     onSuccess: async () => {
@@ -298,6 +302,12 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
             />
           )}
         </Field>
+        <Checkbox
+          label={t('sales.blindCount')}
+          description={t('sales.blindCountHint')}
+          checked={blindCashCount}
+          onChange={(e) => setBlind(e.target.checked)}
+        />
       </div>
     </Dialog>
   );

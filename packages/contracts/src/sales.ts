@@ -250,6 +250,8 @@ export const salesSettingsSchema = z.object({
   maxDiscountPercent: z.string(),
   refundWindowDays: z.number().int(),
   refundApprovalLimit: moneySchema,
+  /** Cashiers count the drawer without seeing the expected balance (BR-162). */
+  blindCashCount: z.boolean(),
   version: z.number().int(),
 });
 export type SalesSettings = z.infer<typeof salesSettingsSchema>;
@@ -260,5 +262,6 @@ export const updateSalesSettingsSchema = z.object({
     .regex(/^(100(\.0{1,2})?|\d{1,2}(\.\d{1,2})?)$/),
   refundWindowDays: z.number().int().min(0).max(3650),
   refundApprovalLimit: moneyAmountSchema,
+  blindCashCount: z.boolean(),
   version: z.number().int().positive(),
 });
