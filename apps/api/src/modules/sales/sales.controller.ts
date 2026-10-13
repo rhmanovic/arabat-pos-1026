@@ -3,6 +3,7 @@ import {
   type Sale,
   type SaleOverrideGrant,
   type SalesSettings,
+  cartEventSchema,
   checkoutSchema,
   requestOverrideSchema,
   saleListQuerySchema,
@@ -22,7 +23,7 @@ import {
   Req,
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
-import type { z } from 'zod';
+import { z } from 'zod';
 import { RequirePermission } from '../../kernel/access/access.decorators.js';
 import { CurrentMerchantActor } from '../../kernel/access/current-actor.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
@@ -31,6 +32,7 @@ import { OverridesService } from './overrides.service.js';
 import { SalesService } from './sales.service.js';
 
 const uuid = new ParseUUIDPipe();
+const lookupQuery = z.object({ receipt: z.string().trim().min(1).max(40) });
 
 /** POS checkout at the session's branch, on the cashier's open shift. */
 @Controller('pos')
@@ -73,6 +75,16 @@ export class PosSalesController {
     return { sales: await this.sales.recent(actor) };
   }
 
+  /** Receipt lookup by number at the till, read-only, session branch only (BR-182). */
+  @RequirePermission('pos', 'sales.create')
+  @Get('sales/lookup')
+  lookup(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Query(new ZodPipe(lookupQuery)) query: z.output<typeof lookupQuery>,
+  ): Promise<Sale> {
+    return this.sales.lookup(actor, query.receipt);
+  }
+
   @RequirePermission('pos', 'sales.create')
   @Get('sales/:id/receipt')
   receipt(
@@ -80,6 +92,29 @@ export class PosSalesController {
     @Param('id', uuid) id: string,
   ): Promise<Receipt> {
     return this.sales.receipt(actor, id, 'pos');
+  }
+
+  /** A receipt copy: logged, audited and numbered on the receipt (BR-182). */
+  @RequirePermission('pos', 'sales.create')
+  @Post('sales/:id/reprints')
+  reprint(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Req() req: FastifyRequest,
+  ): Promise<Receipt> {
+    return this.sales.reprint(actor, id, req.ip);
+  }
+
+  /** A cart cleared or a line removed after a total was shown (BR-182). */
+  @RequirePermission('pos', 'sales.create')
+  @Post('cart-events')
+  @HttpCode(204)
+  async cartEvent(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Body(new ZodPipe(cartEventSchema)) body: z.output<typeof cartEventSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<void> {
+    await this.sales.recordCartEvent(actor, body, req.ip);
   }
 
   @RequirePermission('pos', 'sales.create')

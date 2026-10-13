@@ -306,7 +306,13 @@ function RefundDialog({ id, onClose }: { id: string; onClose: () => void }) {
           {r.approvalReasons.length ? (
             <Alert tone="warning">
               {r.approvalReasons.map((x) => t(`refunds.approvalReason_${x}`)).join(' · ')}
+              {r.ownerOverride ? ` — ${t('refunds.ownerOverrideNote')}` : ''}
             </Alert>
+          ) : null}
+          {r.customerContact ? (
+            <p data-testid="refund-contact">
+              {t('refunds.customerContact')}: {r.customerContact}
+            </p>
           ) : null}
           <Section title={t('refunds.items')}>
             <ul className="divide-y divide-border">
@@ -427,6 +433,12 @@ function Activity() {
             header: t('refunds.outsideWindow'),
             hideBelow: 'lg',
             cell: (a) => a.outsideWindow,
+          },
+          {
+            key: 'own',
+            header: t('refunds.ownSaleRefunds'),
+            hideBelow: 'lg',
+            cell: (a) => a.ownSaleRefunds,
           },
           {
             key: 'flag',

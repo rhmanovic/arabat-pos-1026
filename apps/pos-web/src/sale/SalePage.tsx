@@ -93,6 +93,8 @@ export function SalePage() {
     null,
   );
   const [receiptId, setReceiptId] = useState<string | null>(null);
+  /** Receipts opened from the list are copies; the one right after a sale is the original. */
+  const [receiptIsCopy, setReceiptIsCopy] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const items = useMemo(
@@ -189,6 +191,16 @@ export function SalePage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [busy, ready, hasSearch]);
   const total = pricing?.ok ? pricing.cart.totalMinor : null;
+  // Cleared carts and removed lines above the company threshold leave a trace (BR-182).
+  const threshold = policy.data
+    ? Money.fromJSON(policy.data.cartClearLogThreshold as { amount: string; currency: 'KWD' }).minor
+    : null;
+  const trace = (kind: 'cleared' | 'line_removed', amountMinor: bigint, lineCount: number) => {
+    if (threshold === null || amountMinor < threshold || amountMinor <= 0n) return;
+    void api.sales
+      .cartEvent({ kind, amount: Money.ofMinor(amountMinor, 'KWD').toDecimalString(), lineCount })
+      .catch(() => undefined);
+  };
 
   return (
     <div className="flex h-full flex-col gap-2 p-2 sm:gap-3 sm:p-3">
@@ -388,7 +400,10 @@ export function SalePage() {
                         <Button
                           className="h-11"
                           variant="secondary"
-                          onClick={() => cart.remove(l.key)}
+                          onClick={() => {
+                            if (priced) trace('line_removed', priced.netMinor, 1);
+                            cart.remove(l.key);
+                          }}
                         >
                           {t('sale.remove')}
                         </Button>
@@ -433,6 +448,7 @@ export function SalePage() {
               onClick={() => {
                 if (!confirmClear) return setConfirmClear(true);
                 setConfirmClear(false);
+                if (total !== null) trace('cleared', total, cart.state.lines.length);
                 cart.clear();
               }}
             >
@@ -499,6 +515,7 @@ export function SalePage() {
           onClose={() => setDialog(null)}
           onOpen={(id) => {
             setDialog(null);
+            setReceiptIsCopy(true);
             setReceiptId(id);
           }}
         />
@@ -511,11 +528,14 @@ export function SalePage() {
           onCompleted={(saleId) => {
             setDialog(null);
             setCartOpen(false);
+            setReceiptIsCopy(false);
             setReceiptId(saleId);
           }}
         />
       ) : null}
-      {receiptId ? <ReceiptDialog saleId={receiptId} onClose={() => setReceiptId(null)} /> : null}
+      {receiptId ? (
+        <ReceiptDialog saleId={receiptId} copy={receiptIsCopy} onClose={() => setReceiptId(null)} />
+      ) : null}
     </div>
   );
 }

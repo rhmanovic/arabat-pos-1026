@@ -311,6 +311,13 @@ export function PaymentDialog({
   const [serverAsked, setServerAsked] = useState(false);
   const needsSupervisor = (missing.length > 0 || serverAsked) && !grant;
   const [zeroReason, setZeroReason] = useState('');
+  // Card and transfer tenders need their reference when the company says so (BR-181).
+  const policy = useQuery({
+    queryKey: ['pos', 'sales', 'settings'],
+    queryFn: () => api.sales.settings(),
+    staleTime: 60_000,
+  });
+  const requireReference = policy.data?.requireTenderReference ?? true;
   const methods = useQuery({
     queryKey: ['pos', 'payment-methods'],
     queryFn: () => api.payments.posMethods(),
@@ -334,6 +341,7 @@ export function PaymentDialog({
     amountMinor !== null &&
     amountMinor > 0n &&
     amountMinor <= remaining &&
+    (isCash || !requireReference || reference.trim() !== '') &&
     (!isCash || !tendered.trim() || (tenderedMinor !== null && tenderedMinor >= amountMinor));
   const change = planned.reduce(
     (s, p) =>
@@ -546,7 +554,9 @@ export function PaymentDialog({
                     )}
                   </Field>
                 ) : (
-                  <Field label={t('sale.reference')}>
+                  <Field
+                    label={requireReference ? t('sale.referenceRequired') : t('sale.reference')}
+                  >
                     {(p) => (
                       <Input
                         {...p}
@@ -812,10 +822,37 @@ export function RecentSalesDialog({
 }) {
   const { t, i18n } = useTranslation();
   const api = useApi();
+  const notify = useNotify();
   const fmt = useMoneyFormat();
   const recent = useQuery({ queryKey: ['pos', 'recent'], queryFn: () => api.sales.recent() });
+  // Any receipt of the branch can be found by number, read-only (BR-182).
+  const [code, setCode] = useState('');
+  const find = useMutation({
+    mutationFn: (receipt: string) => api.sales.lookup(receipt),
+    onSuccess: (sale) => onOpen(sale.id),
+    onError: notify.fail,
+  });
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()} title={t('sale.recent')}>
+      <form
+        className="mb-3 flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (code.trim()) find.mutate(code.trim());
+        }}
+      >
+        <Input
+          aria-label={t('sale.lookupReceipt')}
+          placeholder={t('sale.lookupReceipt')}
+          className="h-12 flex-1"
+          dir="ltr"
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+        />
+        <Button size="lg" type="submit" variant="secondary" loading={find.isPending}>
+          {t('sale.find')}
+        </Button>
+      </form>
       {recent.data?.sales.length === 0 ? (
         <p className="text-fg-muted">{t('sale.noRecent')}</p>
       ) : null}
@@ -850,13 +887,40 @@ export function RecentSalesDialog({
   );
 }
 
-export function ReceiptDialog({ saleId, onClose }: { saleId: string; onClose: () => void }) {
+export function ReceiptDialog({
+  saleId,
+  onClose,
+  copy = false,
+}: {
+  saleId: string;
+  onClose: () => void;
+  /** Opened after the sale: the first print. Otherwise every print is a logged copy (BR-182). */
+  copy?: boolean;
+}) {
   const { t } = useTranslation();
   const api = useApi();
+  const notify = useNotify();
+  const queryClient = useQueryClient();
   const receipt = useQuery({
     queryKey: ['pos', 'receipt', saleId],
     queryFn: () => api.sales.posReceipt(saleId),
   });
+  const [printed, setPrinted] = useState(false);
+  const reprint = useMutation({
+    mutationFn: () => api.sales.reprint(saleId),
+    onSuccess: (r) => {
+      queryClient.setQueryData(['pos', 'receipt', saleId], r);
+      setTimeout(() => window.print(), 0);
+    },
+    onError: notify.fail,
+  });
+  const print = () => {
+    if (copy || printed) reprint.mutate();
+    else {
+      setPrinted(true);
+      window.print();
+    }
+  };
   return (
     <Dialog
       open
@@ -868,9 +932,10 @@ export function ReceiptDialog({ saleId, onClose }: { saleId: string; onClose: ()
             variant="secondary"
             size="lg"
             disabled={!receipt.data}
-            onClick={() => window.print()}
+            loading={reprint.isPending}
+            onClick={print}
           >
-            {t('sale.print')}
+            {copy || printed ? t('sale.printCopy') : t('sale.print')}
           </Button>
           <Button size="lg" onClick={onClose}>
             {t('sale.newSale')}
@@ -905,6 +970,11 @@ export function ReceiptView({ receipt }: { receipt: Receipt }) {
       <header className="mb-2 text-center">
         <p className="text-base font-bold">{localizedName(receipt.merchant, i18n.language)}</p>
         <p>{localizedName(receipt.branch, i18n.language)}</p>
+        {s.reprintCount > 0 ? (
+          <p className="font-semibold" data-testid="receipt-copy">
+            {t('sale.copyNumber', { count: s.reprintCount })}
+          </p>
+        ) : null}
         {receipt.branch.address ? <p>{receipt.branch.address}</p> : null}
         {receipt.branch.phone ? <p dir="ltr">{receipt.branch.phone}</p> : null}
         {receipt.branch.receiptHeader ? (

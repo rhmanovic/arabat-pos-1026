@@ -167,6 +167,8 @@ export const paymentMethods = pgTable(
     /** Future gateway integration (no live gateway yet). Never holds secrets. */
     gatewayProvider: text(),
     gatewayConfig: jsonb().notNull().default({}),
+    /** keep | reverse: what the provider does with the fee on a refund (D6, BR-181). */
+    refundFeePolicy: text().notNull().default('keep'),
     sortOrder: integer().notNull().default(0),
     version: integer().notNull().default(1),
     createdAt: createdAt(),
@@ -183,6 +185,10 @@ export const paymentMethods = pgTable(
       .on(t.merchantId)
       .where(sql`${t.kind} = 'cash'`),
     check('payment_methods_name_present', sql`coalesce(${t.nameEn}, ${t.nameAr}) is not null`),
+    check(
+      'payment_methods_refund_fee_policy_valid',
+      sql`${t.refundFeePolicy} in ('keep', 'reverse')`,
+    ),
     check(
       'payment_methods_kind_valid',
       sql`${t.kind} in ('cash', 'card', 'bank_transfer', 'custom')`,

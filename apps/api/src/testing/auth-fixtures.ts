@@ -305,5 +305,45 @@ export async function createCompany(
     if (res.statusCode !== 200) throw new Error(`settings failed ${res.statusCode} ${res.body}`);
   }
 
-  return { client, ...o, main, second, roles, hire, ownerPos, countTreasury, showExpectedCash };
+  /**
+   * Switches the own-sale rule (BR-180) and the tender-reference rule (BR-181) off so tests
+   * about refund mechanics can have the same cashier sell and refund, and pay card money back
+   * without a terminal reference. Both rules have their own tests (`refunds-controls`).
+   */
+  async function allowOwnSaleRefunds() {
+    const current = (
+      await client.request('GET', '/manager/sales-settings', { cookies: o.cookies })
+    ).json();
+    const res = await client.request('PUT', '/manager/sales-settings', {
+      cookies: o.cookies,
+      body: {
+        maxDiscountPercent: current.maxDiscountPercent,
+        refundWindowDays: current.refundWindowDays,
+        refundApprovalLimit: current.refundApprovalLimit.amount,
+        blindCashCount: current.blindCashCount,
+        cashOutOtherLimit: current.cashOutOtherLimit.amount,
+        cashOutOtherShiftLimit: current.cashOutOtherShiftLimit.amount,
+        maxRegisterTolerance: current.maxRegisterTolerance.amount,
+        expenseApprovalLimit: current.expenseApprovalLimit.amount,
+        supplierPaymentApprovalLimit: current.supplierPaymentApprovalLimit.amount,
+        refundOwnSalesNeedApproval: false,
+        requireTenderReference: false,
+        version: current.version,
+      },
+    });
+    if (res.statusCode !== 200) throw new Error(`settings failed ${res.statusCode} ${res.body}`);
+  }
+
+  return {
+    client,
+    ...o,
+    main,
+    second,
+    roles,
+    hire,
+    ownerPos,
+    countTreasury,
+    showExpectedCash,
+    allowOwnSaleRefunds,
+  };
 }

@@ -325,8 +325,8 @@ records without money.
 | 6 | R2.3 transfer losses, R2.4 in-transit location | **Done 2026-10-13** |
 | 7 | R2.6 valuation as at date, R2.7 cost edge cases, R2.8 damaged returns | **Done 2026-10-13** |
 | 8 | R3.1 till overrides, R3.2 price bounds, R3.3 zero-total sales | **Done 2026-10-13** |
-| 9 | R3.4 refund segregation, R3.5 tender hygiene (fee reversal per method, D6), R3.6 held sales, R3.7 combined limit (D4) | Next |
-| 10 | R4.1 one cut-off rule, R4.3, R4.4, R4.5 supplier statement | |
+| 9 | R3.4 refund segregation, R3.5 tender hygiene (fee reversal per method, D6), R3.6 held sales, R3.7 combined limit (D4) | **Done 2026-10-13** |
+| 10 | R4.1 one cut-off rule, R4.3, R4.4, R4.5 supplier statement | Next |
 | 11 | R4.2 period close pack | |
 | 12 | R5.2 ownership transfer, R5.3 audit detail, R5.4 account hygiene | |
 | 13+ | R6 supplier side (after D5), R7 online go-live (after D7), platform items | |

@@ -66,6 +66,29 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after remediation session 9 (2026-10-13, local run)
+
+`pnpm verify` green (175 unit/web tests; the manager `cash.test.tsx` method case now picks a
+settlement account and a refund-fee policy and checks both in the request body, the POS settings
+fixture carries the four new policy fields); `pnpm test:integration` 203 passed, including the
+three new cases in `refunds-controls.int.test.ts` (a cashier's refund of their own sale held
+`pending_approval` with `own_sale`, the approver cannot be the requester, the owner override
+recorded on the refund and in the audit, the `ownSaleRefunds` activity count, the policy switch
+that lets a one-person shop refund its own sales; exchange credit traced pro rata to the original
+tenders and an approval on a closed requester shift re-pointed to the approver's own shift;
+`REFERENCE_REQUIRED` and `SETTLEMENT_ACCOUNT_REQUIRED`, fee reversal per method policy posted as
+a positive fee entry and reported as `feesReversed`, the unreferenced-tender list of the payments
+report) and the three new cases in `sales-controls.int.test.ts` (combined line + order discount
+measured against the limit, a held sale completed by a second cashier keeps its lines and records
+the completer and shift, expiry after the configured hours, receipt lookup at the till, numbered
+reprints audited and counted on the sale, cart-clear events above the threshold); `pnpm test:e2e`
+35 passed after one fix: the payment-method dialog hid the fee preview until an account was
+chosen, so the preview now depends on the fee inputs only and `shifts.spec` picks "Bank account 1"
+before saving. Existing tests adapted to the new rules: non-cash tenders carry a reference and the
+methods an account; owner fixtures disable the own-sale approval and the reference policy with
+`allowOwnSaleRefunds()` where the scenario is not about them; the supervisor's own refund case in
+`refunds.int.test.ts` now goes through approval.
+
 ### Results after remediation session 8 (2026-10-13, local run)
 
 `pnpm verify` green (175 unit/web tests, including the new POS case in `app.test.tsx` (a cashier

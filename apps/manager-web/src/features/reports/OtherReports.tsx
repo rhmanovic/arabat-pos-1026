@@ -41,7 +41,18 @@ export function PaymentsTab({ query, onPeriod }: TabProps) {
           previous={minorOf(r.totals.previousCollected)}
         />
         <Kpi label={t('reports.paidBack')} value={<Amount value={r.totals.refunded} />} />
-        <Kpi testId="kpi-fees" label={t('reports.fees')} value={<Amount value={r.totals.fees} />} />
+        <Kpi
+          testId="kpi-fees"
+          label={t('reports.fees')}
+          value={<Amount value={r.totals.fees} />}
+          hint={
+            minorOf(r.totals.feesReversed) > 0n ? (
+              <>
+                {t('reports.feesReversed')}: <Amount value={r.totals.feesReversed} />
+              </>
+            ) : undefined
+          }
+        />
         <Kpi
           label={t('reports.netAfterFees')}
           value={<Amount value={r.totals.netAfterFees} />}
@@ -115,6 +126,13 @@ export function PaymentsTab({ query, onPeriod }: TabProps) {
           },
           { key: 'fees', header: t('reports.fees'), money: true, value: (x) => x.fees.amount },
           {
+            key: 'feesBack',
+            header: t('reports.feesReversed'),
+            money: true,
+            hideBelow: 'lg',
+            value: (x) => x.feesReversed.amount,
+          },
+          {
             key: 'out',
             header: t('reports.paidBack'),
             money: true,
@@ -141,6 +159,41 @@ export function PaymentsTab({ query, onPeriod }: TabProps) {
             value: (x) => t(`reports.payStatus_${x.status}`, { defaultValue: x.status }),
           },
           { key: 'count', header: t('reports.payments'), value: (x) => String(x.count) },
+          {
+            key: 'amount',
+            header: t('reports.amount'),
+            money: true,
+            value: (x) => x.amount.amount,
+          },
+        ]}
+      />
+      <ReportTable
+        title={t('reports.unreferenced', { count: r.unreferenced.count })}
+        description={t('reports.unreferencedHint')}
+        filename={`unreferenced-tenders-${query.from}-${query.to}`}
+        rows={r.unreferenced.items}
+        rowKey={(x) => x.id}
+        empty={t('reports.unreferencedNone')}
+        columns={[
+          { key: 'doc', header: t('reports.document'), value: (x) => x.document },
+          {
+            key: 'kind',
+            header: t('reports.kind'),
+            value: (x) => t(`reports.unref_${x.kind}`),
+          },
+          { key: 'method', header: t('reports.method'), value: (x) => name({ ...x, kind: '' }) },
+          {
+            key: 'employee',
+            header: t('reports.employee'),
+            hideBelow: 'md',
+            value: (x) => x.employeeName ?? '',
+          },
+          {
+            key: 'when',
+            header: t('reports.when'),
+            hideBelow: 'md',
+            value: (x) => formatDateTime(x.createdAt, i18n.language),
+          },
           {
             key: 'amount',
             header: t('reports.amount'),

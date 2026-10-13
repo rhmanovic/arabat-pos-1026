@@ -6,7 +6,7 @@ not yet re-verified by the audit), **Tested** (fixed and covered by automated te
 **Deferred** (outside the current retail scope or waiting for an owner decision). Update this file
 in the same session as the code.
 
-Last update: 2026-10-13 (remediation session 8). Totals: Deferred 49, Fixed 6, In Progress 3, Open 85, Tested 37.
+Last update: 2026-10-13 (remediation session 9). Totals: Deferred 49, Fixed 6, In Progress 3, Open 72, Tested 50.
 
 | Id | Finding | Severity | Ch. | Package | Status | Note |
 |---|---|---|---|---|---|---|
@@ -50,8 +50,8 @@ Last update: 2026-10-13 (remediation session 8). Totals: Deferred 49, Fixed 6, I
 | FND-213 | No point-in-time valuation, roll-forward or reserved-quantity visibility | Medium | B | R2.6 | Tested | Session 7: as-at valuation, roll-forward with a rounding line, reserved per item and in total (`inventory-valuation.int.test.ts`) |
 | FND-301 | No supervisory override on another cashier's till | Medium | C | R3.1 | Tested | Session 8: supervisor credentials on the cashier's till issue a single-use grant; the sale stays on the cashier's shift and records approver and rights supplied; audited and reported (`sales-overrides.int.test.ts`, `app.test.tsx`) |
 | FND-302 | Price override is not bounded and bypasses the discount limit | Medium | C | R3.2 | Tested | Session 8: reason required, owner-set floor / ceiling / not-below-cost bounds for everyone, list-price gap counted as a discount for the limit, zero price always above the limit (`sales-overrides.int.test.ts`) |
-| FND-304 | Non-cash payments can settle nowhere; cash fees are stored but never posted | Medium | C | R3.5 | Open |  |
-| FND-305 | Card and transfer payments are self-declared ("manual" verification) | Medium | C | R3.5 | Open |  |
+| FND-304 | Non-cash payments can settle nowhere; cash fees are stored but never posted | Medium | C | R3.5 | Tested | Session 9: settlement account required on every non-cash method (set-up and till), cash fee refused and never computed (`refunds-controls.int.test.ts`, `shifts.int.test.ts`) |
+| FND-305 | Card and transfer payments are self-declared ("manual" verification) | Medium | C | R3.5 | Tested | Session 9: reference mandatory on card / transfer tenders (company switch), unreferenced tenders listed in the payments report; statement matching stays manual (`refunds-controls.int.test.ts`) |
 | FND-312 | Zero-total sales complete without a payment or a reason | Medium | C | R3.3 | Tested | Session 8: `sales.zero_total` right and a stored reason (database check), flagged and filterable in the history, counted per employee (`sales-overrides.int.test.ts`, `sales.test.tsx`) |
 | FND-317 | "Net" in the sales history differs from "net after refunds" in the reports | Medium | C | R4.1 | Open |  |
 | FND-401 | Closing is not blind | Medium | D | R1.5 | Tested | Session 1: blind counts by default (`shifts.int.test.ts`, `app.test.tsx`, `checkout.spec.ts`) |
@@ -65,10 +65,10 @@ Last update: 2026-10-13 (remediation session 8). Totals: Deferred 49, Fixed 6, I
 | FND-413 | Processing fees are configured estimates, not settled amounts, and are not reconciled to the acquirer | Medium | D | R1.3, R3.5 | In Progress | Session 4: bank reconciliation shows which settlement entries the statement confirmed; fee settlement per acquirer waits for R3.5 (D6) |
 | FND-416 | Weak segregation of duties around the register | Medium | D | R1.6 | In Progress | Session 2: approvals above the limit need a second person; custody split (FND-422) still open |
 | FND-422 | The custody right is too coarse | Medium | D | R1.6 | Open |  |
-| FND-502 | Holders of the approve permission bypass the refund limit and window for their own refunds | Medium | E | R3.4 | Open |  |
-| FND-503 | Cashiers can refund their own sales within the limit with cash from their own drawer and no customer verification | Medium | E | R3.4 | Open |  |
-| FND-504 | Exchange credit is paid back in cash: a card-to-cash conversion path | Medium | E | R3.4 | Open |  |
-| FND-505 | Manual card and transfer refunds are recorded as paid immediately, with an optional reference and no acquirer reconciliation | Medium | E | R3.5 | Open |  |
+| FND-502 | Holders of the approve permission bypass the refund limit and window for their own refunds | Medium | E | R3.4 | Tested | Session 9: approvers wait like anyone else for their own refunds; only the owner completes directly, flagged `ownerOverride` (`refunds-controls.int.test.ts`, `refunds.int.test.ts`) |
+| FND-503 | Cashiers can refund their own sales within the limit with cash from their own drawer and no customer verification | Medium | E | R3.4 | Tested | Session 9: own-sale refunds wait for a second person (owner switch), customer contact captured, own-sale refunds counted per employee (`refunds-controls.int.test.ts`) |
+| FND-504 | Exchange credit is paid back in cash: a card-to-cash conversion path | Medium | E | R3.4 | Tested | Session 9: credit traced back to the tenders of the original sale, pro rata, cash only as the fallback (`refunds-controls.int.test.ts`) |
+| FND-505 | Manual card and transfer refunds are recorded as paid immediately, with an optional reference and no acquirer reconciliation | Medium | E | R3.5 | Tested | Session 9: reference mandatory on card / transfer pay-backs (company switch), unreferenced pay-backs listed in the payments report; acquirer settlement matching stays manual (`refunds-controls.int.test.ts`) |
 | FND-507 | Restock defaults to "yes" regardless of the return reason | Medium | E | R2.8 | Tested | Session 7: damaged / defective returns stay out of stock unless the cashier says otherwise, API and POS (`inventory-valuation.int.test.ts`) |
 | FND-508 | Returned goods not restocked have no custody record or write-off document | Medium | E | R2.8 | Tested | Session 7: held custody record per non-restocked line, disposal recorded once with a note (`inventory-valuation.int.test.ts`, `returns.test.tsx`) |
 | FND-511 | Three different date bases for refunds and no period-based refund register | Medium | E | R4.1 | Open |  |
@@ -124,15 +124,15 @@ Last update: 2026-10-13 (remediation session 8). Totals: Deferred 49, Fixed 6, I
 | FND-306 | Cut-off follows a fixed merchant time zone; branch time zone is unused | Low | C | R4.1 | Open |  |
 | FND-307 | Staff can attach their own or a colleague's customer profile | Low | C | — | Open |  |
 | FND-308 | Receipt contents are not fixed against a legal or commercial requirement | Low | C | — | Open |  |
-| FND-309 | Held sales: attribution drift, overwritten intent, no expiry | Low | C | R3.6 | Open |  |
-| FND-310 | Reprint only during the current shift; reprints uncounted | Low | C | R3.6 | Open |  |
-| FND-311 | Abandoned carts and cleared lines leave no trace | Low | C | R3.6 | Open |  |
-| FND-313 | Discount limit applied per discount, not combined | Low | C | R3.7 | Open |  |
+| FND-309 | Held sales: attribution drift, overwritten intent, no expiry | Low | C | R3.6 | Tested | Session 9: completer recorded, held lines kept, hold audit with details, owner-set expiry with audited discard (`sales-controls.int.test.ts`) |
+| FND-310 | Reprint only during the current shift; reprints uncounted | Low | C | R3.6 | Tested | Session 9: receipt lookup by number at the till, numbered copies logged and audited (`sales-controls.int.test.ts`) |
+| FND-311 | Abandoned carts and cleared lines leave no trace | Low | C | R3.6 | Tested | Session 9: cleared carts and removed lines above the threshold recorded in `pos_cart_events` and audited (`sales-controls.int.test.ts`) |
+| FND-313 | Discount limit applied per discount, not combined | Low | C | R3.7 | Tested | Session 9 (D4): combined per line, server and POS (`sales-controls.int.test.ts`) |
 | FND-314 | Online store reuses inactive customers | Low | C | — | Open |  |
 | FND-315 | Duplicate customers without a phone | Low | C | — | Open |  |
 | FND-316 | Till search exposes phone numbers broadly | Low | C | — | Open |  |
 | FND-318 | Average sale uses gross spent and counts exchanges as purchases | Low | C | — | Open |  |
-| FND-412 | A fee on the cash method is counted in fee totals but posted nowhere | Low | D | R3.5 | Open |  |
+| FND-412 | A fee on the cash method is counted in fee totals but posted nowhere | Low | D | R3.5 | Tested | Session 9: fee rule refused on the cash method; checkout computes no cash fee (`shifts.int.test.ts`) |
 | FND-414 | Accounts can be deactivated with a balance and keep receiving postings | Low | D | R1.3 | Tested | Session 4: `ACCOUNT_IN_USE` on deactivating a bank account with a balance, unreconciled entries or a deposit in transit (`bank.int.test.ts`) |
 | FND-415 | Documentation and configuration remnants out of step with behaviour | Low | D | — | Open | Documentation alignment, Theme 9 |
 | FND-417 | Treasury of a deactivated branch keeps cash with no restriction | Low | D | — | Open |  |
@@ -140,8 +140,8 @@ Last update: 2026-10-13 (remediation session 8). Totals: Deferred 49, Fixed 6, I
 | FND-419 | Manager cash moves during a shift need no cashier acknowledgement | Low | D | R1.1 | Open |  |
 | FND-420 | Expense evidence is a free-text reference; categories are fixed | Low | D | R1.2 | Tested | Session 3: receipt / invoice reference mandatory above the approval limit; categories still fixed |
 | FND-421 | Idle-drawer count adjustments carry a generated reference, not a document | Low | D | R1.4 | Fixed | Session 3: idle-drawer and treasury count differences appear in the follow-up list with the counter; still no document number |
-| FND-506 | Pay-backs to a tender without a financial account leave no money trace | Low | E | R3.5 | Open |  |
-| FND-509 | A pending request is bound to the requester's shift; once that shift closes it can only be rejected | Low | E | R3.4 | Open |  |
+| FND-506 | Pay-backs to a tender without a financial account leave no money trace | Low | E | R3.5 | Tested | Session 9: refused with `SETTLEMENT_ACCOUNT_REQUIRED` (`refunds-controls.int.test.ts`) |
+| FND-509 | A pending request is bound to the requester's shift; once that shift closes it can only be rejected | Low | E | R3.4 | Tested | Session 9: the approver at the till pays the cash part from their own open shift, audited (`refunds-controls.int.test.ts`) |
 | FND-510 | Withdrawal of a pending request is documented but not offered on any screen | Low | E | — | Open |  |
 | FND-514 | Sales-by-employee breakdown omits online sales and so does not add up to net sales | Low | E | R4.3 | Open |  |
 | FND-515 | Audit event says "refund completed" for gateway refunds that are still processing | Low | E | R7.2 | Open |  |

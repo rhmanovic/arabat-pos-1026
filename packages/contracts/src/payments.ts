@@ -52,6 +52,8 @@ export type SaveFinancialAccount = z.input<typeof saveFinancialAccountSchema>;
 export const PAYMENT_METHOD_KINDS = ['cash', 'card', 'bank_transfer', 'custom'] as const;
 export type PaymentMethodKind = (typeof PAYMENT_METHOD_KINDS)[number];
 export const FEE_TYPES = ['none', 'fixed', 'percentage', 'fixed_plus_percentage'] as const;
+/** What happens to the processing fee when a payment is refunded (owner decision D6). */
+export const REFUND_FEE_POLICIES = ['keep', 'reverse'] as const;
 export const GATEWAY_PROVIDERS = ['tap', 'upayments', 'hesabe', 'bookeey', 'mock'] as const;
 
 export const paymentMethodSchema = z.object({
@@ -67,6 +69,8 @@ export const paymentMethodSchema = z.object({
   feePercent: z.string(),
   financialAccountId: z.string().nullable(),
   gatewayProvider: z.enum(GATEWAY_PROVIDERS).nullable(),
+  /** keep: the provider keeps the fee on refunds; reverse: it is given back pro rata. */
+  refundFeePolicy: z.enum(REFUND_FEE_POLICIES).default('keep'),
   /** Always false until a gateway integration is implemented and approved. */
   gatewayLive: z.literal(false),
   sortOrder: z.number().int(),
@@ -94,6 +98,7 @@ export const savePaymentMethodSchema = z
       .enum(GATEWAY_PROVIDERS)
       .nullish()
       .transform((v) => v ?? null),
+    refundFeePolicy: z.enum(REFUND_FEE_POLICIES).default('keep'),
     sortOrder: z.number().int().min(0).max(1000).default(0),
     version: z.number().int().positive().optional(),
   })
@@ -101,6 +106,11 @@ export const savePaymentMethodSchema = z
   .refine((m) => m.kind !== 'cash' || m.gatewayProvider === null, {
     error: 'Cash cannot use a payment gateway.',
     path: ['gatewayProvider'],
+  })
+  // Fees are a card-network charge: cash never carries one (BR-181, FND-412).
+  .refine((m) => m.kind !== 'cash' || m.feeType === 'none', {
+    error: 'Cash cannot carry a processing fee.',
+    path: ['feeType'],
   });
 export type SavePaymentMethod = z.input<typeof savePaymentMethodSchema>;
 

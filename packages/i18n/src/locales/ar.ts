@@ -143,6 +143,9 @@ export const commonAr: CommonResources = {
     OVERRIDE_INVALID: 'انتهت صلاحية موافقة المشرف أو سبق استخدامها. اطلبها مجددًا.',
     OVERRIDE_SELF: 'يجب أن تأتي موافقة المشرف من شخص آخر.',
     OVERRIDE_NOT_ALLOWED: 'لا يملك هذا الشخص صلاحيات تتجاوز صلاحياتك هنا.',
+    REFERENCE_REQUIRED: 'أدخل مرجع جهاز الدفع أو التحويل لهذه الدفعة.',
+    SETTLEMENT_ACCOUNT_REQUIRED:
+      'طريقة الدفع هذه بلا حساب تسوية. اطلب من المدير ربط حساب قبل استخدامها.',
     PAYMENT_TOTAL_MISMATCH: 'مجموع الدفعات لا يساوي الإجمالي.',
     TOTAL_CHANGED: 'تغيّرت الأسعار. راجع عملية البيع وحاول مجددًا.',
     PAYMENT_NOT_VERIFIED: 'لا يمكن التحقق من هذه الدفعة حاليًا.',

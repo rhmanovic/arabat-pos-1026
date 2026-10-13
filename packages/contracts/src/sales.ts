@@ -215,6 +215,10 @@ export const saleSchema = z.object({
   discountLimitPercent: z.string().nullable().default(null),
   /** Set on every sale whose total is zero (BR-179). */
   zeroTotalReason: z.string().nullable().default(null),
+  /** Cashier who held the cart when somebody else completed it (BR-182). */
+  heldByName: z.string().nullable().default(null),
+  /** Receipt copies printed after the first (BR-182). */
+  reprintCount: z.number().int().default(0),
   /** Supervisor override used on the cashier's till (BR-177). */
   override: z
     .object({
@@ -311,6 +315,8 @@ export const suspendedOrderSchema = z.object({
   ),
   orderDiscount: discountInputSchema.nullable(),
   customer: saleCustomerSchema.nullable(),
+  /** When the held sale is discarded automatically; null = never (BR-182). */
+  expiresAt: z.string().nullable().default(null),
   version: z.number().int(),
 });
 export type SuspendedOrder = z.infer<typeof suspendedOrderSchema>;
@@ -342,6 +348,14 @@ export const salesSettingsSchema = z.object({
   priceOverrideCeilingPercent: z.string().nullable(),
   /** Whether a price change may go below the item's cost (BR-178). */
   priceOverrideBelowCost: z.boolean(),
+  /** A refund of a sale the requester rang up waits for a second person (BR-180). */
+  refundOwnSalesNeedApproval: z.boolean(),
+  /** Card and transfer tenders and pay-backs need a terminal / transfer reference (BR-181). */
+  requireTenderReference: z.boolean(),
+  /** Held sales are discarded after this many hours; 0 = never (BR-182). */
+  heldSaleExpiryHours: z.number().int(),
+  /** Clearing a cart worth at least this much is logged (BR-182). */
+  cartClearLogThreshold: moneySchema,
   version: z.number().int(),
 });
 export type SalesSettings = z.infer<typeof salesSettingsSchema>;
@@ -370,5 +384,17 @@ export const updateSalesSettingsSchema = z.object({
   priceOverrideFloorPercent: boundPercent.nullable().optional(),
   priceOverrideCeilingPercent: boundPercent.nullable().optional(),
   priceOverrideBelowCost: z.boolean().optional(),
+  refundOwnSalesNeedApproval: z.boolean().optional(),
+  requireTenderReference: z.boolean().optional(),
+  heldSaleExpiryHours: z.number().int().min(0).max(720).optional(),
+  cartClearLogThreshold: moneyAmountSchema.optional(),
   version: z.number().int().positive(),
 });
+
+/** A cart cleared or a line removed after a total was shown (BR-182, FND-311). */
+export const cartEventSchema = z.object({
+  kind: z.enum(['cleared', 'line_removed']),
+  amount: moneyAmountSchema,
+  lineCount: z.number().int().min(0).max(1000),
+});
+export type CartEvent = z.input<typeof cartEventSchema>;

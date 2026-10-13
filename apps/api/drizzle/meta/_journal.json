@@ -309,6 +309,13 @@
       "when": 1791873051338,
       "tag": "0043_sale_overrides_price_bounds",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1791874775905,
+      "tag": "0044_refund_segregation_tender_hygiene",
+      "breakpoints": true
     }
   ]
 }

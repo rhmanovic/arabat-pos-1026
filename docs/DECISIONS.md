@@ -1108,3 +1108,53 @@ ADR; supersede it.
   decides the bounds in the selling policy; defaults (50 % / 200 %, not below cost) apply to
   existing companies.
 
+## ADR-0101 — Remediation session 9: refund segregation, tender hygiene, held sales and reprints, combined discount limit
+- **Date:** 2026-10-13 · **Status:** Accepted (remediation plan R3.4 / R3.5 / R3.6 / R3.7, decisions D4 and D6)
+- **Context:** Phase 1 found cashiers refunding their own sales from their own drawer (FND-503),
+  approvers exempt from the limit and window for their own refunds (FND-502), exchange credit
+  paid back in cash (FND-504), pending requests dying with the requester's shift (FND-509),
+  non-cash methods able to settle nowhere and cash fees posted nowhere (FND-304, FND-412,
+  FND-506), self-declared card tenders and pay-backs without a reference (FND-305, FND-505),
+  held sales without expiry or attribution (FND-309), uncounted reprints (FND-310), cleared carts
+  without a trace (FND-311) and a discount limit applied per discount (FND-313, OQ-024).
+- **Decision:**
+  - `approvalReasons` no longer exempts holders of `refunds.approve`; it adds `own_sale` when the
+    requester rang the sale up and `sales_settings.refund_own_sales_need_approval` is on. The
+    owner completes directly with `refunds.owner_override = true` (D3 pattern); exchanges follow
+    the same rule. `refunds.customer_contact` is kept with the request. `insertPayments` traces
+    exchange credit back through `payments.refund_id` to the tenders of the original sale
+    (`creditOrigins`, pro rata, up to three steps, cash as the fallback) and stores the target in
+    `refund_payments.financial_account_id`; `execute` refuses a non-cash pay-back with no account
+    (`SETTLEMENT_ACCOUNT_REQUIRED`). `approve` re-points a pending cash refund to the approver's
+    open shift when the requester's shift is closed (`repointShift`, audited as
+    `paidFromShiftId`); a manager without a shift gets `SHIFT_REQUIRED`. The activity report adds
+    `ownSaleRefunds`.
+  - Payment methods: a non-cash method needs `financial_account_id` (validation) and cash may
+    carry no fee (contract); checkout refuses non-cash methods without an account and ignores
+    any cash fee; `payment_methods.refund_fee_policy` (`keep` | `reverse`, D6) decides whether
+    `execute` posts a pro-rata `fee` entry back and records `refund_payments.fee_reversed_minor`.
+    `sales_settings.require_tender_reference` (default on) makes the reference mandatory on
+    non-cash tenders (`REFERENCE_REQUIRED`) and on non-cash pay-backs of a refund request (the
+    preview marks `referenceRequired`; the POS sends the suggested split with references). The
+    payments report gains `feesReversed` (per method and in the totals, `netAfterFees` adds it
+    back) and an `unreferenced` list (count, amount, up to 200 items).
+  - Held sales: `sales_settings.held_sale_expiry_hours` (default 24); `suspended()` expires stale
+    holds (`orders.status = 'expired'`, `expired_at`, audit `order.expired`) before listing and
+    returns `expiresAt`; completion keeps the held lines and records `completed_by_user_id`,
+    `completed_by_membership_id`, `completed_shift_id`; the sale exposes `heldByName`. Reprints:
+    `receipt_reprints` (RLS, insert-only), `POST /pos/sales/:id/reprints` (audit
+    `sale.reprinted`), `reprintCount` on the sale and a "COPY n" line on the receipt;
+    `GET /pos/sales/lookup?receipt=` finds any receipt of the branch. Cleared carts:
+    `pos_cart_events` (RLS, insert-only) through `POST /pos/cart-events`, logged at or above
+    `sales_settings.cart_clear_log_threshold_minor` (default 5.000) with audit `cart.cleared` /
+    `cart.line_removed`; the POS sends them on clear and on line removal.
+  - Combined limit (D4): per line, `lineDiscount + allocated orderDiscount + list-price gap` is
+    compared with the list gross; the separate order-level check is gone. The POS mirror
+    (`requiredRights`) applies the same rule.
+- **Consequences:** FND-502, FND-503, FND-504, FND-509, FND-304, FND-305, FND-505, FND-412,
+  FND-506, FND-309, FND-310, FND-311 and FND-313 close; OQ-016 and OQ-024 are resolved. Test
+  fixtures that have one person sell and refund switch the two new rules off explicitly
+  (`allowOwnSaleRefunds`); the rules themselves are covered by `refunds-controls.int.test.ts`
+  and `sales-controls.int.test.ts`. Acquirer-statement reconciliation (matching references to
+  settlements) is not built; the unreferenced list is the bridge until a terminal is integrated.
+

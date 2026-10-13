@@ -117,6 +117,15 @@ describe('payment methods', () => {
 
   it('stores fees exactly, rejects invalid ones and keeps one cash method', async () => {
     const c = await company();
+    const bank = (
+      await c.client.request('GET', '/manager/financial-accounts', { cookies: c.cookies })
+    ).json().accounts[0].id as string;
+    // Every non-cash method needs a settlement account (BR-181).
+    const homeless = await c.client.request('POST', '/manager/payment-methods', {
+      cookies: c.cookies,
+      body: { kind: 'custom', nameEn: 'Nowhere' },
+    });
+    expect(homeless.statusCode).toBe(400);
     const created = await c.client.request('POST', '/manager/payment-methods', {
       cookies: c.cookies,
       body: {
@@ -126,6 +135,7 @@ describe('payment methods', () => {
         feeFixed: '0.050',
         feePercent: '2.75',
         availableOnline: true,
+        financialAccountId: bank,
       },
     });
     expect(created.statusCode).toBe(201);
@@ -144,6 +154,7 @@ describe('payment methods', () => {
         feeType: 'percentage',
         feeFixed: '1.000',
         feePercent: '1.5',
+        financialAccountId: bank,
       },
     });
     expect(pct.json().feeFixed.amount).toBe('0.000');
@@ -155,10 +166,27 @@ describe('payment methods', () => {
     ]) {
       const res = await c.client.request('POST', '/manager/payment-methods', {
         cookies: c.cookies,
-        body: { kind: 'custom', nameEn: 'Bad', ...bad },
+        body: { kind: 'custom', nameEn: 'Bad', financialAccountId: bank, ...bad },
       });
       expect(res.statusCode, JSON.stringify(bad)).toBe(400);
     }
+    // Cash carries no fee (FND-412).
+    const cashMethod = (
+      await c.client.request('GET', '/manager/payment-methods', { cookies: c.cookies })
+    )
+      .json()
+      .methods.find((m: { kind: string }) => m.kind === 'cash');
+    const cashFee = await c.client.request('PATCH', `/manager/payment-methods/${cashMethod.id}`, {
+      cookies: c.cookies,
+      body: {
+        kind: 'cash',
+        nameEn: 'Cash',
+        feeType: 'fixed',
+        feeFixed: '0.100',
+        version: cashMethod.version,
+      },
+    });
+    expect(cashFee.statusCode).toBe(400);
     const secondCash = await c.client.request('POST', '/manager/payment-methods', {
       cookies: c.cookies,
       body: { kind: 'cash', nameEn: 'More cash' },

@@ -82,9 +82,68 @@ export const salesSettings = pgTable('sales_settings', {
   priceOverrideFloorPercent: numeric({ precision: 5, scale: 2 }).default('50'),
   priceOverrideCeilingPercent: numeric({ precision: 5, scale: 2 }).default('200'),
   priceOverrideBelowCost: boolean().notNull().default(false),
+  /** A refund of a sale the requester rang up waits for a second person (BR-180, R3.4). */
+  refundOwnSalesNeedApproval: boolean().notNull().default(true),
+  /** Card / transfer tenders and pay-backs need a reference (BR-181, R3.5). */
+  requireTenderReference: boolean().notNull().default(true),
+  /** Held sales are discarded after this many hours; 0 = never (BR-182, R3.6). */
+  heldSaleExpiryHours: integer().notNull().default(24),
+  /** Clearing a cart worth at least this much is logged (BR-182). */
+  cartClearLogThresholdMinor: bigint({ mode: 'bigint' })
+    .notNull()
+    .default(sql`5000`),
   version: integer().notNull().default(1),
   updatedAt: updatedAt(),
 });
+
+/** Receipt copies printed after the first one (BR-182, FND-310): append-only, audited. */
+export const receiptReprints = pgTable(
+  'receipt_reprints',
+  {
+    id: id(),
+    merchantId: merchantId(),
+    saleId: uuid().notNull(),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id),
+    shiftId: uuid(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({ columns: [t.merchantId, t.saleId], foreignColumns: [sales.merchantId, sales.id] }),
+    index('receipt_reprints_sale_idx').on(t.merchantId, t.saleId),
+  ],
+);
+
+/**
+ * Carts cleared or lines removed after a total was shown (BR-182, FND-311): a lightweight
+ * append-only trace of what never became a sale, logged above the company threshold.
+ */
+export const posCartEvents = pgTable(
+  'pos_cart_events',
+  {
+    id: id(),
+    merchantId: merchantId(),
+    branchId: uuid().notNull(),
+    shiftId: uuid().notNull(),
+    membershipId: uuid().notNull(),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id),
+    kind: text().notNull(),
+    amountMinor: minor().notNull(),
+    lineCount: integer().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.merchantId, t.shiftId],
+      foreignColumns: [shifts.merchantId, shifts.id],
+    }),
+    check('pos_cart_events_kind_valid', sql`${t.kind} in ('cleared', 'line_removed')`),
+    index('pos_cart_events_shift_idx').on(t.merchantId, t.shiftId),
+  ],
+);
 
 /**
  * Supervisor override on a cashier's till (BR-177, remediation R3.1): a second person proves
@@ -182,6 +241,11 @@ export const orders = pgTable(
     requestHash: text(),
     completedAt: timestamp({ withTimezone: true }),
     cancelledAt: timestamp({ withTimezone: true }),
+    /** Who completed a held cart, when it was not the holder (BR-182). */
+    completedByUserId: uuid(),
+    completedByMembershipId: uuid(),
+    completedShiftId: uuid(),
+    expiredAt: timestamp({ withTimezone: true }),
     version: integer().notNull().default(1),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -201,7 +265,10 @@ export const orders = pgTable(
       columns: [t.merchantId, t.branchId],
       foreignColumns: [branches.merchantId, branches.id],
     }),
-    check('orders_status_valid', sql`${t.status} in ('suspended', 'completed', 'cancelled')`),
+    check(
+      'orders_status_valid',
+      sql`${t.status} in ('suspended', 'completed', 'cancelled', 'expired')`,
+    ),
     check(
       'orders_discount_valid',
       sql`${t.orderDiscountType} is null or ${t.orderDiscountType} in ('percent', 'amount')`,

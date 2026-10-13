@@ -63,7 +63,13 @@ test('reports show real transactions, filter by period and export what is displa
       data: {
         idempotencyKey: crypto.randomUUID(),
         lines: [{ variantId, quantity }],
-        payments: [{ methodId: methods.find((m) => m.kind === kind)!.id, amount }],
+        payments: [
+          {
+            methodId: methods.find((m) => m.kind === kind)!.id,
+            amount,
+            reference: kind === 'cash' ? null : 'KNET-E2E',
+          },
+        ],
         expectedTotal: amount,
       },
     });

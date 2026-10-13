@@ -34,7 +34,25 @@ describe('payment methods', () => {
       session: makeSession('manager', ['manager.access', 'payments.settings']),
       routes: {
         'GET /manager/payment-methods': () => ({ status: 200, body: { methods: [method] } }),
-        'GET /manager/financial-accounts': () => ({ status: 200, body: { accounts: [] } }),
+        'GET /manager/financial-accounts': () => ({
+          status: 200,
+          body: {
+            accounts: [
+              {
+                id: '0190a000-0000-7000-8000-000000000301',
+                nameEn: 'Bank account 1',
+                nameAr: null,
+                kind: 'bank',
+                currency: 'KWD',
+                status: 'active',
+                balance: money('0.000'),
+                unreconciledEntries: 0,
+                lastReconciledAt: null,
+                version: 1,
+              },
+            ],
+          },
+        }),
         'POST /manager/payment-methods': (body) => ({
           status: 201,
           body: { ...method, ...(body as object), id: 'new', feeFixed: money('0.000') },
@@ -47,6 +65,13 @@ describe('payment methods', () => {
     await userEvent.click(screen.getByRole('button', { name: 'New payment method' }));
     const dialog = await screen.findByRole('dialog');
     await userEvent.type(within(dialog).getByLabelText('Name (English)'), 'Visa');
+    // A non-cash method cannot be saved without a settlement account (BR-181).
+    expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled();
+    await userEvent.selectOptions(
+      within(dialog).getByLabelText('Settles into'),
+      '0190a000-0000-7000-8000-000000000301',
+    );
+    await userEvent.selectOptions(within(dialog).getByLabelText('Fee on refunds'), 'reverse');
     await userEvent.selectOptions(within(dialog).getByLabelText('Processing fee'), 'percentage');
     const pct = within(dialog).getByLabelText('Percentage (%)');
     await userEvent.clear(pct);
@@ -71,6 +96,8 @@ describe('payment methods', () => {
       nameEn: 'Visa',
       feeType: 'percentage',
       feePercent: '2.5',
+      financialAccountId: '0190a000-0000-7000-8000-000000000301',
+      refundFeePolicy: 'reverse',
     });
   });
 });

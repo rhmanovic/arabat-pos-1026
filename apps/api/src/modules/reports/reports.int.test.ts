@@ -42,6 +42,8 @@ const fils = (v: bigint) => {
 
 async function setup() {
   const c = await createCompany(app, db, mailer);
+  // The same person sells and refunds in these fixtures (own-sale rule tested in refunds-controls).
+  await c.allowOwnSaleRefunds();
   const req = (
     method: 'GET' | 'POST' | 'PATCH',
     path: string,
@@ -79,6 +81,7 @@ async function setup() {
     kind: string;
     version: number;
     nameEn: string;
+    financialAccountId: string;
   }[];
   const card = methods.find((m) => m.kind === 'card')!;
   const updated = await req('PATCH', `/manager/payment-methods/${card.id}`, {
@@ -86,6 +89,7 @@ async function setup() {
     nameEn: card.nameEn,
     feeType: 'percentage',
     feePercent: '1.5',
+    financialAccountId: card.financialAccountId,
     version: card.version,
   });
   if (updated.statusCode !== 200) throw new Error(updated.body);
@@ -139,12 +143,12 @@ async function scenario() {
       { variantId: s.tea, quantity: '1' },
     ],
     orderDiscount: { type: 'amount', value: '0.166' },
-    payments: [{ methodId: s.card, amount: '1.500' }],
+    payments: [{ methodId: s.card, amount: '1.500', reference: 'K-1' }],
     expectedTotal: '1.500',
   });
   const s3 = await sell(s, b, {
     lines: [{ variantId: s.tea, quantity: '2' }],
-    payments: [{ methodId: s.card, amount: '2.000' }],
+    payments: [{ methodId: s.card, amount: '2.000', reference: 'K-2' }],
     expectedTotal: '2.000',
   });
   const refund = await s.req(

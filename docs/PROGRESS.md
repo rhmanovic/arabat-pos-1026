@@ -506,6 +506,28 @@ Verified: see `TESTING.md` (results after remediation session 8). Not done (next
 refund segregation (R3.4), tender hygiene (R3.5), held sales (R3.6), combined discount limit
 (R3.7, D4), custody-right split (FND-422), gross profit with a costless item (R4.3).
 
+### 2026-10-13 — Remediation session 9 (R3.4 refund segregation, R3.5 tender hygiene, R3.6 held sales and reprints, R3.7 combined limit)
+Implemented (ADR-0101, BR-180 to BR-183):
+- **Refund segregation**: refunds of one's own sales wait for a second person (owner switch,
+  default on); approvers no longer bypass the limit or window for their own refunds; the owner
+  completes directly, flagged as an override; optional customer contact on requests that wait;
+  exchange credit paid back to the original tenders, not cash; a pending request survives the
+  requester's shift close (the approver pays from their own shift); own-sale refunds counted
+  per employee.
+- **Tender hygiene (D6)**: settlement account mandatory on every non-cash method, no fee on
+  cash, terminal / transfer reference mandatory on card and transfer tenders and pay-backs
+  (owner switch), unreferenced tenders listed in the payments report, fee given back on refunds
+  only under the method's policy (`keep` / `reverse`), shown as fees given back.
+- **Held sales and reprints**: held sales expire after an owner-set time, the completing cashier
+  is recorded and the held lines kept, receipts can be found by number at the till, every copy
+  is numbered, logged and audited, cleared carts and removed lines above a threshold are logged.
+- **Combined discount limit (D4)**: item discount + share of the sale discount + price gap per
+  line against the limit, on the server and in the POS mirror.
+Verified: see `TESTING.md` (results after remediation session 9). Not done (next sessions):
+one cut-off rule (R4.1), gross profit with costless items (R4.3), report access log and
+dashboard KPIs (R4.4), supplier statement (R4.5), period close (R4.2), access and continuity
+(R5.x); acquirer-statement reconciliation remains manual.
+
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025
 before any production launch.

@@ -177,8 +177,9 @@ cash in/out, close with optional note/coin count, closing result).
 |---|---|
 | `POST /pos/sales` (checkout, idempotency key, optional `overrideId`, `zeroTotalReason`) | POS `sales.create`, own open shift; `sales.discount`, `sales.discount.override_limit`, `sales.price_override`, `sales.zero_total` as needed, held by the cashier or lent by a supervisor override (BR-177) |
 | `POST /pos/overrides` (supervisor e-mail + password on the cashier's till → single-use grant) | POS `sales.create`, own open shift; the approver must hold overridable rights the cashier lacks |
-| `GET /pos/sales/recent`, `GET /pos/sales/:id/receipt`, `GET /pos/sales/settings` | POS `sales.create` (session branch only) |
-| `POST /pos/orders` (hold), `GET /pos/orders/suspended`, `POST /pos/orders/:id/cancel` | POS `sales.create` |
+| `GET /pos/sales/recent`, `GET /pos/sales/:id/receipt`, `GET /pos/sales/settings`, `GET /pos/sales/lookup?receipt=` (any receipt of the branch, read-only) | POS `sales.create` (session branch only) |
+| `POST /pos/sales/:id/reprints` (logged, numbered copy), `POST /pos/cart-events` (cleared cart / removed line above the threshold) | POS `sales.create`, own open shift |
+| `POST /pos/orders` (hold; expires after the company limit), `GET /pos/orders/suspended`, `POST /pos/orders/:id/cancel` | POS `sales.create` |
 | `GET /manager/sales?branchId=&q=&from=&to=&flag=` (`flag`: zero_total, above_limit, price_override, supervised), `GET /manager/sales/:id`, `GET …/:id/receipt` | `sales.read` (branch-scoped) |
 | `GET/PUT /manager/sales-settings` | `merchant.settings.read` / `merchant.settings.update` |
 
@@ -195,10 +196,10 @@ supervisor override).
 
 | Method & path | Permission |
 |---|---|
-| `GET /pos/refunds/lookup?receipt=`, `POST /pos/refunds/preview`, `POST /pos/refunds`, `GET /pos/refunds/:id/receipt`, `POST /pos/refunds/:id/cancel` | POS `refunds.create` (own open shift for writes) |
+| `GET /pos/refunds/lookup?receipt=`, `POST /pos/refunds/preview` (reasons incl. `own_sale`, `referenceRequired` per pay-back), `POST /pos/refunds` (optional `customerContact`, references on non-cash pay-backs), `GET /pos/refunds/:id/receipt`, `POST /pos/refunds/:id/cancel` | POS `refunds.create` (own open shift for writes) |
 | `POST /pos/exchanges` | POS `refunds.create` + `sales.create` |
 | `POST /pos/sales/:id/void` | POS `sales.void` (sale of the own open shift, no refunds yet) |
-| `POST /pos/refunds/:id/approve` | POS `refunds.approve` (supervisor at the till; not the requester) |
+| `POST /pos/refunds/:id/approve` | POS `refunds.approve` (supervisor at the till; not the requester; pays the cash part from their own shift when the requester's shift is closed) |
 | `GET /manager/refunds`, `GET /manager/refunds/:id`, `GET /manager/refunds/activity` | `sales.read` (branch-scoped) |
 | `POST /manager/refunds/:id/approve`, `POST /manager/refunds/:id/reject` | `refunds.approve` at the refund's branch |
 

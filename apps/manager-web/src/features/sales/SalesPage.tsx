@@ -278,6 +278,15 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
   const priceOverrideBelowCost = belowCost ?? settings.data?.priceOverrideBelowCost ?? false;
   const BOUND = /^\d{1,3}(\.\d{1,2})?$/;
   const boundOk = (v: string) => v.trim() === '' || BOUND.test(v.trim());
+  // Session 9 controls (BR-180 to BR-182).
+  const [ownSale, setOwnSale] = useState<boolean | null>(null);
+  const [tenderRef, setTenderRef] = useState<boolean | null>(null);
+  const [heldHours, setHeldHours] = useState<string | null>(null);
+  const [clearThreshold, setClearThreshold] = useState<string | null>(null);
+  const refundOwnSalesNeedApproval = ownSale ?? settings.data?.refundOwnSalesNeedApproval ?? true;
+  const requireTenderReference = tenderRef ?? settings.data?.requireTenderReference ?? true;
+  const heldSaleExpiryHours = heldHours ?? String(settings.data?.heldSaleExpiryHours ?? '');
+  const cartClearLogThreshold = clearThreshold ?? settings.data?.cartClearLogThreshold.amount ?? '';
   const AMOUNT = /^\d{1,10}(\.\d{1,3})?$/;
   const current = value ?? settings.data?.maxDiscountPercent ?? '';
   const windowDays = days ?? String(settings.data?.refundWindowDays ?? '');
@@ -294,7 +303,9 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
     AMOUNT.test(adjustmentApprovalLimit.trim()) &&
     boundOk(floor) &&
     boundOk(ceiling) &&
-    (floor.trim() === '' || ceiling.trim() === '' || Number(floor) <= Number(ceiling));
+    (floor.trim() === '' || ceiling.trim() === '' || Number(floor) <= Number(ceiling)) &&
+    /^\d{1,3}$/.test(heldSaleExpiryHours.trim()) &&
+    AMOUNT.test(cartClearLogThreshold.trim());
   const save = useMutation({
     mutationFn: () =>
       api.sales.updateSettings({
@@ -312,6 +323,10 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
         priceOverrideFloorPercent: floor.trim() === '' ? null : floor.trim(),
         priceOverrideCeilingPercent: ceiling.trim() === '' ? null : ceiling.trim(),
         priceOverrideBelowCost,
+        refundOwnSalesNeedApproval,
+        requireTenderReference,
+        heldSaleExpiryHours: Number.parseInt(heldSaleExpiryHours.trim(), 10),
+        cartClearLogThreshold: cartClearLogThreshold.trim(),
         version: settings.data!.version,
       }),
     onSuccess: async () => {
@@ -481,6 +496,40 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
           checked={priceOverrideBelowCost}
           onChange={(e) => setBelowCost(e.target.checked)}
         />
+        <Checkbox
+          label={t('sales.ownSaleApproval')}
+          description={t('sales.ownSaleApprovalHint')}
+          checked={refundOwnSalesNeedApproval}
+          onChange={(e) => setOwnSale(e.target.checked)}
+        />
+        <Checkbox
+          label={t('sales.tenderReference')}
+          description={t('sales.tenderReferenceHint')}
+          checked={requireTenderReference}
+          onChange={(e) => setTenderRef(e.target.checked)}
+        />
+        <Field label={t('sales.heldExpiry')} hint={t('sales.heldExpiryHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="numeric"
+              value={heldSaleExpiryHours}
+              onChange={(e) => setHeldHours(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('sales.clearThreshold')} hint={t('sales.clearThresholdHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="decimal"
+              value={cartClearLogThreshold}
+              onChange={(e) => setClearThreshold(e.target.value)}
+            />
+          )}
+        </Field>
       </div>
     </Dialog>
   );
@@ -514,7 +563,11 @@ export function SaleDetailPage() {
       />
       {s ? (
         <div className="grid gap-6">
-          {s.aboveLimit || s.zeroTotalReason !== null || s.override ? (
+          {s.aboveLimit ||
+          s.zeroTotalReason !== null ||
+          s.override ||
+          s.heldByName ||
+          s.reprintCount > 0 ? (
             <div
               className="grid gap-1 rounded-lg border border-warning/50 bg-warning/10 p-3 text-sm"
               data-testid="sale-exceptions"
@@ -528,6 +581,8 @@ export function SaleDetailPage() {
                   {t('sales.flag_zero_total')}: {s.zeroTotalReason}
                 </p>
               ) : null}
+              {s.heldByName ? <p>{t('sales.heldBy', { name: s.heldByName })}</p> : null}
+              {s.reprintCount > 0 ? <p>{t('sales.reprints', { count: s.reprintCount })}</p> : null}
               {s.override ? (
                 <p>
                   {t('sales.supervisedBy', { name: s.override.approverName })}

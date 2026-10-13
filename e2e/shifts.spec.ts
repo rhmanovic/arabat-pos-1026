@@ -25,6 +25,8 @@ test('payment fee setup, a full POS shift with cash movements, and the managerâ€
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Name (English)').fill('Deema Pay');
   await dialog.getByLabel('Type').selectOption('custom');
+  // A non-cash method must settle into an account (BR-181).
+  await dialog.getByLabel('Settles into').selectOption({ label: 'Bank account 1' });
   await dialog.getByLabel('Processing fee').selectOption('fixed_plus_percentage');
   await dialog.getByLabel('Fixed fee (KWD)').fill('0.100');
   await dialog.getByLabel('Percentage (%)').fill('2');

@@ -91,6 +91,7 @@ async function setup() {
     gatewayProvider: 'mock',
     feeType: 'percentage',
     feePercent: '2',
+    financialAccountId: card['financialAccountId'],
     version: card['version'],
   });
   const slug = `shop-${Date.now().toString(36)}-${(seq += 1)}`;
@@ -583,11 +584,13 @@ describe('online checkout and payments', () => {
   it('refuses unconfigured gateways, closed stores and unauthorised managers', async () => {
     const s = await setup();
     // A Tap method is not ready (no approved credentials): hidden and refused.
+    const bank = (await s.ok('GET', '/manager/financial-accounts')).accounts[0].id as string;
     const tap = await s.ok('POST', '/manager/payment-methods', {
       kind: 'custom',
       nameEn: 'Tap',
       availableOnline: true,
       gatewayProvider: 'tap',
+      financialAccountId: bank,
     });
     expect(
       (await pub(s, 'GET', '')).json().paymentMethods.map((m: { provider: string }) => m.provider),

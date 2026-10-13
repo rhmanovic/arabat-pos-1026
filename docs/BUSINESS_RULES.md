@@ -148,8 +148,10 @@ engineering defaults pending owner confirmation.
 - **BR-080** Pricing: line amount = price × quantity rounded half-up to the fils; item
   discounts (percent or amount, never more than the line); a sale discount on the
   remaining amount is shared across the items exactly; the total is the sum of the items.
-- **BR-081** Discounts need `sales.discount`; above the merchant's limit (default 10 %,
-  per item and per sale) they need `sales.discount.override_limit` (supervisor).
+- **BR-081** Discounts need `sales.discount`; above the merchant's limit (default 10 %)
+  they need `sales.discount.override_limit` (supervisor). The limit is compared with the
+  **combined** effective discount of each line: item discount + its share of the sale
+  discount + any gap under the list price (BR-183, decision D4).
 - **BR-082** Price changes at the till need `sales.price_override`; the original price,
   the change and its reason are kept on the sale and in the audit log, within the company
   bounds of BR-178.
@@ -382,6 +384,31 @@ Remediation session 3 (2026-10-13, owner decision D2):
   reason; the database refuses a free POS sale without one. Unusual sales (free, above the
   limit, with a changed price, or completed with a supervisor override) are flagged in the
   sales history, filterable, and counted per employee in the sales report.
+- **BR-180** Refund segregation. A refund of a sale the requester rang up themselves waits
+  for a second person whatever the amount (company switch, default on); holding the approve
+  right exempts nobody from the limit, the window or the own-sale rule for their own refunds;
+  only the owner may complete such a refund directly, and it is flagged and audited as an
+  owner override. A customer phone or name may be captured on refunds that wait. Exchange
+  credit paid back goes to the tenders of the sale the credit came from, pro rata, never to
+  cash by default. A pending request survives the requester's shift close: the approver pays
+  the cash part from their own open shift at the branch (a manager without a shift cannot).
+  The activity report counts each employee's refunds of their own sales.
+- **BR-181** Non-cash tender hygiene. Every non-cash payment method has a settlement account
+  (refused otherwise, at set-up and at the till), cash never carries a processing fee, and
+  card or transfer tenders and pay-backs need their terminal or transfer reference (company
+  switch, default on); tenders recorded without one are listed in the payments report. The
+  processing fee comes back on a refund only under the method's policy (`keep` or `reverse`
+  pro rata, decision D6), posted as a fee entry and shown as fees given back.
+- **BR-182** Held sales, reprints and cleared carts. A held sale expires after the company's
+  limit (default 24 hours, 0 = never) and is discarded, audited, when the list is read; the
+  held lines are kept as held and the completing cashier, shift and register are recorded
+  when they differ from the holder; the sale names who held it. Any receipt of the branch
+  can be found by number at the till; every print after the first is a numbered copy,
+  logged and audited. Clearing a cart, or removing a line, worth at least the company
+  threshold (default KWD 5.000) leaves an append-only trace and an audit entry.
+- **BR-183** Combined discount limit (D4). The limit applies to the combined effective
+  discount of each line (see BR-081); a cashier can no longer stack an item discount and a
+  sale discount to roughly double the limit.
 
 Platform and subscriptions (Prompt 17):
 - **BR-150** Every merchant has exactly one subscription to a plan. New merchants start on
@@ -455,7 +482,8 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
 - **BR-124** *Paid back* = settled refund payments of refunds completed in the period,
   per method; gateway refunds still waiting are listed separately and not counted.
 - **BR-125** *Processing fees* = fees stored on each payment from the method's settings;
-  not reversed on refunds (OQ-016). *Net cash* = cash sales − cash refunds + cash in −
+  on a refund the fee comes back pro rata only when the method's policy says so (D6,
+  BR-181), shown as *fees given back*. *Net cash* = cash sales − cash refunds + cash in −
   cash out (the same entries as the drawer's expected cash).
 - **BR-126** *Cash difference* of a shift = counted − expected at closing; balanced when
   within the register's tolerance, otherwise over or short.
@@ -513,12 +541,12 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
 | OQ-012 | Number display: Latin digits (0-9) or Arabic-Indic (٠-٩) by default? (engineering default: Latin, configurable) | M0 UI |
 | OQ-014 | Costing method: weighted average (implemented default) or FIFO required for accounting? | Reports / accounting |
 | OQ-015 | Blind closing: should cashiers count the drawer without seeing the expected amount first? (implemented: expected is shown) | POS shifts |
-| OQ-016 | Should card processing fees be reversed on refunds (depends on the acquirer contract)? Implemented: not reversed. | Refunds / reports |
+| OQ-016 | ~~Fee reversal on refunds~~ **Resolved (D6):** per payment method, `keep` or `reverse` pro rata, never assumed (BR-181). | — |
 | OQ-017 | Returns without a receipt or at another branch: allowed? Implemented: receipt required, same branch. | Refunds |
 | OQ-019 | Loyalty points, store credit and promotions: rules (earning rate, expiry, use as payment)? Also: should customers be able to request erasure of their personal data (anonymisation while keeping sales)? Not implemented. | Customers |
 | OQ-020 | Restaurant: service charge or tips? Courses/fire timing? Printing tickets on kitchen printers (vs. screen)? Table reservations? Not implemented. | Restaurant |
 | OQ-023 | Restaurant bills: charge the item price at ordering time or at payment time? Implemented: modifiers at ordering, item at payment (audit F3). | Restaurant |
-| OQ-024 | Discount limit: per discount (implemented: item and sale discounts checked separately, so 10 % + 10 % passes) or combined? | Sales |
+| OQ-024 | ~~Discount limit per discount or combined~~ **Resolved (D4):** combined per line (BR-183). | — |
 | OQ-026 | Actual processing fees per method (KNET, Visa/Mastercard, payment link, WAMD) and which bank account each settles into. Defaults: no fees; KNET, link and WAMD → bank 1, Visa/Mastercard → bank 2. Cash custody is decided (ADR-0090, ADR-0091). | Payments |
 | OQ-025 | Verify the owner's e-mail at self-registration (blocks squatting someone's address)? Not implemented. | Auth |
 | OQ-022 | Subscription pricing and billing: prices per plan, billing provider, invoices/VAT, what happens automatically when a subscription lapses (grace period, read-only, suspension), and data retention after closing? Implemented: no billing, lapse never blocks, closing keeps data. | Platform |

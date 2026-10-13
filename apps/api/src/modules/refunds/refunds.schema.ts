@@ -57,6 +57,10 @@ export const refunds = pgTable(
     decidedByUserId: uuid().references(() => users.id),
     decidedAt: timestamp({ withTimezone: true }),
     decisionNote: text(),
+    /** The owner completed a refund that would otherwise have waited (BR-180, D3). */
+    ownerOverride: boolean().notNull().default(false),
+    /** Customer phone or name captured on refunds that wait for approval (BR-180). */
+    customerContact: text(),
     completedAt: timestamp({ withTimezone: true }),
     idempotencyKey: uuid(),
     requestHash: text(),
@@ -128,6 +132,12 @@ export const refundPayments = pgTable(
     status: text().notNull(),
     verification: text().notNull(),
     reference: text(),
+    /** Account the pay-back leaves (exchange credit traced back to the original tender, BR-180). */
+    financialAccountId: uuid(),
+    /** Processing fee given back with this pay-back under the method's policy (D6). */
+    feeReversedMinor: minor()
+      .notNull()
+      .default(sql`0`),
     createdAt: createdAt(),
   },
   (t) => [
@@ -136,6 +146,7 @@ export const refundPayments = pgTable(
       foreignColumns: [refunds.merchantId, refunds.id],
     }),
     check('refund_payments_amount_positive', sql`${t.amountMinor} > 0`),
+    check('refund_payments_fee_reversed_valid', sql`${t.feeReversedMinor} >= 0`),
     check('refund_payments_status_valid', sql`${t.status} in ('succeeded', 'pending', 'failed')`),
     check(
       'refund_payments_verification_valid',

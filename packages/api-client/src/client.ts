@@ -46,6 +46,7 @@ import {
   refundReceiptSchema,
   refundSchema,
   refundableSaleSchema,
+  type CartEvent,
   type Checkout,
   type RequestOverride,
   saleOverrideGrantSchema,
@@ -717,6 +718,11 @@ export function createApiClient(options: ApiClientOptions = {}) {
       checkout: (body: Checkout) => request('POST', '/pos/sales', { body, schema: saleSchema }),
       requestOverride: (body: RequestOverride) =>
         request('POST', '/pos/overrides', { body, schema: saleOverrideGrantSchema }),
+      lookup: (receipt: string) =>
+        request('GET', `/pos/sales/lookup?${toParams({ receipt })}`, { schema: saleSchema }),
+      reprint: (id: string) =>
+        request('POST', `/pos/sales/${id}/reprints`, { body: {}, schema: receiptSchema }),
+      cartEvent: (body: CartEvent) => request('POST', '/pos/cart-events', { body }),
       recent: () =>
         request('GET', '/pos/sales/recent', {
           schema: z.object({ sales: z.array(saleSummarySchema) }),
@@ -750,6 +756,10 @@ export function createApiClient(options: ApiClientOptions = {}) {
         priceOverrideFloorPercent?: string | null;
         priceOverrideCeilingPercent?: string | null;
         priceOverrideBelowCost?: boolean;
+        refundOwnSalesNeedApproval?: boolean;
+        requireTenderReference?: boolean;
+        heldSaleExpiryHours?: number;
+        cartClearLogThreshold?: string;
         version: number;
       }) => request('PUT', '/manager/sales-settings', { body, schema: salesSettingsSchema }),
     },

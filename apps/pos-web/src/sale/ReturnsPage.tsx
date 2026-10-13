@@ -123,6 +123,10 @@ function ReturnForm({
   const [exchangeSaleId, setExchangeSaleId] = useState<string | null>(null);
   const [voiding, setVoiding] = useState(false);
   const [key] = useState(() => crypto.randomUUID());
+  /** Customer phone or name on refunds that wait for approval (BR-180). */
+  const [customerContact, setCustomerContact] = useState('');
+  /** Terminal / transfer references per card or transfer pay-back (BR-181). */
+  const [references, setReferences] = useState<Record<string, string>>({});
 
   const chosen = sale.lines
     .map((l) => ({ line: l, sel: selection[l.position] }))
@@ -154,6 +158,8 @@ function ReturnForm({
     quantity: x.sel!.quantity.trim(),
     restock: (x.sel!.restock ?? restockDefault) && x.line.trackInventory,
   }));
+  const needsReferences = (preview.data?.allocation ?? []).filter((a) => a.referenceRequired);
+  const referencesOk = needsReferences.every((a) => (references[a.paymentId] ?? '').trim() !== '');
   const refund = useMutation({
     mutationFn: () =>
       api.refunds.create({
@@ -162,6 +168,17 @@ function ReturnForm({
         lines: refundLines,
         reason,
         note: note.trim() || null,
+        customerContact: customerContact.trim() || null,
+        // The suggested split, with the references the cashier typed.
+        ...(needsReferences.length
+          ? {
+              allocation: preview.data!.allocation.map((a) => ({
+                paymentId: a.paymentId,
+                amount: a.amount.amount,
+                reference: (references[a.paymentId] ?? '').trim() || null,
+              })),
+            }
+          : {}),
       }),
     onSuccess: async (r) => {
       await Promise.all([
@@ -332,22 +349,59 @@ function ReturnForm({
             </span>
           </p>
           {mode === 'refund' ? (
-            <ul className="text-sm text-fg-muted">
+            <ul className="grid gap-2 text-sm text-fg-muted">
               {preview.data.allocation.map((a) => {
                 const p = sale.payments.find((x) => x.paymentId === a.paymentId);
                 return (
-                  <li key={a.paymentId} className="flex justify-between">
-                    <span>
-                      {t('returns.payBack')}: {p ? localizedName(p, language) : a.kind}
+                  <li key={a.paymentId} className="grid gap-1">
+                    <span className="flex justify-between">
+                      <span>
+                        {t('returns.payBack')}: {p ? localizedName(p, language) : a.kind}
+                      </span>
+                      <span dir="ltr">{fmt(a.amount)}</span>
                     </span>
-                    <span dir="ltr">{fmt(a.amount)}</span>
+                    {a.referenceRequired ? (
+                      <Field label={t('returns.payBackReference')}>
+                        {(fp) => (
+                          <Input
+                            {...fp}
+                            dir="ltr"
+                            className="h-11"
+                            value={references[a.paymentId] ?? ''}
+                            onChange={(e) =>
+                              setReferences((r) => ({ ...r, [a.paymentId]: e.target.value }))
+                            }
+                          />
+                        )}
+                      </Field>
+                    ) : null}
                   </li>
                 );
               })}
             </ul>
           ) : null}
           {preview.data.approvalRequired ? (
-            <Alert tone="warning">{t('returns.needsApproval')}</Alert>
+            <>
+              <Alert tone="warning">
+                {t('returns.needsApproval')}{' '}
+                {preview.data.approvalReasons
+                  .map((r) => t(`returns.approvalReason_${r}`, { defaultValue: r }))
+                  .join(' · ')}
+              </Alert>
+              {mode === 'refund' ? (
+                <Field label={t('returns.customerContact')} hint={t('returns.customerContactHint')}>
+                  {(fp) => (
+                    <Input
+                      {...fp}
+                      className="h-11"
+                      maxLength={120}
+                      value={customerContact}
+                      onChange={(e) => setCustomerContact(e.target.value)}
+                    />
+                  )}
+                </Field>
+              ) : null}
+            </>
           ) : null}
         </section>
       ) : null}
@@ -356,7 +410,7 @@ function ReturnForm({
         <Button
           size="lg"
           className="h-14 text-lg"
-          disabled={!valid || !preview.data}
+          disabled={!valid || !preview.data || !referencesOk}
           loading={refund.isPending}
           onClick={() => refund.mutate()}
         >

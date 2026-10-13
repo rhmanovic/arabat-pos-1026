@@ -58,7 +58,7 @@ async function store(stock = '10', price = '1.250', cost = '0.500') {
   });
   const methods = (
     await c.client.request('GET', '/manager/payment-methods', { cookies: c.cookies })
-  ).json().methods as { id: string; kind: string; version: number }[];
+  ).json().methods as { id: string; kind: string; version: number; financialAccountId: string }[];
   const cash = methods.find((m) => m.kind === 'cash')!.id;
   const card = methods.find((m) => m.kind === 'card')!;
   const registers = (
@@ -442,9 +442,14 @@ describe('discounts, overrides and payments validation', () => {
     const { cookies } = await cashierWithShift(s);
     const cases: [Record<string, unknown>[], string][] = [
       [[{ methodId: s.cash, amount: '0.999' }], 'PAYMENT_TOTAL_MISMATCH'],
-      [[{ methodId: s.card.id, amount: '1.500' }], 'PAYMENT_TOTAL_MISMATCH'],
+      [[{ methodId: s.card.id, amount: '1.500', reference: 'K' }], 'PAYMENT_TOTAL_MISMATCH'],
+      // Card and transfer tenders need their reference (BR-181).
+      [[{ methodId: s.card.id, amount: '1.000' }], 'REFERENCE_REQUIRED'],
       [[{ methodId: s.cash, amount: '1.000', tendered: '0.500' }], 'PAYMENT_TOTAL_MISMATCH'],
-      [[{ methodId: s.card.id, amount: '1.000', tendered: '2' }], 'PAYMENT_TOTAL_MISMATCH'],
+      [
+        [{ methodId: s.card.id, amount: '1.000', tendered: '2', reference: 'K' }],
+        'PAYMENT_TOTAL_MISMATCH',
+      ],
       [[], 'PAYMENT_TOTAL_MISMATCH'],
       [[{ methodId: newId(), amount: '1.000' }], 'PAYMENT_METHOD_UNAVAILABLE'],
     ];
@@ -467,7 +472,12 @@ describe('discounts, overrides and payments validation', () => {
     const gw = (
       await s.c.client.request('POST', '/manager/payment-methods', {
         cookies: s.c.cookies,
-        body: { kind: 'card', nameEn: 'Online card', gatewayProvider: 'tap' },
+        body: {
+          kind: 'card',
+          nameEn: 'Online card',
+          gatewayProvider: 'tap',
+          financialAccountId: s.card.financialAccountId,
+        },
       })
     ).json();
     const unverified = await checkout(s, cookies, {

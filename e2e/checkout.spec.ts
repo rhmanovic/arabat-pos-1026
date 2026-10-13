@@ -121,7 +121,7 @@ test('end-to-end sale from setup to manager review', async ({ page, browser }) =
   const pay = pos.getByRole('dialog');
   await pay.getByRole('button', { name: 'Card (KNET)' }).click();
   await pay.getByLabel('Amount (KWD)').fill('1.000');
-  await pay.getByLabel('Reference (optional)').fill('APPROVAL-1');
+  await pay.getByLabel(/^Reference/).fill('APPROVAL-1');
   await pay.getByRole('button', { name: 'Add payment' }).click();
   await pay.getByRole('button', { name: 'Cash' }).click();
   await pay.getByLabel('Cash received (KWD)').fill('2');

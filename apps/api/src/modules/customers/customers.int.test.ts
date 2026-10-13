@@ -33,6 +33,8 @@ type Cookies = Co['cookies'];
 
 async function setup() {
   const c = await createCompany(app, db, mailer);
+  // The same person sells and refunds in these fixtures (own-sale rule tested in refunds-controls).
+  await c.allowOwnSaleRefunds();
   const p = (
     await c.client.request('POST', '/manager/products', {
       cookies: c.cookies,

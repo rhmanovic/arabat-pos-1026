@@ -40,6 +40,28 @@ test('cashier refunds and exchanges at the POS; a large refund waits for manager
       ],
     },
   });
+  // This scenario has the cashier refund their own sale: the owner switches the own-sale rule
+  // (BR-180) off for this company; the rule itself is covered by the integration tests.
+  const policy = await (await page.request.get('/api/v1/manager/sales-settings')).json();
+  expect(
+    (
+      await page.request.put('/api/v1/manager/sales-settings', {
+        data: {
+          maxDiscountPercent: policy.maxDiscountPercent,
+          refundWindowDays: policy.refundWindowDays,
+          refundApprovalLimit: policy.refundApprovalLimit.amount,
+          blindCashCount: policy.blindCashCount,
+          cashOutOtherLimit: policy.cashOutOtherLimit.amount,
+          cashOutOtherShiftLimit: policy.cashOutOtherShiftLimit.amount,
+          maxRegisterTolerance: policy.maxRegisterTolerance.amount,
+          expenseApprovalLimit: policy.expenseApprovalLimit.amount,
+          supplierPaymentApprovalLimit: policy.supplierPaymentApprovalLimit.amount,
+          refundOwnSalesNeedApproval: false,
+          version: policy.version,
+        },
+      })
+    ).status(),
+  ).toBe(200);
   const roles = (await (await page.request.get('/api/v1/manager/roles')).json()).roles as {
     id: string;
     templateKey: string;

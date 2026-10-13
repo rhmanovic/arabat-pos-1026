@@ -55,6 +55,7 @@ export function toPaymentMethod(r: MethodRow): PaymentMethod {
     feePercent: trimPercent(r.feePercent),
     financialAccountId: r.financialAccountId,
     gatewayProvider: r.gatewayProvider as PaymentMethod['gatewayProvider'],
+    refundFeePolicy: r.refundFeePolicy as PaymentMethod['refundFeePolicy'],
     gatewayLive: false,
     sortOrder: r.sortOrder,
     version: r.version,
@@ -126,8 +127,18 @@ export class PaymentsService {
           : '0',
       financialAccountId: input.financialAccountId,
       gatewayProvider: input.gatewayProvider,
+      refundFeePolicy: input.refundFeePolicy,
       sortOrder: input.sortOrder,
     };
+    // Every non-cash method settles somewhere (BR-181, FND-304): money must have a place.
+    if (input.kind !== 'cash' && !input.financialAccountId)
+      throw AppError.validation([
+        {
+          path: 'financialAccountId',
+          code: 'required',
+          message: 'Choose the bank or settlement account this method pays into.',
+        },
+      ]);
     const methodId = id ?? newId();
     try {
       return await this.database.withMerchantTx(actor.merchantId, async (tx) => {

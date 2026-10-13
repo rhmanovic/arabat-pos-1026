@@ -270,6 +270,7 @@ function MethodDialog({
     feePercent: method?.feePercent ?? '0',
     financialAccountId: method?.financialAccountId ?? '',
     gatewayProvider: method?.gatewayProvider ?? '',
+    refundFeePolicy: method?.refundFeePolicy ?? ('keep' as PaymentMethod['refundFeePolicy']),
   });
   const [previewAmount, setPreviewAmount] = useState('10.000');
   const set = (patch: Partial<typeof v>) => setV((c) => ({ ...c, ...patch }));
@@ -278,12 +279,14 @@ function MethodDialog({
   const fixedMinor = parseMinor(v.feeFixed);
   const percentOk = PERCENT.test(v.feePercent.trim());
   const amountMinor = parseMinor(previewAmount);
+  const feeValid = (!usesFixed || fixedMinor !== null) && (!usesPercent || percentOk);
   const valid =
     Boolean(v.nameAr || v.nameEn) &&
-    (!usesFixed || fixedMinor !== null) &&
-    (!usesPercent || percentOk);
+    feeValid &&
+    // Every non-cash method settles somewhere (BR-181); cash never carries a fee.
+    (v.kind === 'cash' ? v.feeType === 'none' : Boolean(v.financialAccountId));
   const fee =
-    valid && amountMinor !== null
+    feeValid && amountMinor !== null
       ? processingFee(amountMinor, {
           type: v.feeType,
           fixedMinor: usesFixed ? fixedMinor! : 0n,
@@ -493,6 +496,22 @@ function MethodDialog({
             )}
           </Field>
         )}
+        {v.kind !== 'cash' ? (
+          <Field label={t('cash.refundFeePolicy')} hint={t('cash.refundFeePolicyHint')}>
+            {(p) => (
+              <Select
+                {...p}
+                value={v.refundFeePolicy}
+                onChange={(e) =>
+                  set({ refundFeePolicy: e.target.value as PaymentMethod['refundFeePolicy'] })
+                }
+              >
+                <option value="keep">{t('cash.refundFee_keep')}</option>
+                <option value="reverse">{t('cash.refundFee_reverse')}</option>
+              </Select>
+            )}
+          </Field>
+        ) : null}
         {v.kind !== 'cash' ? (
           <Field label={t('cash.gateway')}>
             {(p) => (

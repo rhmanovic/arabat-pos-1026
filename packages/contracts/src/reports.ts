@@ -175,6 +175,8 @@ export const paymentsReportSchema = z.object({
       count: z.number().int(),
       collected: moneySchema,
       fees: moneySchema,
+      /** Fees given back on refunds under the method's policy (D6). */
+      feesReversed: moneySchema.default({ amount: '0.000', currency: 'KWD' }),
       refunded: moneySchema,
       /** collected − refunded (fees are shown separately). */
       net: moneySchema,
@@ -183,11 +185,31 @@ export const paymentsReportSchema = z.object({
   totals: z.object({
     collected: moneySchema,
     fees: moneySchema,
+    feesReversed: moneySchema.default({ amount: '0.000', currency: 'KWD' }),
     refunded: moneySchema,
     net: moneySchema,
+    /** net − fees + feesReversed. */
     netAfterFees: moneySchema,
     previousCollected: moneySchema,
   }),
+  /** Card and transfer tenders and pay-backs recorded without a reference (BR-181). */
+  unreferenced: z
+    .object({
+      count: z.number().int(),
+      amount: moneySchema,
+      items: z.array(
+        z.object({
+          id: z.string(),
+          kind: z.enum(['payment', 'refund_payment']),
+          document: z.string(),
+          ...named,
+          amount: moneySchema,
+          createdAt: z.string(),
+          employeeName: z.string().nullable(),
+        }),
+      ),
+    })
+    .default({ count: 0, amount: { amount: '0.000', currency: 'KWD' }, items: [] }),
   cash: z.object({
     cashSales: moneySchema,
     cashRefunds: moneySchema,

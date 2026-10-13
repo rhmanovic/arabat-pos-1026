@@ -39,6 +39,8 @@ const yesterday = () => new Date(Date.now() + 3 * 3600_000 - 86_400_000).toISOSt
 
 async function company() {
   const c = await createCompany(app, db, mailer);
+  // The same person sells and refunds in these fixtures (own-sale rule tested in refunds-controls).
+  await c.allowOwnSaleRefunds();
   const call = (
     method: 'GET' | 'POST' | 'PUT',
     path: string,

@@ -64,6 +64,13 @@ export const createRefundSchema = z
     note,
     /** Optional: how to pay back; defaults to the suggested allocation. */
     allocation: z.array(refundAllocationSchema).max(10).optional(),
+    /** Customer phone or name, asked for on refunds that wait for approval (BR-180). */
+    customerContact: z
+      .string()
+      .trim()
+      .max(120)
+      .nullish()
+      .transform((v) => (v == null || v === '' ? null : v)),
   })
   .refine((r) => r.reason !== 'other' || Boolean(r.note), {
     error: 'Add a note explaining the refund.',
@@ -154,8 +161,17 @@ export const refundPreviewSchema = z.object({
     z.object({ position: z.number().int(), quantity: z.string(), amount: moneySchema }),
   ),
   total: moneySchema,
-  allocation: z.array(z.object({ paymentId: z.string(), kind: z.string(), amount: moneySchema })),
+  allocation: z.array(
+    z.object({
+      paymentId: z.string(),
+      kind: z.string(),
+      amount: moneySchema,
+      /** The pay-back needs a terminal / transfer reference (BR-181). */
+      referenceRequired: z.boolean().default(false),
+    }),
+  ),
   approvalRequired: z.boolean(),
+  /** over_limit | outside_window | own_sale (BR-180). */
   approvalReasons: z.array(z.string()),
 });
 export type RefundPreview = z.infer<typeof refundPreviewSchema>;
@@ -177,6 +193,9 @@ export const refundSchema = z.object({
   requestedBy: z.string(),
   decidedBy: z.string().nullable(),
   decisionNote: z.string().nullable(),
+  /** The owner completed a refund that would otherwise have waited (BR-180). */
+  ownerOverride: z.boolean().default(false),
+  customerContact: z.string().nullable().default(null),
   createdAt: z.string(),
   completedAt: z.string().nullable(),
   lines: z.array(
@@ -200,6 +219,8 @@ export const refundSchema = z.object({
       status: z.enum(['succeeded', 'pending', 'failed']),
       verification: z.enum(['manual', 'gateway', 'internal']),
       reference: z.string().nullable(),
+      /** Processing fee given back with this pay-back (method policy, D6). */
+      feeReversed: moneySchema.optional(),
     }),
   ),
   version: z.number().int(),
@@ -237,6 +258,8 @@ export const refundActivitySchema = z.object({
       /** Refunded amount as a percentage of sales (2 decimals). */
       refundRate: z.string(),
       outsideWindow: z.number().int(),
+      /** Completed refunds of sales this employee rang up themselves (BR-180). */
+      ownSaleRefunds: z.number().int().default(0),
       flagged: z.boolean(),
     }),
   ),

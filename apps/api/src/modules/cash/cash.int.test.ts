@@ -91,7 +91,7 @@ function pos(s: Store, cookies: Cookies) {
       call('POST', '/pos/sales', {
         idempotencyKey: newId(),
         lines: [{ variantId: s.variantId, quantity }],
-        payments: [{ methodId, amount }],
+        payments: [{ methodId, amount, reference: methodId === s.cash ? null : 'T-1' }],
         expectedTotal: amount,
       }),
   };

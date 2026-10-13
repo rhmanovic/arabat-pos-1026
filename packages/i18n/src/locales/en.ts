@@ -145,6 +145,9 @@ export const commonEn = {
     OVERRIDE_INVALID: 'The supervisor approval has expired or was already used. Ask again.',
     OVERRIDE_SELF: 'A supervisor override must come from another person.',
     OVERRIDE_NOT_ALLOWED: 'This person cannot authorise anything beyond your own rights here.',
+    REFERENCE_REQUIRED: 'Enter the terminal or transfer reference for this payment.',
+    SETTLEMENT_ACCOUNT_REQUIRED:
+      'This payment method has no settlement account. Ask a manager to link one before using it.',
     PAYMENT_TOTAL_MISMATCH: 'The payments do not add up to the total.',
     TOTAL_CHANGED: 'Prices changed. Review the sale and try again.',
     PAYMENT_NOT_VERIFIED: 'This payment cannot be verified yet.',

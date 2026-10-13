@@ -543,7 +543,8 @@ export class ReportsService {
       const paidOut = await this.rows(
         tx,
         sql`select rp.method_kind, rp.payment_method_id, max(rp.method_name_en) as name_en,
-                   max(rp.method_name_ar) as name_ar, sum(rp.amount_minor)::text as amount
+                   max(rp.method_name_ar) as name_ar, sum(rp.amount_minor)::text as amount,
+                   sum(rp.fee_reversed_minor)::text as fees_reversed
             from refund_payments rp join refunds r on r.id = rp.refund_id where ${outWhere}
             group by rp.method_kind, rp.payment_method_id`,
       );
@@ -564,6 +565,7 @@ export class ReportsService {
           count: int(inRow?.['n']),
           collected: money(amount),
           fees: money(big(inRow?.['fees'])),
+          feesReversed: money(big(outRow?.['fees_reversed'])),
           refunded: money(refunded),
           net: money(amount - refunded),
         };
@@ -571,7 +573,50 @@ export class ReportsService {
       const sum = (xs: { amount: string }[]) => xs.reduce((s, x) => s + minorOf(x), 0n);
       const totalIn = sum(collections.map((x) => x.collected));
       const totalFees = sum(collections.map((x) => x.fees));
+      const totalFeesReversed = sum(collections.map((x) => x.feesReversed));
       const totalOut = sum(collections.map((x) => x.refunded));
+      // Card and transfer money recorded without a reference (BR-181, FND-305 / FND-505).
+      const unreferencedRows = await this.rows(
+        tx,
+        sql`select * from (
+              select p.id, 'payment' as kind, s.receipt_number as document, p.method_name_en as name_en,
+                     p.method_name_ar as name_ar, p.amount_minor::text as amount, p.created_at, u.full_name
+              from payments p join sales s on s.id = p.sale_id left join users u on u.id = s.user_id
+              where ${payWhere(c.from, c.to)} and p.method_kind <> 'cash' and p.verification = 'manual'
+                and p.reference is null
+              union all
+              select rp.id, 'refund_payment' as kind, r.refund_number as document, rp.method_name_en,
+                     rp.method_name_ar, rp.amount_minor::text, coalesce(r.completed_at, r.created_at), u.full_name
+              from refund_payments rp join refunds r on r.id = rp.refund_id left join users u on u.id = r.user_id
+              where ${outWhere} and rp.method_kind <> 'cash' and rp.verification = 'manual'
+                and rp.reference is null
+            ) x order by x.created_at desc limit 200`,
+      );
+      const [unrefTotals] = await this.rows(
+        tx,
+        sql`select count(*)::int as n, coalesce(sum(amount), 0)::text as amount from (
+              select p.amount_minor as amount from payments p join sales s on s.id = p.sale_id
+              where ${payWhere(c.from, c.to)} and p.method_kind <> 'cash' and p.verification = 'manual'
+                and p.reference is null
+              union all
+              select rp.amount_minor from refund_payments rp join refunds r on r.id = rp.refund_id
+              where ${outWhere} and rp.method_kind <> 'cash' and rp.verification = 'manual'
+                and rp.reference is null) x`,
+      );
+      const unreferenced = {
+        count: int(unrefTotals?.['n']),
+        amount: money(big(unrefTotals?.['amount'])),
+        items: unreferencedRows.map((r) => ({
+          id: r['id'] as string,
+          kind: r['kind'] as 'payment' | 'refund_payment',
+          document: r['document'] as string,
+          nameEn: (r['name_en'] as string | null) ?? null,
+          nameAr: (r['name_ar'] as string | null) ?? null,
+          amount: money(big(r['amount'])),
+          createdAt: iso(r['created_at']),
+          employeeName: (r['full_name'] as string | null) ?? null,
+        })),
+      };
       const [prev] = await this.rows(
         tx,
         sql`select coalesce(sum(p.amount_minor), 0)::text as amount
@@ -670,11 +715,13 @@ export class ReportsService {
         totals: {
           collected: money(totalIn),
           fees: money(totalFees),
+          feesReversed: money(totalFeesReversed),
           refunded: money(totalOut),
           net: money(totalIn - totalOut),
-          netAfterFees: money(totalIn - totalOut - totalFees),
+          netAfterFees: money(totalIn - totalOut - totalFees + totalFeesReversed),
           previousCollected: money(big(prev!['amount'])),
         },
+        unreferenced,
         cash: {
           cashSales: money(cashSales),
           cashRefunds: money(cashRefunds),
