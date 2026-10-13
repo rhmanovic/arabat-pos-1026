@@ -53,6 +53,8 @@ import {
   type AuditListQuery,
   auditListSchema,
   posShiftSchema,
+  type DecideCashMovement,
+  controlsChecklistSchema,
   suspendedOrderListSchema,
   suspendedOrderSchema,
   type CloseShift,
@@ -372,6 +374,8 @@ export function createApiClient(options: ApiClientOptions = {}) {
     },
     merchant: {
       get: () => request('GET', '/manager/merchant', { schema: merchantProfileSchema }),
+      controls: () =>
+        request('GET', '/manager/merchant/controls', { schema: controlsChecklistSchema }),
       update: (body: UpdateMerchantProfile) =>
         request('PATCH', '/manager/merchant', { body, schema: merchantProfileSchema }),
     },
@@ -601,6 +605,16 @@ export function createApiClient(options: ApiClientOptions = {}) {
         }),
       forceClose: (id: string, body: ForceCloseShift) =>
         request('POST', `/manager/shifts/${id}/force-close`, { body, schema: shiftSchema }),
+      decideMovement: (id: string, movementId: string, body: DecideCashMovement) =>
+        request('POST', `/manager/shifts/${id}/movements/${movementId}/decision`, {
+          body,
+          schema: shiftSchema,
+        }),
+      withdrawMovement: (movementId: string) =>
+        request('POST', `/pos/shifts/current/cash-movements/${movementId}/withdraw`, {
+          body: {},
+          schema: posShiftSchema,
+        }),
       posRegisters: () => request('GET', '/pos/registers', { schema: posRegisterListSchema }),
       current: () => request('GET', '/pos/shifts/current', { schema: currentShiftSchema }),
       open: (body: OpenShift) => request('POST', '/pos/shifts', { body, schema: posShiftSchema }),
@@ -635,6 +649,9 @@ export function createApiClient(options: ApiClientOptions = {}) {
         refundWindowDays: number;
         refundApprovalLimit: string;
         blindCashCount: boolean;
+        cashOutOtherLimit: string;
+        cashOutOtherShiftLimit: string;
+        maxRegisterTolerance: string;
         version: number;
       }) => request('PUT', '/manager/sales-settings', { body, schema: salesSettingsSchema }),
     },

@@ -294,6 +294,9 @@ export async function createCompany(
         refundWindowDays: current.refundWindowDays,
         refundApprovalLimit: current.refundApprovalLimit.amount,
         blindCashCount: false,
+        cashOutOtherLimit: current.cashOutOtherLimit.amount,
+        cashOutOtherShiftLimit: current.cashOutOtherShiftLimit.amount,
+        maxRegisterTolerance: current.maxRegisterTolerance.amount,
         version: current.version,
       },
     });

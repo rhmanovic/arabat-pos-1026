@@ -33,6 +33,54 @@ export function DashboardPage() {
     queryFn: () => api.merchant.get(),
     enabled: can('merchant.settings.read'),
   });
+  // Internal-control checklist (BR-165): live facts, never estimates.
+  const controls = useQuery({
+    queryKey: ['manager', 'merchant', 'controls'],
+    queryFn: () => api.merchant.controls(),
+    enabled: can('merchant.settings.read'),
+  });
+  const names = (xs: { nameEn: string | null; nameAr: string | null }[]) =>
+    xs.map((x) => localizedName(x, i18n.language)).join(', ');
+  const warnings = controls.data
+    ? [
+        ...(controls.data.treasurerAssigned
+          ? []
+          : [{ key: 'treasurer', to: '/employees', text: t('dashboard.controlTreasurerMissing') }]),
+        ...(controls.data.pendingCashMovements > 0
+          ? [
+              {
+                key: 'pending',
+                to: '/shifts',
+                text: t('dashboard.controlPending', { count: controls.data.pendingCashMovements }),
+              },
+            ]
+          : []),
+        ...(controls.data.membersWithoutRoles.length > 0
+          ? [
+              {
+                key: 'roles',
+                to: '/employees',
+                text: t('dashboard.controlMembersWithoutRoles', {
+                  count: controls.data.membersWithoutRoles.length,
+                  names: controls.data.membersWithoutRoles.map((m) => m.fullName).join(', '),
+                }),
+              },
+            ]
+          : []),
+        ...(controls.data.registersAboveTolerance.length > 0
+          ? [
+              {
+                key: 'tolerance',
+                to: '/registers',
+                text: t('dashboard.controlRegistersAboveTolerance', {
+                  count: controls.data.registersAboveTolerance.length,
+                  names: names(controls.data.registersAboveTolerance),
+                }),
+              },
+            ]
+          : []),
+      ]
+    : [];
 
   const inScope = (assignments: { branchId: string | null }[]) =>
     !branchId || assignments.some((a) => a.branchId === null || a.branchId === branchId);
@@ -127,6 +175,31 @@ export function DashboardPage() {
           />
         ) : null}
       </div>
+
+      {controls.data ? (
+        <section className="rounded-lg border border-border bg-surface" data-testid="controls">
+          <h2 className="border-b border-border p-5 font-semibold">
+            {t('dashboard.controlsTitle')}
+          </h2>
+          {warnings.length === 0 ? (
+            <p className="p-5 text-sm text-fg-muted">{t('dashboard.controlsAllGood')}</p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {warnings.map((w) => (
+                <li key={w.key}>
+                  <Link
+                    to={w.to}
+                    className="flex min-h-14 items-center justify-between gap-3 px-5 py-4 hover:bg-surface-muted"
+                  >
+                    <span className="text-sm">{w.text}</span>
+                    <Badge tone="warning">{t('dashboard.todo')}</Badge>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
 
       <Alert tone="info" title={t('dashboard.noSalesYet')} />
 

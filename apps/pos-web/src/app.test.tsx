@@ -206,6 +206,73 @@ describe('pos app', () => {
     expect(screen.getByRole('button', { name: 'Close shift' })).toBeEnabled();
   });
 
+  it('sends an "other" cash-out above the company limit to a manager and lets the cashier withdraw it (BR-164)', async () => {
+    const pendingMovement = {
+      id: '0190a000-0000-7000-8000-000000000601',
+      kind: 'cash_out',
+      amount: money('30.000'),
+      reason: 'other',
+      note: 'repair',
+      createdBy: 'Cashier',
+      createdByUserId: 'u1',
+      createdAt: '2026-10-12T06:00:00.000Z',
+      status: 'pending',
+      correctsMovementId: null,
+      limitExceeded: true,
+      ownerOverride: false,
+      decidedBy: null,
+      decidedAt: null,
+      decisionNote: null,
+    };
+    let shift: unknown = SHIFT;
+    const fetch = fakeApiFetch({
+      session: makeSession('pos', ['pos.access', 'shifts.operate', 'cash.move']),
+      routes: {
+        'GET /pos/shifts/current': () => ({ status: 200, body: { shift } }),
+        'GET /pos/sales/settings': () => ({
+          status: 200,
+          body: {
+            maxDiscountPercent: '10',
+            refundWindowDays: 30,
+            refundApprovalLimit: money('20.000'),
+            blindCashCount: true,
+            cashOutOtherLimit: money('20.000'),
+            cashOutOtherShiftLimit: money('50.000'),
+            maxRegisterTolerance: money('1.000'),
+            version: 1,
+          },
+        }),
+        'POST /pos/shifts/current/cash-movements': () => {
+          shift = { ...SHIFT, movements: [pendingMovement] };
+          return { status: 201, body: shift };
+        },
+        'POST /pos/shifts/current/cash-movements/0190a000-0000-7000-8000-000000000601/withdraw':
+          () => {
+            shift = { ...SHIFT, movements: [{ ...pendingMovement, status: 'withdrawn' }] };
+            return { status: 201, body: shift };
+          },
+      },
+    });
+    renderApp({ routes, appInterface: 'pos', i18n, fetch, path: '/shift' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Cash out' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.selectOptions(within(dialog).getByLabelText('Reason'), 'other');
+    await userEvent.type(within(dialog).getByLabelText('Amount (KWD)'), '30');
+    // The cashier is warned before confirming that this amount waits for a manager.
+    expect(await within(dialog).findByTestId('cash-out-limit')).toHaveTextContent(
+      'Above KWD 20.000',
+    );
+    await userEvent.type(within(dialog).getByLabelText('Description'), 'repair');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
+    expect(await screen.findByTestId('movement-pending')).toHaveTextContent('Awaiting approval');
+    const sent = fetch.calls.find(
+      (c) => c.method === 'POST' && c.path === '/pos/shifts/current/cash-movements',
+    );
+    expect(sent?.body).toMatchObject({ kind: 'cash_out', reason: 'other', amount: '30' });
+    await userEvent.click(screen.getByRole('button', { name: 'Withdraw' }));
+    expect(await screen.findByTestId('movement-withdrawn')).toHaveTextContent('Withdrawn');
+  });
+
   it('counts the drawer by notes and coins when closing', async () => {
     const fetch = fakeApiFetch({
       session: makeSession('pos', ['pos.access', 'shifts.operate', 'cash.move']),
@@ -235,6 +302,10 @@ describe('pos app', () => {
     await userEvent.type(within(dialog).getByLabelText('0.5'), '3');
     await userEvent.type(within(dialog).getByLabelText('0.25'), '1');
     expect(within(dialog).getByTestId('count-total')).toHaveTextContent('KWD 46.750');
+    // A visible difference (50.000 expected) needs an explanation before closing (BR-164).
+    expect(within(dialog).getByTestId('close-difference')).toHaveTextContent('KWD -3.250');
+    expect(within(dialog).getByRole('button', { name: 'Close shift' })).toBeDisabled();
+    await userEvent.type(within(dialog).getByLabelText('Note (optional)'), 'coins missing');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Close shift' }));
     expect(await screen.findByTestId('discrepancy')).toHaveTextContent('KWD -0.250');
     const call = await vi.waitFor(() => {

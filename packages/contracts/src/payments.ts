@@ -171,6 +171,8 @@ export const CASH_EXPENSE_CATEGORIES = [
 ] as const;
 export type CashExpenseCategory = (typeof CASH_EXPENSE_CATEGORIES)[number];
 
+/** posted moved cash; pending waits for a manager; rejected / withdrawn never moved cash (BR-164). */
+export const CASH_MOVEMENT_STATUSES = ['posted', 'pending', 'rejected', 'withdrawn'] as const;
 export const cashMovementSchema = z.object({
   id: z.string(),
   kind: z.enum(['cash_in', 'cash_out']),
@@ -178,9 +180,32 @@ export const cashMovementSchema = z.object({
   reason: z.string(),
   note: z.string().nullable(),
   createdBy: z.string(),
+  createdByUserId: z.string(),
   createdAt: z.string(),
+  status: z.enum(CASH_MOVEMENT_STATUSES),
+  /** correction: the movement it reverses. */
+  correctsMovementId: z.string().nullable(),
+  /** Above the company's cash-out limit when recorded (BR-164). */
+  limitExceeded: z.boolean(),
+  /** Posted by the owner despite the limit (audited exception, D2). */
+  ownerOverride: z.boolean(),
+  decidedBy: z.string().nullable(),
+  decidedAt: z.string().nullable(),
+  decisionNote: z.string().nullable(),
 });
 export type CashMovement = z.infer<typeof cashMovementSchema>;
+
+/** A manager's decision on a pending cash-out (BR-164). */
+export const decideCashMovementSchema = z
+  .object({
+    decision: z.enum(['approve', 'reject']),
+    note: text(500),
+  })
+  .refine((d) => d.decision !== 'reject' || Boolean(d.note), {
+    error: 'Explain why the movement is rejected.',
+    path: ['note'],
+  });
+export type DecideCashMovement = z.input<typeof decideCashMovementSchema>;
 
 export const denominationSchema = z.object({
   value: moneyAmountSchema,
@@ -364,6 +389,16 @@ export const recordCashMovementSchema = z
     receiptReference: text(80),
     /** bank_deposit: the bank account the cash is deposited into. */
     bankAccountId: z.uuid().optional(),
+    /** correction: the posted "other" movement (or earlier correction) being reversed (BR-164). */
+    correctsMovementId: z.uuid().optional(),
+  })
+  .refine((m) => m.reason !== 'correction' || Boolean(m.correctsMovementId), {
+    error: 'Choose the movement this correction reverses.',
+    path: ['correctsMovementId'],
+  })
+  .refine((m) => m.reason !== 'correction' || Boolean(m.note), {
+    error: 'Explain the correction.',
+    path: ['note'],
   })
   .refine(
     (m) =>

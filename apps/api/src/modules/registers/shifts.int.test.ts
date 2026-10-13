@@ -306,7 +306,7 @@ describe('registers and shifts', () => {
       (await p.cash({ kind: 'cash_out', amount: '20.100', reason: 'safe_drop' })).statusCode,
     ).toBe(201);
     // Cannot take out more cash than the drawer holds.
-    const tooMuch = await p.cash({ kind: 'cash_out', amount: '40.156', reason: 'correction' });
+    const tooMuch = await p.cash({ kind: 'cash_out', amount: '40.156', reason: 'safe_drop' });
     expect(tooMuch.json().code).toBe('INSUFFICIENT_CASH');
     // "other" needs a note; wrong reason for the direction is refused.
     expect((await p.cash({ kind: 'cash_out', amount: '1', reason: 'other' })).statusCode).toBe(400);
@@ -571,6 +571,9 @@ describe('blind cash counts (BR-162)', () => {
         refundWindowDays: current.refundWindowDays,
         refundApprovalLimit: current.refundApprovalLimit.amount,
         blindCashCount,
+        cashOutOtherLimit: current.cashOutOtherLimit.amount,
+        cashOutOtherShiftLimit: current.cashOutOtherShiftLimit.amount,
+        maxRegisterTolerance: current.maxRegisterTolerance.amount,
         version: current.version,
       },
     });
@@ -682,5 +685,268 @@ describe('blind cash counts (BR-162)', () => {
         })
       ).statusCode,
     ).toBe(201);
+  });
+});
+
+describe('cash-out controls (BR-164)', () => {
+  async function policy(c: Co, patch: Record<string, unknown>) {
+    const current = (
+      await c.client.request('GET', '/manager/sales-settings', { cookies: c.cookies })
+    ).json();
+    const res = await c.client.request('PUT', '/manager/sales-settings', {
+      cookies: c.cookies,
+      body: {
+        maxDiscountPercent: current.maxDiscountPercent,
+        refundWindowDays: current.refundWindowDays,
+        refundApprovalLimit: current.refundApprovalLimit.amount,
+        blindCashCount: current.blindCashCount,
+        cashOutOtherLimit: current.cashOutOtherLimit.amount,
+        cashOutOtherShiftLimit: current.cashOutOtherShiftLimit.amount,
+        maxRegisterTolerance: current.maxRegisterTolerance.amount,
+        version: current.version,
+        ...patch,
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    return res.json();
+  }
+  const audit = async (c: Co, action: string) =>
+    (
+      await c.client.request('GET', `/manager/audit?action=${action}`, { cookies: c.cookies })
+    ).json().entries as { action: string; details: Record<string, unknown> }[];
+
+  it('corrections reverse only a posted "other" movement of the shift, up to what is left', async () => {
+    const c = await company();
+    const [register] = await registersAt(c, c.main);
+    const sup = pos(
+      c,
+      (await c.hire([{ roleId: c.roles.supervisor, branchId: c.main }], 'pos')).cookies,
+    );
+    await sup.open(register!.id, '50.000');
+    const other = await sup.cash({
+      kind: 'cash_in',
+      amount: '4.000',
+      reason: 'other',
+      note: 'found',
+    });
+    expect(other.statusCode).toBe(201);
+    const otherId = other.json().movements.at(-1).id as string;
+    const drop = await sup.cash({ kind: 'cash_out', amount: '10.000', reason: 'safe_drop' });
+    const dropId = drop.json().movements.at(-1).id as string;
+    // A correction names the movement, goes the opposite way, and explains itself.
+    expect(
+      (await sup.cash({ kind: 'cash_out', amount: '1', reason: 'correction' })).statusCode,
+    ).toBe(400);
+    expect(
+      (
+        await sup.cash({
+          kind: 'cash_in',
+          amount: '1.000',
+          reason: 'correction',
+          correctsMovementId: otherId,
+          note: 'same way',
+        })
+      ).statusCode,
+    ).toBe(400);
+    // Drops are reversed by a top-up, not by a correction.
+    expect(
+      (
+        await sup.cash({
+          kind: 'cash_in',
+          amount: '1.000',
+          reason: 'correction',
+          correctsMovementId: dropId,
+          note: 'oops',
+        })
+      ).statusCode,
+    ).toBe(400);
+    expect(
+      (
+        await sup.cash({
+          kind: 'cash_out',
+          amount: '4.500',
+          reason: 'correction',
+          correctsMovementId: otherId,
+          note: 'too much',
+        })
+      ).statusCode,
+    ).toBe(400);
+    const first = await sup.cash({
+      kind: 'cash_out',
+      amount: '3.000',
+      reason: 'correction',
+      correctsMovementId: otherId,
+      note: 'typed 4 instead of 1',
+    });
+    expect(first.statusCode).toBe(201);
+    expect(first.json().movements.at(-1)).toMatchObject({
+      reason: 'correction',
+      status: 'posted',
+      correctsMovementId: otherId,
+    });
+    // Only 1.000 is left to correct.
+    expect(
+      (
+        await sup.cash({
+          kind: 'cash_out',
+          amount: '1.001',
+          reason: 'correction',
+          correctsMovementId: otherId,
+          note: 'again',
+        })
+      ).statusCode,
+    ).toBe(400);
+    expect((await sup.current()).json().shift.summary.expectedCash.amount).toBe('41.000');
+  });
+
+  it('holds "other" cash-outs above the company limit for a manager, except for the owner', async () => {
+    const c = await company();
+    const [register] = await registersAt(c, c.main);
+    await policy(c, { cashOutOtherLimit: '5.000', cashOutOtherShiftLimit: '8.000' });
+    const supCookies = (await c.hire([{ roleId: c.roles.supervisor, branchId: c.main }], 'pos'))
+      .cookies;
+    const sup = pos(c, supCookies);
+    const opened = await sup.open(register!.id, '100.000');
+    // Within the limit: posted at once.
+    expect(
+      (await sup.cash({ kind: 'cash_out', amount: '4.000', reason: 'other', note: 'taxi' }))
+        .json()
+        .movements.at(-1).status,
+    ).toBe('posted');
+    // Above the per-movement limit: pending, drawer figure unchanged.
+    const big = await sup.cash({
+      kind: 'cash_out',
+      amount: '6.000',
+      reason: 'other',
+      note: 'repair',
+    });
+    expect(big.statusCode).toBe(201);
+    const pending = big.json().movements.at(-1);
+    expect(pending).toMatchObject({ status: 'pending', limitExceeded: true, ownerOverride: false });
+    expect(big.json().summary.expectedCash.amount).toBe('96.000');
+    // The per-shift total counts posted and pending: 4 + 6 + 3 > 8 → pending too.
+    const third = await sup.cash({
+      kind: 'cash_out',
+      amount: '3.000',
+      reason: 'other',
+      note: 'more',
+    });
+    expect(third.json().movements.at(-1).status).toBe('pending');
+    expect(await audit(c, 'cash_out_requested')).toHaveLength(2);
+    // The cashier cannot close while a request is open, but may withdraw it.
+    expect(
+      (await sup.close({ countedCash: '96.000', version: opened.json().version })).json().code,
+    ).toBe('PENDING_MOVEMENTS');
+    const withdrawn = await c.client.request(
+      'POST',
+      `/pos/shifts/current/cash-movements/${third.json().movements.at(-1).id}/withdraw`,
+      { cookies: supCookies, body: {} },
+    );
+    expect(withdrawn.statusCode).toBe(201);
+    expect(withdrawn.json().movements.at(-1).status).toBe('withdrawn');
+    // Nobody approves their own request; a company manager does, and the cash leaves then.
+    const shiftId = opened.json().id as string;
+    const decide = (cookies: Cookies, body: Record<string, unknown>) =>
+      c.client.request('POST', `/manager/shifts/${shiftId}/movements/${pending.id}/decision`, {
+        cookies,
+        body,
+      });
+    const supManager = (
+      await c.hire([{ roleId: c.roles.branch_manager, branchId: c.main }], 'manager')
+    ).cookies;
+    expect((await decide(supCookies, { decision: 'approve' })).statusCode).toBe(401);
+    expect((await decide(supManager, { decision: 'reject' })).statusCode).toBe(400);
+    const approved = await decide(supManager, { decision: 'approve', note: 'repair confirmed' });
+    expect(approved.statusCode).toBe(201);
+    const row = approved.json().movements.find((m: { id: string }) => m.id === pending.id);
+    expect(row).toMatchObject({ status: 'posted', decisionNote: 'repair confirmed' });
+    expect(typeof row.decidedBy).toBe('string');
+    expect(approved.json().summary.expectedCash.amount).toBe('90.000');
+    expect((await decide(supManager, { decision: 'approve' })).json().code).toBe(
+      'MOVEMENT_DECIDED',
+    );
+    expect((await audit(c, 'cash_out_approved'))[0]!.details).toMatchObject({
+      movementId: pending.id,
+    });
+
+    // The owner posts directly: the exception is flagged on the movement and in the audit log.
+    const ownerPos = pos(c, await c.ownerPos(c.main));
+    const [, second] = await registersAt(c, c.main).then(async (rs) =>
+      rs.length > 1
+        ? rs
+        : [
+            rs[0],
+            (
+              await c.client.request('POST', '/manager/registers', {
+                cookies: c.cookies,
+                body: { branchId: c.main, code: 'R2', nameEn: 'R2' },
+              })
+            ).json(),
+          ],
+    );
+    await ownerPos.open(second!.id, '50.000');
+    const own = await ownerPos.cash({
+      kind: 'cash_out',
+      amount: '20.000',
+      reason: 'other',
+      note: 'owner',
+    });
+    expect(own.json().movements.at(-1)).toMatchObject({
+      status: 'posted',
+      limitExceeded: true,
+      ownerOverride: true,
+    });
+    expect((await audit(c, 'shift.cash_out'))[0]!.details).toMatchObject({
+      limitExceeded: true,
+      ownerOverride: true,
+    });
+
+    // A forced close rejects what is still pending.
+    const again = await sup.cash({
+      kind: 'cash_out',
+      amount: '7.000',
+      reason: 'other',
+      note: 'late',
+    });
+    expect(again.json().movements.at(-1).status).toBe('pending');
+    const forced = await c.client.request('POST', `/manager/shifts/${shiftId}/force-close`, {
+      cookies: c.cookies,
+      body: { note: 'went home', version: again.json().version },
+    });
+    expect(forced.statusCode).toBe(201);
+    expect(
+      forced.json().movements.filter((m: { status: string }) => m.status === 'rejected'),
+    ).toHaveLength(1);
+  });
+
+  it('caps register tolerance by the company maximum and asks for a note on a visible difference', async () => {
+    const c = await company();
+    const [register] = await registersAt(c, c.main);
+    await policy(c, { maxRegisterTolerance: '0.500' });
+    const save = (discrepancyTolerance: string) =>
+      c.client.request('PATCH', `/manager/registers/${register!.id}`, {
+        cookies: c.cookies,
+        body: {
+          branchId: c.main,
+          code: register!.code,
+          nameEn: 'Register 1',
+          discrepancyTolerance,
+          version: register!.version,
+        },
+      });
+    expect((await save('0.750')).statusCode).toBe(400);
+    expect((await save('0.500')).statusCode).toBe(200);
+    // A supervisor sees the expected figure, so a difference beyond the tolerance needs a note.
+    const sup = pos(
+      c,
+      (await c.hire([{ roleId: c.roles.supervisor, branchId: c.main }], 'pos')).cookies,
+    );
+    const opened = await sup.open(register!.id, '30.000');
+    expect(
+      (await sup.close({ countedCash: '29.000', version: opened.json().version })).statusCode,
+    ).toBe(400);
+    expect(
+      (await sup.close({ countedCash: '29.600', version: opened.json().version })).json().outcome,
+    ).toBe('balanced');
   });
 });

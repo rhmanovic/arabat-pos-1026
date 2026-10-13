@@ -153,6 +153,9 @@ export class SalesService {
       refundWindowDays: row?.refundWindowDays ?? 30,
       refundApprovalLimit: money(row?.refundApprovalLimitMinor ?? 20000n),
       blindCashCount: row?.blindCashCount ?? true,
+      cashOutOtherLimit: money(row?.cashOutOtherLimitMinor ?? 20000n),
+      cashOutOtherShiftLimit: money(row?.cashOutOtherShiftLimitMinor ?? 50000n),
+      maxRegisterTolerance: money(row?.maxRegisterToleranceMinor ?? 1000n),
       version: row?.version ?? 1,
     };
   }
@@ -164,6 +167,14 @@ export class SalesService {
   ): Promise<SalesSettings> {
     assertCan(actor, 'merchant.settings.update', null);
     const limitMinor = parseAmount(input.refundApprovalLimit, 'refundApprovalLimit');
+    const cashLimits = {
+      cashOutOtherLimitMinor: parseAmount(input.cashOutOtherLimit, 'cashOutOtherLimit'),
+      cashOutOtherShiftLimitMinor: parseAmount(
+        input.cashOutOtherShiftLimit,
+        'cashOutOtherShiftLimit',
+      ),
+      maxRegisterToleranceMinor: parseAmount(input.maxRegisterTolerance, 'maxRegisterTolerance'),
+    };
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const [row] = await tx
         .select()
@@ -179,6 +190,7 @@ export class SalesService {
             refundWindowDays: input.refundWindowDays,
             refundApprovalLimitMinor: limitMinor,
             blindCashCount: input.blindCashCount,
+            ...cashLimits,
             version: sql`${salesSettings.version} + 1`,
             updatedAt: sql`now()`,
           })
@@ -190,6 +202,7 @@ export class SalesService {
           refundWindowDays: input.refundWindowDays,
           refundApprovalLimitMinor: limitMinor,
           blindCashCount: input.blindCashCount,
+          ...cashLimits,
           version: 2,
         });
       }
@@ -212,6 +225,18 @@ export class SalesService {
             to: limitMinor.toString(),
           },
           blindCashCount: { from: row?.blindCashCount ?? true, to: input.blindCashCount },
+          cashOutOtherLimit: {
+            from: (row?.cashOutOtherLimitMinor ?? 20000n).toString(),
+            to: cashLimits.cashOutOtherLimitMinor.toString(),
+          },
+          cashOutOtherShiftLimit: {
+            from: (row?.cashOutOtherShiftLimitMinor ?? 50000n).toString(),
+            to: cashLimits.cashOutOtherShiftLimitMinor.toString(),
+          },
+          maxRegisterTolerance: {
+            from: (row?.maxRegisterToleranceMinor ?? 1000n).toString(),
+            to: cashLimits.maxRegisterToleranceMinor.toString(),
+          },
         },
       });
       return this.settings(tx, actor.merchantId);

@@ -873,3 +873,32 @@ ADR; supersede it.
   disbursement approvals, deposits in transit, variance follow-up, custody roles) follows in
   later sessions; thresholds will be per-merchant settings with the owner's defaults.
 
+## ADR-0094 — Remediation session 2: cash-out controls, Treasurer role, controls checklist
+- **Date:** 2026-10-13 · **Status:** Accepted (owner decisions D2 and D3 on the remediation plan)
+- **Context:** Phase 1 found that a cash-out with reason "correction" or "other" removed cash
+  from custody with no counterpart, limit or approval (FND-407), that closing shortages needed
+  no explanation (FND-402), that register tolerance was unbounded (FND-403), and that custody
+  rights were held by nobody but the owner (FND-113, FND-422).
+- **Decision:**
+  - `cash_movements` gains `status` (`posted` | `pending` | `rejected` | `withdrawn`),
+    `corrects_movement_id`, `limit_exceeded`, `owner_override` and the decision columns
+    (migration 0037). Only pending rows change, once, into a final state (trigger
+    `cash_movements_decision`; the runtime role may update only the decision columns);
+    posting on approval requires the shift to be open. Drawer figures, shift totals and the
+    cash reports count only `posted` movements.
+  - Policy columns on `sales_settings`: `cash_out_other_limit_minor` (20.000 KWD),
+    `cash_out_other_shift_limit_minor` (50.000 KWD), `max_register_tolerance_minor`
+    (1.000 KWD), owner-editable per company (D2: never hard-coded).
+  - Pending requests are decided with `POST /manager/shifts/:id/movements/:movementId/decision`
+    (`shifts.view_all`, approver ≠ requester, owner excepted and flagged) and withdrawn with
+    `POST /pos/shifts/current/cash-movements/:movementId/withdraw`. The POS warns before the
+    cashier confirms an amount that will wait, and shows the request's state.
+  - New role template `treasurer`; the template seed adds it to existing companies on the next
+    `db:seed`. `GET /manager/merchant/controls` (`merchant.settings.read`) computes the
+    checklist from live tables.
+  - Practicality for an owner with one cashier: the owner is never blocked (owner override,
+    audited); limits are company settings with sensible defaults.
+- **Consequences:** The remaining custody split (`cash.custody` into count / move / transfer,
+  FND-422) and the cashier acknowledgement of manager cash moves (FND-419) stay open. Variance
+  follow-up (R1.4) and disbursement approvals (R1.2) reuse the pending/decision pattern.
+

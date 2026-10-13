@@ -43,6 +43,21 @@ export const salesSettings = pgTable('sales_settings', {
    * drawer at opening and closing without seeing the expected balance first.
    */
   blindCashCount: boolean().notNull().default(true),
+  /**
+   * Cash-out controls (BR-164, remediation R1.1): an "other" cash-out above the per-movement
+   * limit, or taking the shift's "other" cash-outs above the per-shift limit, waits for a
+   * manager unless the owner records it. Owner-set, per company (D2).
+   */
+  cashOutOtherLimitMinor: bigint({ mode: 'bigint' })
+    .notNull()
+    .default(sql`20000`),
+  cashOutOtherShiftLimitMinor: bigint({ mode: 'bigint' })
+    .notNull()
+    .default(sql`50000`),
+  /** Largest discrepancy tolerance a register may be given (FND-403). */
+  maxRegisterToleranceMinor: bigint({ mode: 'bigint' })
+    .notNull()
+    .default(sql`1000`),
   version: integer().notNull().default(1),
   updatedAt: updatedAt(),
 });

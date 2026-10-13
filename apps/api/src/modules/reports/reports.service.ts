@@ -574,6 +574,7 @@ export class ReportsService {
         sql`select coalesce(sum(m.amount_minor) filter (where m.kind = 'cash_in'), 0)::text as cash_in,
                    coalesce(sum(m.amount_minor) filter (where m.kind = 'cash_out'), 0)::text as cash_out
             from cash_movements m where ${this.within(c, sql.raw('m.created_at'))}
+              and m.status = 'posted'
               and ${this.branches(c, sql.raw('m.branch_id'))}
               and ${c.userId ? sql`m.created_by_user_id = ${c.userId}` : sql`true`}`,
       );
@@ -717,7 +718,7 @@ export class ReportsService {
                        group by rp.shift_id) rs on rs.shift_id = sh.id
             left join (select m.shift_id, sum(m.amount_minor) filter (where m.kind = 'cash_in') as cash_in,
                               sum(m.amount_minor) filter (where m.kind = 'cash_out') as cash_out
-                       from cash_movements m group by m.shift_id) ms on ms.shift_id = sh.id
+                       from cash_movements m where m.status = 'posted' group by m.shift_id) ms on ms.shift_id = sh.id
             where sh.status = 'closed' and ${this.within(c, sql.raw('sh.closed_at'))}
               and ${this.branches(c, sql.raw('sh.branch_id'))} and ${this.member(c, sql.raw('sh.membership_id'))}
             order by sh.closed_at desc`,

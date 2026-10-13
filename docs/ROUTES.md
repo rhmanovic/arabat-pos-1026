@@ -154,6 +154,9 @@ per-branch breakdown, settings dialog), `/manager/inventory/adjustments`,
 | `GET /pos/payment-methods` | POS `sales.create` (active POS methods, no fees) |
 | `GET /pos/registers`, `GET /pos/shifts/current`, `POST /pos/shifts`, `POST /pos/shifts/current/close` | POS `shifts.operate` at the bound branch + register access |
 | `GET /manager/audit?from=&to=&action=&targetType=&actorId=&page=&pageSize=` | `audit.read` (company-wide; ADR-0093) |
+| `POST /manager/shifts/:id/movements/:movementId/decision` | `shifts.view_all` at the branch; approver ≠ requester (owner excepted, flagged; ADR-0094) |
+| `POST /pos/shifts/current/cash-movements/:movementId/withdraw` | POS `cash.move` (own open shift) |
+| `GET /manager/merchant/controls` | `merchant.settings.read` (internal-control checklist, BR-165) |
 | `POST /pos/shifts/current/cash-movements` | POS `cash.move` (own open shift) |
 
 Screens: `/manager/payments` (methods + internal balances, fee preview),

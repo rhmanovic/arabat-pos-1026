@@ -54,7 +54,7 @@ not a commitment).
   (local-day period, action, record type and actor filters, pagination, distinct actions) and
   the management screen `/manager/audit` with CSV export; platform-only events stay separate.
 
-### R1.1 Cash-out corrections and limits — **M**
+### R1.1 Cash-out corrections and limits — **M** — *done in session 2 (FND-419 remains)*
 - Closes: FND-407, FND-402, FND-403 (cap), FND-419
 - Build: "correction" cash-out allowed only as a reversal of a named earlier movement of the same
   shift; "other" cash-out requires a note and is capped per movement and per shift by an
@@ -98,7 +98,7 @@ not a commitment).
   the shift; the API withholds the figures, the screens only follow; the difference is revealed
   after the count. Owners and supervisors keep the figures. Test gateway warning (R7.5) added.
 
-### R1.6 Custody roles and set-up checklist — **S**
+### R1.6 Custody roles and set-up checklist — **S** — *done in session 2 (custody-right split FND-422 deferred to R5)*
 - Closes: FND-113, FND-422, FND-416, FND-117
 - Build: split the custody right into *count*, *move register↔treasury*, *branch transfer*; new
   default template "Treasurer"; an onboarding checklist in the management dashboard that warns
@@ -318,8 +318,8 @@ records without money.
 | Session | Packages | Status |
 |---|---|---|
 | 1 | R1.0 audit log, R1.5 blind counts, R7.5 test-gateway guard | **Done 2026-10-13** |
-| 2 | R1.1 cash-out corrections and limits, R1.6 custody roles and set-up checklist | Next |
-| 3 | R1.2 disbursement approvals (per-merchant thresholds, owner override), R1.4 variance follow-up | |
+| 2 | R1.1 cash-out corrections and limits, R1.6 custody roles and set-up checklist | **Done 2026-10-13** |
+| 3 | R1.2 disbursement approvals (per-merchant thresholds, owner override), R1.4 variance follow-up | Next |
 | 4 | R1.3 deposits in transit and bank reconciliation | |
 | 5 | R2.1 adjustment approvals, R2.2 blind counts with sign-off, R2.5 master-data guards | |
 | 6 | R2.3 transfer losses, R2.4 in-transit location | |

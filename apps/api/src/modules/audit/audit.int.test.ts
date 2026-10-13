@@ -45,6 +45,9 @@ async function changeSettings(c: Co, blindCashCount: boolean) {
       refundWindowDays: current.refundWindowDays,
       refundApprovalLimit: current.refundApprovalLimit.amount,
       blindCashCount,
+      cashOutOtherLimit: current.cashOutOtherLimit.amount,
+      cashOutOtherShiftLimit: current.cashOutOtherShiftLimit.amount,
+      maxRegisterTolerance: current.maxRegisterTolerance.amount,
       version: current.version,
     },
   });

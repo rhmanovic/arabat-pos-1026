@@ -92,7 +92,7 @@ describe('cash reports', () => {
       { kind: 'cash_in', reason: 'float_top_up', amount: '3.000' },
       { kind: 'cash_out', reason: 'petty_expense', amount: '1.000', category: 'cleaning' },
       { kind: 'cash_out', reason: 'supplier_payment', amount: '2.000', supplierId: supplier },
-      { kind: 'cash_out', reason: 'correction', amount: '0.500', note: 'miscount' },
+      { kind: 'cash_out', reason: 'other', amount: '0.500', note: 'miscount' },
       { kind: 'cash_in', reason: 'change_received', amount: '7.000' },
     ])
       expect((await move(body)).statusCode).toBe(201);

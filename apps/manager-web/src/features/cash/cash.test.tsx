@@ -183,6 +183,114 @@ describe('cash custody payouts', () => {
   });
 });
 
+describe('cash-out approvals (BR-164)', () => {
+  const shiftId = '0190a000-0000-7000-8000-000000000501';
+  const pending = {
+    id: '0190a000-0000-7000-8000-000000000601',
+    kind: 'cash_out',
+    amount: money('30.000'),
+    reason: 'other',
+    note: 'repair',
+    createdBy: 'Sara Cashier',
+    createdByUserId: 'u1',
+    createdAt: '2026-10-12T06:00:00.000Z',
+    status: 'pending',
+    correctsMovementId: null,
+    limitExceeded: true,
+    ownerOverride: false,
+    decidedBy: null,
+    decidedAt: null,
+    decisionNote: null,
+  };
+  const shift = {
+    id: shiftId,
+    branchId: '0190a000-0000-7000-8000-000000000301',
+    registerId: '0190a000-0000-7000-8000-000000000101',
+    registerName: { nameEn: 'Register 1', nameAr: null },
+    membershipId: 'm',
+    employeeName: 'Sara Cashier',
+    status: 'open',
+    openedAt: '2026-10-12T05:00:00.000Z',
+    openingNote: null,
+    closedAt: null,
+    closedByName: null,
+    closeType: null,
+    summary: {
+      openingFloat: money('50.000'),
+      cashIn: money('0.000'),
+      cashOut: money('0.000'),
+      cashSales: money('0.000'),
+      cashRefunds: money('0.000'),
+      expectedCash: money('50.000'),
+      openingExpected: money('50.000'),
+      openingDiscrepancy: money('0.000'),
+      openingIsInitial: false,
+    },
+    countedCash: null,
+    discrepancy: null,
+    outcome: null,
+    countedBreakdown: null,
+    closingNote: null,
+    movements: [pending],
+    version: 1,
+  };
+
+  it('lets a manager approve a pending cash-out from the shift detail', async () => {
+    const decisions: unknown[] = [];
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'shifts.view_all']),
+      routes: {
+        'GET /manager/branches': () => ({ status: 200, body: { branches: [] } }),
+        [`GET /manager/shifts/${shiftId}`]: () => ({ status: 200, body: shift }),
+        [`POST /manager/shifts/${shiftId}/movements/${pending.id}/decision`]: (body) => {
+          decisions.push(body);
+          return {
+            status: 201,
+            body: {
+              ...shift,
+              movements: [{ ...pending, status: 'posted', decidedBy: 'Test User' }],
+            },
+          };
+        },
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: `/shifts/${shiftId}`, fetch });
+    expect(await screen.findByText('Above the limit')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('decide-movement'));
+    const dialog = await screen.findByRole('dialog');
+    // Rejecting needs a reason; approving does not.
+    expect(within(dialog).getByRole('button', { name: 'Reject' })).toBeDisabled();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve' }));
+    await vi.waitFor(() => expect(decisions).toHaveLength(1));
+    expect(decisions[0]).toMatchObject({ decision: 'approve' });
+  });
+});
+
+describe('dashboard controls checklist (BR-165)', () => {
+  it('warns the owner when nobody but them holds cash custody and when cash-outs wait', async () => {
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'merchant.settings.read']),
+      routes: {
+        'GET /manager/merchant': () => ({ status: 200, body: {} }),
+        'GET /manager/merchant/controls': () => ({
+          status: 200,
+          body: {
+            treasurerAssigned: false,
+            membersWithoutRoles: [{ membershipId: 'm1', fullName: 'Ali' }],
+            registersAboveTolerance: [],
+            pendingCashMovements: 2,
+          },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/', fetch });
+    const section = await screen.findByTestId('controls');
+    expect(section).toHaveTextContent('Assign the Treasurer role');
+    expect(section).toHaveTextContent('2 cash-outs are waiting');
+    expect(section).toHaveTextContent('Ali');
+  });
+});
+
 describe('dashboard cash card', () => {
   it('shows the company’s cash on hand to cash custodians only', async () => {
     const overview = {

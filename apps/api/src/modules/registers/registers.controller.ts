@@ -4,6 +4,7 @@ import {
   type Register,
   type Shift,
   closeShiftSchema,
+  decideCashMovementSchema,
   discrepancyReportQuerySchema,
   forceCloseShiftSchema,
   openShiftSchema,
@@ -108,6 +109,19 @@ export class RegistersController {
     return this.shifts.getShift(actor, id);
   }
 
+  /** A manager decides a cash-out that waits above the company limit (BR-164). */
+  @RequirePermission('manager', 'shifts.view_all')
+  @Post('shifts/:id/movements/:movementId/decision')
+  decide(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Param('movementId', uuid) movementId: string,
+    @Body(new ZodPipe(decideCashMovementSchema)) body: z.output<typeof decideCashMovementSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<Shift> {
+    return this.shifts.decideMovement(actor, id, movementId, body, req.ip);
+  }
+
   @RequirePermission('manager', 'registers.manage')
   @Post('shifts/:id/force-close')
   forceClose(
@@ -155,6 +169,16 @@ export class PosShiftsController {
     @Req() req: FastifyRequest,
   ): Promise<PosShift> {
     return this.shifts.recordCashMovement(actor, body, req.ip);
+  }
+
+  @RequirePermission('pos', 'cash.move')
+  @Post('shifts/current/cash-movements/:movementId/withdraw')
+  withdraw(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('movementId', uuid) movementId: string,
+    @Req() req: FastifyRequest,
+  ): Promise<PosShift> {
+    return this.shifts.withdrawMovement(actor, movementId, req.ip);
   }
 
   @RequirePermission('pos', 'shifts.operate')

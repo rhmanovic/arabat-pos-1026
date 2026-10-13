@@ -196,6 +196,21 @@ export const cashMovements = pgTable(
       .notNull()
       .references(() => users.id),
     createdAt: createdAt(),
+    /**
+     * Cash-out controls (ADR-0094, BR-164): `posted` moves cash; `pending` waits for a
+     * manager's decision (an "other" cash-out above the company limit); `rejected` and
+     * `withdrawn` never moved cash. Pending rows may only move to one of the final states.
+     */
+    status: text().notNull().default('posted'),
+    /** correction: the posted "other" movement (or earlier correction) this one reverses. */
+    correctsMovementId: uuid(),
+    /** The movement exceeded the company's cash-out limit when it was recorded. */
+    limitExceeded: boolean().notNull().default(false),
+    /** The owner posted it directly despite the limit (documented, audited exception). */
+    ownerOverride: boolean().notNull().default(false),
+    decidedByUserId: uuid().references(() => users.id),
+    decidedAt: timestamp({ withTimezone: true }),
+    decisionNote: text(),
   },
   (t) => [
     foreignKey({
@@ -204,6 +219,10 @@ export const cashMovements = pgTable(
     }),
     unique('cash_movements_idempotency_key').on(t.merchantId, t.idempotencyKey),
     check('cash_movements_kind_valid', sql`${t.kind} in ('cash_in', 'cash_out')`),
+    check(
+      'cash_movements_status_valid',
+      sql`${t.status} in ('posted', 'pending', 'rejected', 'withdrawn')`,
+    ),
     check(
       'cash_movements_amount_positive',
       sql`${t.amountMinor} > 0 and ${t.amountMinor} <= 1000000000`,

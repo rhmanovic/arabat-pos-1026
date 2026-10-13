@@ -252,6 +252,12 @@ export const salesSettingsSchema = z.object({
   refundApprovalLimit: moneySchema,
   /** Cashiers count the drawer without seeing the expected balance (BR-162). */
   blindCashCount: z.boolean(),
+  /** "Other" cash-out above this amount waits for a manager (BR-164). */
+  cashOutOtherLimit: moneySchema,
+  /** "Other" cash-outs of one shift above this total wait for a manager (BR-164). */
+  cashOutOtherShiftLimit: moneySchema,
+  /** Largest discrepancy tolerance a register may be given (BR-164). */
+  maxRegisterTolerance: moneySchema,
   version: z.number().int(),
 });
 export type SalesSettings = z.infer<typeof salesSettingsSchema>;
@@ -263,5 +269,8 @@ export const updateSalesSettingsSchema = z.object({
   refundWindowDays: z.number().int().min(0).max(3650),
   refundApprovalLimit: moneyAmountSchema,
   blindCashCount: z.boolean(),
+  cashOutOtherLimit: moneyAmountSchema,
+  cashOutOtherShiftLimit: moneyAmountSchema,
+  maxRegisterTolerance: moneyAmountSchema,
   version: z.number().int().positive(),
 });

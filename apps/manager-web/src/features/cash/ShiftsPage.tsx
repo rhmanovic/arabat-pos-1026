@@ -1,7 +1,8 @@
-import type { DiscrepancyReport, ShiftListQuery } from '@arabat/contracts';
+import type { CashMovement, DiscrepancyReport, ShiftListQuery } from '@arabat/contracts';
 import { Money, MoneyError } from '@arabat/money';
 import {
   Alert,
+  Badge,
   Button,
   DataTable,
   Dialog,
@@ -342,6 +343,7 @@ export function ShiftDetailPage() {
   const { can } = useSession();
   const branchName = useBranchName();
   const [closing, setClosing] = useState(false);
+  const [deciding, setDeciding] = useState<CashMovement | null>(null);
   const shift = useQuery({
     queryKey: [...shiftsKey, 'detail', shiftId],
     queryFn: () => api.shifts.get(shiftId!),
@@ -481,7 +483,54 @@ export function ShiftDetailPage() {
                 {
                   key: 'reason',
                   header: t('cash.reason'),
-                  cell: (m) => t(`cash.reason_${m.reason}`),
+                  cell: (m) => (
+                    <span className="flex flex-wrap items-center gap-1">
+                      {t(`cash.reason_${m.reason}`)}
+                      {m.correctsMovementId ? (
+                        <Badge tone="neutral">{t('cash.corrects')}</Badge>
+                      ) : null}
+                      {m.limitExceeded ? (
+                        <Badge tone="warning">{t('cash.limitExceeded')}</Badge>
+                      ) : null}
+                      {m.ownerOverride ? (
+                        <Badge tone="danger">{t('cash.ownerOverride')}</Badge>
+                      ) : null}
+                    </span>
+                  ),
+                },
+                {
+                  key: 'status',
+                  header: t('cash.movementStatus'),
+                  cell: (m) =>
+                    m.status === 'pending' && s.status === 'open' && can('shifts.view_all') ? (
+                      <Button
+                        size="sm"
+                        onClick={() => setDeciding(m)}
+                        data-testid="decide-movement"
+                      >
+                        {t('cash.status_pending')}
+                      </Button>
+                    ) : (
+                      <span className="flex flex-col gap-0.5">
+                        <Badge
+                          tone={
+                            m.status === 'posted'
+                              ? 'success'
+                              : m.status === 'pending'
+                                ? 'warning'
+                                : 'neutral'
+                          }
+                        >
+                          {t(`cash.status_${m.status}`)}
+                        </Badge>
+                        {m.decidedBy ? (
+                          <span className="text-xs text-fg-muted">
+                            {t('cash.decidedBy', { name: m.decidedBy })}
+                            {m.decisionNote ? ` — ${m.decisionNote}` : ''}
+                          </span>
+                        ) : null}
+                      </span>
+                    ),
                 },
                 {
                   key: 'note',
@@ -503,7 +552,76 @@ export function ShiftDetailPage() {
       {closing && s ? (
         <ForceCloseDialog shiftId={s.id} version={s.version} onClose={() => setClosing(false)} />
       ) : null}
+      {deciding && s ? (
+        <DecisionDialog shiftId={s.id} movement={deciding} onClose={() => setDeciding(null)} />
+      ) : null}
     </div>
+  );
+}
+
+/** A manager approves or rejects a cash-out above the company limit (BR-164). */
+function DecisionDialog({
+  shiftId,
+  movement,
+  onClose,
+}: {
+  shiftId: string;
+  movement: CashMovement;
+  onClose: () => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const api = useApi();
+  const notify = useNotify();
+  const queryClient = useQueryClient();
+  const [note, setNote] = useState('');
+  const decide = useMutation({
+    mutationFn: (decision: 'approve' | 'reject') =>
+      api.shifts.decideMovement(shiftId, movement.id, { decision, note: note.trim() || null }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: shiftsKey });
+      notify.ok(t('cash.decided'));
+      onClose();
+    },
+    onError: notify.fail,
+  });
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={t('cash.decideTitle')}
+      description={t('cash.decideHint')}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            variant="danger"
+            disabled={!note.trim()}
+            loading={decide.isPending}
+            onClick={() => decide.mutate('reject')}
+          >
+            {t('cash.reject')}
+          </Button>
+          <Button loading={decide.isPending} onClick={() => decide.mutate('approve')}>
+            {t('cash.approve')}
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-4">
+        <p className="text-sm">
+          {t('cash.cashOut')} · <Amount value={movement.amount} /> · {movement.createdBy} ·{' '}
+          {formatDateTime(movement.createdAt, i18n.language)}
+          {movement.note ? ` — ${movement.note}` : ''}
+        </p>
+        <Field label={t('cash.note')}>
+          {(p) => (
+            <Textarea {...p} rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
+          )}
+        </Field>
+      </div>
+    </Dialog>
   );
 }
 

@@ -225,13 +225,24 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
   const [limit, setLimit] = useState<string | null>(null);
   const [blind, setBlind] = useState<boolean | null>(null);
   const blindCashCount = blind ?? settings.data?.blindCashCount ?? true;
+  const [cashLimit, setCashLimit] = useState<string | null>(null);
+  const [cashShiftLimit, setCashShiftLimit] = useState<string | null>(null);
+  const [maxTolerance, setMaxTolerance] = useState<string | null>(null);
+  const cashOutOtherLimit = cashLimit ?? settings.data?.cashOutOtherLimit.amount ?? '';
+  const cashOutOtherShiftLimit =
+    cashShiftLimit ?? settings.data?.cashOutOtherShiftLimit.amount ?? '';
+  const maxRegisterTolerance = maxTolerance ?? settings.data?.maxRegisterTolerance.amount ?? '';
+  const AMOUNT = /^\d{1,10}(\.\d{1,3})?$/;
   const current = value ?? settings.data?.maxDiscountPercent ?? '';
   const windowDays = days ?? String(settings.data?.refundWindowDays ?? '');
   const approvalLimit = limit ?? settings.data?.refundApprovalLimit.amount ?? '';
   const valid =
     /^(100(\.0{1,2})?|\d{1,2}(\.\d{1,2})?)$/.test(current.trim()) &&
     /^\d{1,4}$/.test(windowDays.trim()) &&
-    /^\d{1,10}(\.\d{1,3})?$/.test(approvalLimit.trim());
+    AMOUNT.test(approvalLimit.trim()) &&
+    AMOUNT.test(cashOutOtherLimit.trim()) &&
+    AMOUNT.test(cashOutOtherShiftLimit.trim()) &&
+    AMOUNT.test(maxRegisterTolerance.trim());
   const save = useMutation({
     mutationFn: () =>
       api.sales.updateSettings({
@@ -239,6 +250,9 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
         refundWindowDays: Number.parseInt(windowDays.trim(), 10),
         refundApprovalLimit: approvalLimit.trim(),
         blindCashCount,
+        cashOutOtherLimit: cashOutOtherLimit.trim(),
+        cashOutOtherShiftLimit: cashOutOtherShiftLimit.trim(),
+        maxRegisterTolerance: maxRegisterTolerance.trim(),
         version: settings.data!.version,
       }),
     onSuccess: async () => {
@@ -308,6 +322,39 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
           checked={blindCashCount}
           onChange={(e) => setBlind(e.target.checked)}
         />
+        <Field label={t('sales.cashOutLimit')} hint={t('sales.cashOutLimitHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="decimal"
+              value={cashOutOtherLimit}
+              onChange={(e) => setCashLimit(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('sales.cashOutShiftLimit')} hint={t('sales.cashOutShiftLimitHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="decimal"
+              value={cashOutOtherShiftLimit}
+              onChange={(e) => setCashShiftLimit(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('sales.maxTolerance')} hint={t('sales.maxToleranceHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="decimal"
+              value={maxRegisterTolerance}
+              onChange={(e) => setMaxTolerance(e.target.value)}
+            />
+          )}
+        </Field>
       </div>
     </Dialog>
   );

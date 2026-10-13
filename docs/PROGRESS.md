@@ -384,6 +384,25 @@ the manager API). Not done (next sessions): cash-out limits and corrections (R1.
 (R1.6), disbursement approvals with per-merchant thresholds (R1.2), variance follow-up (R1.4),
 deposits in transit and bank reconciliation (R1.3).
 
+### 2026-10-13 — Remediation session 2 (R1.1 cash-out controls, R1.6 treasurer and controls checklist)
+Implemented (ADR-0094, BR-164, BR-165):
+- **Corrections** reverse only a posted "other" movement of the same shift, opposite way, up to
+  what is left, with a note; the POS offers the correctable movements.
+- **"Other" cash-out limits** per movement and per shift, owner-set in the selling policy
+  (defaults 20.000 / 50.000 KWD): above them the request is *pending*, decided by a holder of
+  `shifts.view_all` in the shift detail (approve posts the cash then; reject needs a reason),
+  withdrawable by the cashier, refused at closing, auto-rejected on a forced close; the owner
+  posts directly with an audited override flag.
+- **Tolerance cap** per company (default 1.000 KWD) enforced on register save; a visible
+  closing difference beyond the tolerance needs a note (blind cashiers excepted).
+- **Treasurer** role template (least privilege) and the dashboard **internal-control checklist**
+  (`GET /manager/merchant/controls`): treasurer assigned, members without roles, registers above
+  the tolerance cap, cash-outs awaiting approval.
+Verified: see `TESTING.md` (results after remediation session 2). Not done (next sessions):
+disbursement approvals with per-merchant thresholds and owner override (R1.2), variance
+follow-up (R1.4), deposits in transit and bank reconciliation (R1.3), custody-right split
+(FND-422), cashier acknowledgement of manager cash moves (FND-419).
+
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025
 before any production launch.

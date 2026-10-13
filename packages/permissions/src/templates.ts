@@ -132,6 +132,25 @@ export const ROLE_TEMPLATES = {
       'restaurant.orders',
     ],
   },
+  /**
+   * Cash custody outside the owner (BR-165, remediation R1.6): counts treasuries and drawers,
+   * moves cash between places, deposits to the bank and reads the financial reports; no selling,
+   * no master data, no employee administration (least privilege).
+   */
+  treasurer: {
+    nameEn: 'Treasurer',
+    nameAr: 'أمين الخزينة',
+    typicalScope: 'branch',
+    permissions: [
+      'manager.access',
+      'cash.custody',
+      'cash.deposit',
+      'shifts.view_all',
+      'reports.financial',
+      'purchasing.read',
+      'branches.read',
+    ],
+  },
   kitchen: {
     nameEn: 'Kitchen staff',
     nameAr: 'طاقم المطبخ',

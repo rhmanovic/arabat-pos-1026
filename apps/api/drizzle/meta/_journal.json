@@ -260,6 +260,13 @@
       "when": 1791849830714,
       "tag": "0036_blind_cash_count",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1791856098762,
+      "tag": "0037_cash_out_controls",
+      "breakpoints": true
     }
   ]
 }

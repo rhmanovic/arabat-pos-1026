@@ -6,7 +6,7 @@ not yet re-verified by the audit), **Tested** (fixed and covered by automated te
 **Deferred** (outside the current retail scope or waiting for an owner decision). Update this file
 in the same session as the code.
 
-Last update: 2026-10-13 (remediation session 1). Totals: Deferred 49, Fixed 1, Open 128, Tested 2.
+Last update: 2026-10-13 (remediation session 2). Totals: Deferred 49, Fixed 2, In Progress 1, Open 122, Tested 6.
 
 | Id | Finding | Severity | Ch. | Package | Status | Note |
 |---|---|---|---|---|---|---|
@@ -16,7 +16,7 @@ Last update: 2026-10-13 (remediation session 1). Totals: Deferred 49, Fixed 1, O
 | FND-201 | Stock adjustments have no approval, value limit or segregation of duties | High | B | R2.1 | Open |  |
 | FND-207 | Switching off stock tracking (or changing goods to service) hides existing balances from valuation without a movement | High | B | R2.5 | Open |  |
 | FND-406 | Bank account balances are never reconciled; deposits are credited on the depositor's word | High | D | R1.3 | Open |  |
-| FND-407 | Cash out "correction" / "other" removes cash from custody with no destination and no approval | High | D | R1.1 | Open |  |
+| FND-407 | Cash out "correction" / "other" removes cash from custody with no destination and no approval | High | D | R1.1 | Tested | Session 2: corrections bound to a movement; "other" cash-outs capped and pending above the limit (`shifts.int.test.ts`, `app.test.tsx`) |
 | FND-408 | Disbursements have no limits, no approval and no link to what is owed | High | D | R1.2 | Open |  |
 | FND-501 | Gateway refunds can never be confirmed; stock is restocked while revenue stays unreduced | High | E | R7.2 | Open |  |
 | FND-512 | Inventory valuation is only available "as of now"; no closing stock at period end | High | E | R2.6 | Open |  |
@@ -39,7 +39,7 @@ Last update: 2026-10-13 (remediation session 1). Totals: Deferred 49, Fixed 1, O
 | FND-108 | Invitation grants are authorised at invitation time, not at acceptance | Medium | A | R5.4 | Open |  |
 | FND-109 | Branch deactivation has no operational pre-conditions | Medium | A | R2.5 | Open |  |
 | FND-110 | Account lock-out by failed attempts can be triggered by anyone who knows an e-mail | Medium | A | R5.4 | Open |  |
-| FND-113 | Default templates concentrate cash custody in the owner and leave segregation choices implicit | Medium | A | R1.6 | Open |  |
+| FND-113 | Default templates concentrate cash custody in the owner and leave segregation choices implicit | Medium | A | R1.6 | Tested | Session 2: Treasurer template + dashboard warning when only the owner holds custody (`controls.int.test.ts`) |
 | FND-202 | Stock counts are not blind, overwrite intervening movements and have no variance sign-off | Medium | B | R2.2 | Open |  |
 | FND-203 | Average unit cost is limited to whole fils, distorting costs of low-value units | Medium | B | R2.7 | Open |  |
 | FND-204 | Negative balances are valued at zero and their cost basis is discarded on replenishment | Medium | B | R2.7 | Open |  |
@@ -55,15 +55,15 @@ Last update: 2026-10-13 (remediation session 1). Totals: Deferred 49, Fixed 1, O
 | FND-312 | Zero-total sales complete without a payment or a reason | Medium | C | R3.3 | Open |  |
 | FND-317 | "Net" in the sales history differs from "net after refunds" in the reports | Medium | C | R4.1 | Open |  |
 | FND-401 | Closing is not blind | Medium | D | R1.5 | Tested | Session 1: blind counts by default (`shifts.int.test.ts`, `app.test.tsx`, `checkout.spec.ts`) |
-| FND-402 | No explanation required for a closing shortage of any size | Medium | D | R1.1 | Open |  |
-| FND-403 | Tolerance is unlimited, set by the monitoring manager, and silently reclassifies differences as "balanced" | Medium | D | R1.1 | Open |  |
+| FND-402 | No explanation required for a closing shortage of any size | Medium | D | R1.1 | Tested | Session 2: note required on a visible closing difference beyond the tolerance |
+| FND-403 | Tolerance is unlimited, set by the monitoring manager, and silently reclassifies differences as "balanced" | Medium | D | R1.1 | Tested | Session 2: owner-set maximum tolerance enforced on register save; checklist lists registers above it |
 | FND-404 | No follow-up or settlement process for shift and count differences | Medium | D | R1.4 | Open |  |
 | FND-405 | Opening balances by count are created without source, note or second person | Medium | D | — | Open |  |
 | FND-409 | Book balances of a drawer can change under a cashier without their count or a movement on their shift | Medium | D | — | Open |  |
 | FND-410 | Differences on branch transfers are absorbed by the company without an accountable party | Medium | D | R1.4 | Open |  |
 | FND-411 | Period cut-off is inconsistent across lists and reports, and statements have no period | Medium | D | R4.1 | Open |  |
 | FND-413 | Processing fees are configured estimates, not settled amounts, and are not reconciled to the acquirer | Medium | D | R1.3 | Open |  |
-| FND-416 | Weak segregation of duties around the register | Medium | D | R1.6 | Open |  |
+| FND-416 | Weak segregation of duties around the register | Medium | D | R1.6 | In Progress | Session 2: approvals above the limit need a second person; custody split (FND-422) still open |
 | FND-422 | The custody right is too coarse | Medium | D | R1.6 | Open |  |
 | FND-502 | Holders of the approve permission bypass the refund limit and window for their own refunds | Medium | E | R3.4 | Open |  |
 | FND-503 | Cashiers can refund their own sales within the limit with cash from their own drawer and no customer verification | Medium | E | R3.4 | Open |  |
@@ -110,7 +110,7 @@ Last update: 2026-10-13 (remediation session 1). Totals: Deferred 49, Fixed 1, O
 | FND-114 | Failed sign-in audit rows store attempted e-mails without a company and are unreviewable | Low | A | R1.0 | Open |  |
 | FND-115 | Operator lifecycle beyond creation is manual | Low | A | — | Open |  |
 | FND-116 | Reactivating a branch silently restores all dormant grants | Low | A | R5.4 | Open |  |
-| FND-117 | Members with no role assignments remain active, invisible to branch managers, and count against plan capacity | Low | A | R1.6 | Open |  |
+| FND-117 | Members with no role assignments remain active, invisible to branch managers, and count against plan capacity | Low | A | R1.6 | Fixed | Session 2: members without roles listed in the controls checklist; plan-capacity counting unchanged |
 | FND-205 | Valuation can drift from the sum of movement values because the average is rounded | Low | B | R2.7 | Open |  |
 | FND-208 | Catalog audit entries do not record most attribute changes | Low | B | R5.3 | Open |  |
 | FND-209 | The "sale void" movement type exists in the schema and the screen filter but is never produced | Low | B | — | Open |  |

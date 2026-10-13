@@ -509,22 +509,40 @@ export function ShiftPage() {
         ) : (
           <ul className="divide-y divide-border">
             {shift.movements.map((m) => (
-              <li key={m.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+              <li
+                key={m.id}
+                className="flex items-center justify-between gap-3 py-2 text-sm"
+                data-testid={`movement-${m.status}`}
+              >
                 <span>
                   <span className="font-medium">
                     {m.kind === 'cash_in' ? t('shift.cashIn') : t('shift.cashOut')}
                   </span>
                   <span className="ms-2 text-fg-muted">{t(`shift.reason_${m.reason}`)}</span>
                   {m.note ? <span className="ms-2 text-fg-muted">— {m.note}</span> : null}
+                  {m.status !== 'posted' ? (
+                    <Badge tone={m.status === 'pending' ? 'warning' : 'neutral'} className="ms-2">
+                      {t(`shift.status_${m.status}`)}
+                    </Badge>
+                  ) : null}
                 </span>
-                <span
-                  dir="ltr"
-                  className={
-                    m.kind === 'cash_in' ? 'tabular-nums text-success' : 'tabular-nums text-danger'
-                  }
-                >
-                  {m.kind === 'cash_in' ? '+' : '−'}
-                  {fmt(m.amount)}
+                <span className="flex items-center gap-2">
+                  {m.status === 'pending' && hasPermission('cash.move') ? (
+                    <WithdrawButton movementId={m.id} />
+                  ) : null}
+                  <span
+                    dir="ltr"
+                    className={
+                      m.status !== 'posted'
+                        ? 'tabular-nums text-fg-muted line-through'
+                        : m.kind === 'cash_in'
+                          ? 'tabular-nums text-success'
+                          : 'tabular-nums text-danger'
+                    }
+                  >
+                    {m.kind === 'cash_in' ? '+' : '−'}
+                    {fmt(m.amount)}
+                  </span>
                 </span>
               </li>
             ))}
@@ -546,10 +564,36 @@ export function ShiftPage() {
   );
 }
 
+function WithdrawButton({ movementId }: { movementId: string }) {
+  const { t } = useTranslation();
+  const api = useApi();
+  const notify = useNotify();
+  const queryClient = useQueryClient();
+  const withdraw = useMutation({
+    mutationFn: () => api.shifts.withdrawMovement(movementId),
+    onSuccess: (shift) => {
+      queryClient.setQueryData(shiftKey, { shift });
+      notify.ok(t('shift.withdrawn'));
+    },
+    onError: notify.fail,
+  });
+  return (
+    <Button
+      size="sm"
+      variant="secondary"
+      loading={withdraw.isPending}
+      onClick={() => withdraw.mutate()}
+    >
+      {t('shift.withdraw')}
+    </Button>
+  );
+}
+
 function MovementDialog({ kind, onClose }: { kind: 'cash_in' | 'cash_out'; onClose: () => void }) {
   const { t, i18n } = useTranslation();
   const api = useApi();
   const notify = useNotify();
+  const fmt = useMoney();
   const queryClient = useQueryClient();
   const { hasPermission } = useAuth();
   // Bank deposits need their own permission (ADR-0091); hide the reason without it.
@@ -563,7 +607,31 @@ function MovementDialog({ kind, onClose }: { kind: 'cash_in' | 'cash_out'; onClo
   const [supplierId, setSupplierId] = useState('');
   const [bankAccountId, setBankAccountId] = useState('');
   const [receipt, setReceipt] = useState('');
+  const [corrects, setCorrects] = useState('');
   const [key] = useState(() => crypto.randomUUID());
+  const current = useCurrentShift();
+  // Cash-out limits (BR-164): shown so the cashier knows when a manager must approve.
+  const policy = useQuery({
+    queryKey: ['pos', 'sales', 'settings'],
+    queryFn: () => api.sales.settings(),
+  });
+  // A correction may only reverse a posted "other" movement (or earlier correction) of this
+  // shift that goes the opposite way, up to what is left of it.
+  const movements = current.data?.shift?.movements ?? [];
+  const correctable = movements
+    .filter(
+      (m) =>
+        m.status === 'posted' &&
+        m.kind !== kind &&
+        (m.reason === 'other' || m.reason === 'correction'),
+    )
+    .map((m) => {
+      const used = movements
+        .filter((c) => c.status === 'posted' && c.correctsMovementId === m.id)
+        .reduce((sum, c) => sum + minor(c.amount.amount)!, 0n);
+      return { ...m, remaining: minor(m.amount.amount)! - used };
+    })
+    .filter((m) => m.remaining > 0n);
   const suppliers = useQuery({
     queryKey: ['pos', 'cash', 'suppliers'],
     queryFn: () => api.cash.posSuppliers(),
@@ -575,11 +643,22 @@ function MovementDialog({ kind, onClose }: { kind: 'cash_in' | 'cash_out'; onClo
     enabled: reason === 'bank_deposit',
   });
   const amountMinor = minor(amount);
-  const needsNote = reason === 'other' || (reason === 'petty_expense' && category === 'other');
+  const needsNote =
+    reason === 'other' ||
+    reason === 'correction' ||
+    (reason === 'petty_expense' && category === 'other');
+  const limitMinor = policy.data ? minor(policy.data.cashOutOtherLimit.amount) : null;
+  const aboveLimit =
+    kind === 'cash_out' &&
+    reason === 'other' &&
+    amountMinor !== null &&
+    limitMinor !== null &&
+    amountMinor > limitMinor;
   const valid =
     amountMinor !== null &&
     amountMinor > 0n &&
     (!needsNote || Boolean(note.trim())) &&
+    (reason !== 'correction' || Boolean(corrects)) &&
     (reason !== 'petty_expense' || Boolean(category)) &&
     (reason !== 'supplier_payment' || Boolean(supplierId)) &&
     (reason !== 'bank_deposit' || Boolean(bankAccountId));
@@ -597,10 +676,12 @@ function MovementDialog({ kind, onClose }: { kind: 'cash_in' | 'cash_out'; onClo
           ? { receiptReference: receipt.trim() || null }
           : {}),
         ...(reason === 'bank_deposit' ? { bankAccountId } : {}),
+        ...(reason === 'correction' ? { correctsMovementId: corrects } : {}),
       }),
     onSuccess: async (shift) => {
       queryClient.setQueryData(shiftKey, { shift });
-      notify.ok(t('shift.recorded'));
+      const pending = shift.movements.some((m) => m.status === 'pending');
+      notify.ok(t(pending ? 'shift.sentForApproval' : 'shift.recorded'));
       onClose();
     },
     onError: notify.fail,
@@ -657,10 +738,35 @@ function MovementDialog({ kind, onClose }: { kind: 'cash_in' | 'cash_out'; onClo
           'petty_expense',
           'supplier_payment',
           'bank_deposit',
+          'correction',
         ].includes(reason) ? (
           <p className="text-sm text-fg-muted" data-testid="movement-hint">
             {t(`shift.movementHint_${reason}`)}
           </p>
+        ) : null}
+        {kind === 'cash_out' && reason === 'other' && policy.data ? (
+          <Alert tone={aboveLimit ? 'warning' : 'info'}>
+            <span data-testid="cash-out-limit">
+              {t(aboveLimit ? 'shift.aboveLimit' : 'shift.limitHint', {
+                amount: fmt(policy.data.cashOutOtherLimit),
+              })}
+            </span>
+          </Alert>
+        ) : null}
+        {reason === 'correction' ? (
+          <Field label={t('shift.corrects')}>
+            {(p) => (
+              <Select {...p} value={corrects} onChange={(e) => setCorrects(e.target.value)}>
+                <option value="">{t('shift.choose')}</option>
+                {correctable.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {t(`shift.reason_${m.reason}`)} · {fmt(m.remaining)}
+                    {m.note ? ` — ${m.note}` : ''}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
         ) : null}
         {reason === 'petty_expense' ? (
           <Field label={t('shift.category')}>
@@ -742,10 +848,16 @@ function CloseDialog({
   const { t } = useTranslation();
   const api = useApi();
   const notify = useNotify();
+  const fmt = useMoney();
   const queryClient = useQueryClient();
   const [note, setNote] = useState('');
   const count = useCashCount();
   const countedMinor = count.countedMinor;
+  // Whoever sees the expected figure explains a difference before closing (BR-164).
+  const expectedMinor = shift.summary ? minor(shift.summary.expectedCash.amount) : null;
+  const difference =
+    expectedMinor !== null && countedMinor !== null ? countedMinor - expectedMinor : null;
+  const needsNote = difference !== null && difference !== 0n && !note.trim();
   const close = useMutation({
     mutationFn: () =>
       api.shifts.close({
@@ -776,7 +888,7 @@ function CloseDialog({
           <Button
             variant="danger"
             size="lg"
-            disabled={countedMinor === null}
+            disabled={countedMinor === null || needsNote}
             loading={close.isPending}
             onClick={() => close.mutate()}
           >
@@ -787,7 +899,14 @@ function CloseDialog({
     >
       <div className="grid gap-4">
         <CashCountFields count={count} />
-        <Field label={t('shift.note')}>
+        {difference !== null && difference !== 0n ? (
+          <Alert tone="warning">
+            <span data-testid="close-difference">
+              {t('shift.openingDifference', { amount: fmt(difference) })}
+            </span>
+          </Alert>
+        ) : null}
+        <Field label={t('shift.note')} error={needsNote ? t('shift.noteRequired') : undefined}>
           {(p) => (
             <Textarea {...p} rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
           )}

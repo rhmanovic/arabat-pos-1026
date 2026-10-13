@@ -310,6 +310,19 @@ export const posEn = {
     reason_change_received: 'Change swap (amount unchanged)',
     reason_correction: 'Correction',
     reason_other: 'Other (note required)',
+    movementHint_correction:
+      'Reverses part or all of an earlier "other" movement of this shift. Drops, top-ups, deposits and payments are reversed with their own opposite record.',
+    corrects: 'Movement to correct',
+    limitHint: 'Cash out "other" above {{amount}} needs a manager’s approval.',
+    aboveLimit:
+      'Above {{amount}}: this cash-out will wait for a manager’s approval. Do not hand out the cash before it is approved.',
+    sentForApproval:
+      'Sent to a manager for approval. The cash stays in the drawer until it is approved.',
+    status_pending: 'Awaiting approval',
+    status_rejected: 'Rejected',
+    status_withdrawn: 'Withdrawn',
+    withdraw: 'Withdraw',
+    withdrawn: 'Request withdrawn',
     reason_safe_drop: 'Drop to treasury',
     reason_bank_deposit: 'Bank deposit',
     reason_petty_expense: 'Petty expense',

@@ -245,6 +245,27 @@ Remediation session 1 (2026-10-13, owner decisions D1 and the audit-log change; 
   displayed rows). Entries without a company (failed sign-ins, platform-only actions) are not
   shown; entries can never be edited or deleted.
 
+Remediation session 2 (2026-10-13, owner decisions D2 and D3):
+- **BR-164** Cash-out controls. A **correction** at the till only reverses a posted "other"
+  movement (or an earlier correction) of the same shift, the opposite way, up to what is left of
+  it, and needs a note; drops, top-ups, deposits and disbursements are reversed by their own
+  opposite record. An **"other" cash-out** above the company's per-movement limit, or taking the
+  shift's "other" cash-outs above the per-shift limit (owner-set in the selling policy; defaults
+  20.000 and 50.000 KWD), is recorded **pending**: no cash leaves the books until a holder of
+  `shifts.view_all` at the branch approves it in management; nobody approves their own request;
+  rejecting needs a reason; the cashier may withdraw it; a shift cannot be closed by its cashier
+  while a request is pending, and a manager's forced close rejects what is pending. The **owner**
+  posts such a cash-out directly: the movement is flagged *above the limit / owner override* and
+  the audit entry says so. A register's tolerance can never exceed the owner-set company
+  maximum (default 1.000 KWD), and whoever closes a shift while seeing the expected figure must
+  explain a difference beyond the tolerance (a blind cashier is not asked).
+- **BR-165** Cash custody outside the owner. A default **Treasurer** role (manager access, cash
+  custody, bank deposits, shift monitoring, financial reports, supplier and branch reading; no
+  selling, master data or employee administration) exists in every company. The dashboard shows
+  an internal-control checklist to holders of company-settings reading: no treasurer other than
+  the owner, active employees without any role, registers above the tolerance maximum, and
+  cash-outs awaiting approval.
+
 Platform and subscriptions (Prompt 17):
 - **BR-150** Every merchant has exactly one subscription to a plan. New merchants start on
   the default plan (trial when the plan has trial days). Plans can be archived, never

@@ -2,6 +2,7 @@ import type {
   CashMovement,
   DiscrepancyReport,
   PosShift,
+  decideCashMovementSchema,
   Register,
   Shift,
   ShiftRow,
@@ -52,6 +53,7 @@ type OpenShiftInput = z.output<typeof openShiftSchema>;
 type CashMovementInput = z.output<typeof recordCashMovementSchema>;
 type CloseShiftInput = z.output<typeof closeShiftSchema>;
 type ForceCloseInput = z.output<typeof forceCloseShiftSchema>;
+type DecisionInput = z.output<typeof decideCashMovementSchema>;
 type Breakdown = { value: string; count: number }[];
 type ShiftQuery = z.output<typeof shiftListQuerySchema>;
 type ReportQuery = z.output<typeof discrepancyReportQuerySchema>;
@@ -141,6 +143,16 @@ export class ShiftsService {
           .from(branches)
           .where(eq(branches.id, input.branchId));
         if (!branch) throw AppError.notFound('Branch not found.');
+        // The owner caps how much a register may be allowed to differ unnoticed (BR-164).
+        const policy = await this.policy(tx, actor.merchantId);
+        if (fields.discrepancyToleranceMinor > policy.maxToleranceMinor)
+          throw AppError.validation([
+            {
+              path: 'discrepancyTolerance',
+              code: 'too_big',
+              message: `The tolerance cannot exceed the company maximum of ${Money.ofMinor(policy.maxToleranceMinor, CURRENCY).toDecimalString()} KWD.`,
+            },
+          ]);
         if (id) {
           if (!input.version)
             throw AppError.validation([
@@ -378,11 +390,26 @@ export class ShiftsService {
    */
   private async blindFor(tx: Transaction, actor: MerchantActor, branchId: string) {
     if (can(actor.access, 'shifts.view_all', branchId)) return false;
+    return (await this.policy(tx, actor.merchantId)).blind;
+  }
+
+  /** The company's cash policy (BR-162, BR-164) with the engineering defaults when unset. */
+  private async policy(tx: Transaction, merchantId: string) {
     const [row] = await tx
-      .select({ blind: salesSettings.blindCashCount })
+      .select({
+        blind: salesSettings.blindCashCount,
+        otherLimit: salesSettings.cashOutOtherLimitMinor,
+        otherShiftLimit: salesSettings.cashOutOtherShiftLimitMinor,
+        maxTolerance: salesSettings.maxRegisterToleranceMinor,
+      })
       .from(salesSettings)
-      .where(eq(salesSettings.merchantId, actor.merchantId));
-    return row?.blind ?? true;
+      .where(eq(salesSettings.merchantId, merchantId));
+    return {
+      blind: row?.blind ?? true,
+      otherLimitMinor: row?.otherLimit ?? 20000n,
+      otherShiftLimitMinor: row?.otherShiftLimit ?? 50000n,
+      maxToleranceMinor: row?.maxTolerance ?? 1000n,
+    };
   }
 
   /** The cashier's own view: drawer figures withheld under a blind count. */
@@ -602,6 +629,18 @@ export class ShiftsService {
           assertTreasuryCounted(treasury!);
           assertCovers(await accountBalance(tx, treasury!.id), amountMinor, 'treasury');
         }
+        // Corrections only reverse a posted "other" movement (or an earlier correction) of
+        // this shift, up to what is left of it (BR-164). Transfers, deposits and
+        // disbursements are reversed by their own opposite documents.
+        if (input.reason === 'correction')
+          await this.assertCorrects(tx, shift, input.kind, input.correctsMovementId!, amountMinor);
+        // "Other" cash-outs are capped per movement and per shift; above the cap the owner
+        // posts with a documented override, anyone else waits for a manager (D2).
+        const limitExceeded =
+          input.kind === 'cash_out' && input.reason === 'other'
+            ? await this.exceedsOtherLimit(tx, shift, amountMinor)
+            : false;
+        const pending = limitExceeded && !actor.access.isOwner;
         const id = newId();
         await tx.insert(cashMovements).values({
           id,
@@ -616,7 +655,20 @@ export class ShiftsService {
           bankAccountId: bankId,
           idempotencyKey: input.idempotencyKey ?? null,
           createdByUserId: actor.userId,
+          status: pending ? 'pending' : 'posted',
+          correctsMovementId: input.reason === 'correction' ? input.correctsMovementId! : null,
+          limitExceeded,
+          ownerOverride: limitExceeded && actor.access.isOwner,
         });
+        if (pending) {
+          await this.record(tx, actor, 'shift.cash_out_requested', 'shift', shift.id, ip, {
+            movementId: id,
+            amount: Money.ofMinor(amountMinor, CURRENCY).toDecimalString(),
+            reason: input.reason,
+            limitExceeded: true,
+          });
+          return this.toPosShift(tx, actor, shift);
+        }
         await this.postMovement(tx, actor, shift, drawer.id, treasury?.id ?? null, {
           id,
           kind: input.kind,
@@ -632,6 +684,8 @@ export class ShiftsService {
           movementId: id,
           amount: Money.ofMinor(amountMinor, CURRENCY).toDecimalString(),
           reason: input.reason,
+          ...(input.reason === 'correction' ? { corrects: input.correctsMovementId } : {}),
+          ...(limitExceeded ? { limitExceeded: true, ownerOverride: true } : {}),
         });
         return this.toPosShift(tx, actor, shift);
       });
@@ -640,6 +694,152 @@ export class ShiftsService {
         return (await this.currentShift(actor))!;
       throw error;
     }
+  }
+
+  /** A correction reverses part or all of one posted "other" movement of the same shift. */
+  private async assertCorrects(
+    tx: Transaction,
+    shift: ShiftRecord,
+    kind: string,
+    targetId: string,
+    amountMinor: bigint,
+  ) {
+    const [target] = await tx
+      .select()
+      .from(cashMovements)
+      .where(and(eq(cashMovements.id, targetId), eq(cashMovements.shiftId, shift.id)));
+    const invalid = (message: string) =>
+      AppError.validation([{ path: 'correctsMovementId', code: 'invalid', message }]);
+    if (!target) throw invalid('The movement to correct is not on this shift.');
+    if (target.status !== 'posted') throw invalid('Only posted movements can be corrected.');
+    if (target.kind === kind) throw invalid('A correction goes the opposite way of the movement.');
+    if (target.reason !== 'other' && target.reason !== 'correction')
+      throw invalid(
+        'Only "other" movements can be corrected here; reverse drops, top-ups, deposits and payments with their own opposite record.',
+      );
+    const [used] = (
+      await tx.execute(sql`
+        select coalesce(sum(amount_minor), 0)::text as corrected from cash_movements
+        where corrects_movement_id = ${targetId} and status = 'posted'`)
+    ).rows as { corrected: string }[];
+    if (amountMinor > target.amountMinor - BigInt(used!.corrected))
+      throw invalid('The correction is larger than what is left of the movement.');
+  }
+
+  /** Would this "other" cash-out exceed the per-movement or the per-shift limit (BR-164)? */
+  private async exceedsOtherLimit(tx: Transaction, shift: ShiftRecord, amountMinor: bigint) {
+    const policy = await this.policy(tx, shift.merchantId);
+    if (amountMinor > policy.otherLimitMinor) return true;
+    const [row] = (
+      await tx.execute(sql`
+        select coalesce(sum(amount_minor), 0)::text as total from cash_movements
+        where shift_id = ${shift.id} and kind = 'cash_out' and reason = 'other'
+          and status in ('posted', 'pending')`)
+    ).rows as { total: string }[];
+    return BigInt(row!.total) + amountMinor > policy.otherShiftLimitMinor;
+  }
+
+  /** A manager approves or rejects a pending cash-out (BR-164); nobody decides their own. */
+  async decideMovement(
+    actor: MerchantActor,
+    shiftId: string,
+    movementId: string,
+    input: DecisionInput,
+    ip: string,
+  ): Promise<Shift> {
+    return this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const [shift] = await tx.select().from(shifts).where(eq(shifts.id, shiftId)).for('update');
+      if (!shift) throw AppError.notFound();
+      assertCan(actor, 'shifts.view_all', shift.branchId);
+      const [m] = await tx
+        .select()
+        .from(cashMovements)
+        .where(and(eq(cashMovements.id, movementId), eq(cashMovements.shiftId, shift.id)))
+        .for('update');
+      if (!m) throw AppError.notFound('Cash movement not found.');
+      if (m.status !== 'pending')
+        throw new AppError(409, 'MOVEMENT_DECIDED', 'This movement was already decided.');
+      // Segregation of duties, with the owner's documented override (D2).
+      const ownerOverride = m.createdByUserId === actor.userId;
+      if (ownerOverride && !actor.access.isOwner)
+        throw AppError.forbidden('You cannot approve your own cash movement.');
+      if (input.decision === 'approve') {
+        if (shift.status !== 'open')
+          throw new AppError(409, 'SHIFT_CLOSED', 'The shift is closed; reject the movement.');
+        const drawer = await registerAccount(tx, shift.registerId);
+        await lockAccounts(tx, [drawer.id]);
+        assertCovers(await this.drawerCash(tx, shift), m.amountMinor, 'register');
+        await this.postMovement(tx, actor, shift, drawer.id, null, {
+          id: m.id,
+          kind: m.kind,
+          reason: m.reason,
+          amountMinor: m.amountMinor,
+          note: m.note,
+          bankId: null,
+          category: null,
+          supplierId: null,
+          receiptReference: null,
+        });
+      }
+      await tx
+        .update(cashMovements)
+        .set({
+          status: input.decision === 'approve' ? 'posted' : 'rejected',
+          decidedByUserId: actor.userId,
+          decidedAt: sql`now()`,
+          decisionNote: input.note,
+          ...(ownerOverride ? { ownerOverride: true } : {}),
+        })
+        .where(eq(cashMovements.id, m.id));
+      await this.record(
+        tx,
+        actor,
+        input.decision === 'approve' ? 'shift.cash_out_approved' : 'shift.cash_out_rejected',
+        'shift',
+        shift.id,
+        ip,
+        {
+          movementId: m.id,
+          amount: Money.ofMinor(m.amountMinor, CURRENCY).toDecimalString(),
+          requestedBy: m.createdByUserId,
+          note: input.note,
+          ...(ownerOverride ? { ownerOverride: true } : {}),
+        },
+      );
+      return this.toShift(tx, shift);
+    });
+  }
+
+  /** The cashier takes back their own pending request. */
+  async withdrawMovement(actor: MerchantActor, movementId: string, ip: string): Promise<PosShift> {
+    return this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const shift = await this.lockOwnShift(tx, actor);
+      const [m] = await tx
+        .select()
+        .from(cashMovements)
+        .where(and(eq(cashMovements.id, movementId), eq(cashMovements.shiftId, shift.id)))
+        .for('update');
+      if (!m) throw AppError.notFound('Cash movement not found.');
+      if (m.status !== 'pending')
+        throw new AppError(409, 'MOVEMENT_DECIDED', 'This movement was already decided.');
+      await tx
+        .update(cashMovements)
+        .set({ status: 'withdrawn', decidedByUserId: actor.userId, decidedAt: sql`now()` })
+        .where(eq(cashMovements.id, m.id));
+      await this.record(tx, actor, 'shift.cash_out_withdrawn', 'shift', shift.id, ip, {
+        movementId: m.id,
+        amount: Money.ofMinor(m.amountMinor, CURRENCY).toDecimalString(),
+      });
+      return this.toPosShift(tx, actor, shift);
+    });
+  }
+
+  /** Pending requests die with the shift: refused on a normal close, rejected on a forced one. */
+  private async pendingMovements(tx: Transaction, shiftId: string) {
+    return tx
+      .select({ id: cashMovements.id })
+      .from(cashMovements)
+      .where(and(eq(cashMovements.shiftId, shiftId), eq(cashMovements.status, 'pending')));
   }
 
   /**
@@ -746,6 +946,12 @@ export class ShiftsService {
     assertCan(actor, 'shifts.operate', branchId);
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const shift = await this.lockOwnShift(tx, actor);
+      if ((await this.pendingMovements(tx, shift.id)).length > 0)
+        throw new AppError(
+          409,
+          'PENDING_MOVEMENTS',
+          'A cash-out is still waiting for a manager. Withdraw it or wait for the decision.',
+        );
       return this.close(tx, actor, shift, input, 'normal', ip);
     });
   }
@@ -776,6 +982,21 @@ export class ShiftsService {
             message: 'Explain why the shift is closed by a manager.',
           },
         ]);
+      for (const m of await this.pendingMovements(tx, shift.id)) {
+        await tx
+          .update(cashMovements)
+          .set({
+            status: 'rejected',
+            decidedByUserId: actor.userId,
+            decidedAt: sql`now()`,
+            decisionNote: 'Shift closed by a manager.',
+          })
+          .where(eq(cashMovements.id, m.id));
+        await this.record(tx, actor, 'shift.cash_out_rejected', 'shift', shift.id, ip, {
+          movementId: m.id,
+          reason: 'force_close',
+        });
+      }
       if (input.countedCash === undefined)
         return this.closeUncounted(tx, actor, shift, input.note!, input.version, ip);
       return this.close(
@@ -848,6 +1069,20 @@ export class ShiftsService {
       ? (await this.totals(tx, shift)).expectedCashMinor
       : balanceMinor;
     const discrepancy = countedMinor - expectedMinor;
+    // A shortage or overage beyond the tolerance needs an explanation from whoever can see
+    // the expected figure (BR-164); a blind cashier cannot, and the manager follows up.
+    if (
+      !input.note &&
+      abs(discrepancy) > register.discrepancyToleranceMinor &&
+      !(closeType === 'normal' && (await this.blindFor(tx, actor, shift.branchId)))
+    )
+      throw AppError.validation([
+        {
+          path: 'note',
+          code: 'required',
+          message: 'Explain the difference between the counted and the expected cash.',
+        },
+      ]);
     // Posted while the shift is still open (register entries carry the open shift).
     await postEntries(tx, [
       {
@@ -1093,7 +1328,7 @@ export class ShiftsService {
       await tx.execute(sql`
         select coalesce(sum(amount_minor) filter (where kind = 'cash_in'), 0)::text as cash_in,
                coalesce(sum(amount_minor) filter (where kind = 'cash_out'), 0)::text as cash_out
-        from cash_movements where shift_id = ${shift.id}
+        from cash_movements where shift_id = ${shift.id} and status = 'posted'
           -- Exchanging notes for coins does not change the drawer (ADR-0090).
           and (${shift.legacyOpen} or reason <> 'change_received')`)
     ).rows as { cash_in: string; cash_out: string }[];
@@ -1138,7 +1373,9 @@ export class ShiftsService {
     ).rows as Record<string, string | null>[];
     const movements = (
       await tx.execute(sql`
-        select m.*, u.full_name from cash_movements m join users u on u.id = m.created_by_user_id
+        select m.*, u.full_name, d.full_name as decided_by_name
+        from cash_movements m join users u on u.id = m.created_by_user_id
+        left join users d on d.id = m.decided_by_user_id
         where m.shift_id = ${r.id} order by m.created_at, m.id`)
     ).rows as Record<string, unknown>[];
     return {
@@ -1178,7 +1415,15 @@ export class ShiftsService {
         reason: m['reason'] as string,
         note: (m['note'] as string | null) ?? null,
         createdBy: m['full_name'] as string,
+        createdByUserId: m['created_by_user_id'] as string,
         createdAt: iso(m['created_at'] as string)!,
+        status: m['status'] as CashMovement['status'],
+        correctsMovementId: (m['corrects_movement_id'] as string | null) ?? null,
+        limitExceeded: Boolean(m['limit_exceeded']),
+        ownerOverride: Boolean(m['owner_override']),
+        decidedBy: (m['decided_by_name'] as string | null) ?? null,
+        decidedAt: iso(m['decided_at'] as string | null),
+        decisionNote: (m['decision_note'] as string | null) ?? null,
       })),
       version: r.version,
     };
