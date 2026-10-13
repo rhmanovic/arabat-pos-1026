@@ -66,6 +66,23 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after remediation session 3 (2026-10-13, local run)
+
+`pnpm verify` green (165 unit/web tests, including the treasury payout-request approval dialog
+and the follow-up-of-differences tab with its resolve dialog; POS and purchasing fixtures carry
+the new policy fields and `paidToDate`); `pnpm test:integration` 181 passed, including the two
+new cases in `cash-payouts.int.test.ts` (treasurer payments within and above the limit, receipt
+required, `APPROVAL_REQUIRED`, request → list → self-approval refused → rejection needs a reason →
+approval by another treasurer pays from the treasury, withdraw by the requester only, owner
+override flagged in the audit log, checklist count; overpayment of a purchase order refused,
+owner-confirmed and audited, paid to date net of a reversal), the POS case in
+`shifts.int.test.ts` (expense above the limit held with its category and reference, posted as
+a disbursement on approval) and `cash-variances.int.test.ts` (shift-close and treasury-count
+differences listed from their sources with the accountable person, explained by a branch
+manager, settled only with custody, resolved filter, checklist count, audit, cashiers refused);
+`pnpm test:e2e` 35 passed. Existing tests adapted: every settings helper sends the two
+approval limits; the treasury "more than it holds" case carries a receipt reference.
+
 ### Results after remediation session 2 (2026-10-13, local run)
 
 `pnpm verify` green (163 unit/web tests, including the POS pending cash-out flow with withdraw
