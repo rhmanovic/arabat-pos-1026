@@ -52,6 +52,8 @@ export const cashOverviewSchema = z.object({
   registersTotal: moneySchema,
   /** Cash sent between branches and not yet received (ADR-0091). */
   inTransitTotal: moneySchema,
+  /** Cash deposited and not yet confirmed on the bank side (BR-168); no longer cash on hand. */
+  depositsInTransitTotal: moneySchema,
   /** All treasuries + all drawers (+ cash in transit) in scope: the company's cash on hand. */
   total: moneySchema,
 });
@@ -105,9 +107,18 @@ export const cashTransferSchema = z.object({
   amount: moneySchema,
   /**
    * pos_movement: a cashier's drop, top-up or deposit; manager: from the cash custody page;
-   * deposit: a bank deposit from a treasury; branch_transfer: a step of a branch transfer.
+   * deposit: a bank deposit from a treasury; branch_transfer: a step of a branch transfer;
+   * deposit_confirmation / deposit_return: a deposit in transit confirmed by the bank or
+   * returned to the treasury (BR-168).
    */
-  origin: z.enum(['pos_movement', 'manager', 'deposit', 'branch_transfer']),
+  origin: z.enum([
+    'pos_movement',
+    'manager',
+    'deposit',
+    'branch_transfer',
+    'deposit_confirmation',
+    'deposit_return',
+  ]),
   reference: z.string().nullable(),
   note: z.string().nullable(),
   createdBy: z.string(),
@@ -311,16 +322,111 @@ export const supplierPaymentsSchema = z.object({
 });
 export type SupplierPayments = z.infer<typeof supplierPaymentsSchema>;
 
-/** A manager deposits cash from a branch treasury into a bank account (`cash.deposit`). */
+/**
+ * A manager deposits cash from a branch treasury towards a bank account (`cash.deposit`). The
+ * cash waits in "deposits in transit" until a second person confirms it on the bank side; the
+ * deposit slip number is mandatory (BR-168).
+ */
 export const createBankDepositSchema = z.object({
   fromAccountId: z.uuid(),
   bankAccountId: z.uuid(),
   amount: moneyAmountSchema,
-  reference: note(80),
+  reference: z.string().trim().min(1, 'Enter the deposit slip number.').max(80),
   note: note(500),
   idempotencyKey: z.uuid(),
 });
 export type CreateBankDeposit = z.input<typeof createBankDepositSchema>;
+
+// ---------------------------------------------------------------- deposits in transit (BR-168)
+/** A deposit recorded at the POS or by a manager and not yet confirmed on the bank side. */
+export const depositInTransitSchema = z.object({
+  id: z.string(),
+  from: z.object({ accountId: z.string(), kind: z.enum(['register', 'treasury']), ...names }),
+  branchId: z.string(),
+  bank: z.object({ id: z.string(), ...names }),
+  amount: moneySchema,
+  /** The deposit slip number. */
+  reference: z.string(),
+  note: z.string().nullable(),
+  createdBy: z.string(),
+  createdByUserId: z.string(),
+  createdAt: z.string(),
+});
+export type DepositInTransit = z.infer<typeof depositInTransitSchema>;
+export const depositInTransitListSchema = z.object({
+  deposits: z.array(depositInTransitSchema),
+  total: moneySchema,
+});
+export type DepositInTransitList = z.infer<typeof depositInTransitListSchema>;
+export const depositInTransitQuerySchema = z.object({ branchId: z.uuid().optional() });
+/**
+ * Settles a deposit in transit: `confirm` moves it into its bank account (with the bank's
+ * reference), `return` moves it back into the branch treasury with a reason. Nobody settles
+ * their own deposit; the owner may, and the exception is recorded.
+ */
+export const settleDepositSchema = z
+  .object({
+    decision: z.enum(['confirm', 'return']),
+    reference: note(80),
+    note: note(500),
+  })
+  .refine((d) => d.decision !== 'return' || Boolean(d.note), {
+    error: 'Explain why the deposit is returned.',
+    path: ['note'],
+  });
+export type SettleDeposit = z.input<typeof settleDepositSchema>;
+
+// ---------------------------------------------------------------- bank reconciliation (BR-168)
+export const bankEntrySchema = z.object({
+  id: z.string(),
+  amount: moneySchema,
+  entryType: z.string(),
+  sourceType: z.string(),
+  description: z.string().nullable(),
+  /** Deposit slip or bank reference carried by the transfer, when there is one. */
+  reference: z.string().nullable(),
+  createdBy: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type BankEntry = z.infer<typeof bankEntrySchema>;
+export const bankReconciliationSchema = z.object({
+  id: z.string(),
+  statementDate: z.string(),
+  statementBalance: moneySchema,
+  bookBalance: moneySchema,
+  clearedBalance: moneySchema,
+  /** statement − cleared; a non-zero difference carries an explanation. */
+  difference: moneySchema,
+  itemCount: z.number().int(),
+  note: z.string().nullable(),
+  createdBy: z.string(),
+  createdAt: z.string(),
+});
+export type BankReconciliation = z.infer<typeof bankReconciliationSchema>;
+/** Everything needed to reconcile one bank account against its statement. */
+export const bankReconciliationStateSchema = z.object({
+  account: z.object({ id: z.string(), ...names, status: z.enum(['active', 'inactive']) }),
+  bookBalance: moneySchema,
+  /** Sum of every entry reconciled so far. */
+  clearedBalance: moneySchema,
+  /** Ledger entries that appeared on no statement yet, oldest first. */
+  unreconciled: z.array(bankEntrySchema),
+  last: bankReconciliationSchema.nullable(),
+  history: z.array(bankReconciliationSchema),
+});
+export type BankReconciliationState = z.infer<typeof bankReconciliationStateSchema>;
+export const signedAmountSchema = z
+  .string()
+  .trim()
+  .regex(/^-?\d{1,10}(\.\d{1,3})?$/, { error: 'Enter an amount with up to 3 decimal places.' });
+export const createBankReconciliationSchema = z.object({
+  statementDate: z.iso.date(),
+  statementBalance: signedAmountSchema,
+  /** The unreconciled entries that appear on the statement. */
+  entryIds: z.array(z.uuid()).max(1000),
+  note: note(1000),
+});
+export type CreateBankReconciliation = z.input<typeof createBankReconciliationSchema>;
 
 export const bankAccountOptionSchema = z.object({ id: z.string(), ...names });
 export const bankAccountOptionsSchema = z.object({ accounts: z.array(bankAccountOptionSchema) });

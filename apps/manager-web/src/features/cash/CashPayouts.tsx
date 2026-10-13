@@ -5,6 +5,7 @@ import {
   type CashDisbursement,
   type CashOverview,
   type CashPayoutRequest,
+  type DepositInTransit,
 } from '@arabat/contracts';
 import { Money, MoneyError } from '@arabat/money';
 import {
@@ -464,7 +465,10 @@ function PayoutDecisionDialog({
   );
 }
 
-/** Deposits cash from a branch treasury into a bank account (`cash.deposit`). */
+/**
+ * Deposits cash from a branch treasury towards a bank account (`cash.deposit`). The slip number
+ * is mandatory; the cash waits in transit until a second person confirms it (BR-168).
+ */
 export function DepositDialog({
   overview,
   onClose,
@@ -492,7 +496,7 @@ export function DepositDialog({
         fromAccountId: branch.treasury.accountId,
         bankAccountId: bankId,
         amount: amount.trim(),
-        reference: reference.trim() || null,
+        reference: reference.trim(),
         note: note.trim() || null,
         idempotencyKey,
       }),
@@ -510,7 +514,7 @@ export function DepositDialog({
             {t('common.cancel')}
           </Button>
           <Button
-            disabled={!bankId || amountMinor === null || amountMinor <= 0n}
+            disabled={!bankId || !reference.trim() || amountMinor === null || amountMinor <= 0n}
             loading={save.isPending}
             onClick={() => save.mutate()}
           >
@@ -539,7 +543,10 @@ export function DepositDialog({
           )}
         </Field>
         <AmountField value={amount} onChange={setAmount} />
-        <Field label={t('cashCustody.depositReference')}>
+        <Field
+          label={t('cashCustody.depositReference')}
+          hint={t('cashCustody.depositReferenceHint')}
+        >
           {(p) => (
             <Input
               {...p}
@@ -550,6 +557,135 @@ export function DepositDialog({
           )}
         </Field>
         <Field label={t('cashCustody.note')}>
+          {(p) => (
+            <Textarea {...p} rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
+          )}
+        </Field>
+      </div>
+    </Dialog>
+  );
+}
+
+/** Deposits recorded but not yet confirmed on the bank side (BR-168). */
+export function DepositsInTransitList() {
+  const { t, i18n } = useTranslation();
+  const api = useApi();
+  const { branchId } = useBranchContext();
+  const { session } = useSession();
+  const [settling, setSettling] = useState<DepositInTransit | null>(null);
+  const list = useQuery({
+    queryKey: [...cashKey, 'deposits-pending', branchId],
+    queryFn: () => api.cash.depositsInTransit(branchId),
+  });
+  if (!list.data?.deposits.length) return null;
+  return (
+    <section
+      className="rounded-lg border border-warning/40 bg-surface"
+      data-testid="deposits-in-transit"
+    >
+      <h2 className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 font-semibold">
+        <span>{t('cashCustody.depositsInTransit')}</span>
+        <span dir="ltr" className="tabular-nums">
+          {formatAmount(list.data.total, i18n.language)}
+        </span>
+      </h2>
+      <p className="px-4 pt-3 text-xs text-fg-muted">{t('cashCustody.depositsInTransitHint')}</p>
+      <ul className="divide-y divide-border">
+        {list.data.deposits.map((d) => (
+          <li key={d.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
+            <span className="min-w-0 flex-1">
+              <span className="block font-medium">
+                {d.from.kind === 'treasury'
+                  ? t('cashCustody.treasury')
+                  : localizedName(d.from, i18n.language)}{' '}
+                → {localizedName(d.bank, i18n.language)} · {d.reference}
+              </span>
+              <span className="block text-xs text-fg-muted">
+                {d.createdBy} · {formatDateTime(d.createdAt, i18n.language)}
+                {d.note ? ` — ${d.note}` : ''}
+              </span>
+            </span>
+            <span dir="ltr" className="font-semibold tabular-nums">
+              {formatAmount(d.amount, i18n.language)}
+            </span>
+            {d.createdByUserId === session.actor.id && !session.isOwner ? (
+              <Badge tone="warning">{t('cashCustody.awaitingOther')}</Badge>
+            ) : (
+              <Button size="sm" onClick={() => setSettling(d)} data-testid="settle-deposit">
+                {t('cashCustody.confirmDeposit')}
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {settling ? (
+        <SettleDepositDialog deposit={settling} onClose={() => setSettling(null)} />
+      ) : null}
+    </section>
+  );
+}
+
+function SettleDepositDialog({
+  deposit,
+  onClose,
+}: {
+  deposit: DepositInTransit;
+  onClose: () => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const api = useApi();
+  const [reference, setReference] = useState('');
+  const [note, setNote] = useState('');
+  const settle = useMutation({
+    mutationFn: (decision: 'confirm' | 'return') =>
+      api.cash.settleDeposit(deposit.id, {
+        decision,
+        reference: reference.trim() || null,
+        note: note.trim() || null,
+      }),
+    ...useDone(onClose, t('cashCustody.depositSettled')),
+  });
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={t('cashCustody.confirmDepositTitle')}
+      description={t('cashCustody.confirmDepositHint')}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            variant="danger"
+            disabled={!note.trim()}
+            loading={settle.isPending}
+            onClick={() => settle.mutate('return')}
+          >
+            {t('cashCustody.returnDeposit')}
+          </Button>
+          <Button loading={settle.isPending} onClick={() => settle.mutate('confirm')}>
+            {t('cashCustody.confirmDeposit')}
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-4">
+        <p className="text-sm">
+          <span dir="ltr">{formatAmount(deposit.amount, i18n.language)}</span> ·{' '}
+          {localizedName(deposit.bank, i18n.language)} · {deposit.reference} · {deposit.createdBy}
+        </p>
+        <Field label={t('cashCustody.bankReference')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              value={reference}
+              onChange={(e) => setReference(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('cashCustody.returnReason')}>
           {(p) => (
             <Textarea {...p} rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
           )}

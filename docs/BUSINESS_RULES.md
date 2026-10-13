@@ -283,6 +283,17 @@ Remediation session 3 (2026-10-13, owner decision D2):
   person, until management records a follow-up: *explained* (anyone who monitors shifts),
   *settled* or *written off* (cash custody at the branch). Follow-ups are audited; the dashboard
   counts the differences still open.
+- **BR-168** Bank deposits in transit and bank reconciliation. A bank deposit (from a drawer at
+  the POS or from a treasury) always carries its **deposit slip number** and moves the cash into
+  the company's **deposits in transit** account, which is neither cash on hand nor the bank. A
+  **second person** holding the deposit right at that branch confirms it on the bank side (the
+  amount reaches the bank account, with the bank's reference) or returns it to the branch
+  treasury with a reason; nobody settles their own deposit except the owner, whose override is
+  audited. Each bank account is **reconciled by hand**: on a statement date the reconciler ticks
+  the ledger entries that appear on the statement and enters the statement balance; the cleared
+  balance is everything ticked so far and a difference from the statement must be explained.
+  Reconciliations are append-only. A bank account with a balance, with entries no statement has
+  confirmed, or with a deposit on its way cannot be deactivated.
 
 Platform and subscriptions (Prompt 17):
 - **BR-150** Every merchant has exactly one subscription to a plan. New merchants start on

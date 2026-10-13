@@ -288,7 +288,10 @@ export const posEn = {
     noteRequired: 'Explain the difference.',
     movementHint_petty_expense: 'Recorded as an expense paid from this drawer.',
     movementHint_supplier_payment: 'Recorded as a payment to the supplier from this drawer.',
-    movementHint_bank_deposit: 'The cash leaves the drawer for the chosen bank account.',
+    movementHint_bank_deposit:
+      'The cash leaves the drawer towards the chosen bank account and waits until a second person confirms it on the bank side.',
+    depositSlip: 'Deposit slip number',
+    depositSlipNeeded: 'Enter the number printed on the bank’s deposit slip.',
     category: 'Expense category',
     supplier: 'Supplier',
     bankAccount: 'Bank account',

@@ -26,6 +26,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { formatAmount } from '../catalog/ProductsPage.js';
+import { ReconcileDialog } from './BankReconciliation.js';
 import { CashTabs } from './shared.js';
 
 export const paymentsKey = ['manager', 'payments'] as const;
@@ -61,6 +62,7 @@ export function PaymentsPage({ view = 'methods' }: { view?: 'methods' | 'account
   const tab = view;
   const [editing, setEditing] = useState<PaymentMethod | 'new' | null>(null);
   const [account, setAccount] = useState<FinancialAccount | 'new' | null>(null);
+  const [reconciling, setReconciling] = useState<FinancialAccount | null>(null);
   const methods = useQuery({
     queryKey: [...paymentsKey, 'methods'],
     queryFn: () => api.payments.methods(),
@@ -193,10 +195,39 @@ export function PaymentsPage({ view = 'methods' }: { view?: 'methods' | 'account
                       ? t('common.active')
                       : t('common.inactive'),
               },
+              {
+                key: 'reconcile',
+                header: t('cash.reconciliation'),
+                cell: (a) =>
+                  a.kind === 'bank' && a.status !== 'archived' ? (
+                    <span className="flex flex-wrap items-center gap-2">
+                      {a.unreconciledEntries > 0 ? (
+                        <Badge tone="warning">
+                          {t('cash.unreconciledCount', { count: a.unreconciledEntries })}
+                        </Badge>
+                      ) : a.lastReconciledAt ? (
+                        <Badge tone="success">{t('cash.reconciledUpToDate')}</Badge>
+                      ) : null}
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setReconciling(a);
+                        }}
+                      >
+                        {t('cash.reconcile')}
+                      </Button>
+                    </span>
+                  ) : null,
+              },
             ]}
           />
         </>
       )}
+      {reconciling ? (
+        <ReconcileDialog account={reconciling} onClose={() => setReconciling(null)} />
+      ) : null}
       {editing ? (
         <MethodDialog
           method={editing === 'new' ? null : editing}

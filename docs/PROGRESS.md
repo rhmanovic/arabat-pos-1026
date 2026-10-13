@@ -419,6 +419,23 @@ Verified: see `TESTING.md` (results after remediation session 3). Not done (next
 deposits in transit and bank reconciliation (R1.3), custody-right split (FND-422), approval
 of stock adjustments (R2.1).
 
+### 2026-10-13 — Remediation session 4 (R1.3 deposits in transit, bank reconciliation)
+Implemented (ADR-0096, BR-168):
+- **Deposits in transit**: every bank deposit (POS drawer or manager treasury) needs its slip
+  number and lands in the company "deposits in transit" account; a second holder of
+  `cash.deposit` confirms it into the bank (bank reference) or returns it to the treasury with a
+  reason; the owner settles their own deposits with an audited override. Cash overview card,
+  "Deposits in transit" list on the custody page, dashboard checklist count.
+- **Manual bank reconciliation** per bank account (`/manager/accounts` → Reconcile): tick the
+  entries on the statement, enter the statement balance, see the cleared balance and the
+  difference, explain any difference; history kept; unreconciled count and last reconciliation
+  on the accounts list; checklist counts bank entries older than a week on no statement.
+- **Deactivation guard**: a bank account with a balance, unreconciled entries or a deposit in
+  transit cannot be set inactive (`ACCOUNT_IN_USE`).
+Verified: see `TESTING.md` (results after remediation session 4). Not done (next sessions):
+custody-right split (FND-422), approval of stock adjustments (R2.1), blind counts with sign-off
+(R2.2), master-data guards (R2.5); fee settlement per acquirer (FND-413 in full, R3.5).
+
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025
 before any production launch.

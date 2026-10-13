@@ -660,8 +660,9 @@ function MovementDialog({ kind, onClose }: { kind: 'cash_in' | 'cash_out'; onClo
   const limit = kind === 'cash_out' ? limitFor(reason) : null;
   const limitMinor = limit ? minor(limit.amount) : null;
   const aboveLimit = amountMinor !== null && limitMinor !== null && amountMinor > limitMinor;
-  // Above the approval limit a disbursement must carry its receipt or invoice reference.
-  const receiptRequired = aboveLimit && reason !== 'other';
+  // Above the approval limit a disbursement must carry its receipt or invoice reference; a
+  // bank deposit always carries its slip number (BR-168).
+  const receiptRequired = (aboveLimit && reason !== 'other') || reason === 'bank_deposit';
   const valid =
     amountMinor !== null &&
     amountMinor > 0n &&
@@ -681,7 +682,7 @@ function MovementDialog({ kind, onClose }: { kind: 'cash_in' | 'cash_out'; onClo
         idempotencyKey: key,
         ...(reason === 'petty_expense' ? { category: category as never } : {}),
         ...(reason === 'supplier_payment' ? { supplierId } : {}),
-        ...(reason === 'petty_expense' || reason === 'supplier_payment'
+        ...(reason === 'petty_expense' || reason === 'supplier_payment' || reason === 'bank_deposit'
           ? { receiptReference: receipt.trim() || null }
           : {}),
         ...(reason === 'bank_deposit' ? { bankAccountId } : {}),
@@ -818,6 +819,21 @@ function MovementDialog({ kind, onClose }: { kind: 'cash_in' | 'cash_out'; onClo
                   </option>
                 ))}
               </Select>
+            )}
+          </Field>
+        ) : null}
+        {reason === 'bank_deposit' ? (
+          <Field
+            label={t('shift.depositSlip')}
+            error={!receipt.trim() ? t('shift.depositSlipNeeded') : undefined}
+          >
+            {(p) => (
+              <Input
+                {...p}
+                dir="ltr"
+                value={receipt}
+                onChange={(e) => setReceipt(e.target.value)}
+              />
             )}
           </Field>
         ) : null}

@@ -132,11 +132,24 @@ export class CashService {
           where t.status = 'in_transit' and ${transitScope ?? sql`true`}`)
       ).rows as { total: string }[];
       const inTransitTotal = BigInt(transit!.total);
+      // Deposits not yet confirmed on the bank side (BR-168): no longer cash on hand, not yet
+      // in the bank; shown so nobody forgets them.
+      const depositScope = this.scope(actor, branchId, sql`f.branch_id`);
+      const [deposits] = (
+        await tx.execute(sql`select coalesce(sum(t.amount_minor), 0)::text as total
+          from cash_transfers t
+          join financial_accounts f on f.id = t.from_account_id
+          join financial_accounts d on d.id = t.to_account_id
+          where d.kind = 'deposit_transit'
+            and not exists (select 1 from cash_transfers c where c.confirms_transfer_id = t.id)
+            and ${depositScope ?? sql`true`}`)
+      ).rows as { total: string }[];
       return {
         branches: [...branches.values()].map(({ totalMinor: _t, ...b }) => b),
         treasuriesTotal: money(treasuriesTotal),
         registersTotal: money(registersTotal),
         inTransitTotal: money(inTransitTotal),
+        depositsInTransitTotal: money(BigInt(deposits!.total)),
         total: money(treasuriesTotal + registersTotal + inTransitTotal),
       };
     });
@@ -192,8 +205,12 @@ export class CashService {
   }
 
   async listTransfers(actor: MerchantActor, query: TransferQuery, onlyId?: string) {
-    // Branch of a transfer: its register/treasury side (the in-transit account has none).
-    const scope = this.scope(actor, query.branchId, sql`coalesce(f.branch_id, d.branch_id)`);
+    // Branch of a transfer: its register/treasury side (the transit accounts have none); a
+    // deposit confirmation belongs to the branch of the deposit it settles.
+    const branchOf = sql`coalesce(f.branch_id, d.branch_id,
+      (select ff.branch_id from cash_transfers c join financial_accounts ff on ff.id = c.from_account_id
+        where c.id = t.confirms_transfer_id))`;
+    const scope = this.scope(actor, query.branchId, branchOf);
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const where = sql`${scope ?? sql`true`} and ${onlyId ? sql`t.id = ${onlyId}` : sql`true`}`;
       const [count] = (
@@ -205,7 +222,7 @@ export class CashService {
         await tx.execute(sql`
           select t.id, t.amount_minor::text as amount, t.origin, t.note, t.reference, t.created_at,
                  u.full_name, f.id as f_id, f.kind as f_kind, f.name_en as f_en, f.name_ar as f_ar,
-                 coalesce(f.branch_id, d.branch_id) as branch_id, d.id as d_id, d.kind as d_kind, d.name_en as d_en, d.name_ar as d_ar
+                 ${branchOf} as branch_id, d.id as d_id, d.kind as d_kind, d.name_en as d_en, d.name_ar as d_ar
           from cash_transfers t
           join financial_accounts f on f.id = t.from_account_id
           join financial_accounts d on d.id = t.to_account_id

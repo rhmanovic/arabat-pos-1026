@@ -73,7 +73,7 @@ not a commitment).
   and warn (block above 100 % unless the approver overrides with a reason).
 - Depends on: R1.1 (shared pending-movement concept). Decision: D2.
 
-### R1.3 Bank deposits in transit and manual bank reconciliation — **M**
+### R1.3 Bank deposits in transit and manual bank reconciliation — **M** — *done in session 4*
 - Closes: FND-406, FND-413 (visibility), FND-414
 - Build: a deposit leaves the drawer/treasury into "deposits in transit"; a second user with the
   deposit right confirms it into the bank account with slip reference and date (or the depositor
@@ -320,8 +320,8 @@ records without money.
 | 1 | R1.0 audit log, R1.5 blind counts, R7.5 test-gateway guard | **Done 2026-10-13** |
 | 2 | R1.1 cash-out corrections and limits, R1.6 custody roles and set-up checklist | **Done 2026-10-13** |
 | 3 | R1.2 disbursement approvals (per-merchant thresholds, owner override), R1.4 variance follow-up | **Done 2026-10-13** |
-| 4 | R1.3 deposits in transit and bank reconciliation | Next |
-| 5 | R2.1 adjustment approvals, R2.2 blind counts with sign-off, R2.5 master-data guards | |
+| 4 | R1.3 deposits in transit and bank reconciliation | **Done 2026-10-13** |
+| 5 | R2.1 adjustment approvals, R2.2 blind counts with sign-off, R2.5 master-data guards | Next |
 | 6 | R2.3 transfer losses, R2.4 in-transit location | |
 | 7 | R2.6 valuation as at date, R2.7 cost edge cases, R2.8 damaged returns | |
 | 8 | R3.1 till overrides, R3.2 price bounds, R3.3 zero-total sales | |

@@ -60,9 +60,25 @@ export class ControlsService {
           where merchant_id = ${actor.merchantId} and status = 'pending'`)
       ).rows as { n: number }[];
       const openVariances = await countOpenVariances(tx, actor.merchantId);
+      const [deposits] = (
+        await tx.execute(sql`
+          select count(*)::int as n from cash_transfers t join financial_accounts d on d.id = t.to_account_id
+          where t.merchant_id = ${actor.merchantId} and d.kind = 'deposit_transit'
+            and not exists (select 1 from cash_transfers c where c.confirms_transfer_id = t.id)`)
+      ).rows as { n: number }[];
+      const [unreconciled] = (
+        await tx.execute(sql`
+          select count(*)::int as n from financial_account_entries e
+          join financial_accounts a on a.id = e.account_id
+          where e.merchant_id = ${actor.merchantId} and a.kind = 'bank' and a.status = 'active'
+            and e.created_at < now() - interval '7 days'
+            and not exists (select 1 from bank_reconciliation_items i where i.entry_id = e.id)`)
+      ).rows as { n: number }[];
       return {
         pendingPayoutRequests: Number(payouts?.n ?? 0),
         openVariances,
+        depositsInTransit: Number(deposits?.n ?? 0),
+        unreconciledBankEntries: Number(unreconciled?.n ?? 0),
         treasurerAssigned: Boolean(treasurer?.assigned),
         membersWithoutRoles: withoutRoles.map((r) => ({
           membershipId: r['id'] as string,

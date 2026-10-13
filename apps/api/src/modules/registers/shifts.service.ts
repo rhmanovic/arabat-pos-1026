@@ -31,10 +31,15 @@ import { branches } from '../branches/branches.schema.js';
 import { merchants } from '../merchants/merchants.schema.js';
 import { suppliers } from '../purchasing/purchasing.schema.js';
 import { salesSettings } from '../sales/sales.schema.js';
-import { assertReceiptReference, exceedsApprovalLimit } from '../cash/approval-limits.js';
+import {
+  assertDepositSlip,
+  assertReceiptReference,
+  exceedsApprovalLimit,
+} from '../cash/approval-limits.js';
 import {
   accountBalance,
   activeBankAccount,
+  depositTransitAccount,
   assertCovers,
   assertTreasuryCounted,
   branchTreasury,
@@ -614,15 +619,20 @@ export class ShiftsService {
             : null;
         // Bank deposits need their own permission on top of cash.move (ADR-0091).
         let bankId: string | null = null;
+        let depositTransitId: string | null = null;
         if (input.reason === 'bank_deposit') {
           assertCan(actor, 'cash.deposit', branchId);
           bankId = await activeBankAccount(tx, input.bankAccountId!);
+          // The deposit slip number is mandatory; the cash waits in "deposits in transit"
+          // until a second person confirms it on the bank side (BR-168).
+          assertDepositSlip(input.receiptReference);
+          depositTransitId = await depositTransitAccount(tx, actor.merchantId);
         }
         if (input.reason === 'supplier_payment') await this.assertSupplier(tx, input.supplierId!);
         await lockAccounts(tx, [
           drawer.id,
           ...(treasury ? [treasury.id] : []),
-          ...(bankId ? [bankId] : []),
+          ...(depositTransitId ? [depositTransitId] : []),
         ]);
         if (input.kind === 'cash_out')
           assertCovers(await this.drawerCash(tx, shift), amountMinor, 'register');
@@ -691,6 +701,7 @@ export class ShiftsService {
           amountMinor,
           note: input.note ?? null,
           bankId,
+          depositTransitId,
           category: input.category ?? null,
           supplierId: input.supplierId ?? null,
           receiptReference: input.receiptReference ?? null,
@@ -699,6 +710,9 @@ export class ShiftsService {
           movementId: id,
           amount: Money.ofMinor(amountMinor, CURRENCY).toDecimalString(),
           reason: input.reason,
+          ...(input.reason === 'bank_deposit'
+            ? { bank: bankId, reference: input.receiptReference }
+            : {}),
           ...(input.reason === 'correction' ? { corrects: input.correctsMovementId } : {}),
           ...(limitExceeded ? { limitExceeded: true, ownerOverride: true } : {}),
         });
@@ -792,6 +806,7 @@ export class ShiftsService {
           amountMinor: m.amountMinor,
           note: m.note,
           bankId: null,
+          depositTransitId: null,
           category: m.expenseCategory,
           supplierId: m.supplierId,
           receiptReference: m.receiptReference,
@@ -877,6 +892,7 @@ export class ShiftsService {
       amountMinor: bigint;
       note: string | null;
       bankId: string | null;
+      depositTransitId: string | null;
       category: string | null;
       supplierId: string | null;
       receiptReference: string | null;
@@ -884,13 +900,16 @@ export class ShiftsService {
   ) {
     if (m.reason === 'change_received') return;
     if (m.reason === 'bank_deposit') {
+      // Into "deposits in transit", towards the chosen bank; confirmed later (BR-168).
       await postTransfer(tx, {
         merchantId: actor.merchantId,
         fromAccountId: drawerId,
-        toAccountId: m.bankId!,
+        toAccountId: m.depositTransitId!,
+        targetAccountId: m.bankId!,
         amountMinor: m.amountMinor,
         origin: 'pos_movement',
         cashMovementId: m.id,
+        reference: m.receiptReference,
         note: m.note,
         userId: actor.userId,
         fromShiftId: shift.id,

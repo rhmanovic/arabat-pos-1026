@@ -131,6 +131,7 @@ describe('cash reports', () => {
       fromAccountId: treasury,
       bankAccountId: bank,
       amount: '10.000',
+      reference: 'SLIP-R',
       idempotencyKey: newId(),
     });
     const sent = (

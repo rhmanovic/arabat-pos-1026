@@ -6,7 +6,7 @@ not yet re-verified by the audit), **Tested** (fixed and covered by automated te
 **Deferred** (outside the current retail scope or waiting for an owner decision). Update this file
 in the same session as the code.
 
-Last update: 2026-10-13 (remediation session 3). Totals: Deferred 49, Fixed 4, In Progress 2, Open 115, Tested 10.
+Last update: 2026-10-13 (remediation session 4). Totals: Deferred 49, Fixed 4, In Progress 3, Open 112, Tested 12.
 
 | Id | Finding | Severity | Ch. | Package | Status | Note |
 |---|---|---|---|---|---|---|
@@ -15,7 +15,7 @@ Last update: 2026-10-13 (remediation session 3). Totals: Deferred 49, Fixed 4, I
 | FND-102 | Ownership transfer and owner succession are not implemented although documented | High | A | R5.2 | Open |  |
 | FND-201 | Stock adjustments have no approval, value limit or segregation of duties | High | B | R2.1 | Open |  |
 | FND-207 | Switching off stock tracking (or changing goods to service) hides existing balances from valuation without a movement | High | B | R2.5 | Open |  |
-| FND-406 | Bank account balances are never reconciled; deposits are credited on the depositor's word | High | D | R1.3 | Open |  |
+| FND-406 | Bank account balances are never reconciled; deposits are credited on the depositor's word | High | D | R1.3 | Tested | Session 4: deposits wait in transit with a mandatory slip number until a second person confirms them; manual bank reconciliation per account (`bank.int.test.ts`, `cash.test.tsx`, `cash-payouts.spec.ts`) |
 | FND-407 | Cash out "correction" / "other" removes cash from custody with no destination and no approval | High | D | R1.1 | Tested | Session 2: corrections bound to a movement; "other" cash-outs capped and pending above the limit (`shifts.int.test.ts`, `app.test.tsx`) |
 | FND-408 | Disbursements have no limits, no approval and no link to what is owed | High | D | R1.2 | Tested | Session 3: approval limits per company, pending till movements and treasury payout requests with a second custody holder, owner override audited (`cash-payouts.int.test.ts`, `shifts.int.test.ts`) |
 | FND-501 | Gateway refunds can never be confirmed; stock is restocked while revenue stays unreduced | High | E | R7.2 | Open |  |
@@ -62,7 +62,7 @@ Last update: 2026-10-13 (remediation session 3). Totals: Deferred 49, Fixed 4, I
 | FND-409 | Book balances of a drawer can change under a cashier without their count or a movement on their shift | Medium | D | — | Open |  |
 | FND-410 | Differences on branch transfers are absorbed by the company without an accountable party | Medium | D | R1.4 | Fixed | Session 3: branch-transfer differences listed with the receiver as accountable and followed up; not yet charged to a branch automatically |
 | FND-411 | Period cut-off is inconsistent across lists and reports, and statements have no period | Medium | D | R4.1 | Open |  |
-| FND-413 | Processing fees are configured estimates, not settled amounts, and are not reconciled to the acquirer | Medium | D | R1.3 | Open |  |
+| FND-413 | Processing fees are configured estimates, not settled amounts, and are not reconciled to the acquirer | Medium | D | R1.3, R3.5 | In Progress | Session 4: bank reconciliation shows which settlement entries the statement confirmed; fee settlement per acquirer waits for R3.5 (D6) |
 | FND-416 | Weak segregation of duties around the register | Medium | D | R1.6 | In Progress | Session 2: approvals above the limit need a second person; custody split (FND-422) still open |
 | FND-422 | The custody right is too coarse | Medium | D | R1.6 | Open |  |
 | FND-502 | Holders of the approve permission bypass the refund limit and window for their own refunds | Medium | E | R3.4 | Open |  |
@@ -133,7 +133,7 @@ Last update: 2026-10-13 (remediation session 3). Totals: Deferred 49, Fixed 4, I
 | FND-316 | Till search exposes phone numbers broadly | Low | C | — | Open |  |
 | FND-318 | Average sale uses gross spent and counts exchanges as purchases | Low | C | — | Open |  |
 | FND-412 | A fee on the cash method is counted in fee totals but posted nowhere | Low | D | R3.5 | Open |  |
-| FND-414 | Accounts can be deactivated with a balance and keep receiving postings | Low | D | R1.3 | Open |  |
+| FND-414 | Accounts can be deactivated with a balance and keep receiving postings | Low | D | R1.3 | Tested | Session 4: `ACCOUNT_IN_USE` on deactivating a bank account with a balance, unreconciled entries or a deposit in transit (`bank.int.test.ts`) |
 | FND-415 | Documentation and configuration remnants out of step with behaviour | Low | D | — | Open | Documentation alignment, Theme 9 |
 | FND-417 | Treasury of a deactivated branch keeps cash with no restriction | Low | D | — | Open |  |
 | FND-418 | Management counts have no denomination breakdown in the screen | Low | D | R1.5 | Open |  |

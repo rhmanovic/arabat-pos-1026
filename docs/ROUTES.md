@@ -159,6 +159,8 @@ per-branch breakdown, settings dialog), `/manager/inventory/adjustments`,
 | `GET /manager/merchant/controls` | `merchant.settings.read` (internal-control checklist, BR-165) |
 | `GET /manager/cash/payout-requests?branchId=&status=`, `POST /manager/cash/payout-requests`, `POST …/:id/decision`, `POST …/:id/withdraw` | `cash.custody` at the branch; decision by someone other than the requester (owner excepted, flagged; ADR-0095) |
 | `GET /manager/cash/variances?branchId=&status=&from=&to=`, `POST /manager/cash/variances/:sourceType/:sourceId/followup` | `shifts.view_all` (branch-scoped); settled / written off need `cash.custody` (BR-167) |
+| `GET /manager/cash/deposits/pending?branchId=`, `POST /manager/cash/deposits/:id/settle` | `cash.deposit` at the deposit's branch; settler ≠ depositor (owner excepted, flagged; BR-168) |
+| `GET /manager/cash/bank-accounts/:id/reconciliation`, `POST /manager/cash/bank-accounts/:id/reconciliations` | `cash.deposit` (bank-side control; BR-168) |
 | `POST /pos/shifts/current/cash-movements` | POS `cash.move` (own open shift) |
 
 Screens: `/manager/payments` (methods + internal balances, fee preview),

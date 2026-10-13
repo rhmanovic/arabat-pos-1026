@@ -35,6 +35,7 @@ import {
   assertCovers,
   assertTreasuryCounted,
   branchTreasury,
+  depositTransitAccount,
   inTransitAccount,
   lockAccounts,
   postDisbursement,
@@ -311,7 +312,11 @@ export class CashPayoutsService {
   }
 
   // ------------------------------------------------------------ bank deposits
-  /** A manager deposits cash from a branch treasury into a bank account. */
+  /**
+   * A manager deposits cash from a branch treasury towards a bank account. The cash moves into
+   * "deposits in transit" and reaches the bank account when a second person confirms it
+   * (BR-168); the deposit slip number is mandatory.
+   */
   async deposit(actor: MerchantActor, input: DepositInput, ip: string): Promise<CashTransfer> {
     const amountMinor = positive(input.amount, 'amount');
     try {
@@ -333,13 +338,15 @@ export class CashPayoutsService {
           );
         assertCan(actor, 'cash.deposit', from.branchId);
         const bankId = await activeBankAccount(tx, input.bankAccountId);
-        await lockAccounts(tx, [from.id, bankId]);
+        const transitId = await depositTransitAccount(tx, actor.merchantId);
+        await lockAccounts(tx, [from.id, transitId]);
         assertTreasuryCounted({ ...from, branchId: from.branchId });
         assertCovers(await accountBalance(tx, from.id), amountMinor, 'treasury');
         const transferId = await postTransfer(tx, {
           merchantId: actor.merchantId,
           fromAccountId: from.id,
-          toAccountId: bankId,
+          toAccountId: transitId,
+          targetAccountId: bankId,
           amountMinor,
           origin: 'deposit',
           note: input.note,

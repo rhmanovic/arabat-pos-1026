@@ -75,6 +75,28 @@ export function DashboardPage() {
               },
             ]
           : []),
+        ...(controls.data.depositsInTransit > 0
+          ? [
+              {
+                key: 'deposits',
+                to: '/cash',
+                text: t('dashboard.controlDepositsInTransit', {
+                  count: controls.data.depositsInTransit,
+                }),
+              },
+            ]
+          : []),
+        ...(controls.data.unreconciledBankEntries > 0
+          ? [
+              {
+                key: 'bank',
+                to: '/accounts',
+                text: t('dashboard.controlUnreconciledBank', {
+                  count: controls.data.unreconciledBankEntries,
+                }),
+              },
+            ]
+          : []),
         ...(controls.data.membersWithoutRoles.length > 0
           ? [
               {

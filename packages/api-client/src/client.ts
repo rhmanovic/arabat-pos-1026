@@ -71,6 +71,11 @@ import {
   type CancelCashBranchTransfer,
   type CashDisbursementQuery,
   type CreateBankDeposit,
+  type CreateBankReconciliation,
+  type SettleDeposit,
+  bankReconciliationStateSchema,
+  bankReconciliationSchema,
+  depositInTransitListSchema,
   type CreateCashBranchTransfer,
   type CreateCashDisbursement,
   type ReceiveCashBranchTransfer,
@@ -607,6 +612,24 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('POST', `/manager/cash/variances/${sourceType}/${sourceId}/followup`, {
           body,
           schema: cashVarianceSchema,
+        }),
+      depositsInTransit: (branchId?: string | null) =>
+        request('GET', `/manager/cash/deposits/pending?${toParams({ branchId })}`, {
+          schema: depositInTransitListSchema,
+        }),
+      settleDeposit: (id: string, body: SettleDeposit) =>
+        request('POST', `/manager/cash/deposits/${id}/settle`, {
+          body,
+          schema: cashTransferSchema,
+        }),
+      bankReconciliation: (accountId: string) =>
+        request('GET', `/manager/cash/bank-accounts/${accountId}/reconciliation`, {
+          schema: bankReconciliationStateSchema,
+        }),
+      reconcileBank: (accountId: string, body: CreateBankReconciliation) =>
+        request('POST', `/manager/cash/bank-accounts/${accountId}/reconciliations`, {
+          body,
+          schema: bankReconciliationSchema,
         }),
       posBankAccounts: () =>
         request('GET', '/pos/cash/bank-accounts', { schema: bankAccountOptionsSchema }),

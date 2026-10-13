@@ -77,6 +77,7 @@ async function overview(s: Company) {
       registers: { accountId: string; balance: { amount: string } }[];
     }[];
     inTransitTotal: { amount: string };
+    depositsInTransitTotal: { amount: string };
     total: { amount: string };
   };
 }
@@ -389,6 +390,7 @@ describe('bank deposits', () => {
       reason: 'bank_deposit',
       amount: '12.000',
       bankAccountId: s.bank,
+      receiptReference: 'SLIP-POS',
     };
     expect((await shift.move(body)).statusCode).toBe(403);
     expect(
@@ -404,7 +406,9 @@ describe('bank deposits', () => {
     expect(banks.accounts.map((a: { id: string }) => a.id)).toContain(s.bank);
     expect((await shift.move(body)).statusCode).toBe(201);
     expect((await drawer(s)).balance.amount).toBe('18.000');
-    expect(await balanceOf(s.bank)).toBe('12000');
+    // The cash waits in "deposits in transit" until a second person confirms it (BR-168).
+    expect(await balanceOf(s.bank)).toBe('0');
+    expect((await overview(s)).depositsInTransitTotal.amount).toBe('12.000');
     // The register is no longer the bank: a register account is refused as a deposit target.
     const wrong = await shift.move({ ...body, bankAccountId: (await drawer(s)).accountId });
     expect(wrong.statusCode).toBe(400);
@@ -425,16 +429,18 @@ describe('bank deposits', () => {
     expect(deposit.json()).toMatchObject({
       origin: 'deposit',
       reference: 'SLIP-1',
-      to: { accountId: s.bank, kind: 'bank' },
+      to: { kind: 'deposit_transit' },
     });
     expect((await treasury(s, s.c.main)).balance.amount).toBe('30.000');
-    expect(await balanceOf(s.bank)).toBe('50000');
-    // Company cash fell by the deposit: it is in the bank now.
+    // Company cash fell by the deposit: it is on its way to the bank (BR-168).
+    expect(await balanceOf(s.bank)).toBe('0');
     expect((await overview(s)).total.amount).toBe('30.000');
+    expect((await overview(s)).depositsInTransitTotal.amount).toBe('50.000');
     const tooMuch = await call(s, 'POST', '/manager/cash/deposits', {
       fromAccountId: t.accountId,
       bankAccountId: s.bank,
       amount: '30.001',
+      reference: 'SLIP-2',
       idempotencyKey: newId(),
     });
     expect(tooMuch.json().code).toBe('INSUFFICIENT_TREASURY_CASH');
@@ -455,6 +461,7 @@ describe('bank deposits', () => {
         fromAccountId: t.accountId,
         bankAccountId: s.bank,
         amount: '1.000',
+        reference: 'SLIP-3',
         idempotencyKey: newId(),
       },
       custodian.cookies,

@@ -220,10 +220,16 @@ export class PaymentsService {
       const rows = (
         await tx.execute(sql`
           select a.*, coalesce((select sum(e.amount_minor) from financial_account_entries e
-                                where e.account_id = a.id), 0)::text as balance
+                                where e.account_id = a.id), 0)::text as balance,
+                 (select count(*) from financial_account_entries e
+                   where e.account_id = a.id and a.kind = 'bank'
+                     and not exists (select 1 from bank_reconciliation_items i where i.entry_id = e.id))::int
+                   as unreconciled,
+                 (select max(r.created_at) from bank_reconciliations r where r.account_id = a.id)
+                   as last_reconciled_at
           from financial_accounts a
-          -- Registers and treasuries are managed on the cash custody page (ADR-0090).
-          where a.kind not in ('register', 'treasury', 'in_transit')
+          -- Registers, treasuries and the transit accounts are managed on the cash custody page.
+          where a.kind not in ('register', 'treasury', 'in_transit', 'deposit_transit')
           order by a.created_at`)
       ).rows as Record<string, unknown>[];
       return rows.map((r) => ({
@@ -234,6 +240,10 @@ export class PaymentsService {
         currency: r['currency'] as string,
         status: r['status'] as FinancialAccount['status'],
         balance: money(BigInt(r['balance'] as string)),
+        unreconciledEntries: Number(r['unreconciled'] ?? 0),
+        lastReconciledAt: r['last_reconciled_at']
+          ? new Date(r['last_reconciled_at'] as string).toISOString()
+          : null,
         version: r['version'] as number,
       }));
     });
@@ -261,10 +271,14 @@ export class PaymentsService {
           ]);
         const existing = await this.findAccount(tx, id);
         if (
-          ['register', 'treasury', 'in_transit'].includes(existing.kind) ||
+          ['register', 'treasury', 'in_transit', 'deposit_transit'].includes(existing.kind) ||
           existing.status === 'archived'
         )
           throw AppError.conflict('This account is managed by the system.');
+        // A bank account with a balance, with entries no statement has confirmed, or with a
+        // deposit on its way cannot be switched off (BR-168, FND-414).
+        if (existing.kind === 'bank' && input.status === 'inactive')
+          await assertBankAccountIdle(tx, id);
         const [row] = await tx
           .update(financialAccounts)
           .set({ ...fields, version: sql`${financialAccounts.version} + 1`, updatedAt: sql`now()` })
@@ -295,4 +309,38 @@ export class PaymentsService {
     if (!row) throw AppError.notFound('Financial account not found.');
     return row;
   }
+}
+
+async function assertBankAccountIdle(tx: Transaction, accountId: string) {
+  const [row] = (
+    await tx.execute(sql`
+      select coalesce((select sum(e.amount_minor) from financial_account_entries e
+                       where e.account_id = ${accountId}), 0)::text as balance,
+             (select count(*) from financial_account_entries e
+               where e.account_id = ${accountId}
+                 and not exists (select 1 from bank_reconciliation_items i where i.entry_id = e.id))::int
+               as unreconciled,
+             (select count(*) from cash_transfers t
+               where t.target_account_id = ${accountId}
+                 and not exists (select 1 from cash_transfers c where c.confirms_transfer_id = t.id))::int
+               as pending`)
+  ).rows as { balance: string; unreconciled: number; pending: number }[];
+  if (BigInt(row!.balance) !== 0n)
+    throw new AppError(
+      409,
+      'ACCOUNT_IN_USE',
+      'This bank account still has a balance. Move or reconcile it before deactivating the account.',
+    );
+  if (Number(row!.unreconciled) > 0)
+    throw new AppError(
+      409,
+      'ACCOUNT_IN_USE',
+      'This bank account has entries that appeared on no statement yet. Reconcile them first.',
+    );
+  if (Number(row!.pending) > 0)
+    throw new AppError(
+      409,
+      'ACCOUNT_IN_USE',
+      'A deposit towards this bank account is still in transit. Confirm or return it first.',
+    );
 }

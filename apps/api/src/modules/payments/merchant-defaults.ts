@@ -5,6 +5,7 @@ import { branches } from '../branches/branches.schema.js';
 import { registers } from '../registers/registers.schema.js';
 import {
   ensureBranchTreasury,
+  ensureDepositTransitAccount,
   ensureInTransitAccount,
   ensureRegisterAccount,
 } from './cash-ledger.js';
@@ -174,6 +175,7 @@ export async function ensureDefaultRegister(tx: Transaction, merchantId: string,
     .where(and(eq(branches.merchantId, merchantId), eq(branches.id, branchId)));
   if (branch) await ensureBranchTreasury(tx, merchantId, branch);
   await ensureInTransitAccount(tx, merchantId);
+  await ensureDepositTransitAccount(tx, merchantId);
   for (const r of await tx
     .select({
       id: registers.id,

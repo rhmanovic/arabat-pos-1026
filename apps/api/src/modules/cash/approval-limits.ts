@@ -85,3 +85,11 @@ export async function assertNotOverpaid(
     `This payment would exceed the order's value: ordered ${decimal(position.totalMinor)}, paid to date ${decimal(position.paidMinor)}, this payment ${decimal(amountMinor)} KWD.`,
   );
 }
+
+/** A bank deposit always carries its deposit slip number (BR-168, FND-406). */
+export function assertDepositSlip(reference: string | null | undefined) {
+  if (!reference)
+    throw AppError.validation([
+      { path: 'receiptReference', code: 'required', message: 'Enter the deposit slip number.' },
+    ]);
+}

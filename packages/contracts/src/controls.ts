@@ -26,5 +26,9 @@ export const controlsChecklistSchema = z.object({
   pendingPayoutRequests: z.number().int(),
   /** Cash differences with no follow-up yet (BR-167). */
   openVariances: z.number().int(),
+  /** Bank deposits waiting for a second person to confirm them on the bank side (BR-168). */
+  depositsInTransit: z.number().int(),
+  /** Entries on active bank accounts older than a week that appeared on no statement yet. */
+  unreconciledBankEntries: z.number().int(),
 });
 export type ControlsChecklist = z.infer<typeof controlsChecklistSchema>;

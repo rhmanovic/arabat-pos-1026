@@ -931,3 +931,37 @@ ADR; supersede it.
 - **Consequences:** Deposits in transit and bank reconciliation (R1.3) follow; the dashboard
   checklist now counts pending payout requests and open variances.
 
+## ADR-0096 — Remediation session 4: deposits in transit and manual bank reconciliation
+- **Date:** 2026-10-13 · **Status:** Accepted (remediation plan R1.3)
+- **Context:** Phase 1 found bank balances credited on the depositor's word and never reconciled
+  (FND-406), no visibility of what the bank actually settled (FND-413) and bank accounts that could
+  be deactivated with a balance (FND-414).
+- **Decision:**
+  - One company account of kind `deposit_transit` per merchant (migration 0039, created for
+    existing merchants and in `merchant-defaults`). Every deposit — POS `bank_deposit` movement or
+    `POST /manager/cash/deposits` — posts register/treasury → deposits in transit with
+    `cash_transfers.target_account_id` (the intended bank) and a mandatory slip `reference`
+    (`assertDepositSlip`, contract refinements).
+  - Settlement is a second transfer naming the deposit (`confirms_transfer_id`, unique): origin
+    `deposit_confirmation` (transit → that bank, optional bank reference) or `deposit_return`
+    (transit → the branch treasury, reason required). The database trigger
+    `cash_transfers_direction` enforces the directions, the matching amount and the bank named on
+    the deposit. Settler ≠ depositor; the owner may settle their own deposit (`ownerOverride` in
+    the audit event). Transfers stay append-only, so no row locks: a race ends in the unique
+    settlement index, reported as `DEPOSIT_SETTLED`.
+  - Manual reconciliation: `bank_reconciliations` (statement date, statement / book / cleared
+    balances, difference, note, who) and `bank_reconciliation_items` (each ledger entry ticked
+    once; a trigger keeps items on the reconciled account). `difference ≠ 0` needs a note (also a
+    check constraint). Both tables are RLS-protected and never updated or deleted.
+  - Rights: everything under `cash.deposit` (the Treasurer template holds it); a deposit's branch
+    is the branch of the account it left; reconciliation is a bank-side control open to anyone
+    holding the right at some branch.
+  - `PATCH /manager/financial-accounts/:id` answers `ACCOUNT_IN_USE` when a bank account with a
+    balance, unreconciled entries or a deposit in transit is set inactive.
+  - Visibility: cash overview `depositsInTransitTotal` (not part of cash on hand), the custody
+    report counts deposits net of returns, the checklist counts deposits in transit and bank
+    entries older than a week on no statement, the accounts page shows unreconciled counts and
+    the last reconciliation.
+- **Consequences:** The bank balance in the system is only what a second person confirmed; the
+  owner + one cashier set-up works because the owner is the confirmer with an audited override.
+  Fee settlement per acquirer (FND-413 in full) remains for R3.5 / D6.

@@ -30,6 +30,9 @@ export const financialAccountSchema = z.object({
   currency: z.string(),
   status: z.enum(['active', 'inactive', 'archived']),
   balance: moneySchema,
+  /** Bank accounts: ledger entries that appeared on no statement yet (BR-168). */
+  unreconciledEntries: z.number().int(),
+  lastReconciledAt: z.string().nullable(),
   version: z.number().int(),
 });
 export type FinancialAccount = z.infer<typeof financialAccountSchema>;
@@ -386,6 +389,7 @@ export const recordCashMovementSchema = z
     category: z.enum(CASH_EXPENSE_CATEGORIES).optional(),
     /** supplier_payment: the supplier paid. */
     supplierId: z.uuid().optional(),
+    /** Expenses and payments: receipt or invoice number; bank_deposit: the deposit slip number. */
     receiptReference: text(80),
     /** bank_deposit: the bank account the cash is deposited into. */
     bankAccountId: z.uuid().optional(),
@@ -426,6 +430,10 @@ export const recordCashMovementSchema = z
   .refine((m) => m.reason !== 'bank_deposit' || Boolean(m.bankAccountId), {
     error: 'Choose the bank account.',
     path: ['bankAccountId'],
+  })
+  .refine((m) => m.reason !== 'bank_deposit' || Boolean(m.receiptReference), {
+    error: 'Enter the deposit slip number.',
+    path: ['receiptReference'],
   });
 export type RecordCashMovement = z.input<typeof recordCashMovementSchema>;
 

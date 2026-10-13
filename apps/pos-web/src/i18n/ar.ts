@@ -288,7 +288,10 @@ export const posAr: PosResources = {
     noteRequired: 'اكتب سبب الفرق.',
     movementHint_petty_expense: 'يُسجَّل مصروفاً مدفوعاً من هذا الدرج.',
     movementHint_supplier_payment: 'يُسجَّل دفعة للمورد من هذا الدرج.',
-    movementHint_bank_deposit: 'يخرج النقد من الدرج إلى الحساب البنكي المختار.',
+    movementHint_bank_deposit:
+      'يخرج النقد من الدرج باتجاه الحساب البنكي المختار ويبقى في الطريق حتى يؤكده شخص ثانٍ من جهة البنك.',
+    depositSlip: 'رقم قسيمة الإيداع',
+    depositSlipNeeded: 'أدخل الرقم المطبوع على قسيمة الإيداع البنكية.',
     category: 'تصنيف المصروف',
     supplier: 'المورد',
     bankAccount: 'الحساب البنكي',

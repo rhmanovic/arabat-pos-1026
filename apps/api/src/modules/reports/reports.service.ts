@@ -592,8 +592,9 @@ export class ReportsService {
                 and fa.kind = 'register' and ta.kind = 'treasury'), 0)::text as drops,
               coalesce(-sum(e.amount_minor) filter (where e.account_id = t.from_account_id
                 and fa.kind = 'treasury' and ta.kind = 'register'), 0)::text as top_ups,
-              coalesce(-sum(e.amount_minor) filter (where e.account_id = t.from_account_id
-                and ta.kind = 'bank'), 0)::text as deposits,
+              coalesce(-sum(e.amount_minor) filter (where (e.account_id = t.from_account_id
+                and ta.kind in ('bank', 'deposit_transit'))
+                or (e.account_id = t.to_account_id and fa.kind = 'deposit_transit')), 0)::text as deposits,
               coalesce(-sum(e.amount_minor) filter (where e.entry_type = 'expense'), 0)::text as expenses,
               coalesce(-sum(e.amount_minor) filter (where e.entry_type = 'supplier_payment'), 0)::text as supplier,
               coalesce(sum(e.amount_minor) filter (where e.source_type = 'cash_movement'), 0)::text as corrections,

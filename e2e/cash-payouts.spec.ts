@@ -49,14 +49,17 @@ test('expenses, a bank deposit, a branch transfer and a supplier paid from the d
   await dialog.getByRole('button', { name: 'Pay expense / supplier' }).click();
   await expect(main.getByTestId('cash-place-treasury')).toContainText('KWD 96.000');
 
-  // A bank deposit: the cash leaves company cash for the bank.
+  // A bank deposit: the cash leaves company cash and waits in transit until it is confirmed
+  // on the bank side (BR-168). The slip number is mandatory.
   await page.getByRole('button', { name: 'Deposit to bank' }).click();
   dialog = page.getByRole('dialog');
   await dialog.getByLabel('Bank account').selectOption({ index: 1 });
   await dialog.getByLabel('Amount').fill('50');
-  await dialog.getByLabel('Deposit slip number (optional)').fill('SLIP-7');
+  await expect(dialog.getByRole('button', { name: 'Deposit to bank' })).toBeDisabled();
+  await dialog.getByLabel('Deposit slip number').fill('SLIP-7');
   await dialog.getByRole('button', { name: 'Deposit to bank' }).click();
   await expect(main.getByTestId('cash-place-treasury')).toContainText('KWD 46.000');
+  await expect(page.getByText('Deposits in transit').first()).toBeVisible();
 
   // Cash sent to the other branch waits in transit until it is counted there.
   await page.getByRole('button', { name: 'Send to branch' }).click();
@@ -76,6 +79,26 @@ test('expenses, a bank deposit, a branch transfer and a supplier paid from the d
   await page.getByRole('button', { name: 'Expenses & payments' }).click();
   await expect(page.getByTestId('disbursements-total')).toContainText('KWD 4.000');
   await expect(page.getByRole('cell', { name: /Supplies/ })).toBeVisible();
+  // The owner confirms the deposit in the bank (their own: an audited override).
+  const transit = page.getByTestId('deposits-in-transit');
+  await expect(transit).toContainText('SLIP-7');
+  await transit.getByTestId('settle-deposit').click();
+  dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Bank reference (optional)').fill('NBK-123');
+  await dialog.getByRole('button', { name: 'Confirm in bank' }).click();
+  await expect(page.getByTestId('deposits-in-transit')).toHaveCount(0);
+
+  // Bank reconciliation: the statement shows the deposit; balanced.
+  await page.goto('/manager/accounts');
+  await expect(page.getByText('1 unreconciled')).toBeVisible();
+  await page.getByRole('button', { name: 'Reconcile' }).first().click();
+  dialog = page.getByRole('dialog');
+  await dialog.getByLabel(/NBK-123/).check();
+  await dialog.getByLabel('Statement balance (KWD)').fill('50');
+  await expect(dialog.getByText('The statement matches the cleared balance.')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Save reconciliation' }).click();
+  await expect(page.getByText('Reconciled', { exact: true })).toBeVisible();
+  await page.goto('/manager/cash');
 
   // At the POS: the owner pays the supplier from the drawer.
   await page.goto('/manager/');

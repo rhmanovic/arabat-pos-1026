@@ -22,6 +22,7 @@ import { formatAmount } from '../catalog/ProductsPage.js';
 import {
   BranchTransferList,
   DepositDialog,
+  DepositsInTransitList,
   DisbursementDialog,
   DisbursementList,
   SendToBranchDialog,
@@ -124,11 +125,15 @@ export function CashCustodyPage() {
         <ErrorState error={overview.error} onRetry={() => void overview.refetch()} />
       ) : null}
       {data ? (
-        <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
+        <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-5 sm:gap-4">
           <StatCard label={t('cashCustody.total')} value={fmt(data.total)} />
           <StatCard label={t('cashCustody.treasuries')} value={fmt(data.treasuriesTotal)} />
           <StatCard label={t('cashCustody.registers')} value={fmt(data.registersTotal)} />
           <StatCard label={t('cashCustody.inTransit')} value={fmt(data.inTransitTotal)} />
+          <StatCard
+            label={t('cashCustody.depositsInTransit')}
+            value={fmt(data.depositsInTransitTotal)}
+          />
         </div>
       ) : null}
       <CashTabs
@@ -212,6 +217,7 @@ export function CashCustodyPage() {
       ) : tab === 'payouts' ? (
         <div className="grid gap-4">
           <PayoutRequestList />
+          {can('cash.deposit') ? <DepositsInTransitList /> : null}
           <DisbursementList />
         </div>
       ) : (
