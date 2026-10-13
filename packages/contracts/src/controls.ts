@@ -32,5 +32,9 @@ export const controlsChecklistSchema = z.object({
   unreconciledBankEntries: z.number().int(),
   /** Stock adjustments waiting for a second person's approval (BR-169). */
   pendingAdjustments: z.number().int(),
+  /** Transfer losses waiting for the source approver (BR-172). */
+  pendingTransferLosses: z.number().int(),
+  /** Transfers received short whose shortage is not written off (rejected or unclaimed). */
+  unresolvedTransferShortages: z.number().int(),
 });
 export type ControlsChecklist = z.infer<typeof controlsChecklistSchema>;

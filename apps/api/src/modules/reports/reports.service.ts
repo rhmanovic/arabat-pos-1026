@@ -1007,6 +1007,43 @@ export class ReportsService {
         quantityOut: qty(r['q_out']),
         value: money(big(r['value'])),
       }));
+      // Transfer losses posted in the period (BR-172): written off against the source branch.
+      const [lossRow] = await this.rows(
+        tx,
+        sql`select count(distinct x.id)::int as n, coalesce(sum(ll.quantity), 0)::text as q_out,
+                   coalesce(sum(round(ll.quantity * coalesce(ll.unit_cost_minor, 0))), 0)::text as value
+            from stock_transfer_losses x
+            join stock_transfers t on t.id = x.transfer_id
+            join stock_transfer_loss_lines ll on ll.loss_id = x.id
+            where x.status = 'posted' and ${this.within(c, sql.raw('coalesce(x.decided_at, x.created_at)'))}
+              and ${this.branches(c, sql.raw('t.source_branch_id'))}`,
+      );
+      if (int(lossRow!['n']) > 0)
+        movements.push({
+          movementType: 'transfer_loss',
+          count: int(lossRow!['n']),
+          quantityIn: qty('0'),
+          quantityOut: qty(lossRow!['q_out']),
+          value: money(-big(lossRow!['value'])),
+        });
+      // Goods on the road right now, at dispatch cost (BR-173): either end in scope.
+      const [transit] = await this.rows(
+        tx,
+        sql`select count(distinct t.id)::int as n, coalesce(sum(r.qty), 0)::text as qty, coalesce(sum(r.value), 0)::text as value
+            from (
+              select t.id, greatest(l.dispatched_quantity - coalesce(l.received_quantity, 0)
+                       - coalesce(l.recalled_quantity, 0) - coalesce(lp.lost, 0), 0) as qty,
+                     round(greatest(l.dispatched_quantity - coalesce(l.received_quantity, 0)
+                       - coalesce(l.recalled_quantity, 0) - coalesce(lp.lost, 0), 0) * coalesce(l.unit_cost_minor, 0)) as value
+              from stock_transfers t join stock_transfer_lines l on l.transfer_id = t.id
+              left join lateral (
+                select sum(ll.quantity) as lost from stock_transfer_loss_lines ll
+                join stock_transfer_losses x on x.id = ll.loss_id
+                where x.transfer_id = t.id and x.status = 'posted' and ll.position = l.position) lp on true
+              where t.status in ('in_transit', 'received') and t.dispatched_at is not null
+                and ${c.branchIds === null ? sql`true` : sql`(${this.branches(c, sql.raw('t.source_branch_id'))} or ${this.branches(c, sql.raw('t.destination_branch_id'))})`}
+            ) r join stock_transfers t on t.id = r.id where r.qty > 0`,
+      );
       const adjustments = (
         await this.rows(
           tx,
@@ -1068,6 +1105,11 @@ export class ReportsService {
         .map(({ k: _k, ...rest }) => rest);
       return {
         period: this.period(c),
+        inTransit: {
+          transfers: int(transit!['n']),
+          quantity: qty(transit!['qty']),
+          value: money(big(transit!['value'])),
+        },
         valuation,
         stock,
         movements,
@@ -1196,8 +1238,16 @@ export class ReportsService {
                      coalesce(sum(tl.dispatched_quantity - tl.received_quantity) filter (where t.status = 'received'), 0)::text as missing,
                      coalesce(sum(round(tl.dispatched_quantity * tl.unit_cost_minor)), 0)::text as dispatched_value,
                      coalesce(sum(round((tl.dispatched_quantity - tl.received_quantity) * tl.unit_cost_minor))
-                              filter (where t.status = 'received'), 0)::text as missing_value
+                              filter (where t.status = 'received'), 0)::text as missing_value,
+                     coalesce(sum(lp.lost), 0)::text as lost,
+                     coalesce(sum(lp.lost_value), 0)::text as lost_value,
+                     count(distinct px.id)::int as pending_losses
               from stock_transfers t join stock_transfer_lines tl on tl.transfer_id = t.id
+              left join lateral (
+                select sum(ll.quantity) as lost, sum(round(ll.quantity * coalesce(ll.unit_cost_minor, 0))) as lost_value
+                from stock_transfer_loss_lines ll join stock_transfer_losses x on x.id = ll.loss_id
+                where x.transfer_id = t.id and x.status = 'posted' and ll.position = tl.position) lp on true
+              left join stock_transfer_losses px on px.transfer_id = t.id and px.status = 'pending'
               where t.dispatched_at is not null and ${this.within(c, sql.raw('t.dispatched_at'))} and ${transferScope}
               group by 1, 2 order by 3 desc`,
         )
@@ -1210,6 +1260,9 @@ export class ReportsService {
         missing: qty(r['missing']),
         dispatchedValue: money(big(r['dispatched_value'])),
         missingValue: money(big(r['missing_value'])),
+        lost: qty(r['lost']),
+        lostValue: money(big(r['lost_value'])),
+        pendingLosses: int(r['pending_losses']),
       }));
       return {
         period: this.period(c),

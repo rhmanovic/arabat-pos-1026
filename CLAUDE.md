@@ -194,4 +194,6 @@ Bank deposits go register/treasury → `deposit_transit` with a mandatory slip r
 through a second person's confirmation transfer (`confirms_transfer_id`, ADR-0096); bank accounts are reconciled by hand.
 Stock adjustments above the company limit at cost are `pending` until a second holder of `inventory.adjust`
 approves (ADR-0097); master data that still holds stock cannot be untracked, archived or deactivated (BR-171).
+Transfer shortages are explicit `stock_transfer_losses` documents (approved at the source above the limit); in-transit
+stock is computed from transfer lines, never stored, and a transfer in transit can be recalled (ADR-0098).
 See `docs/PROGRESS.md` for the current state and `docs/ROADMAP.md` for next steps.

@@ -79,12 +79,31 @@ export class ControlsService {
           select count(*)::int as n from stock_adjustments
           where merchant_id = ${actor.merchantId} and status = 'pending'`)
       ).rows as { n: number }[];
+      const [losses] = (
+        await tx.execute(sql`
+          select count(*)::int as n from stock_transfer_losses
+          where merchant_id = ${actor.merchantId} and status = 'pending'`)
+      ).rows as { n: number }[];
+      // Received short, nothing pending and not fully written off: somebody must claim or decide.
+      const [shortages] = (
+        await tx.execute(sql`
+          select count(*)::int as n from stock_transfers t
+          where t.merchant_id = ${actor.merchantId} and t.status = 'received'
+            and not exists (select 1 from stock_transfer_losses x where x.transfer_id = t.id and x.status = 'pending')
+            and (select coalesce(sum(greatest(l.dispatched_quantity - coalesce(l.received_quantity, 0)
+                   - coalesce((select sum(ll.quantity) from stock_transfer_loss_lines ll
+                               join stock_transfer_losses x on x.id = ll.loss_id
+                               where x.transfer_id = t.id and x.status = 'posted' and ll.position = l.position), 0), 0)), 0)
+                 from stock_transfer_lines l where l.transfer_id = t.id) > 0`)
+      ).rows as { n: number }[];
       return {
         pendingPayoutRequests: Number(payouts?.n ?? 0),
         openVariances,
         depositsInTransit: Number(deposits?.n ?? 0),
         unreconciledBankEntries: Number(unreconciled?.n ?? 0),
         pendingAdjustments: Number(adjustments?.n ?? 0),
+        pendingTransferLosses: Number(losses?.n ?? 0),
+        unresolvedTransferShortages: Number(shortages?.n ?? 0),
         treasurerAssigned: Boolean(treasurer?.assigned),
         membersWithoutRoles: withoutRoles.map((r) => ({
           membershipId: r['id'] as string,

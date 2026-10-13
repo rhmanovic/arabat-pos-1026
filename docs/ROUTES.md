@@ -294,6 +294,9 @@ export; metric definitions on every tab.
 | `POST /manager/transfers/:id/cancel` | requester or approver, before dispatch |
 | `POST /manager/transfers/:id/dispatch` | `inventory.transfer` at the source |
 | `POST /manager/transfers/:id/receive` | `inventory.transfer` at the destination |
+| `GET /manager/transfers/in-transit?branchId=` | `inventory.read` (goods on the road, valued with cost rights; BR-173) |
+| `POST /manager/transfers/:id/recall` | `inventory.transfer` at the source; reason required (BR-173) |
+| `POST /manager/transfers/:id/losses`, `POST …/:id/losses/:lossId/decision` | claim: `inventory.transfer` at the destination; decision: `inventory.transfer.approve` at the source, claimant ≠ decider (owner excepted, flagged; BR-172) |
 
 Screens: `/manager/suppliers` (list with order count and received value, create/edit,
 history link), `/manager/purchasing` (filters by status/supplier, editor for drafts with

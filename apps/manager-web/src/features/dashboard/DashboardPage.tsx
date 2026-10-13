@@ -108,6 +108,28 @@ export function DashboardPage() {
               },
             ]
           : []),
+        ...(controls.data.pendingTransferLosses > 0
+          ? [
+              {
+                key: 'losses',
+                to: '/transfers',
+                text: t('dashboard.controlPendingTransferLosses', {
+                  count: controls.data.pendingTransferLosses,
+                }),
+              },
+            ]
+          : []),
+        ...(controls.data.unresolvedTransferShortages > 0
+          ? [
+              {
+                key: 'shortages',
+                to: '/transfers',
+                text: t('dashboard.controlUnresolvedShortages', {
+                  count: controls.data.unresolvedTransferShortages,
+                }),
+              },
+            ]
+          : []),
         ...(controls.data.membersWithoutRoles.length > 0
           ? [
               {

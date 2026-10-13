@@ -288,6 +288,13 @@
       "when": 1791867840351,
       "tag": "0040_adjustment_approvals_blind_counts",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1791869395553,
+      "tag": "0041_transfer_losses_in_transit",
+      "breakpoints": true
     }
   ]
 }

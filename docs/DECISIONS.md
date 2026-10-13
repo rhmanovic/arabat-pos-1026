@@ -999,3 +999,37 @@ ADR; supersede it.
   - Checklist and dashboard count pending adjustments.
 - **Consequences:** FND-201, FND-202, FND-218, FND-220, FND-206, FND-207 and FND-109 close.
   Transfer losses and the in-transit location (R2.3 / R2.4) reuse the same approval limit.
+
+## ADR-0098 — Remediation session 6: transfer losses, surplus, recall, in-transit valuation
+- **Date:** 2026-10-13 · **Status:** Accepted (remediation plan R2.3 / R2.4)
+- **Context:** Phase 1 found transfer shortages written off silently and self-approved (FND-603,
+  FND-211), surplus impossible to record (FND-622), unvalued transfers when the dispatch cost was
+  unknown (FND-623), documentation out of step (FND-613) and in-transit stock unvalued, unaged and
+  irrecoverable (FND-604).
+- **Decision:**
+  - The ledger keeps its shape: `transfer_out` of the full dispatched quantity at the source,
+    `transfer_in` of what arrived at the destination. No synthetic ledger row is written for a
+    loss (it would either double-count the source or create phantom stock at the destination);
+    the loss is an explicit, numbered, approved document (`stock_transfer_losses` +
+    `stock_transfer_loss_lines`, migration 0041) that closes the in-transit quantity and is
+    reported as `transfer_loss` in the inventory report and as written-off quantity and value in
+    the purchasing report.
+  - `receive` creates the loss for the shortage with the receiver's note; the value at dispatch
+    cost decides against the adjustment approval limit (R2.1); the owner posts directly, flagged.
+    `POST /manager/transfers/:id/losses` claims the remaining in-transit quantity later (after a
+    rejection, or when a loss was never created); one pending loss at a time.
+    `POST …/losses/:lossId/decision` needs `inventory.transfer.approve` at the source; claimant
+    ≠ decider unless owner. Database: column-level UPDATE grant and trigger (pending → final once).
+  - Surplus: the receive cap is lifted; any difference needs a note; the line check no longer
+    requires received ≤ dispatched; the signed discrepancy is reported.
+  - `assertCostsKnown` refuses dispatch when a line has neither an average nor a catalog cost.
+  - In transit = dispatched − received − recalled − posted losses per line, computed from the
+    documents (never stored): `GET /manager/transfers/in-transit` (per transfer, age, value,
+    unresolved / pending flags), transfer detail totals, inventory report `inTransit`.
+  - Recall: `POST /manager/transfers/:id/recall` (source right, reason) posts `transfer_in` at
+    the source at dispatch cost, sets `recalled_quantity` (set once) and the final status
+    `recalled` (added to `purchasing_final_states`).
+  - Checklist counts pending losses and unresolved shortages; the dashboard warns.
+- **Consequences:** FND-603, FND-604, FND-211, FND-622, FND-623 and FND-613 close. Transfer
+  losses are not yet listed with the cash variances (BR-167); a stock-side follow-up list is a
+  candidate for R4.

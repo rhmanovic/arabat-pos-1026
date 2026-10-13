@@ -6,7 +6,7 @@ not yet re-verified by the audit), **Tested** (fixed and covered by automated te
 **Deferred** (outside the current retail scope or waiting for an owner decision). Update this file
 in the same session as the code.
 
-Last update: 2026-10-13 (remediation session 5). Totals: Deferred 49, Fixed 4, In Progress 3, Open 105, Tested 19.
+Last update: 2026-10-13 (remediation session 6). Totals: Deferred 49, Fixed 5, In Progress 3, Open 99, Tested 24.
 
 | Id | Finding | Severity | Ch. | Package | Status | Note |
 |---|---|---|---|---|---|---|
@@ -22,8 +22,8 @@ Last update: 2026-10-13 (remediation session 5). Totals: Deferred 49, Fixed 4, I
 | FND-512 | Inventory valuation is only available "as of now"; no closing stock at period end | High | E | R2.6 | Open |  |
 | FND-601 | No supplier invoice and no three-way match; delivery price cannot differ from the order | High | F | R6.1 | Deferred | Supplier invoices and payables deferred (D5) |
 | FND-602 | Supplier payments are unbounded and unmatched: overpayment, duplicate and prepayment risk | High | F | R1.2, R6.2 | Tested | Session 3: payment above the order value refused unless the owner confirms; paid to date on the order; payables themselves deferred (D5) |
-| FND-603 | Transfer discrepancy write-off is self-approved and never posted | High | F | R2.3 | Open |  |
-| FND-604 | Stock in transit is not valued, not aged and cannot be recalled | High | F | R2.4 | Open |  |
+| FND-603 | Transfer discrepancy write-off is self-approved and never posted | High | F | R2.3 | Tested | Session 6: numbered transfer loss with the receiver's explanation, approved by the source approver above the limit (claimant never decides), owner override audited, reported in inventory and purchasing reports (`transfers-controls.int.test.ts`, `transfers.test.tsx`, `purchasing.spec.ts`) |
+| FND-604 | Stock in transit is not valued, not aged and cannot be recalled | High | F | R2.4 | Tested | Session 6: in-transit summary per transfer with age and value at dispatch cost, inventory report KPI, recall to the source with a reason (`transfers-controls.int.test.ts`, `transfers.test.tsx`) |
 | FND-702 | Gateway refunds can never complete inside the system | High | G | R7.2 | Deferred | Online store: R7 only after a gateway is approved (D7) |
 | FND-703 | Paid online orders can only be refunded from a POS terminal by a cashier with an open shift; the customer has no receipt number | High | G | R7.3 | Deferred | Online store: R7 only after a gateway is approved (D7) |
 | FND-704 | No reconciliation of gateway payouts to online sales; bank balance credited at confirmation with a merchant-entered fee | High | G | R7.4 | Deferred | Online store: R7 only after a gateway is approved (D7) |
@@ -45,7 +45,7 @@ Last update: 2026-10-13 (remediation session 5). Totals: Deferred 49, Fixed 4, I
 | FND-204 | Negative balances are valued at zero and their cost basis is discarded on replenishment | Medium | B | R2.7 | Open |  |
 | FND-206 | Stock held by archived variants/products or at inactive branches is frozen | Medium | B | R2.5 | Tested | Session 5: archiving and deactivation refused while stock remains; archived items can still be written off or counted (`inventory-controls.int.test.ts`) |
 | FND-210 | Restaurant waste bypasses the adjustment document, reason catalogue and adjustments report | Medium | B | — | Open |  |
-| FND-211 | Transfer shortfalls leave the ledger without a write-off movement (shared with the Transfers chapter) | Medium | B | R2.3 | Open |  |
+| FND-211 | Transfer shortfalls leave the ledger without a write-off movement (shared with the Transfers chapter) | Medium | B | R2.3 | Tested | Session 6: the shortfall is an explicit loss document closing the in-transit quantity and listed as `transfer_loss` in the inventory report; ADR-0098 records why no synthetic ledger row is written (`transfers-controls.int.test.ts`) |
 | FND-212 | "Customer return (outside POS)" lets stock re-enter outside the refund controls | Medium | B | R2.8 | Open |  |
 | FND-213 | No point-in-time valuation, roll-forward or reserved-quantity visibility | Medium | B | R2.6 | Open |  |
 | FND-301 | No supervisory override on another cashier's till | Medium | C | R3.1 | Open |  |
@@ -157,14 +157,14 @@ Last update: 2026-10-13 (remediation session 5). Totals: Deferred 49, Fixed 4, I
 | FND-610 | Supplier creation needs a merchant-wide right while the screen and the catalogue suggest branch scope | Low | F | — | Open |  |
 | FND-611 | Cancellations need no reason; no "reject to draft"; creator may cancel an approved order | Low | F | — | Open |  |
 | FND-612 | Received value rounded differently on the order page and in supplier/report totals | Low | F | R6.1 | Deferred | Supplier invoices and payables deferred (D5) |
-| FND-613 | Documentation does not match behaviour on write-off and on schema | Low | F | R2.3 | Open |  |
+| FND-613 | Documentation does not match behaviour on write-off and on schema | Low | F | R2.3 | Fixed | Session 6: BR-104 corrected, BR-172 / BR-173 and ADR-0098 describe the write-off and the schema as built |
 | FND-617 | Zero unit cost and duplicate item lines accepted on purchase orders | Low | F | R6.1 | Deferred | Supplier invoices and payables deferred (D5) |
 | FND-618 | Partial dispatch needs no explanation; notes are dropped | Low | F | — | Open |  |
 | FND-619 | No document dates; cut-off depends on timely entry | Low | F | R4.2 | Open |  |
 | FND-620 | Thin audit detail for master-data and draft edits | Low | F | R5.3 | Open |  |
 | FND-621 | Purchasing report counts closed orders at full ordered value; open value is "as of now" | Low | F | — | Open |  |
-| FND-622 | Surplus arriving on a transfer cannot be recorded on it | Low | F | R2.3 | Open |  |
-| FND-623 | Unknown dispatch cost leaves transfers and losses unvalued | Low | F | R2.3 | Open |  |
+| FND-622 | Surplus arriving on a transfer cannot be recorded on it | Low | F | R2.3 | Tested | Session 6: surplus received with a mandatory note, signed discrepancy reported (`transfers-controls.int.test.ts`) |
+| FND-623 | Unknown dispatch cost leaves transfers and losses unvalued | Low | F | R2.3 | Tested | Session 6: `COST_UNKNOWN` refuses dispatching an item with neither an average nor a catalog cost (`transfers-controls.int.test.ts`) |
 | FND-711 | Delivery fee is booked as product revenue at 100 % margin and is refundable as an item | Low | G | — | Deferred | Online store deferred (D7) |
 | FND-712 | Sale date is the confirmation time, not the provider's charge time | Low | G | — | Deferred | Online store deferred (D7) |
 | FND-714 | No customer notifications; the tracking link is shown once | Low | G | — | Deferred | Online store deferred (D7) |

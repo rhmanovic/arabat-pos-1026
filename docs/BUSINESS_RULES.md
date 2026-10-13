@@ -187,7 +187,8 @@ engineering defaults pending owner confirmation.
   leaves the source and is "in transit") and received at the destination. A source can
   never send more than it holds.
 - **BR-104** If less arrives than was sent, the receiver must explain it; the missing
-  quantity is recorded as a discrepancy and written off.
+  quantity is recorded as a discrepancy and written off through an explicit transfer loss
+  (BR-172).
 
 - **BR-110** A sale may name a registered, active customer or be a walk-in sale (no
   customer). Choosing a customer at the till needs `customers.read`; creating a basic
@@ -315,6 +316,22 @@ Remediation session 3 (2026-10-13, owner decision D2):
   (`BRANCH_IN_USE`) while it holds stock, cash in a register or treasury, an open shift, an
   open purchase order, an open stock transfer or a cash transfer in transit; the error says what
   to settle first.
+- **BR-172** Transfer losses. A shortage at receipt is never silent: it becomes a numbered
+  **transfer loss** (TL-000001) with the receiver's explanation, valued at dispatch cost. Within
+  the adjustment approval limit it is posted at once; above it the loss waits for a holder of
+  the transfer-approval right **at the source branch** (claimant ≠ decider, owner excepted and
+  flagged) who approves the write-off or rejects it with a reason. Until a loss is posted the
+  quantity stays "on the road" and visible; a rejected or unclaimed shortage can be claimed
+  again by the destination. Surplus at receipt is allowed, must be explained and is received
+  at dispatch cost. An item with neither an average nor a catalog cost cannot be dispatched
+  (`COST_UNKNOWN`). The source ledger keeps the full `transfer_out`; the destination books only
+  what arrived; the loss document explains the difference and appears in the inventory report
+  (as `transfer_loss`) and in the transfer summary of the purchasing report.
+- **BR-173** Stock in transit is a valued location. What was dispatched and neither received,
+  recalled nor written off is "in transit": listed per transfer with its age in days, valued at
+  dispatch cost, totalled on the transfers page and in the inventory report, and counted in no
+  branch. A transfer in transit can be **recalled** by the source (reason required): the goods
+  return to the source branch at dispatch cost and the transfer becomes final (`recalled`).
 
 Platform and subscriptions (Prompt 17):
 - **BR-150** Every merchant has exactly one subscription to a plan. New merchants start on

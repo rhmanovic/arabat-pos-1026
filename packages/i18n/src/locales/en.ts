@@ -161,6 +161,8 @@ export const commonEn = {
       'This item still has stock on hand. Write it off or transfer it before archiving it or switching tracking off.',
     BRANCH_IN_USE:
       'This branch still has stock, cash, open shifts or open documents. Settle them before deactivating it.',
+    COST_UNKNOWN: 'Some items have no cost yet. Set a cost on the product before dispatching them.',
+    LOSS_DECIDED: 'This transfer loss was already decided.',
     PAYLOAD_TOO_LARGE: 'The file is too large.',
     STORE_CLOSED: 'This store is not taking orders right now.',
     GATEWAY_NOT_CONFIGURED: 'Online payment is not available yet. Choose another method.',

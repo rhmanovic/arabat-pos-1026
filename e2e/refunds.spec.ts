@@ -101,6 +101,8 @@ test('cashier refunds and exchanges at the POS; a large refund waits for manager
   await expect(pos.getByTestId('refund-number').first()).toHaveText(`${first}-R1`);
   await expect(pos.getByTestId('refund-receipt-total').first()).toHaveText('KWD 10.000');
   await pos.getByRole('button', { name: 'Done' }).click();
+  // The sale is reloaded after the refund; typing before that reload lands is wiped by it.
+  await expect(pos.getByText('Already refunded: KWD 10.000')).toBeVisible();
 
   // 2. Exchange: return one lamp (10.000 credit) for 8 bulbs (12.000): customer pays 2.000.
   await pos.getByLabel('Return Desk lamp').fill('1');

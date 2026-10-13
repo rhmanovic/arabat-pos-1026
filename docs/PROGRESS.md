@@ -453,6 +453,22 @@ Verified: see `TESTING.md` (results after remediation session 5). Not done (next
 transfer losses posted and approved (R2.3), in-transit stock as a valued location (R2.4),
 custody-right split (FND-422).
 
+### 2026-10-13 — Remediation session 6 (R2.3 transfer losses, R2.4 in-transit stock)
+Implemented (ADR-0098, BR-172, BR-173):
+- **Transfer losses**: a shortage at receipt becomes a numbered loss document (TL-) with the
+  receiver's explanation, valued at dispatch cost; within the adjustment limit it posts at once,
+  above it the source approver approves or rejects (reason) — never the claimant; the owner
+  overrides, flagged. Rejected or unclaimed shortages can be claimed again. Surplus at receipt
+  is recorded with a note. Dispatch is refused for items with no cost at all.
+- **In-transit stock**: goods on the road listed per transfer with age and value on the
+  transfers page and in the inventory report (`In transit` KPI, `transfer_loss` movement line);
+  transfer detail shows per-line quantities on the road; a transfer in transit can be
+  **recalled** to the source with a reason. Purchasing report: written-off quantity and value,
+  pending losses. Dashboard checklist: pending losses, unresolved shortages.
+Verified: see `TESTING.md` (results after remediation session 6). Not done (next sessions):
+valuation as at a date and stock roll-forward (R2.6), cost edge cases (R2.7), damaged returns
+(R2.8), custody-right split (FND-422), stock-side follow-up list for losses.
+
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025
 before any production launch.

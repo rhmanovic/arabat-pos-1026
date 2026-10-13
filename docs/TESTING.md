@@ -66,6 +66,28 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after remediation session 6 (2026-10-13, local run)
+
+`pnpm verify` green (171 unit/web tests, including the new `transfers.test.tsx`: in-transit
+summary with age, value and the pending-loss badge, the loss list on the transfer with the
+approve / reject dialog, and the recall dialog that needs a reason; the controls fixture carries
+`pendingTransferLosses` and `unresolvedTransferShortages`); `pnpm test:integration` 190 passed,
+including the three new cases in `transfers-controls.int.test.ts` (small shortage written off at
+once as TL-000001 with the receiver's note and its value; large shortage held pending with the
+quantity still in transit, valued and aged, checklist counts, destination manager and claimant
+refused, rejection needs a reason and reopens the shortage, `LOSS_DECIDED`, re-claim, one pending
+loss at a time, approval by the source manager closes the shortage, purchasing report written-off
+quantity and value, inventory report `transfer_loss` line and in-transit block, audit actions,
+surplus refused without a note and recorded with one as a negative discrepancy; dispatch of an
+item with no cost refused with `COST_UNKNOWN`; in-transit value and report KPI, recall refused
+without a reason or from the destination, recall returns the goods to the source at dispatch
+cost and makes the transfer final); `pnpm test:e2e` 35 passed on a clean run. Existing tests
+adapted: over-receipt is a surplus needing a note (was refused), the received transfer carries
+its posted loss; `purchasing.spec` checks the transfer loss on the page and uses the new
+difference label; `refunds.spec` now waits for the sale to reload after a refund before typing
+the exchange quantity (a race that produced timeouts under the parallel full run in sessions 5
+and 6).
+
 ### Results after remediation session 5 (2026-10-13, local run)
 
 `pnpm verify` green (169 unit/web tests, including the blind count sheet that hides the book

@@ -125,7 +125,7 @@ not a commitment).
   sheet creation and posting are shown and must be acknowledged, not silently overwritten.
 - Depends on: R2.1.
 
-### R2.3 Transfer losses posted and approved — **M**
+### R2.3 Transfer losses posted and approved — **M** — *done in session 6*
 - Closes: FND-603, FND-211, FND-622, FND-623, FND-613
 - Build: a shortage at receipt posts an explicit *transfer loss* movement at dispatch cost against
   the sending branch (or an "in-transit loss" location), with the receiver's explanation; losses
@@ -134,7 +134,7 @@ not a commitment).
   movement report and the purchasing/transfer report.
 - Depends on: R2.1 thresholds.
 
-### R2.4 In-transit stock as a valued location — **M**
+### R2.4 In-transit stock as a valued location — **M** — *done in session 6*
 - Closes: FND-604
 - Build: stock in transit shown per transfer and in total, valued at dispatch cost, with age; a
   dispatched transfer can be recalled (stock returns to source) before receipt; inventory valuation
@@ -322,8 +322,8 @@ records without money.
 | 3 | R1.2 disbursement approvals (per-merchant thresholds, owner override), R1.4 variance follow-up | **Done 2026-10-13** |
 | 4 | R1.3 deposits in transit and bank reconciliation | **Done 2026-10-13** |
 | 5 | R2.1 adjustment approvals, R2.2 blind counts with sign-off, R2.5 master-data guards | **Done 2026-10-13** |
-| 6 | R2.3 transfer losses, R2.4 in-transit location | Next |
-| 7 | R2.6 valuation as at date, R2.7 cost edge cases, R2.8 damaged returns | |
+| 6 | R2.3 transfer losses, R2.4 in-transit location | **Done 2026-10-13** |
+| 7 | R2.6 valuation as at date, R2.7 cost edge cases, R2.8 damaged returns | Next |
 | 8 | R3.1 till overrides, R3.2 price bounds, R3.3 zero-total sales | |
 | 9 | R3.4 refund segregation, R3.5 tender hygiene (fee reversal per method, D6), R3.6 held sales, R3.7 combined limit (D4) | |
 | 10 | R4.1 one cut-off rule, R4.3, R4.4, R4.5 supplier statement | |

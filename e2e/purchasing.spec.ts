@@ -126,11 +126,18 @@ test('supplier → purchase order → approval → two deliveries → transfer w
   await dialog.getByLabel('Received').fill('3.5');
   const receive = dialog.getByRole('button', { name: 'Receive' });
   await expect(receive).toBeDisabled();
-  await dialog.getByLabel('Explain the missing quantity').fill('One bag torn in the van');
+  await dialog
+    .getByLabel('Explain the difference (missing or surplus)')
+    .fill('One bag torn in the van');
   await receive.click();
   await expect(page.getByText('Received', { exact: true }).first()).toBeVisible();
   await expect(page.getByTestId('line-missing')).toHaveText('0.5');
-  await expect(page.getByText('One bag torn in the van')).toBeVisible();
+  await expect(page.getByText('One bag torn in the van').first()).toBeVisible();
+  // The shortage is written off explicitly (BR-172): a numbered transfer loss, posted at once
+  // because it is within the company limit.
+  const losses = page.getByTestId('transfer-losses');
+  await expect(losses).toContainText('TL-000001');
+  await expect(losses).toContainText('Written off');
   expect(await onHand(page, main.id)).toBe('6.000');
   expect(await onHand(page, north.id)).toBe('3.500');
 });

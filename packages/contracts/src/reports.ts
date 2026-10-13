@@ -278,6 +278,8 @@ export type ShiftsReport = z.infer<typeof shiftsReportSchema>;
 // ---------------------------------------------------------------- inventory
 export const inventoryReportSchema = z.object({
   period: reportPeriodSchema,
+  /** Goods in transit between branches right now, at dispatch cost (BR-173). */
+  inTransit: z.object({ transfers: z.number().int(), quantity: z.string(), value: moneySchema }),
   /** Current values (not period-bound). */
   valuation: z.array(
     z.object({
@@ -379,6 +381,10 @@ export const purchasingReportSchema = z.object({
       missing: z.string(),
       dispatchedValue: moneySchema,
       missingValue: moneySchema,
+      /** Written off by posted transfer losses (BR-172). */
+      lost: z.string(),
+      lostValue: moneySchema,
+      pendingLosses: z.number().int(),
     }),
   ),
 });

@@ -25,6 +25,10 @@ import {
   type SavePurchaseOrder,
   type SaveSupplier,
   type TransferListQuery,
+  type RecallTransfer,
+  type ClaimTransferLoss,
+  type DecideTransferLoss,
+  inTransitSummarySchema,
   type TransferQuantities,
   purchaseOrderListSchema,
   purchaseOrderSchema,
@@ -1041,6 +1045,19 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('POST', `/manager/transfers/${id}/dispatch`, { body, schema: transferSchema }),
       receive: (id: string, body: TransferQuantities) =>
         request('POST', `/manager/transfers/${id}/receive`, { body, schema: transferSchema }),
+      recall: (id: string, body: RecallTransfer) =>
+        request('POST', `/manager/transfers/${id}/recall`, { body, schema: transferSchema }),
+      claimLoss: (id: string, body: ClaimTransferLoss) =>
+        request('POST', `/manager/transfers/${id}/losses`, { body, schema: transferSchema }),
+      decideLoss: (id: string, lossId: string, body: DecideTransferLoss) =>
+        request('POST', `/manager/transfers/${id}/losses/${lossId}/decision`, {
+          body,
+          schema: transferSchema,
+        }),
+      inTransit: (branchId?: string | null) =>
+        request('GET', `/manager/transfers/in-transit?${toParams({ branchId })}`, {
+          schema: inTransitSummarySchema,
+        }),
     },
     employees: {
       list: () => request('GET', '/manager/employees', { schema: employeeListSchema }),

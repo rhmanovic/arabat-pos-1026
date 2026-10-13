@@ -167,8 +167,31 @@ export const TRANSFER_STATUSES = [
   'in_transit',
   'received',
   'cancelled',
+  'recalled',
 ] as const;
 export type TransferStatus = (typeof TRANSFER_STATUSES)[number];
+export const TRANSFER_LOSS_STATUSES = ['posted', 'pending', 'rejected'] as const;
+export type TransferLossStatus = (typeof TRANSFER_LOSS_STATUSES)[number];
+
+/** A written-off shortage of a transfer (BR-172). */
+export const transferLossSchema = z.object({
+  id: z.string(),
+  number: z.string(),
+  status: z.enum(TRANSFER_LOSS_STATUSES),
+  /** Σ quantity × dispatch cost; present only for users allowed to see costs. */
+  value: moneySchema.optional(),
+  explanation: z.string(),
+  limitExceeded: z.boolean(),
+  ownerOverride: z.boolean(),
+  claimedBy: z.string(),
+  claimedByUserId: z.string(),
+  createdAt: z.string(),
+  decidedBy: z.string().nullable(),
+  decidedAt: z.string().nullable(),
+  decisionNote: z.string().nullable(),
+  lines: z.array(z.object({ position: z.number().int(), quantity: z.string() })),
+});
+export type TransferLoss = z.infer<typeof transferLossSchema>;
 
 export const transferSchema = z.object({
   id: z.string(),
@@ -182,11 +205,20 @@ export const transferSchema = z.object({
   approvedBy: z.string().nullable(),
   dispatchedBy: z.string().nullable(),
   receivedBy: z.string().nullable(),
+  recalledBy: z.string().nullable(),
+  recallNote: z.string().nullable(),
   createdAt: z.string(),
   dispatchedAt: z.string().nullable(),
   receivedAt: z.string().nullable(),
-  /** Quantity short at receipt summed over lines. */
+  recalledAt: z.string().nullable(),
+  /** dispatched − received summed over lines (negative when more arrived than was sent). */
   discrepancyQuantity: z.string(),
+  /** Dispatched, not received, not recalled and not written off by a posted loss (BR-173). */
+  inTransitQuantity: z.string(),
+  inTransitValue: moneySchema.optional(),
+  /** Quantity written off by posted losses. */
+  lostQuantity: z.string(),
+  losses: z.array(transferLossSchema),
   lines: z.array(
     z.object({
       position: z.number().int(),
@@ -194,7 +226,11 @@ export const transferSchema = z.object({
       requestedQuantity: z.string(),
       dispatchedQuantity: z.string().nullable(),
       receivedQuantity: z.string().nullable(),
+      recalledQuantity: z.string().nullable(),
+      /** dispatched − received (negative = surplus). */
       discrepancyQuantity: z.string().nullable(),
+      lostQuantity: z.string(),
+      inTransitQuantity: z.string(),
       unitCost: moneySchema.nullable().optional(),
     }),
   ),
@@ -202,7 +238,7 @@ export const transferSchema = z.object({
 });
 export type Transfer = z.infer<typeof transferSchema>;
 export const transferListSchema = z.object({
-  transfers: z.array(transferSchema.omit({ lines: true })),
+  transfers: z.array(transferSchema.omit({ lines: true, losses: true })),
   total: z.number().int(),
   page: z.number().int(),
   pageSize: z.number().int(),
@@ -236,6 +272,46 @@ export const createTransferSchema = z
 export type CreateTransfer = z.input<typeof createTransferSchema>;
 
 export const transferActionSchema = z.object({ version: z.number().int().positive() });
+/** Recall (BR-173): the goods in transit return to the source; a reason is required. */
+export const recallTransferSchema = z.object({
+  version: z.number().int().positive(),
+  note: z.string().trim().min(1).max(500),
+});
+export type RecallTransfer = z.input<typeof recallTransferSchema>;
+/** Claims the remaining in-transit quantity of a received transfer as a loss (BR-172). */
+export const claimTransferLossSchema = z.object({
+  explanation: z.string().trim().min(1).max(500),
+});
+export type ClaimTransferLoss = z.input<typeof claimTransferLossSchema>;
+export const decideTransferLossSchema = z
+  .object({ decision: z.enum(['approve', 'reject']), note: text(500) })
+  .refine((d) => d.decision !== 'reject' || Boolean(d.note), {
+    error: 'Explain why the loss is rejected.',
+    path: ['note'],
+  });
+export type DecideTransferLoss = z.input<typeof decideTransferLossSchema>;
+/** Goods on the road right now, valued at dispatch cost, with their age (BR-173). */
+export const inTransitSummarySchema = z.object({
+  transfers: z.array(
+    z.object({
+      id: z.string(),
+      number: z.string(),
+      sourceBranchId: z.string(),
+      destinationBranchId: z.string(),
+      status: z.enum(TRANSFER_STATUSES),
+      dispatchedAt: z.string(),
+      ageDays: z.number().int(),
+      quantity: z.string(),
+      value: moneySchema.optional(),
+      /** Received short with no posted loss yet (a loss is pending, rejected or not claimed). */
+      unresolved: z.boolean(),
+      pendingLoss: z.boolean(),
+    }),
+  ),
+  quantity: z.string(),
+  value: moneySchema.optional(),
+});
+export type InTransitSummary = z.infer<typeof inTransitSummarySchema>;
 export const transferQuantitiesSchema = z.object({
   version: z.number().int().positive(),
   lines: z

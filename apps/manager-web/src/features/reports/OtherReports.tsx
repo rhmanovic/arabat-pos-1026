@@ -364,6 +364,15 @@ export function InventoryTab({ query, onPeriod }: TabProps) {
         />
         <Kpi label={t('reports.lowStock')} value={low} />
         <Kpi label={t('reports.outOfStock')} value={out} />
+        <Kpi
+          testId="kpi-in-transit"
+          label={t('reports.inTransit')}
+          value={<Amount value={r.inTransit.value} />}
+          hint={t('reports.inTransitHint', {
+            count: r.inTransit.transfers,
+            quantity: displayQty(r.inTransit.quantity),
+          })}
+        />
       </div>
       <ReportTable
         title={t('reports.valuation')}
@@ -647,6 +656,19 @@ export function PurchasingTab({ query, onPeriod }: TabProps) {
             header: t('reports.missingValue'),
             money: true,
             value: (x) => x.missingValue.amount,
+          },
+          { key: 'lost', header: t('reports.lost'), value: (x) => displayQty(x.lost) },
+          {
+            key: 'lvalue',
+            header: t('reports.lostValue'),
+            money: true,
+            value: (x) => x.lostValue.amount,
+          },
+          {
+            key: 'pending',
+            header: t('reports.pendingLosses'),
+            value: (x) => String(x.pendingLosses),
+            hideBelow: 'lg',
           },
         ]}
       />
