@@ -74,11 +74,17 @@ export class ControlsService {
             and e.created_at < now() - interval '7 days'
             and not exists (select 1 from bank_reconciliation_items i where i.entry_id = e.id)`)
       ).rows as { n: number }[];
+      const [adjustments] = (
+        await tx.execute(sql`
+          select count(*)::int as n from stock_adjustments
+          where merchant_id = ${actor.merchantId} and status = 'pending'`)
+      ).rows as { n: number }[];
       return {
         pendingPayoutRequests: Number(payouts?.n ?? 0),
         openVariances,
         depositsInTransit: Number(deposits?.n ?? 0),
         unreconciledBankEntries: Number(unreconciled?.n ?? 0),
+        pendingAdjustments: Number(adjustments?.n ?? 0),
         treasurerAssigned: Boolean(treasurer?.assigned),
         membersWithoutRoles: withoutRoles.map((r) => ({
           membershipId: r['id'] as string,

@@ -965,3 +965,37 @@ ADR; supersede it.
 - **Consequences:** The bank balance in the system is only what a second person confirmed; the
   owner + one cashier set-up works because the owner is the confirmer with an audited override.
   Fee settlement per acquirer (FND-413 in full) remains for R3.5 / D6.
+
+## ADR-0097 — Remediation session 5: stock adjustment approvals, blind counts, master-data guards
+- **Date:** 2026-10-13 · **Status:** Accepted (owner decision D2 on the remediation plan)
+- **Context:** Phase 1 found stock adjustments with no approval, limit or segregation (FND-201),
+  counts that were not blind and overwrote intervening movements (FND-202), master-data changes
+  that hid balances (FND-206, FND-207) and branch deactivation with no pre-conditions (FND-109).
+- **Decision:**
+  - `stock_adjustments` (migration 0040) gains `number` (ADJ-, gap-free per merchant through
+    `document_sequences`, back-filled for existing rows), `status` (posted | pending | rejected
+    | withdrawn), `value_minor`, `limit_exceeded`, `owner_override`, decision columns,
+    `started_at` and `movements_acknowledged`. The adjustment approval limit
+    (`sales_settings.adjustment_approval_limit_minor`, default 50 000 fils) and the blind-count
+    policy (`blind_stock_count`) live with the other company thresholds; both are optional on
+    the settings PUT (unchanged when omitted) and are exposed read-only through
+    `GET /manager/inventory/settings` so counters see the policy without company-settings rights.
+  - `InventoryService.createAdjustment` estimates the value at cost from the current balances
+    before posting; above the limit (never for opening stock) a non-owner's document is stored
+    pending with its lines and the balances seen, and nothing goes through the ledger. Approval
+    (`POST …/adjustments/:id/decision`, approver ≠ requester, owner excepted and flagged) runs
+    the same `post()` as a direct document, attributing movements to the requester; rejection
+    needs a note; the requester may withdraw. Database rules: column-level UPDATE grants only,
+    trigger `stock_adjustments_decision` (pending → final once, header otherwise immutable, a
+    final document only receives its posted value) and `stock_adjustment_lines_apply` (lines
+    take their applied figures only while the header is pending).
+  - Counts carry `startedAt`; `assertNoMovementsSince` reports movements of the counted items
+    after that moment (net quantity, count and types per line) until `acknowledgeMovements` is
+    sent. The editor hides the book quantity and the resulting balance under the blind policy.
+  - `assertNoStockOnHand` (catalog) refuses tracking off, goods → service, archiving and
+    variant removal while stock is on hand; `assertAdjustable` lets archived items be written
+    off or counted. `assertBranchIdle` (branches) lists stock, open shifts, cash, open purchase
+    orders, open stock transfers and cash transfers in transit before deactivation.
+  - Checklist and dashboard count pending adjustments.
+- **Consequences:** FND-201, FND-202, FND-218, FND-220, FND-206, FND-207 and FND-109 close.
+  Transfer losses and the in-transit location (R2.3 / R2.4) reuse the same approval limit.

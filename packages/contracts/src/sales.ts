@@ -262,6 +262,10 @@ export const salesSettingsSchema = z.object({
   expenseApprovalLimit: moneySchema,
   /** Supplier payments above this amount wait for a second person (BR-166). */
   supplierPaymentApprovalLimit: moneySchema,
+  /** Stock adjustments above this value at cost wait for a second person (BR-169). */
+  adjustmentApprovalLimit: moneySchema,
+  /** Count sheets hide the expected quantity (BR-170). */
+  blindStockCount: z.boolean(),
   version: z.number().int(),
 });
 export type SalesSettings = z.infer<typeof salesSettingsSchema>;
@@ -278,5 +282,8 @@ export const updateSalesSettingsSchema = z.object({
   maxRegisterTolerance: moneyAmountSchema,
   expenseApprovalLimit: moneyAmountSchema,
   supplierPaymentApprovalLimit: moneyAmountSchema,
+  /** Omitted = unchanged. */
+  adjustmentApprovalLimit: moneyAmountSchema.optional(),
+  blindStockCount: z.boolean().optional(),
   version: z.number().int().positive(),
 });

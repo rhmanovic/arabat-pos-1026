@@ -192,4 +192,6 @@ Cash balances (registers, treasuries) change **only** through `apps/api/src/modu
 drawer balance (ADR-0090). Expenses and supplier payments are `cash_disbursements`, never transfers (ADR-0091).
 Bank deposits go register/treasury → `deposit_transit` with a mandatory slip reference and reach the bank only
 through a second person's confirmation transfer (`confirms_transfer_id`, ADR-0096); bank accounts are reconciled by hand.
+Stock adjustments above the company limit at cost are `pending` until a second holder of `inventory.adjust`
+approves (ADR-0097); master data that still holds stock cannot be untracked, archived or deactivated (BR-171).
 See `docs/PROGRESS.md` for the current state and `docs/ROADMAP.md` for next steps.

@@ -112,6 +112,9 @@ export class BranchesService {
       if (status === 'inactive' && branch.isMain) {
         throw AppError.conflict('The main branch cannot be deactivated.');
       }
+      // A branch with stock, cash, open shifts or open documents keeps working until they
+      // are settled (BR-171, FND-109): deactivation would freeze them out of sight.
+      if (status === 'inactive' && branch.status === 'active') await assertBranchIdle(tx, branchId);
       if (status === 'active' && branch.status !== 'active')
         await this.subscriptions.assertCapacity(tx, actor.merchantId, 'branches');
       const [row] = await tx
@@ -202,4 +205,45 @@ function duplicateCode(error: unknown): unknown {
   return isUniqueViolation(error, 'branches_merchant_code_key')
     ? new AppError(409, 'DUPLICATE_CODE', 'Another branch already uses this code.')
     : error;
+}
+
+/** What still lives at a branch and must be settled before it is deactivated. */
+async function assertBranchIdle(tx: Transaction, branchId: string) {
+  const [row] = (
+    await tx.execute(sql`
+      select (select count(*) from stock_levels l where l.branch_id = ${branchId} and l.on_hand <> 0)::int as stock,
+             (select count(*) from shifts s where s.branch_id = ${branchId} and s.status = 'open')::int as shifts,
+             (select count(*) from financial_accounts a
+               where a.branch_id = ${branchId} and a.kind in ('register', 'treasury') and a.status = 'active'
+                 and coalesce((select sum(e.amount_minor) from financial_account_entries e where e.account_id = a.id), 0) <> 0)::int as cash,
+             (select count(*) from purchase_orders o where o.branch_id = ${branchId}
+               and o.status in ('submitted', 'approved', 'partially_received'))::int as orders,
+             (select count(*) from stock_transfers t
+               where (t.source_branch_id = ${branchId} or t.destination_branch_id = ${branchId})
+                 and t.status in ('requested', 'approved', 'in_transit'))::int as transfers,
+             (select count(*) from cash_branch_transfers c
+               where (c.from_branch_id = ${branchId} or c.to_branch_id = ${branchId}) and c.status = 'in_transit')::int as cash_transfers`)
+  ).rows as Record<string, number>[];
+  const r = row!;
+  const issues = [
+    ['stock', r['stock'], 'items still have stock on hand here: write them off or transfer them.'],
+    ['shifts', r['shifts'], 'shifts are still open here: close them.'],
+    ['cash', r['cash'], 'registers or treasuries still hold cash here: move it out.'],
+    ['orders', r['orders'], 'purchase orders are still open here: receive, close or cancel them.'],
+    ['transfers', r['transfers'], 'stock transfers are still open here: receive or cancel them.'],
+    [
+      'cashTransfers',
+      r['cash_transfers'],
+      'cash transfers are still in transit here: receive or cancel them.',
+    ],
+  ]
+    .filter(([, n]) => Number(n) > 0)
+    .map(([path, n, text]) => ({ path: String(path), code: 'in_use', message: `${n} ${text}` }));
+  if (issues.length > 0)
+    throw new AppError(
+      409,
+      'BRANCH_IN_USE',
+      `This branch cannot be deactivated yet: ${issues.map((i) => i.message).join(' ')}`,
+      issues,
+    );
 }

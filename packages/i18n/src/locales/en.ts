@@ -151,6 +151,16 @@ export const commonEn = {
     NOT_VOIDABLE: 'Only sales of your open shift without returns can be cancelled.',
     SELF_APPROVAL: 'You cannot approve your own refund.',
     APPROVAL_REQUIRED: 'This needs a supervisor’s approval.',
+    DEPOSIT_SETTLED: 'This deposit was already confirmed or returned.',
+    ACCOUNT_IN_USE:
+      'This bank account still has a balance, unreconciled entries or a deposit in transit. Settle them first.',
+    ADJUSTMENT_DECIDED: 'This adjustment was already decided.',
+    STOCK_MOVED_SINCE_COUNT:
+      'Stock moved while you were counting. Review the movements and confirm the count.',
+    STOCK_ON_HAND:
+      'This item still has stock on hand. Write it off or transfer it before archiving it or switching tracking off.',
+    BRANCH_IN_USE:
+      'This branch still has stock, cash, open shifts or open documents. Settle them before deactivating it.',
     PAYLOAD_TOO_LARGE: 'The file is too large.',
     STORE_CLOSED: 'This store is not taking orders right now.',
     GATEWAY_NOT_CONFIGURED: 'Online payment is not available yet. Choose another method.',

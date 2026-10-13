@@ -6,15 +6,15 @@ not yet re-verified by the audit), **Tested** (fixed and covered by automated te
 **Deferred** (outside the current retail scope or waiting for an owner decision). Update this file
 in the same session as the code.
 
-Last update: 2026-10-13 (remediation session 4). Totals: Deferred 49, Fixed 4, In Progress 3, Open 112, Tested 12.
+Last update: 2026-10-13 (remediation session 5). Totals: Deferred 49, Fixed 4, In Progress 3, Open 105, Tested 19.
 
 | Id | Finding | Severity | Ch. | Package | Status | Note |
 |---|---|---|---|---|---|---|
 | FND-701 | Money collected for "needs attention" cases exists in no ledger | Critical | G | R7.1 | Deferred | Online store: R7 only after a gateway is approved (D7) |
 | FND-101 | Merchant audit trail is written but cannot be read by the merchant | High | A | R1.0 | Tested | Session 1: `/manager/audit` + API (`audit.int.test.ts`, `audit.test.tsx`) |
 | FND-102 | Ownership transfer and owner succession are not implemented although documented | High | A | R5.2 | Open |  |
-| FND-201 | Stock adjustments have no approval, value limit or segregation of duties | High | B | R2.1 | Open |  |
-| FND-207 | Switching off stock tracking (or changing goods to service) hides existing balances from valuation without a movement | High | B | R2.5 | Open |  |
+| FND-201 | Stock adjustments have no approval, value limit or segregation of duties | High | B | R2.1 | Tested | Session 5: value at cost on every document, pending above the company limit until a second person decides, owner override audited (`inventory-controls.int.test.ts`, `inventory.test.tsx`) |
+| FND-207 | Switching off stock tracking (or changing goods to service) hides existing balances from valuation without a movement | High | B | R2.5 | Tested | Session 5: `STOCK_ON_HAND` names the branches and quantities to write off or transfer first (`inventory-controls.int.test.ts`) |
 | FND-406 | Bank account balances are never reconciled; deposits are credited on the depositor's word | High | D | R1.3 | Tested | Session 4: deposits wait in transit with a mandatory slip number until a second person confirms them; manual bank reconciliation per account (`bank.int.test.ts`, `cash.test.tsx`, `cash-payouts.spec.ts`) |
 | FND-407 | Cash out "correction" / "other" removes cash from custody with no destination and no approval | High | D | R1.1 | Tested | Session 2: corrections bound to a movement; "other" cash-outs capped and pending above the limit (`shifts.int.test.ts`, `app.test.tsx`) |
 | FND-408 | Disbursements have no limits, no approval and no link to what is owed | High | D | R1.2 | Tested | Session 3: approval limits per company, pending till movements and treasury payout requests with a second custody holder, owner override audited (`cash-payouts.int.test.ts`, `shifts.int.test.ts`) |
@@ -37,13 +37,13 @@ Last update: 2026-10-13 (remediation session 4). Totals: Deferred 49, Fixed 4, I
 | FND-104 | Owner e-mail is never verified at self-registration | Medium | A | — | Open |  |
 | FND-105 | Audit entries for profile-type edits record the fact but not the values | Medium | A | R5.3 | Open |  |
 | FND-108 | Invitation grants are authorised at invitation time, not at acceptance | Medium | A | R5.4 | Open |  |
-| FND-109 | Branch deactivation has no operational pre-conditions | Medium | A | R2.5 | Open |  |
+| FND-109 | Branch deactivation has no operational pre-conditions | Medium | A | R2.5 | Tested | Session 5: `BRANCH_IN_USE` lists stock, open shifts, cash, open purchase orders, open stock transfers and cash in transit to settle first (`inventory-controls.int.test.ts`) |
 | FND-110 | Account lock-out by failed attempts can be triggered by anyone who knows an e-mail | Medium | A | R5.4 | Open |  |
 | FND-113 | Default templates concentrate cash custody in the owner and leave segregation choices implicit | Medium | A | R1.6 | Tested | Session 2: Treasurer template + dashboard warning when only the owner holds custody (`controls.int.test.ts`) |
-| FND-202 | Stock counts are not blind, overwrite intervening movements and have no variance sign-off | Medium | B | R2.2 | Open |  |
+| FND-202 | Stock counts are not blind, overwrite intervening movements and have no variance sign-off | Medium | B | R2.2 | Tested | Session 5: blind count sheet (policy), movements since the sheet started must be acknowledged, count differences above the limit wait for approval (`inventory-controls.int.test.ts`, `inventory.test.tsx`) |
 | FND-203 | Average unit cost is limited to whole fils, distorting costs of low-value units | Medium | B | R2.7 | Open |  |
 | FND-204 | Negative balances are valued at zero and their cost basis is discarded on replenishment | Medium | B | R2.7 | Open |  |
-| FND-206 | Stock held by archived variants/products or at inactive branches is frozen | Medium | B | R2.5 | Open |  |
+| FND-206 | Stock held by archived variants/products or at inactive branches is frozen | Medium | B | R2.5 | Tested | Session 5: archiving and deactivation refused while stock remains; archived items can still be written off or counted (`inventory-controls.int.test.ts`) |
 | FND-210 | Restaurant waste bypasses the adjustment document, reason catalogue and adjustments report | Medium | B | — | Open |  |
 | FND-211 | Transfer shortfalls leave the ledger without a write-off movement (shared with the Transfers chapter) | Medium | B | R2.3 | Open |  |
 | FND-212 | "Customer return (outside POS)" lets stock re-enter outside the refund controls | Medium | B | R2.8 | Open |  |
@@ -116,8 +116,8 @@ Last update: 2026-10-13 (remediation session 4). Totals: Deferred 49, Fixed 4, I
 | FND-209 | The "sale void" movement type exists in the schema and the screen filter but is never produced | Low | B | — | Open |  |
 | FND-214 | Balance-equals-ledger integrity relies on code discipline only | Low | B | — | Open |  |
 | FND-216 | Items can be stocked with no cost at all; the gap is reported only as "unvalued" | Low | B | R2.7 | Open |  |
-| FND-218 | Increases by users without the price right are valued at a cost that may not be actual | Low | B | R2.1 | Open |  |
-| FND-220 | Adjustment documents have no human-readable document number | Low | B | R2.1 | Open |  |
+| FND-218 | Increases by users without the price right are valued at a cost that may not be actual | Low | B | R2.1 | Tested | Session 5: valued at the current average (typed costs refused without the price right), above the limit the document waits for approval (`inventory-controls.int.test.ts`) |
+| FND-220 | Adjustment documents have no human-readable document number | Low | B | R2.1 | Tested | Session 5: ADJ-000001 per merchant, back-filled (`inventory-controls.int.test.ts`) |
 | FND-222 | Price and cost history exists only in the audit log | Low | B | R5.3 | Open |  |
 | FND-223 | Two cost concepts (catalog standard cost vs moving average) are not explained to users | Low | B | R2.7 | Open |  |
 | FND-303 | Above-limit discounts are not flagged and the limit in force is not kept | Low | C | R3.2 | Open |  |

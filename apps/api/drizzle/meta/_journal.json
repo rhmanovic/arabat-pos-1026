@@ -281,6 +281,13 @@
       "when": 1791865678091,
       "tag": "0039_deposits_in_transit_reconciliation",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1791867840351,
+      "tag": "0040_adjustment_approvals_blind_counts",
+      "breakpoints": true
     }
   ]
 }

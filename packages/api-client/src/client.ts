@@ -114,6 +114,7 @@ import {
   shiftSchema,
   type AdjustmentListQuery,
   type CreateAdjustment,
+  type DecideAdjustment,
   type MovementQuery,
   type StockLevelQuery,
   adjustmentListSchema,
@@ -486,6 +487,16 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('GET', `/manager/inventory/adjustments/${id}`, { schema: adjustmentSchema }),
       createAdjustment: (body: CreateAdjustment) =>
         request('POST', '/manager/inventory/adjustments', { body, schema: adjustmentSchema }),
+      decideAdjustment: (id: string, body: DecideAdjustment) =>
+        request('POST', `/manager/inventory/adjustments/${id}/decision`, {
+          body,
+          schema: adjustmentSchema,
+        }),
+      withdrawAdjustment: (id: string) =>
+        request('POST', `/manager/inventory/adjustments/${id}/withdraw`, {
+          body: {},
+          schema: adjustmentSchema,
+        }),
       settings: () =>
         request('GET', '/manager/inventory/settings', { schema: inventorySettingsSchema }),
       updateSettings: (body: { allowNegativeStock: boolean; version: number }) =>
@@ -713,6 +724,8 @@ export function createApiClient(options: ApiClientOptions = {}) {
         maxRegisterTolerance: string;
         expenseApprovalLimit: string;
         supplierPaymentApprovalLimit: string;
+        adjustmentApprovalLimit?: string;
+        blindStockCount?: boolean;
         version: number;
       }) => request('PUT', '/manager/sales-settings', { body, schema: salesSettingsSchema }),
     },

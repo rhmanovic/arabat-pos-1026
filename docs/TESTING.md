@@ -66,6 +66,27 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after remediation session 5 (2026-10-13, local run)
+
+`pnpm verify` green (169 unit/web tests, including the blind count sheet that hides the book
+quantity, lists the stock that moved since the sheet was opened and posts only once the counter
+acknowledges it, and the pending-adjustment detail page with its approve / reject dialog; the
+POS settings fixture carries the two new policy fields, the controls fixture
+`pendingAdjustments`); `pnpm test:integration` 187 passed, including the three new cases in
+`inventory-controls.int.test.ts` (ADJ numbering, documents within the limit posted at once,
+above it held pending with nothing moved, list filter and checklist count, self-approval and
+cashier refused, owner approval posting the movements attributed to the requester,
+`ADJUSTMENT_DECIDED` on a second decision, withdraw by the requester only, rejection needs a
+note, owner override flagged in the audit log, company limit change through the selling policy
+and exposed through inventory settings, increase without the price right valued at the average
+and a typed cost refused; count sheet reporting `STOCK_MOVED_SINCE_COUNT` with the net quantity
+and posting against the current balance once acknowledged; `STOCK_ON_HAND` on tracking off,
+goods → service, variant removal and archiving while stock remains, archiving after a write-off,
+archived item counted but not increased, `BRANCH_IN_USE` naming stock, then cash, then cash in
+transit, and deactivation once settled); `pnpm test:e2e` 35 passed on a clean run (a first run
+had one 30-second timeout in `refunds.spec` at the POS search box, unrelated to this session,
+which passed alone and on the repeated full run).
+
 ### Results after remediation session 4 (2026-10-13, local run)
 
 `pnpm verify` green (167 unit/web tests, including the deposit dialog with its mandatory slip

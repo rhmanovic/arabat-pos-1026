@@ -284,6 +284,7 @@ describe('dashboard controls checklist (BR-165)', () => {
             openVariances: 0,
             depositsInTransit: 0,
             unreconciledBankEntries: 0,
+            pendingAdjustments: 0,
           },
         }),
       },

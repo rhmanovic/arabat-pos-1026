@@ -106,6 +106,7 @@ export const managerEn = {
       '{{count}} bank deposits are waiting for a second person to confirm them on the bank side.',
     controlUnreconciledBank:
       '{{count}} bank entries older than a week appeared on no statement yet. Reconcile the bank accounts.',
+    controlPendingAdjustments: '{{count}} stock adjustments are waiting for approval.',
     controlsAllGood: 'No control warnings.',
     onboardingTitle: 'Get your company ready',
     stepProfile: 'Complete the company profile',
@@ -370,6 +371,42 @@ export const managerEn = {
     remove: 'Remove',
     submit: 'Post adjustment',
     posted: 'Adjustment posted',
+    sentForApproval:
+      'Sent for approval. Nothing moves until a second person with the adjust right approves it.',
+    approvalLimitHint:
+      'Documents worth more than {{amount}} at cost wait for a second person’s approval. The owner may post them directly; the exception is recorded.',
+    blindCountHint:
+      'Blind count: enter what you actually counted. The book quantity and the difference are shown after posting.',
+    movedTitle: 'Stock moved while you were counting',
+    movedBody:
+      'These items had movements after this sheet was opened. Review them; if your count still stands, confirm below and post it against the current balance.',
+    acknowledgeMovements: 'I reviewed these movements; post the count against the current balance.',
+    number: 'Number',
+    status: 'Status',
+    allStatuses: 'All statuses',
+    status_posted: 'Posted',
+    status_pending: 'Awaiting approval',
+    status_rejected: 'Rejected',
+    status_withdrawn: 'Withdrawn',
+    valueAtCost: 'Value at cost',
+    pendingTitle: 'Awaiting approval',
+    pendingBody:
+      'This document is above the approval limit. Nothing has moved yet; a second person with the adjust right approves or rejects it. Nobody approves their own; the owner may, and the exception is recorded.',
+    ownerOverride:
+      'Posted by the owner above the approval limit; the exception is in the audit log.',
+    decide: 'Approve / reject',
+    decideTitle: 'Decide {{number}}',
+    decideHint: 'Approving posts the movements now. Rejecting needs a reason.',
+    decided: 'Decision recorded',
+    decided_posted: 'Approved by',
+    decided_rejected: 'Rejected by',
+    decided_withdrawn: 'Withdrawn by',
+    decided_pending: 'Decided by',
+    approve: 'Approve',
+    reject: 'Reject',
+    decisionNote: 'Note (required to reject)',
+    withdraw: 'Withdraw',
+    withdrawn: 'Adjustment withdrawn',
     confirmTitle: 'Post this adjustment?',
     confirmBody:
       'Stock adjustments cannot be edited or deleted. Mistakes are corrected with a new adjustment.',
@@ -781,6 +818,12 @@ export const managerEn = {
     supplierPaymentLimit: 'Supplier payment approval limit (KWD)',
     approvalLimitHint:
       'Above this amount the payment waits for a second person and needs a receipt or invoice number. The owner may pay directly; the exception is recorded in the audit log.',
+    adjustmentLimit: 'Stock adjustment approval limit (KWD at cost)',
+    adjustmentLimitHint:
+      'Stock documents worth more than this at cost wait for a second person with the adjust right. Opening stock is exempt. The owner may post directly; the exception is recorded.',
+    blindStockCount: 'Blind stock counts',
+    blindStockCountHint:
+      'Counters enter what they counted without seeing the book quantity; the difference is shown after posting.',
     refunded: 'Refunded',
     netSales: 'Net',
     title: 'Sales',

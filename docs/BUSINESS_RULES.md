@@ -294,6 +294,27 @@ Remediation session 3 (2026-10-13, owner decision D2):
   balance is everything ticked so far and a difference from the statement must be explained.
   Reconciliations are append-only. A bank account with a balance, with entries no statement has
   confirmed, or with a deposit on its way cannot be deactivated.
+- **BR-169** Approval of stock adjustments. Every stock document carries a number (ADJ-000001).
+  A document whose value at cost (Σ |change| × unit cost, the current average for outgoing
+  stock) exceeds the company's **adjustment approval limit** (owner-set, default KWD 50) is
+  *pending*: nothing moves until a **different** holder of the adjust right at that branch
+  approves it (the movements then post, attributed to the requester) or rejects it with a
+  reason; the requester may withdraw it. The owner posts above the limit directly and the
+  override is audited. Opening stock is the initial load and is exempt. Increases by users
+  without the price right are valued at the current average cost, never at a typed cost.
+- **BR-170** Blind stock counts. Under the **blind stock count** policy (default on) the count
+  sheet shows no book quantity and no resulting balance; the difference appears after posting.
+  A count sheet records when it was started; stock that moved at the branch after that moment
+  is reported (`STOCK_MOVED_SINCE_COUNT`) and the counter must acknowledge it before the count
+  posts against the current balance, so a count never silently overwrites a sale or receipt.
+  Count differences above the adjustment approval limit wait for approval like any document.
+- **BR-171** No balance disappears silently. Switching stock tracking off, turning goods into a
+  service, archiving a product or removing a variant is refused (`STOCK_ON_HAND`) while any
+  branch still holds stock of it; the error names the branches and quantities. Archived items
+  can still be written off or counted (never increased). A branch is not deactivated
+  (`BRANCH_IN_USE`) while it holds stock, cash in a register or treasury, an open shift, an
+  open purchase order, an open stock transfer or a cash transfer in transit; the error says what
+  to settle first.
 
 Platform and subscriptions (Prompt 17):
 - **BR-150** Every merchant has exactly one subscription to a plan. New merchants start on

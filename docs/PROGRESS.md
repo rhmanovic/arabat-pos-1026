@@ -436,6 +436,23 @@ Verified: see `TESTING.md` (results after remediation session 4). Not done (next
 custody-right split (FND-422), approval of stock adjustments (R2.1), blind counts with sign-off
 (R2.2), master-data guards (R2.5); fee settlement per acquirer (FND-413 in full, R3.5).
 
+### 2026-10-13 — Remediation session 5 (R2.1 adjustment approvals, R2.2 blind counts, R2.5 master-data guards)
+Implemented (ADR-0097, BR-169 to BR-171):
+- **Adjustment approvals**: numbered documents (ADJ-), value at cost on every document; above
+  the company limit (default KWD 50, in the selling policy) a non-owner's document waits for a
+  second holder of the adjust right (approve posts, reject needs a reason, requester withdraws);
+  owner override audited; list filter and detail panel; dashboard checklist count.
+- **Blind counts**: count sheets hide the book quantity and the resulting balance (policy,
+  default on); stock that moved since the sheet was started is listed and must be acknowledged
+  before the count posts.
+- **Master-data guards**: tracking off, goods → service, archiving and variant removal refused
+  while stock is on hand (branches and quantities named); archived items can still be written
+  off or counted; branch deactivation refused while stock, cash, open shifts, open purchase
+  orders, open stock transfers or cash in transit remain.
+Verified: see `TESTING.md` (results after remediation session 5). Not done (next sessions):
+transfer losses posted and approved (R2.3), in-transit stock as a valued location (R2.4),
+custody-right split (FND-422).
+
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025
 before any production launch.

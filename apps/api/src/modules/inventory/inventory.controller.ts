@@ -6,6 +6,7 @@ import {
   type VariantStock,
   adjustmentListQuerySchema,
   createAdjustmentSchema,
+  decideAdjustmentSchema,
   movementQuerySchema,
   posAvailabilityQuerySchema,
   setThresholdSchema,
@@ -118,6 +119,27 @@ export class InventoryController {
     @Req() req: FastifyRequest,
   ): Promise<Adjustment> {
     return this.inventory.createAdjustment(actor, body, req.ip);
+  }
+
+  @RequirePermission('manager', 'inventory.adjust')
+  @Post('adjustments/:id/decision')
+  decide(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Body(new ZodPipe(decideAdjustmentSchema)) body: z.output<typeof decideAdjustmentSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<Adjustment> {
+    return this.inventory.decideAdjustment(actor, id, body, req.ip);
+  }
+
+  @RequirePermission('manager', 'inventory.adjust')
+  @Post('adjustments/:id/withdraw')
+  withdraw(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Req() req: FastifyRequest,
+  ): Promise<Adjustment> {
+    return this.inventory.withdrawAdjustment(actor, id, req.ip);
   }
 
   @RequirePermission('manager', 'inventory.read')

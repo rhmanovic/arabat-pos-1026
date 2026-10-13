@@ -1,8 +1,10 @@
+import { ApiError } from '@arabat/api-client';
 import { ADJUSTMENT_REASONS, type AdjustmentKind, type StockLevel } from '@arabat/contracts';
 import { QuantityError, formatQuantity, parseQuantity } from '@arabat/money';
 import {
   Alert,
   Button,
+  Checkbox,
   ConfirmDialog,
   Field,
   Input,
@@ -17,6 +19,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useBranchContext, useSession } from '../../app/context.js';
+import { formatAmount } from '../catalog/ProductsPage.js';
 import { InventoryTabs, displayQty, inventoryKey, itemName } from './shared.js';
 
 const KINDS: AdjustmentKind[] = ['increase', 'decrease', 'count', 'opening'];
@@ -62,7 +65,18 @@ export function AdjustmentEditorPage() {
   const [submitted, setSubmitted] = useState(false);
   // One key per document: a retried submit can never post the adjustment twice.
   const [idempotencyKey] = useState(() => crypto.randomUUID());
+  // Count sheets: when this sheet was opened. Stock that moves afterwards is reported by the
+  // API and must be acknowledged before the count posts (BR-170).
+  const [startedAt] = useState(() => new Date().toISOString());
+  const [moved, setMoved] = useState<{ item: StockLevel; message: string }[] | null>(null);
+  const [acknowledged, setAcknowledged] = useState(false);
   const withCost = (kind === 'opening' || kind === 'increase') && can('catalog.prices.manage');
+  const policy = useQuery({
+    queryKey: [...inventoryKey, 'settings'],
+    queryFn: () => api.inventory.settings(),
+  });
+  // Blind counts (BR-170): the counter enters what is there without seeing the book figure.
+  const blind = kind === 'count' && (policy.data?.blindStockCount ?? true);
 
   useEffect(() => {
     const id = setTimeout(() => setQ(search.trim()), 250);
@@ -151,6 +165,7 @@ export function AdjustmentEditorPage() {
         reason,
         note: note.trim() || null,
         idempotencyKey,
+        ...(kind === 'count' ? { startedAt, acknowledgeMovements: acknowledged } : {}),
         lines: lines.map((l) => ({
           variantId: l.item.variantId,
           quantity: l.quantity.trim(),
@@ -159,11 +174,23 @@ export function AdjustmentEditorPage() {
       }),
     onSuccess: async (adjustment) => {
       await queryClient.invalidateQueries({ queryKey: inventoryKey });
-      notify.ok(t('inventory.posted'));
+      notify.ok(
+        t(adjustment.status === 'pending' ? 'inventory.sentForApproval' : 'inventory.posted'),
+      );
       void navigate(`/inventory/adjustments/${adjustment.id}`, { replace: true });
     },
     onError: (error) => {
       setConfirm(false);
+      if (error instanceof ApiError && error.code === 'STOCK_MOVED_SINCE_COUNT') {
+        setMoved(
+          (error.problem.issues ?? []).flatMap((issue) => {
+            const index = Number(issue.path.split('.')[1]);
+            const line = lines[index];
+            return line ? [{ item: line.item, message: issue.message }] : [];
+          }),
+        );
+        return;
+      }
       notify.fail(error);
     },
   });
@@ -184,6 +211,34 @@ export function AdjustmentEditorPage() {
       />
       <InventoryTabs />
       {branches.length === 0 ? <Alert tone="warning">{t('inventory.noBranches')}</Alert> : null}
+      {policy.data && kind !== 'opening' ? (
+        <p className="mb-4 text-sm text-fg-muted" data-testid="approval-limit">
+          {t('inventory.approvalLimitHint', {
+            amount: formatAmount(policy.data.adjustmentApprovalLimit, i18n.language),
+          })}
+        </p>
+      ) : null}
+      {blind ? <Alert tone="info">{t('inventory.blindCountHint')}</Alert> : null}
+      {moved ? (
+        <Alert tone="warning" title={t('inventory.movedTitle')}>
+          <p className="text-sm">{t('inventory.movedBody')}</p>
+          <ul className="my-2 list-disc ps-5 text-sm" data-testid="moved-items">
+            {moved.map((m) => (
+              <li key={m.item.variantId}>
+                {itemName(m.item, i18n.language)}{' '}
+                <span dir="ltr" className="text-fg-muted">
+                  ({m.message})
+                </span>
+              </li>
+            ))}
+          </ul>
+          <Checkbox
+            label={t('inventory.acknowledgeMovements')}
+            checked={acknowledged}
+            onChange={(e) => setAcknowledged(e.target.checked)}
+          />
+        </Alert>
+      ) : null}
 
       <div className="grid gap-6">
         <Section title={t('inventory.adjustmentTitle')}>
@@ -282,9 +337,11 @@ export function AdjustmentEditorPage() {
                             </span>
                           ) : null}
                         </span>
-                        <span className="tabular-nums text-fg-muted" dir="ltr">
-                          {displayQty(item.onHand)}
-                        </span>
+                        {blind ? null : (
+                          <span className="tabular-nums text-fg-muted" dir="ltr">
+                            {displayQty(item.onHand)}
+                          </span>
+                        )}
                       </button>
                     </li>
                   ))
@@ -312,10 +369,16 @@ export function AdjustmentEditorPage() {
                     ) : null}
                   </div>
                   <p className="text-sm max-md:hidden">
-                    <span className="block text-xs text-fg-muted">{t('inventory.current')}</span>
-                    <span className="tabular-nums" dir="ltr">
-                      {displayQty(l.item.onHand)}
-                    </span>
+                    {blind ? null : (
+                      <>
+                        <span className="block text-xs text-fg-muted">
+                          {t('inventory.current')}
+                        </span>
+                        <span className="tabular-nums" dir="ltr">
+                          {displayQty(l.item.onHand)}
+                        </span>
+                      </>
+                    )}
                   </p>
                   <Field
                     label={kind === 'count' ? t('inventory.counted') : t('inventory.quantity')}
@@ -348,10 +411,14 @@ export function AdjustmentEditorPage() {
                     <span className="max-md:hidden" />
                   )}
                   <p className="text-sm">
-                    <span className="block text-xs text-fg-muted">{t('inventory.after')}</span>
-                    <span className="font-semibold tabular-nums" dir="ltr" data-testid="after">
-                      {after(l)}
-                    </span>
+                    {blind ? null : (
+                      <>
+                        <span className="block text-xs text-fg-muted">{t('inventory.after')}</span>
+                        <span className="font-semibold tabular-nums" dir="ltr" data-testid="after">
+                          {after(l)}
+                        </span>
+                      </>
+                    )}
                   </p>
                   <Button
                     variant="ghost"
@@ -376,7 +443,7 @@ export function AdjustmentEditorPage() {
             {t('common.cancel')}
           </Button>
           <Button
-            disabled={!branchId || lines.length === 0}
+            disabled={!branchId || lines.length === 0 || (moved !== null && !acknowledged)}
             onClick={() => {
               setSubmitted(true);
               if (valid) setConfirm(true);

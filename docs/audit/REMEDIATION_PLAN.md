@@ -110,7 +110,7 @@ not a commitment).
 
 ## Phase R2 — Stock integrity
 
-### R2.1 Approval of stock adjustments — **M**
+### R2.1 Approval of stock adjustments — **M** — *done in session 5*
 - Closes: FND-201, FND-218, FND-220
 - Build: adjustments above the per-merchant value threshold (default D2: KWD 50 at cost) are *pending* until approved by
   a different person with the adjust right (owner override recorded and audited); human-readable adjustment numbers
@@ -118,7 +118,7 @@ not a commitment).
   self-entered cost) or go to pending.
 - Decision: D2.
 
-### R2.2 Blind counts with variance sign-off — **M**
+### R2.2 Blind counts with variance sign-off — **M** — *done in session 5*
 - Closes: FND-202
 - Build: count sheet hides the expected quantity; the resulting difference is posted as a count
   document whose variances above the threshold need approval (R2.1); movements posted between
@@ -141,7 +141,7 @@ not a commitment).
   includes in-transit as its own line.
 - Depends on: R2.3.
 
-### R2.5 Guards on master data that hide balances — **S**
+### R2.5 Guards on master data that hide balances — **S** — *done in session 5*
 - Closes: FND-207, FND-206, FND-109
 - Build: refuse switching tracking off, converting goods to a service, archiving a variant, or
   deactivating a branch while any balance ≠ 0 or any open order/transfer/shift exists; the screen
@@ -321,8 +321,8 @@ records without money.
 | 2 | R1.1 cash-out corrections and limits, R1.6 custody roles and set-up checklist | **Done 2026-10-13** |
 | 3 | R1.2 disbursement approvals (per-merchant thresholds, owner override), R1.4 variance follow-up | **Done 2026-10-13** |
 | 4 | R1.3 deposits in transit and bank reconciliation | **Done 2026-10-13** |
-| 5 | R2.1 adjustment approvals, R2.2 blind counts with sign-off, R2.5 master-data guards | Next |
-| 6 | R2.3 transfer losses, R2.4 in-transit location | |
+| 5 | R2.1 adjustment approvals, R2.2 blind counts with sign-off, R2.5 master-data guards | **Done 2026-10-13** |
+| 6 | R2.3 transfer losses, R2.4 in-transit location | Next |
 | 7 | R2.6 valuation as at date, R2.7 cost edge cases, R2.8 damaged returns | |
 | 8 | R3.1 till overrides, R3.2 price bounds, R3.3 zero-total sales | |
 | 9 | R3.4 refund segregation, R3.5 tender hygiene (fee reversal per method, D6), R3.6 held sales, R3.7 combined limit (D4) | |

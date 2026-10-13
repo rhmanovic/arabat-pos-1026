@@ -30,5 +30,7 @@ export const controlsChecklistSchema = z.object({
   depositsInTransit: z.number().int(),
   /** Entries on active bank accounts older than a week that appeared on no statement yet. */
   unreconciledBankEntries: z.number().int(),
+  /** Stock adjustments waiting for a second person's approval (BR-169). */
+  pendingAdjustments: z.number().int(),
 });
 export type ControlsChecklist = z.infer<typeof controlsChecklistSchema>;

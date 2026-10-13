@@ -158,6 +158,8 @@ export class SalesService {
       maxRegisterTolerance: money(row?.maxRegisterToleranceMinor ?? 1000n),
       expenseApprovalLimit: money(row?.expenseApprovalLimitMinor ?? 20000n),
       supplierPaymentApprovalLimit: money(row?.supplierPaymentApprovalLimitMinor ?? 100000n),
+      adjustmentApprovalLimit: money(row?.adjustmentApprovalLimitMinor ?? 50000n),
+      blindStockCount: row?.blindStockCount ?? true,
       version: row?.version ?? 1,
     };
   }
@@ -189,6 +191,14 @@ export class SalesService {
         .where(eq(salesSettings.merchantId, actor.merchantId))
         .for('update');
       if ((row?.version ?? 1) !== input.version) throw versionConflict();
+      // Stock controls (BR-169 / BR-170): unchanged when omitted.
+      const stockPolicy = {
+        adjustmentApprovalLimitMinor:
+          input.adjustmentApprovalLimit === undefined
+            ? (row?.adjustmentApprovalLimitMinor ?? 50000n)
+            : parseAmount(input.adjustmentApprovalLimit, 'adjustmentApprovalLimit'),
+        blindStockCount: input.blindStockCount ?? row?.blindStockCount ?? true,
+      };
       if (row) {
         await tx
           .update(salesSettings)
@@ -198,6 +208,7 @@ export class SalesService {
             refundApprovalLimitMinor: limitMinor,
             blindCashCount: input.blindCashCount,
             ...cashLimits,
+            ...stockPolicy,
             version: sql`${salesSettings.version} + 1`,
             updatedAt: sql`now()`,
           })
@@ -210,6 +221,7 @@ export class SalesService {
           refundApprovalLimitMinor: limitMinor,
           blindCashCount: input.blindCashCount,
           ...cashLimits,
+          ...stockPolicy,
           version: 2,
         });
       }
@@ -252,6 +264,11 @@ export class SalesService {
             from: (row?.supplierPaymentApprovalLimitMinor ?? 100000n).toString(),
             to: cashLimits.supplierPaymentApprovalLimitMinor.toString(),
           },
+          adjustmentApprovalLimit: {
+            from: (row?.adjustmentApprovalLimitMinor ?? 50000n).toString(),
+            to: stockPolicy.adjustmentApprovalLimitMinor.toString(),
+          },
+          blindStockCount: { from: row?.blindStockCount ?? true, to: stockPolicy.blindStockCount },
         },
       });
       return this.settings(tx, actor.merchantId);

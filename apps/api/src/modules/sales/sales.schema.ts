@@ -68,6 +68,12 @@ export const salesSettings = pgTable('sales_settings', {
   supplierPaymentApprovalLimitMinor: bigint({ mode: 'bigint' })
     .notNull()
     .default(sql`100000`),
+  /** Stock adjustments above this value at cost wait for a second person (BR-169, D2). */
+  adjustmentApprovalLimitMinor: bigint({ mode: 'bigint' })
+    .notNull()
+    .default(sql`50000`),
+  /** Count sheets hide the expected quantity (BR-170). */
+  blindStockCount: boolean().notNull().default(true),
   version: integer().notNull().default(1),
   updatedAt: updatedAt(),
 });

@@ -97,6 +97,17 @@ export function DashboardPage() {
               },
             ]
           : []),
+        ...(controls.data.pendingAdjustments > 0
+          ? [
+              {
+                key: 'adjustments',
+                to: '/inventory/adjustments',
+                text: t('dashboard.controlPendingAdjustments', {
+                  count: controls.data.pendingAdjustments,
+                }),
+              },
+            ]
+          : []),
         ...(controls.data.membersWithoutRoles.length > 0
           ? [
               {

@@ -1,6 +1,7 @@
 import {
   type Adjustment,
   type AdjustmentKind,
+  type AdjustmentStatus,
   COSTING_METHOD,
   type InventorySettings,
   type InventorySummary,
@@ -11,6 +12,7 @@ import {
   type VariantStock,
   type adjustmentListQuerySchema,
   type createAdjustmentSchema,
+  type decideAdjustmentSchema,
   type movementQuerySchema,
   type setThresholdSchema,
   type stockLevelQuerySchema,
@@ -30,6 +32,7 @@ import { type SQL, and, eq, sql } from 'drizzle-orm';
 import { createHash } from 'node:crypto';
 import type { z } from 'zod';
 import { DatabaseService, type Transaction } from '../../database/database.service.js';
+import { nextDocumentNumber } from '../../database/schema/sequences.schema.js';
 import { assertCan } from '../../kernel/access/assert.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
@@ -38,6 +41,7 @@ import { AuditService } from '../audit/audit.service.js';
 import { isUniqueViolation } from '../auth/registration.service.js';
 import { versionConflict } from '../branches/branches.service.js';
 import { branches } from '../branches/branches.schema.js';
+import { stockPolicy } from '../cash/approval-limits.js';
 import { merchants } from '../merchants/merchants.schema.js';
 import {
   inventorySettings,
@@ -48,6 +52,8 @@ import {
 import { StockLedgerService, stockStatus } from './stock-ledger.service.js';
 
 type CreateAdjustmentInput = z.output<typeof createAdjustmentSchema>;
+type DecisionInput = z.output<typeof decideAdjustmentSchema>;
+type PlannedLine = { variantId: string; quantityMilli: bigint; unitCostMinor: bigint | null };
 type LevelQuery = z.output<typeof stockLevelQuerySchema>;
 type MovementQuery = z.output<typeof movementQuerySchema>;
 type AdjustmentQuery = z.output<typeof adjustmentListQuerySchema>;
@@ -179,49 +185,80 @@ export class InventoryService {
         await this.assertAdjustable(
           tx,
           lines.map((l) => l.variantId),
+          input.kind,
         );
+        // Counts (BR-170): stock that moved since the sheet was started is reported until
+        // the counter acknowledges it, so a count never silently overwrites a sale or receipt.
+        if (input.kind === 'count' && input.startedAt && !input.acknowledgeMovements)
+          await this.assertNoMovementsSince(tx, input.branchId, lines, input.startedAt);
+        // Value at cost before anything is posted: above the company limit the document waits
+        // for a second person (BR-169, D2); the owner posts directly, flagged. Opening stock
+        // is the initial load and never waits.
+        const policy = await stockPolicy(tx, actor.merchantId);
+        const estimate = await this.estimateValue(tx, input.branchId, input.kind, lines);
+        const limitExceeded =
+          input.kind !== 'opening' && estimate.valueMinor > policy.adjustmentLimitMinor;
+        const pending = limitExceeded && !actor.access.isOwner;
+        const number = await nextDocumentNumber(tx, actor.merchantId, 'stock_adjustment', 'ADJ');
         await tx.insert(stockAdjustments).values({
           id: adjustmentId,
           merchantId: actor.merchantId,
+          number,
           branchId: input.branchId,
           kind: input.kind,
           reason: input.reason,
           note: input.note,
+          status: pending ? 'pending' : 'posted',
+          valueMinor: estimate.valueMinor,
+          limitExceeded,
+          ownerOverride: limitExceeded && actor.access.isOwner,
+          startedAt: input.startedAt ? new Date(input.startedAt) : null,
+          movementsAcknowledged: Boolean(input.acknowledgeMovements),
           idempotencyKey: input.idempotencyKey ?? null,
           requestHash,
           createdByUserId: actor.userId,
         });
-        const applied = await this.ledger.apply(
-          tx,
-          {
+        if (pending) {
+          // Lines keep what was asked and the balance seen; nothing moves yet.
+          await tx.insert(stockAdjustmentLines).values(
+            lines.map((l, i) => ({
+              merchantId: actor.merchantId,
+              adjustmentId,
+              variantId: l.variantId,
+              quantity: formatQuantity(l.quantityMilli),
+              previousOnHand: formatQuantity(estimate.lines[i]!.previousMilli),
+              delta: formatQuantity(estimate.lines[i]!.deltaMilli),
+              unitCostMinor: l.unitCostMinor,
+            })),
+          );
+          await this.audit.recordIn(tx, {
             merchantId: actor.merchantId,
-            branchId: input.branchId,
-            movementType: MOVEMENT_FOR_KIND[input.kind],
-            reason: input.reason,
-            sourceType: 'stock_adjustment',
-            sourceId: adjustmentId,
-            note: input.note,
-            userId: actor.userId,
-            requireNoHistory: input.kind === 'opening',
-          },
-          lines.map((l) => ({
-            variantId: l.variantId,
-            mode: input.kind === 'count' ? 'set' : 'delta',
-            quantityMilli: input.kind === 'decrease' ? -l.quantityMilli : l.quantityMilli,
-            unitCostMinor: l.unitCostMinor,
-          })),
-        );
-        await tx.insert(stockAdjustmentLines).values(
-          applied.map((a, i) => ({
-            merchantId: actor.merchantId,
-            adjustmentId,
-            variantId: a.variantId,
-            quantity: formatQuantity(lines[i]!.quantityMilli),
-            previousOnHand: formatQuantity(a.previousMilli),
-            delta: formatQuantity(a.deltaMilli),
-            unitCostMinor: a.unitCostMinor,
-          })),
-        );
+            actorType: 'user',
+            actorId: actor.userId,
+            action: 'inventory.adjustment_requested',
+            targetType: 'stock_adjustment',
+            targetId: adjustmentId,
+            ip,
+            details: {
+              number,
+              branchId: input.branchId,
+              kind: input.kind,
+              reason: input.reason,
+              value: Money.ofMinor(estimate.valueMinor, CURRENCY).toDecimalString(),
+              limit: Money.ofMinor(policy.adjustmentLimitMinor, CURRENCY).toDecimalString(),
+            },
+          });
+          return;
+        }
+        const applied = await this.post(tx, actor.merchantId, actor.userId, {
+          id: adjustmentId,
+          branchId: input.branchId,
+          kind: input.kind,
+          reason: input.reason,
+          note: input.note,
+          lines,
+          insertLines: true,
+        });
         await this.audit.recordIn(tx, {
           merchantId: actor.merchantId,
           actorType: 'user',
@@ -231,10 +268,14 @@ export class InventoryService {
           targetId: adjustmentId,
           ip,
           details: {
+            number,
             branchId: input.branchId,
             kind: input.kind,
             reason: input.reason,
-            lines: applied.map((a) => ({
+            value: Money.ofMinor(applied.valueMinor, CURRENCY).toDecimalString(),
+            ...(limitExceeded ? { limitExceeded: true, ownerOverride: true } : {}),
+            ...(input.acknowledgeMovements ? { movementsAcknowledged: true } : {}),
+            lines: applied.lines.map((a) => ({
               variantId: a.variantId,
               delta: formatQuantity(a.deltaMilli),
               balance: formatQuantity(a.balanceMilli),
@@ -251,6 +292,268 @@ export class InventoryService {
       throw error;
     }
     return this.getAdjustment(actor, adjustmentId);
+  }
+
+  /**
+   * Writes the movements of a document through the ledger and records the applied lines.
+   * Used when posting directly and when approving a pending document. Returns the value at
+   * cost actually posted (Σ |delta| × unit cost).
+   */
+  private async post(
+    tx: Transaction,
+    merchantId: string,
+    userId: string,
+    doc: {
+      id: string;
+      branchId: string;
+      kind: AdjustmentKind;
+      reason: string;
+      note: string | null;
+      lines: PlannedLine[];
+      insertLines: boolean;
+    },
+  ) {
+    const applied = await this.ledger.apply(
+      tx,
+      {
+        merchantId,
+        branchId: doc.branchId,
+        movementType: MOVEMENT_FOR_KIND[doc.kind],
+        reason: doc.reason,
+        sourceType: 'stock_adjustment',
+        sourceId: doc.id,
+        note: doc.note,
+        userId,
+        requireNoHistory: doc.kind === 'opening',
+      },
+      doc.lines.map((l) => ({
+        variantId: l.variantId,
+        mode: doc.kind === 'count' ? 'set' : 'delta',
+        quantityMilli: doc.kind === 'decrease' ? -l.quantityMilli : l.quantityMilli,
+        unitCostMinor: l.unitCostMinor,
+      })),
+    );
+    let valueMinor = 0n;
+    for (const a of applied)
+      if (a.unitCostMinor !== null) valueMinor += quantityValue(abs(a.deltaMilli), a.unitCostMinor);
+    if (doc.insertLines)
+      await tx.insert(stockAdjustmentLines).values(
+        applied.map((a, i) => ({
+          merchantId,
+          adjustmentId: doc.id,
+          variantId: a.variantId,
+          quantity: formatQuantity(doc.lines[i]!.quantityMilli),
+          previousOnHand: formatQuantity(a.previousMilli),
+          delta: formatQuantity(a.deltaMilli),
+          unitCostMinor: a.unitCostMinor,
+        })),
+      );
+    else
+      for (const a of applied)
+        await tx
+          .update(stockAdjustmentLines)
+          .set({
+            previousOnHand: formatQuantity(a.previousMilli),
+            delta: formatQuantity(a.deltaMilli),
+            unitCostMinor: a.unitCostMinor,
+          })
+          .where(
+            and(
+              eq(stockAdjustmentLines.adjustmentId, doc.id),
+              eq(stockAdjustmentLines.variantId, a.variantId),
+            ),
+          );
+    await tx.update(stockAdjustments).set({ valueMinor }).where(eq(stockAdjustments.id, doc.id));
+    return { lines: applied, valueMinor };
+  }
+
+  /**
+   * What the document would move and what it is worth at cost, from the current balances
+   * (no locks: the figure decides whether approval is needed; posting recomputes it).
+   */
+  private async estimateValue(
+    tx: Transaction,
+    branchId: string,
+    kind: AdjustmentKind,
+    lines: PlannedLine[],
+  ) {
+    const rows = (
+      await tx.execute(sql`
+        select v.id, v.cost_minor::text as cost, coalesce(l.on_hand, 0)::text as on_hand,
+               l.avg_cost_minor::text as avg
+        from product_variants v
+        left join stock_levels l on l.variant_id = v.id and l.branch_id = ${branchId}
+        where v.id in (${sql.join(
+          lines.map((l) => sql`${l.variantId}`),
+          sql`, `,
+        )})`)
+    ).rows as { id: string; cost: string | null; on_hand: string; avg: string | null }[];
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    let valueMinor = 0n;
+    const planned = lines.map((l) => {
+      const r = byId.get(l.variantId);
+      const previousMilli = r ? parseQuantity(r.on_hand) : 0n;
+      const deltaMilli =
+        kind === 'count'
+          ? l.quantityMilli - previousMilli
+          : kind === 'decrease'
+            ? -l.quantityMilli
+            : l.quantityMilli;
+      const avg = r?.avg ? BigInt(r.avg) : null;
+      const catalog = r?.cost ? BigInt(r.cost) : null;
+      const cost = deltaMilli > 0n ? (l.unitCostMinor ?? avg ?? catalog) : (avg ?? catalog);
+      if (cost !== null) valueMinor += quantityValue(abs(deltaMilli), cost);
+      return { variantId: l.variantId, previousMilli, deltaMilli };
+    });
+    return { valueMinor, lines: planned };
+  }
+
+  /** Movements of the counted items at the branch since the sheet was started (BR-170). */
+  private async assertNoMovementsSince(
+    tx: Transaction,
+    branchId: string,
+    lines: PlannedLine[],
+    startedAt: string,
+  ) {
+    const rows = (
+      await tx.execute(sql`
+        select m.variant_id, sum(m.quantity)::text as net, count(*)::int as n,
+               string_agg(distinct m.movement_type, ',') as types
+        from stock_movements m
+        where m.branch_id = ${branchId} and m.created_at > ${startedAt}::timestamptz
+          and m.variant_id in (${sql.join(
+            lines.map((l) => sql`${l.variantId}`),
+            sql`, `,
+          )})
+        group by m.variant_id`)
+    ).rows as { variant_id: string; net: string; n: number; types: string }[];
+    if (rows.length === 0) return;
+    throw new AppError(
+      409,
+      'STOCK_MOVED_SINCE_COUNT',
+      'Stock moved while the count was in progress. Review the movements and confirm the count.',
+      rows.map((r) => ({
+        path: `lines.${lines.findIndex((l) => l.variantId === r.variant_id)}`,
+        code: 'moved_since_count',
+        message: `net=${formatQuantity(parseQuantity(r.net))} movements=${r.n} types=${r.types}`,
+      })),
+    );
+  }
+
+  /**
+   * A second holder of the adjust right approves (posting the movements now) or rejects a
+   * pending document. Nobody decides their own; the owner may, flagged in the audit log.
+   */
+  async decideAdjustment(
+    actor: MerchantActor,
+    id: string,
+    input: DecisionInput,
+    ip: string,
+  ): Promise<Adjustment> {
+    await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const [doc] = await tx
+        .select()
+        .from(stockAdjustments)
+        .where(eq(stockAdjustments.id, id))
+        .for('update');
+      if (!doc) throw AppError.notFound();
+      assertCan(actor, 'inventory.adjust', doc.branchId);
+      if (doc.status !== 'pending')
+        throw new AppError(409, 'ADJUSTMENT_DECIDED', 'This adjustment was already decided.');
+      const ownerOverride = doc.createdByUserId === actor.userId;
+      if (ownerOverride && !actor.access.isOwner)
+        throw AppError.forbidden('You cannot approve your own stock adjustment.');
+      let value: bigint | null = doc.valueMinor;
+      if (input.decision === 'approve') {
+        await this.assertBranchActive(tx, doc.branchId);
+        const stored = await tx
+          .select()
+          .from(stockAdjustmentLines)
+          .where(eq(stockAdjustmentLines.adjustmentId, id));
+        const lines: PlannedLine[] = stored.map((l) => ({
+          variantId: l.variantId,
+          quantityMilli: parseQuantity(l.quantity),
+          unitCostMinor: l.unitCostMinor,
+        }));
+        await this.assertAdjustable(
+          tx,
+          lines.map((l) => l.variantId),
+          doc.kind as AdjustmentKind,
+        );
+        value = (
+          await this.post(tx, actor.merchantId, doc.createdByUserId, {
+            id,
+            branchId: doc.branchId,
+            kind: doc.kind as AdjustmentKind,
+            reason: doc.reason,
+            note: doc.note,
+            lines,
+            insertLines: false,
+          })
+        ).valueMinor;
+      }
+      await tx
+        .update(stockAdjustments)
+        .set({
+          status: input.decision === 'approve' ? 'posted' : 'rejected',
+          decidedByUserId: actor.userId,
+          decidedAt: sql`now()`,
+          decisionNote: input.note,
+        })
+        .where(eq(stockAdjustments.id, id));
+      await this.audit.recordIn(tx, {
+        merchantId: actor.merchantId,
+        actorType: 'user',
+        actorId: actor.userId,
+        action:
+          input.decision === 'approve'
+            ? 'inventory.adjustment_approved'
+            : 'inventory.adjustment_rejected',
+        targetType: 'stock_adjustment',
+        targetId: id,
+        ip,
+        details: {
+          number: doc.number,
+          requestedBy: doc.createdByUserId,
+          value: value === null ? null : Money.ofMinor(value, CURRENCY).toDecimalString(),
+          note: input.note,
+          ...(ownerOverride ? { ownerOverride: true } : {}),
+        },
+      });
+    });
+    return this.getAdjustment(actor, id);
+  }
+
+  /** The requester takes a pending document back. */
+  async withdrawAdjustment(actor: MerchantActor, id: string, ip: string): Promise<Adjustment> {
+    await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const [doc] = await tx
+        .select()
+        .from(stockAdjustments)
+        .where(eq(stockAdjustments.id, id))
+        .for('update');
+      if (!doc) throw AppError.notFound();
+      assertCan(actor, 'inventory.adjust', doc.branchId);
+      if (doc.status !== 'pending')
+        throw new AppError(409, 'ADJUSTMENT_DECIDED', 'This adjustment was already decided.');
+      if (doc.createdByUserId !== actor.userId)
+        throw AppError.forbidden('Only the requester can withdraw an adjustment.');
+      await tx
+        .update(stockAdjustments)
+        .set({ status: 'withdrawn', decidedByUserId: actor.userId, decidedAt: sql`now()` })
+        .where(eq(stockAdjustments.id, id));
+      await this.audit.recordIn(tx, {
+        merchantId: actor.merchantId,
+        actorType: 'user',
+        actorId: actor.userId,
+        action: 'inventory.adjustment_withdrawn',
+        targetType: 'stock_adjustment',
+        targetId: id,
+        ip,
+        details: { number: doc.number },
+      });
+    });
+    return this.getAdjustment(actor, id);
   }
 
   private async findByIdempotencyKey(
@@ -274,8 +577,15 @@ export class InventoryService {
     return this.getAdjustment(actor, existing.id);
   }
 
-  /** Manual adjustments only for active, stock-tracked items. */
-  private async assertAdjustable(tx: Transaction, variantIds: string[]): Promise<void> {
+  /**
+   * Manual adjustments only for stock-tracked items; archived items can still be written
+   * off or counted (never increased), so no balance is ever frozen (BR-171).
+   */
+  private async assertAdjustable(
+    tx: Transaction,
+    variantIds: string[],
+    kind: AdjustmentKind = 'increase',
+  ): Promise<void> {
     const rows = (
       await tx.execute(sql`
         select v.id, v.status as variant_status, p.status as product_status, p.track_inventory
@@ -303,9 +613,17 @@ export class InventoryService {
             message: 'Stock is not tracked for this item.',
           },
         ];
-      if (r.variant_status !== 'active' || r.product_status !== 'active')
+      if (
+        (r.variant_status !== 'active' || r.product_status !== 'active') &&
+        kind !== 'decrease' &&
+        kind !== 'count'
+      )
         return [
-          { path: `lines.${i}.variantId`, code: 'archived', message: 'This item is archived.' },
+          {
+            path: `lines.${i}.variantId`,
+            code: 'archived',
+            message: 'This item is archived; it can only be written off or counted.',
+          },
         ];
       return [];
     });
@@ -322,8 +640,12 @@ export class InventoryService {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const [header] = (
         await tx.execute(sql`
-          select a.id, a.branch_id, a.kind, a.reason, a.note, a.created_at, a.created_by_user_id, u.full_name
+          select a.id, a.number, a.branch_id, a.kind, a.reason, a.note, a.status, a.value_minor::text as value_minor,
+                 a.limit_exceeded, a.owner_override, a.decided_at, a.decision_note, a.started_at,
+                 a.movements_acknowledged, a.created_at, a.created_by_user_id, u.full_name,
+                 d.full_name as decided_by
           from stock_adjustments a join users u on u.id = a.created_by_user_id
+          left join users d on d.id = a.decided_by_user_id
           where a.id = ${id}`)
       ).rows as Record<string, string>[];
       if (!header) throw AppError.notFound();
@@ -345,6 +667,9 @@ export class InventoryService {
         kind: header['kind'] as AdjustmentKind,
         reason: header['reason']!,
         note: header['note'] ?? null,
+        ...controlFields(header as Record<string, unknown>, costVisible),
+        startedAt: iso(header['started_at']),
+        movementsAcknowledged: Boolean(header['movements_acknowledged']),
         createdAt: iso(header['created_at'])!,
         createdBy: { userId: header['created_by_user_id']!, fullName: header['full_name']! },
         lines: lines.map((l) => ({
@@ -368,10 +693,12 @@ export class InventoryService {
 
   async listAdjustments(actor: MerchantActor, query: AdjustmentQuery) {
     const scope = this.readScope(actor, query.branchId);
+    const costVisible = this.costVisible(actor, scope);
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const where = and(
         branchIn(sql`a.branch_id`, scope),
         query.kind ? sql`a.kind = ${query.kind}` : undefined,
+        query.status ? sql`a.status = ${query.status}` : undefined,
       );
       const [total] = (
         await tx.execute(
@@ -380,9 +707,12 @@ export class InventoryService {
       ).rows as { n: number }[];
       const rows = (
         await tx.execute(sql`
-          select a.id, a.branch_id, a.kind, a.reason, a.note, a.created_at, a.created_by_user_id, u.full_name,
+          select a.id, a.number, a.branch_id, a.kind, a.reason, a.note, a.status, a.value_minor::text as value_minor,
+                 a.limit_exceeded, a.owner_override, a.decided_at, a.decision_note, d.full_name as decided_by,
+                 a.created_at, a.created_by_user_id, u.full_name,
                  (select count(*)::int from stock_adjustment_lines l where l.adjustment_id = a.id) as line_count
           from stock_adjustments a join users u on u.id = a.created_by_user_id
+          left join users d on d.id = a.decided_by_user_id
           where ${where ?? sql`true`}
           order by a.created_at desc, a.id desc
           limit ${query.pageSize} offset ${(query.page - 1) * query.pageSize}`)
@@ -394,6 +724,7 @@ export class InventoryService {
           kind: r['kind'] as AdjustmentKind,
           reason: r['reason'] as string,
           note: (r['note'] as string | null) ?? null,
+          ...controlFields(r, costVisible),
           lineCount: r['line_count'] as number,
           createdAt: iso(r['created_at'])!,
           createdBy: {
@@ -681,9 +1012,12 @@ export class InventoryService {
         .select()
         .from(inventorySettings)
         .where(eq(inventorySettings.merchantId, actor.merchantId));
+      const policy = await stockPolicy(tx, actor.merchantId);
       return {
         allowNegativeStock: row?.allowNegativeStock ?? false,
         costingMethod: COSTING_METHOD,
+        adjustmentApprovalLimit: money(policy.adjustmentLimitMinor)!,
+        blindStockCount: policy.blindStockCount,
         version: row?.version ?? 1,
       };
     });
@@ -770,6 +1104,22 @@ export class InventoryService {
       };
     });
   }
+}
+
+const abs = (v: bigint) => (v < 0n ? -v : v);
+
+/** Approval facts of a document row (BR-169). */
+function controlFields(r: Record<string, unknown>, costVisible: boolean) {
+  return {
+    number: (r['number'] as string | null) ?? null,
+    status: r['status'] as AdjustmentStatus,
+    ...(costVisible ? { value: money((r['value_minor'] as string | null) ?? null) } : {}),
+    limitExceeded: Boolean(r['limit_exceeded']),
+    ownerOverride: Boolean(r['owner_override']),
+    decidedBy: (r['decided_by'] as string | null) ?? null,
+    decidedAt: iso(r['decided_at']),
+    decisionNote: (r['decision_note'] as string | null) ?? null,
+  };
 }
 
 function branchIn(column: SQL, scope: BranchScope): SQL | undefined {

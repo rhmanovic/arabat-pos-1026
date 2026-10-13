@@ -122,8 +122,9 @@ branch availability, images, archive), `/manager/categories`.
 | `GET /manager/inventory/variants/:variantId` | `inventory.read` (per readable branch) |
 | `PUT /manager/inventory/thresholds` | `inventory.adjust` at the branch |
 | `GET /manager/inventory/movements?branchId=&variantId=&type=&from=&to=&page=` | `inventory.read` |
-| `GET /manager/inventory/adjustments`, `GET /manager/inventory/adjustments/:id` | `inventory.read` |
+| `GET /manager/inventory/adjustments?status=`, `GET /manager/inventory/adjustments/:id` | `inventory.read` (value at cost only with cost rights) |
 | `POST /manager/inventory/adjustments` | `inventory.adjust` at the branch (+ `catalog.prices.manage` to enter unit costs) |
+| `POST /manager/inventory/adjustments/:id/decision`, `POST …/:id/withdraw` | `inventory.adjust` at the branch; approver ≠ requester (owner excepted, flagged); withdraw by the requester (BR-169) |
 | `GET /manager/inventory/settings` / `PUT …/settings` | `inventory.read` / `merchant.settings.update` |
 | `GET /pos/inventory/availability?variantIds=` | POS `catalog.read` at the bound branch (no costs) |
 

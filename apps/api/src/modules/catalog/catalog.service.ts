@@ -296,10 +296,31 @@ export class CatalogService {
       this.database.withMerchantTx(actor.merchantId, async (tx) => {
         const existing = await this.loadProduct(tx, actor, productId);
         await this.validateReferences(tx, input);
+        const fields = productFields(input);
+        const currentVariants = await tx
+          .select()
+          .from(productVariants)
+          .where(eq(productVariants.productId, productId));
+        // Stock never disappears silently (BR-171): tracking stays on, goods stay goods and
+        // variants stay active while any balance is not zero.
+        if (existing.trackInventory && !fields.trackInventory)
+          await assertNoStockOnHand(
+            tx,
+            currentVariants.map((v) => v.id),
+            'switch stock tracking off',
+          );
+        const requestedIds = new Set(input.variants.map((v) => v.id).filter(Boolean));
+        await assertNoStockOnHand(
+          tx,
+          currentVariants
+            .filter((v) => v.status === 'active' && !requestedIds.has(v.id))
+            .map((v) => v.id),
+          'remove a variant',
+        );
         const [row] = await tx
           .update(products)
           .set({
-            ...productFields(input),
+            ...fields,
             version: sql`${products.version} + 1`,
             updatedAt: sql`now()`,
           })
@@ -307,10 +328,6 @@ export class CatalogService {
           .returning({ id: products.id });
         if (!row) throw versionConflict();
         await this.saveAvailability(tx, actor.merchantId, productId, input);
-        const currentVariants = await tx
-          .select()
-          .from(productVariants)
-          .where(eq(productVariants.productId, productId));
         const changes = await this.saveVariants(tx, actor, productId, input, currentVariants);
         await this.record(tx, actor, 'product.updated', 'product', productId, ip, {
           before: { status: existing.status, name: existing.nameEn ?? existing.nameAr },
@@ -331,6 +348,17 @@ export class CatalogService {
       const current = await this.loadProduct(tx, actor, productId);
       if (status === 'active' && current.status !== 'active')
         await this.subscriptions.assertCapacity(tx, actor.merchantId, 'products');
+      if (status === 'archived' && current.status === 'active')
+        await assertNoStockOnHand(
+          tx,
+          (
+            await tx
+              .select({ id: productVariants.id })
+              .from(productVariants)
+              .where(eq(productVariants.productId, productId))
+          ).map((v) => v.id),
+          'archive the product',
+        );
       await tx
         .update(products)
         .set({ status, version: sql`${products.version} + 1`, updatedAt: sql`now()` })
@@ -800,6 +828,45 @@ export class CatalogService {
       details,
     });
   }
+}
+
+/**
+ * Refuses an action that would hide a stock balance (BR-171, FND-206 / FND-207): every
+ * branch where one of the variants still holds stock is named, with what to do first.
+ */
+export async function assertNoStockOnHand(
+  tx: Transaction,
+  variantIds: readonly string[],
+  action: string,
+): Promise<void> {
+  if (variantIds.length === 0) return;
+  const rows = (
+    await tx.execute(sql`
+      select l.variant_id, l.on_hand::text as on_hand, b.name_en, b.name_ar,
+             coalesce(v.name_en, p.name_en, v.name_ar, p.name_ar) as item
+      from stock_levels l
+      join branches b on b.id = l.branch_id
+      join product_variants v on v.id = l.variant_id
+      join products p on p.id = v.product_id
+      where l.on_hand <> 0 and l.variant_id in (${sql.join(
+        variantIds.map((id) => sql`${id}`),
+        sql`, `,
+      )})
+      order by b.is_main desc, b.name_en, v.position`)
+  ).rows as Record<string, string | null>[];
+  if (rows.length === 0) return;
+  throw new AppError(
+    409,
+    'STOCK_ON_HAND',
+    `Cannot ${action} while stock is on hand. Write it off or transfer it first: ${rows
+      .map((r) => `${r['item']} at ${r['name_en'] ?? r['name_ar']}: ${r['on_hand']}`)
+      .join('; ')}.`,
+    rows.map((r) => ({
+      path: `variants.${r['variant_id']}`,
+      code: 'stock_on_hand',
+      message: `${r['name_en'] ?? r['name_ar']}: ${r['on_hand']}`,
+    })),
+  );
 }
 
 function productFields(input: SaveProductInput) {

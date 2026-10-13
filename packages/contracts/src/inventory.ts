@@ -144,6 +144,12 @@ export const createAdjustmentSchema = z
       .transform((v) => (v == null || v === '' ? null : v)),
     /** Client-generated key: retrying the same request never applies it twice. */
     idempotencyKey: z.uuid().optional(),
+    /**
+     * Counts (BR-170): when the count sheet was started. Stock movements posted after it are
+     * reported (`STOCK_MOVED_SINCE_COUNT`) until the counter acknowledges them.
+     */
+    startedAt: z.iso.datetime({ offset: true }).optional(),
+    acknowledgeMovements: z.boolean().optional(),
     lines: z.array(adjustmentLineInputSchema).min(1).max(200),
   })
   .refine((a) => (ADJUSTMENT_REASONS[a.kind] as readonly string[]).includes(a.reason), {
@@ -160,12 +166,30 @@ export const createAdjustmentSchema = z
   });
 export type CreateAdjustment = z.input<typeof createAdjustmentSchema>;
 
+export const ADJUSTMENT_STATUSES = ['posted', 'pending', 'rejected', 'withdrawn'] as const;
+export type AdjustmentStatus = (typeof ADJUSTMENT_STATUSES)[number];
+/** Approval facts of a stock document (BR-169). */
+const adjustmentControl = {
+  /** ADJ-000001; null only on documents older than the numbering. */
+  number: z.string().nullable(),
+  status: z.enum(ADJUSTMENT_STATUSES),
+  /** Absolute value at cost; present only for users allowed to see costs. */
+  value: moneySchema.nullable().optional(),
+  limitExceeded: z.boolean(),
+  ownerOverride: z.boolean(),
+  decidedBy: z.string().nullable(),
+  decidedAt: z.string().nullable(),
+  decisionNote: z.string().nullable(),
+};
 export const adjustmentSchema = z.object({
   id: z.string(),
   branchId: z.string(),
   kind: z.enum(ADJUSTMENT_KINDS),
   reason: z.string(),
   note: z.string().nullable(),
+  ...adjustmentControl,
+  startedAt: z.string().nullable(),
+  movementsAcknowledged: z.boolean(),
   createdAt: z.string(),
   createdBy: z.object({ userId: z.string(), fullName: z.string() }),
   lines: z.array(
@@ -192,10 +216,27 @@ export const adjustmentSummarySchema = z.object({
   kind: z.enum(ADJUSTMENT_KINDS),
   reason: z.string(),
   note: z.string().nullable(),
+  ...adjustmentControl,
   lineCount: z.number().int(),
   createdAt: z.string(),
   createdBy: z.object({ userId: z.string(), fullName: z.string() }),
 });
+/** Approve posts the movements now; rejecting needs a reason. Nobody decides their own. */
+export const decideAdjustmentSchema = z
+  .object({
+    decision: z.enum(['approve', 'reject']),
+    note: z
+      .string()
+      .trim()
+      .max(500)
+      .nullish()
+      .transform((v) => (v == null || v === '' ? null : v)),
+  })
+  .refine((d) => d.decision !== 'reject' || Boolean(d.note), {
+    error: 'Explain why the adjustment is rejected.',
+    path: ['note'],
+  });
+export type DecideAdjustment = z.input<typeof decideAdjustmentSchema>;
 export const adjustmentListSchema = z.object({
   adjustments: z.array(adjustmentSummarySchema),
   total: z.number().int(),
@@ -205,6 +246,7 @@ export const adjustmentListSchema = z.object({
 export const adjustmentListQuerySchema = z.object({
   branchId: z.uuid().optional(),
   kind: z.enum(ADJUSTMENT_KINDS).optional(),
+  status: z.enum(ADJUSTMENT_STATUSES).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
 });
@@ -256,6 +298,9 @@ export type MovementQuery = z.input<typeof movementQuerySchema>;
 export const inventorySettingsSchema = z.object({
   allowNegativeStock: z.boolean(),
   costingMethod: z.literal(COSTING_METHOD),
+  /** Company policy (BR-169 / BR-170), read-only here; edited in the selling policy. */
+  adjustmentApprovalLimit: moneySchema,
+  blindStockCount: z.boolean(),
   version: z.number().int(),
 });
 export type InventorySettings = z.infer<typeof inventorySettingsSchema>;

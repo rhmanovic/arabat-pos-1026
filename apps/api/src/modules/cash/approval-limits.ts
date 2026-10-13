@@ -93,3 +93,15 @@ export function assertDepositSlip(reference: string | null | undefined) {
       { path: 'receiptReference', code: 'required', message: 'Enter the deposit slip number.' },
     ]);
 }
+
+/** Stock controls of the company (BR-169 / BR-170) with the engineering defaults. */
+export async function stockPolicy(tx: Transaction, merchantId: string) {
+  const [row] = await tx
+    .select({
+      limit: salesSettings.adjustmentApprovalLimitMinor,
+      blind: salesSettings.blindStockCount,
+    })
+    .from(salesSettings)
+    .where(eq(salesSettings.merchantId, merchantId));
+  return { adjustmentLimitMinor: row?.limit ?? 50000n, blindStockCount: row?.blind ?? true };
+}

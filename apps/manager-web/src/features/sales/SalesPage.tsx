@@ -237,6 +237,10 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
   const expenseApprovalLimit = expLimit ?? settings.data?.expenseApprovalLimit.amount ?? '';
   const supplierPaymentApprovalLimit =
     supLimit ?? settings.data?.supplierPaymentApprovalLimit.amount ?? '';
+  const [adjLimit, setAdjLimit] = useState<string | null>(null);
+  const [blindStock, setBlindStock] = useState<boolean | null>(null);
+  const adjustmentApprovalLimit = adjLimit ?? settings.data?.adjustmentApprovalLimit.amount ?? '';
+  const blindStockCount = blindStock ?? settings.data?.blindStockCount ?? true;
   const AMOUNT = /^\d{1,10}(\.\d{1,3})?$/;
   const current = value ?? settings.data?.maxDiscountPercent ?? '';
   const windowDays = days ?? String(settings.data?.refundWindowDays ?? '');
@@ -249,7 +253,8 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
     AMOUNT.test(cashOutOtherShiftLimit.trim()) &&
     AMOUNT.test(maxRegisterTolerance.trim()) &&
     AMOUNT.test(expenseApprovalLimit.trim()) &&
-    AMOUNT.test(supplierPaymentApprovalLimit.trim());
+    AMOUNT.test(supplierPaymentApprovalLimit.trim()) &&
+    AMOUNT.test(adjustmentApprovalLimit.trim());
   const save = useMutation({
     mutationFn: () =>
       api.sales.updateSettings({
@@ -262,6 +267,8 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
         maxRegisterTolerance: maxRegisterTolerance.trim(),
         expenseApprovalLimit: expenseApprovalLimit.trim(),
         supplierPaymentApprovalLimit: supplierPaymentApprovalLimit.trim(),
+        adjustmentApprovalLimit: adjustmentApprovalLimit.trim(),
+        blindStockCount,
         version: settings.data!.version,
       }),
     onSuccess: async () => {
@@ -386,6 +393,23 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
             />
           )}
         </Field>
+        <Field label={t('sales.adjustmentLimit')} hint={t('sales.adjustmentLimitHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="decimal"
+              value={adjustmentApprovalLimit}
+              onChange={(e) => setAdjLimit(e.target.value)}
+            />
+          )}
+        </Field>
+        <Checkbox
+          label={t('sales.blindStockCount')}
+          description={t('sales.blindStockCountHint')}
+          checked={blindStockCount}
+          onChange={(e) => setBlindStock(e.target.checked)}
+        />
       </div>
     </Dialog>
   );
