@@ -9,6 +9,7 @@ import type { z } from 'zod';
 import { DatabaseService, type Transaction } from '../../database/database.service.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
+import { assertTimezone } from '../../kernel/time/period.js';
 import { AuditService } from '../audit/audit.service.js';
 import { merchants } from './merchants.schema.js';
 
@@ -30,6 +31,16 @@ export class MerchantsService {
     ip: string,
   ): Promise<MerchantProfile> {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const [current] = await tx
+        .select({ timezone: merchants.timezone })
+        .from(merchants)
+        .where(eq(merchants.id, actor.merchantId))
+        .for('update');
+      if (!current) throw AppError.notFound();
+      // The time zone is the single cut-off rule (BR-184): a change re-cuts every past day,
+      // so it is applied only when asked for, stamped and audited on its own.
+      const timezone = input.timezone === undefined ? null : assertTimezone(input.timezone);
+      const timezoneChanged = timezone !== null && timezone !== current.timezone;
       const updated = await tx
         .update(merchants)
         .set({
@@ -40,6 +51,7 @@ export class MerchantsService {
           contactEmail: input.contactEmail,
           contactPhone: input.contactPhone,
           defaultLanguage: input.defaultLanguage,
+          ...(timezoneChanged ? { timezone, timezoneChangedAt: sql`now()` } : {}),
           version: sql`${merchants.version} + 1`,
           updatedAt: sql`now()`,
         })
@@ -61,6 +73,17 @@ export class MerchantsService {
         targetId: actor.merchantId,
         ip,
       });
+      if (timezoneChanged)
+        await this.audit.recordIn(tx, {
+          merchantId: actor.merchantId,
+          actorType: 'user',
+          actorId: actor.userId,
+          action: 'merchant.timezone_changed',
+          targetType: 'merchant',
+          targetId: actor.merchantId,
+          ip,
+          details: { from: current.timezone, to: timezone },
+        });
       return this.load(tx, actor.merchantId);
     });
   }
@@ -80,6 +103,7 @@ export class MerchantsService {
       defaultCurrency: row.defaultCurrency,
       defaultLanguage: row.defaultLanguage as 'ar' | 'en',
       timezone: row.timezone,
+      timezoneChangedAt: row.timezoneChangedAt?.toISOString() ?? null,
       status: row.status as MerchantProfile['status'],
       version: row.version,
       createdAt: row.createdAt.toISOString(),

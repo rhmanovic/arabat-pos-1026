@@ -71,6 +71,11 @@ export const cashEntrySchema = z.object({
   createdAt: z.string(),
 });
 export type CashEntry = z.infer<typeof cashEntrySchema>;
+const zero = { amount: '0.000', currency: 'KWD' };
+/**
+ * Statement of one treasury or drawer. With a period (BR-184) the entries are those of the
+ * local days [from, to] in the merchant's time zone, with the balance brought forward.
+ */
 export const cashStatementSchema = z.object({
   account: z.object({
     id: z.string(),
@@ -79,6 +84,17 @@ export const cashStatementSchema = z.object({
     branchId: z.string().nullable(),
     balance: moneySchema,
   }),
+  period: z
+    .object({ from: z.string(), to: z.string(), timezone: z.string() })
+    .nullable()
+    .default(null),
+  /** Balance before the first day of the period (0 without a period). */
+  openingBalance: moneySchema.default(zero),
+  /** Sum of the positive / negative entries of the period. */
+  totalIn: moneySchema.default(zero),
+  totalOut: moneySchema.default(zero),
+  /** Balance at the end of the period (the current balance without a period). */
+  closingBalance: moneySchema.default(zero),
   entries: z.array(cashEntrySchema),
   total: z.number().int(),
   page: z.number().int(),
@@ -89,6 +105,11 @@ export const pageQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
 });
+export const cashStatementQuerySchema = pageQuerySchema.extend({
+  from: z.iso.date().optional(),
+  to: z.iso.date().optional(),
+});
+export type CashStatementQuery = z.input<typeof cashStatementQuerySchema>;
 
 export const createCashTransferSchema = z.object({
   fromAccountId: z.uuid(),
@@ -321,6 +342,49 @@ export const supplierPaymentsSchema = z.object({
   totalPaid: moneySchema,
 });
 export type SupplierPayments = z.infer<typeof supplierPaymentsSchema>;
+
+/**
+ * Supplier statement (BR-188, bridge until supplier accounts payable): goods received at order
+ * cost against cash paid, with the running difference "received − paid" (positive = still
+ * owed to the supplier). Period by the merchant's local days (BR-184).
+ */
+export const supplierStatementQuerySchema = z.object({
+  from: z.iso.date().optional(),
+  to: z.iso.date().optional(),
+});
+export type SupplierStatementQuery = z.input<typeof supplierStatementQuerySchema>;
+export const supplierStatementLineSchema = z.object({
+  id: z.string(),
+  kind: z.enum(['receipt', 'payment', 'reversal']),
+  occurredAt: z.string(),
+  /** Receipt number, or the payment number. */
+  document: z.string(),
+  /** The purchase order concerned, when known. */
+  orderNumber: z.string().nullable(),
+  reference: z.string().nullable(),
+  branchId: z.string(),
+  received: moneySchema,
+  /** Negative for a reversal. */
+  paid: moneySchema,
+  /** received − paid, cumulative, after this line. */
+  balance: moneySchema,
+  createdBy: z.string().nullable(),
+});
+export const supplierStatementSchema = z.object({
+  supplier: z.object({ id: z.string(), ...names }),
+  period: z.object({ from: z.string(), to: z.string(), timezone: z.string() }).nullable(),
+  /** received − paid before the period (0 without a period). */
+  openingBalance: moneySchema,
+  totals: z.object({
+    received: moneySchema,
+    paid: moneySchema,
+    reversed: moneySchema,
+    /** openingBalance + received − paid, at the end of the period. */
+    closingBalance: moneySchema,
+  }),
+  lines: z.array(supplierStatementLineSchema),
+});
+export type SupplierStatement = z.infer<typeof supplierStatementSchema>;
 
 /**
  * A manager deposits cash from a branch treasury towards a bank account (`cash.deposit`). The

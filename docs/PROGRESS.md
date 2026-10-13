@@ -523,10 +523,25 @@ Implemented (ADR-0101, BR-180 to BR-183):
   is numbered, logged and audited, cleared carts and removed lines above a threshold are logged.
 - **Combined discount limit (D4)**: item discount + share of the sale discount + price gap per
   line against the limit, on the server and in the POS mirror.
-Verified: see `TESTING.md` (results after remediation session 9). Not done (next sessions):
-one cut-off rule (R4.1), gross profit with costless items (R4.3), report access log and
-dashboard KPIs (R4.4), supplier statement (R4.5), period close (R4.2), access and continuity
-(R5.x); acquirer-statement reconciliation remains manual.
+Verified: see `TESTING.md` (results after remediation session 9).
+
+### 2026-10-13 — Remediation session 10 (R4.1 one cut-off rule, R4.3 gross profit, R4.4 report access log and dashboard, R4.5 supplier statement)
+Implemented (ADR-0102, BR-184 to BR-188):
+- **One cut-off rule**: a single period helper in the merchant's time zone used by every list,
+  statement and report (cash variances and disbursements no longer cut on UTC days); refunds
+  counted on their completion day in the sales history and the refund register (with totals);
+  cash statements take a period with the balance brought forward; the time zone is set at
+  registration and any later change is stamped, audited and warned about.
+- **Gross profit**: always shown for the costed part with the uncosted share (amount, % of net)
+  flagged; the by-employee breakdown carries the online store as its own row.
+- **Report access log and dashboard**: every report view and CSV export in the audit log;
+  dashboard KPIs (today / yesterday net sales, refunds, net after refunds, open shifts) in the
+  merchant's zone; the unusual-activity threshold and window are company policy.
+- **Supplier statement**: received at order cost vs. cash paid (and reversals) with the running
+  difference, period filter and balance brought forward, on the suppliers page.
+Verified: see `TESTING.md` (results after remediation session 10). Not done (next sessions):
+period close (R4.2), access and continuity (R5.x); server-rendered exports and a supplier
+ledger with invoices (R6) are not built; acquirer-statement reconciliation remains manual.
 
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025

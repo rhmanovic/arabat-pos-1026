@@ -20,6 +20,7 @@ import {
   BarChart,
   Definitions,
   Kpi,
+  ReportExportContext,
   ReportState,
   ReportTable,
   type TabProps,
@@ -187,12 +188,21 @@ export function ReportsPage() {
           onChange={(k) => setTab(k as Tab)}
         />
       ) : null}
-      {tab === 'sales' ? <SalesTab {...props} onEmployees={setEmployees} /> : null}
-      {tab === 'payments' ? <PaymentsTab {...props} /> : null}
-      {tab === 'expenses' ? <ExpensesTab {...props} /> : null}
-      {tab === 'shifts' ? <ShiftsTab {...props} /> : null}
-      {tab === 'inventory' ? <InventoryTab {...props} /> : null}
-      {tab === 'purchasing' ? <PurchasingTab {...props} /> : null}
+      <ReportExportContext.Provider
+        value={{
+          report: tab,
+          from: props.query.from,
+          to: props.query.to,
+          ...(props.query.branchId ? { branchId: props.query.branchId } : {}),
+        }}
+      >
+        {tab === 'sales' ? <SalesTab {...props} onEmployees={setEmployees} /> : null}
+        {tab === 'payments' ? <PaymentsTab {...props} /> : null}
+        {tab === 'expenses' ? <ExpensesTab {...props} /> : null}
+        {tab === 'shifts' ? <ShiftsTab {...props} /> : null}
+        {tab === 'inventory' ? <InventoryTab {...props} /> : null}
+        {tab === 'purchasing' ? <PurchasingTab {...props} /> : null}
+      </ReportExportContext.Provider>
     </div>
   );
 }
@@ -213,7 +223,11 @@ function SalesTab({
   const unfiltered = !query.employeeId;
   useEffect(() => {
     if (r && unfiltered)
-      onEmployees(r.byEmployee.map((e) => ({ id: e.membershipId, name: e.name })));
+      onEmployees(
+        r.byEmployee
+          .filter((e) => e.membershipId !== 'online')
+          .map((e) => ({ id: e.membershipId, name: e.name })),
+      );
   }, [r, unfiltered, onEmployees]);
   if (!r) return <ReportState isPending={report.isPending} error={report.error} />;
   const s = r.summary;
@@ -280,14 +294,24 @@ function SalesTab({
           previous={minorOf(p.netAfterRefunds)}
         />
         {r.profit ? (
+          // Gross profit on the costed sales; the uncosted share is flagged, never hidden (BR-185).
           <Kpi
             testId="kpi-profit"
             label={t('reports.grossProfit')}
-            value={r.profit.available ? <Amount value={r.profit.grossProfit} /> : '—'}
+            value={<Amount value={r.profit.grossProfit} />}
             hint={
-              r.profit.available
-                ? `${t('reports.margin')}: ${r.profit.marginPercent ?? '—'}%`
-                : t('reports.profitUnavailable', { count: r.profit.missingCostSales })
+              r.profit.available ? (
+                `${t('reports.margin')}: ${r.profit.marginPercent ?? '—'}%`
+              ) : (
+                <span className="text-danger">
+                  {t('reports.margin')}: {r.profit.marginPercent ?? '—'}% ·{' '}
+                  {t('reports.profitUncosted', {
+                    count: r.profit.missingCostSales,
+                    amount: formatAmount(r.profit.uncostedSales, i18n.language),
+                    percent: r.profit.uncostedSharePercent ?? '—',
+                  })}
+                </span>
+              )
             }
           />
         ) : null}
@@ -382,7 +406,11 @@ function SalesTab({
         rows={r.byEmployee}
         rowKey={(x) => x.membershipId}
         columns={[
-          { key: 'name', header: t('reports.employee'), value: (x) => x.name },
+          {
+            key: 'name',
+            header: t('reports.employee'),
+            value: (x) => (x.membershipId === 'online' ? t('reports.onlineStoreRow') : x.name),
+          },
           { key: 'count', header: t('reports.saleCount'), value: (x) => String(x.saleCount) },
           {
             key: 'disc',

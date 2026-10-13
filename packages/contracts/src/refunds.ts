@@ -226,11 +226,19 @@ export const refundSchema = z.object({
   version: z.number().int(),
 });
 export type Refund = z.infer<typeof refundSchema>;
+/**
+ * Refund register (BR-184): the period filter uses the refund's business date, its
+ * completion time when completed, otherwise its request time, in the merchant's time zone.
+ */
 export const refundListSchema = z.object({
   refunds: z.array(refundSchema.omit({ lines: true, payments: true })),
   total: z.number().int(),
   page: z.number().int(),
   pageSize: z.number().int(),
+  /** Over every matching refund, not only the page; `amount` counts completed refunds only. */
+  totals: z
+    .object({ count: z.number().int(), completedCount: z.number().int(), amount: moneySchema })
+    .default({ count: 0, completedCount: 0, amount: { amount: '0.000', currency: 'KWD' } }),
 });
 const isoDate = z.iso.date();
 export const refundListQuerySchema = z.object({
@@ -263,8 +271,12 @@ export const refundActivitySchema = z.object({
       flagged: z.boolean(),
     }),
   ),
-  /** Employees whose refund rate is above this percentage are flagged. */
+  /** Employees whose refund rate is above this percentage are flagged (company policy, BR-186). */
   flagThresholdPercent: z.string(),
+  /** The window reviewed: the query's dates, else the company's default number of days. */
+  period: z
+    .object({ from: z.string(), to: z.string(), timezone: z.string() })
+    .default({ from: '', to: '', timezone: 'Asia/Kuwait' }),
 });
 export type RefundActivity = z.infer<typeof refundActivitySchema>;
 export const refundActivityQuerySchema = z.object({

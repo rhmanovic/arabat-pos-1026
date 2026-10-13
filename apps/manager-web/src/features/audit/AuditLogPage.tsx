@@ -92,6 +92,15 @@ export function AuditLogPage() {
       e.ip ?? '',
       summarizeDetails(e.details),
     ]);
+    void api.reports
+      .logExport({
+        report: 'audit',
+        section: 'entries',
+        ...(from ? { from } : {}),
+        ...(to ? { to } : {}),
+        rows: rows.length,
+      })
+      .catch(() => undefined);
     downloadText(
       `audit-${from || 'all'}-${to || 'all'}-p${page}.csv`,
       toCsv(

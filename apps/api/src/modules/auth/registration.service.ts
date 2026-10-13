@@ -78,6 +78,7 @@ export class RegistrationService {
           legalName: input.company.legalName ?? null,
           contactEmail: input.owner.email,
           defaultLanguage: language,
+          ...(input.company.timezone ? { timezone: input.company.timezone } : {}),
         });
         await this.subscriptions.createInitial(tx, merchantId, null, 'Self-service registration');
 

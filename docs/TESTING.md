@@ -66,6 +66,34 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after remediation session 10 (2026-10-13, local run)
+
+`pnpm verify` green (178 unit/web tests, including the new manager cases in `reports.test.tsx`
+(gross profit shown on the costed part with the uncosted share flagged, the "Online store" row
+in sales by employee kept out of the employee filter, a CSV export reported to
+`POST /manager/reports/exports` with report, section, period and row count; the dashboard's
+today / yesterday figures and the "no sales yet" notice for a company that never sold) and in
+`purchasing.test.tsx` (supplier statement dialog: received vs. paid, reversal line, running
+difference, period sent as local days)); `pnpm test:integration` 207 passed, including the four
+new cases in `period-controls.int.test.ts` (a sale rung up at 23:30 local the day before and
+refunded today: the sales history counts the refund today and its net equals the report, the
+refund register cuts on the completion day with totals, disbursements of 01:30 local land on the
+local day not the UTC day, a treasury statement with a period brings the balance forward and
+closes exactly, no period gives the current balance; time zone at registration, an unknown zone
+refused, an unchanged profile save leaves it alone, a change is stamped and audited from → to and
+re-cuts the reports; gross profit with one costless service sale (uncosted 2.000, 66.7 % of net,
+margin 60.0 % on the costed part), today's KPIs and the refusal of a POS session, a fresh company
+with `hasSales false`, `report.viewed` with period and `report.exported` with rows, the activity
+review's default 30-day window and 10 % threshold, both changed by policy and audited, explicit
+dates winning over the window; the supplier statement with receipt, payment, reversal and second
+payment in running order, totals, a future period bringing 3.000 forward, branch scope leaving a
+second-branch manager with no lines, 404 for an unknown supplier) and the e-commerce suite's new
+assertion that the online row makes sales by employee add up; `pnpm test:e2e` 35 passed after
+`cash-payouts.spec` was pointed at the supplier statement (the "Payments" dialog it clicked is
+now the statement). Existing expectations adapted: the complete-period profit carries
+`uncostedSales 0.000` / `0.0 %`, and the costless-item case shows `grossProfit 0.000` with
+`marginPercent null` instead of hiding the block.
+
 ### Results after remediation session 9 (2026-10-13, local run)
 
 `pnpm verify` green (175 unit/web tests; the manager `cash.test.tsx` method case now picks a

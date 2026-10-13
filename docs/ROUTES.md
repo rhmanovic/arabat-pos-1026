@@ -147,10 +147,10 @@ per-branch breakdown, settings dialog), `/manager/inventory/adjustments`,
 | `GET /manager/shifts?branchId=&status=&outcome=&from=&to=`, `GET /manager/shifts/:id` | `shifts.view_all` (branch-scoped) |
 | `GET /manager/shifts/discrepancies?branchId=&from=&to=` | `shifts.view_all` |
 | `POST /manager/shifts/:id/force-close` | `registers.manage` at the shift's branch (note required; optional `countedCash` — without it the shift closes `forced_uncounted`) |
-| `GET /manager/cash/overview`, `GET /manager/cash/accounts/:id/entries`, `POST /manager/cash/accounts/:id/counts`, `GET/POST /manager/cash/transfers` | `cash.custody` (branch-scoped; ADR-0090) |
+| `GET /manager/cash/overview`, `GET /manager/cash/accounts/:id/entries?from=&to=&page=` (period with balance brought forward, BR-184), `POST /manager/cash/accounts/:id/counts`, `GET/POST /manager/cash/transfers` | `cash.custody` (branch-scoped; ADR-0090) |
 | `GET/POST /manager/cash/disbursements`, `POST /manager/cash/disbursements/:id/reverse`, `GET /manager/cash/suppliers`, `GET /manager/cash/suppliers/:id/orders`, `GET/POST /manager/cash/branch-transfers`, `POST …/:id/receive`, `POST …/:id/cancel` | `cash.custody` (branch-scoped; ADR-0091) |
 | `GET /manager/cash/bank-accounts`, `POST /manager/cash/deposits` | `cash.deposit` at the treasury's branch |
-| `GET /manager/suppliers/:id/payments` | `purchasing.read` (branch-scoped) |
+| `GET /manager/suppliers/:id/payments`, `GET /manager/suppliers/:id/statement?from=&to=` | `purchasing.read` (branch-scoped; the statement is received vs. paid with the running difference, BR-188) |
 | `GET /manager/reports/expenses?from=&to=&branchId=&employeeId=` | `reports.financial` (branch-scoped; ADR-0092) |
 | `GET /pos/cash/suppliers` / `GET /pos/cash/bank-accounts` | POS `cash.move` / `cash.deposit` |
 | `GET /pos/payment-methods` | POS `sales.create` (active POS methods, no fees) |
@@ -259,7 +259,9 @@ permission and the merchant) and, where it applies, `employeeId` (membership).
 
 | Method & path | Permission |
 |---|---|
-| `GET /manager/reports/sales` | `reports.sales` (profit only with `reports.financial` for the whole scope) |
+| `GET /manager/reports/sales` | `reports.sales` (profit only with `reports.financial` for the whole scope; every report view is audited as `report.viewed`, BR-187) |
+| `GET /manager/reports/today` | `reports.sales` (dashboard KPIs: today and yesterday in the merchant's zone, BR-187) |
+| `POST /manager/reports/exports` | authenticated manager session (records a browser CSV export as `report.exported`, BR-187) |
 | `GET /manager/reports/payments` | `reports.financial` |
 | `GET /manager/reports/shifts` | `reports.financial` |
 | `GET /manager/reports/inventory` | `reports.inventory` |

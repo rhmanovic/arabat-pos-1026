@@ -63,17 +63,26 @@ export const salesSummarySchema = z.object({
 });
 export type SalesSummary = z.infer<typeof salesSummarySchema>;
 
+/**
+ * Gross profit (BR-127, BR-185): always computed for the costed part of the period; sales
+ * and restocked returns without a known cost are excluded and shown as the uncosted share
+ * instead of hiding the whole figure.
+ */
 export const salesProfitSchema = z.object({
-  /** False when some sale in the period has no known cost (`missingCostSales` > 0). */
+  /** True when every sale and restocked return in the period has a known cost. */
   available: z.boolean(),
   missingCostSales: z.number().int(),
-  /** Cost of goods sold at weighted-average cost when sold. */
+  /** Net sales (after their refunds) of the sales without a known cost. */
+  uncostedSales: moneySchema.default({ amount: '0.000', currency: 'KWD' }),
+  /** uncostedSales ÷ netAfterRefunds × 100, one decimal; null when there are no sales. */
+  uncostedSharePercent: z.string().nullable().default(null),
+  /** Cost of goods sold at weighted-average cost when sold (costed sales only). */
   costOfSales: moneySchema.nullable(),
-  /** Cost of refunded units that went back to stock. */
+  /** Cost of refunded units that went back to stock (costed lines only). */
   restockedCost: moneySchema.nullable(),
-  /** netAfterRefunds − (costOfSales − restockedCost). Fees are not deducted. */
+  /** (netAfterRefunds − uncostedSales) − (costOfSales − restockedCost). Fees are not deducted. */
   grossProfit: moneySchema.nullable(),
-  /** grossProfit ÷ netAfterRefunds × 100, one decimal; null when not computable. */
+  /** grossProfit ÷ (netAfterRefunds − uncostedSales) × 100, one decimal; null when not computable. */
   marginPercent: z.string().nullable(),
 });
 
@@ -103,6 +112,7 @@ export const salesReportSchema = z.object({
       netAfterRefunds: moneySchema,
     }),
   ),
+  /** Who rang up the sale; online-store sales form one row with `membershipId` "online". */
   byEmployee: z.array(
     z.object({
       membershipId: z.string(),
@@ -163,6 +173,43 @@ export const salesReportSchema = z.object({
   profit: salesProfitSchema.nullable(),
 });
 export type SalesReport = z.infer<typeof salesReportSchema>;
+
+/** Dashboard KPIs (BR-187): today and yesterday in the merchant's time zone, in scope. */
+export const todaySummarySchema = z.object({
+  date: z.string(),
+  timezone: z.string(),
+  today: z.object({
+    saleCount: z.number().int(),
+    netSales: moneySchema,
+    refundCount: z.number().int(),
+    refunds: moneySchema,
+    netAfterRefunds: moneySchema,
+  }),
+  yesterday: z.object({
+    saleCount: z.number().int(),
+    netSales: moneySchema,
+    refundCount: z.number().int(),
+    refunds: moneySchema,
+    netAfterRefunds: moneySchema,
+  }),
+  /** Shifts open right now in scope. */
+  openShifts: z.number().int(),
+  /** When the company has not sold anything yet (the dashboard says so instead of zeros). */
+  hasSales: z.boolean(),
+});
+export type TodaySummary = z.infer<typeof todaySummarySchema>;
+
+/** A CSV export built in the browser is reported so it lands in the audit log (BR-187). */
+export const reportExportSchema = z.object({
+  report: z.enum(['sales', 'payments', 'expenses', 'shifts', 'inventory', 'purchasing', 'audit']),
+  /** The table exported (e.g. "byProduct"). */
+  section: z.string().trim().min(1).max(60),
+  from: isoDate.optional(),
+  to: isoDate.optional(),
+  branchId: z.uuid().optional(),
+  rows: z.number().int().min(0).max(1_000_000),
+});
+export type ReportExport = z.input<typeof reportExportSchema>;
 
 // ---------------------------------------------------------------- payments & cash
 export const paymentsReportSchema = z.object({

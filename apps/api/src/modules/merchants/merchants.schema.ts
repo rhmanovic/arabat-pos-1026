@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { char, check, integer, pgTable, text } from 'drizzle-orm/pg-core';
+import { char, check, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
 import { createdAt, id, updatedAt } from '../../database/schema/columns.js';
 import { currencies } from '../../database/schema/currencies.schema.js';
 
@@ -20,7 +20,10 @@ export const merchants = pgTable(
       .default('KWD')
       .references(() => currencies.code),
     defaultLanguage: text().notNull().default('ar'),
+    /** The single cut-off zone of every list, statement and report (BR-184). */
     timezone: text().notNull().default('Asia/Kuwait'),
+    /** Set when the zone is changed after registration (audited, BR-184). */
+    timezoneChangedAt: timestamp({ withTimezone: true }),
     status: text().notNull().default('active'),
     version: integer().notNull().default(1),
     createdAt: createdAt(),

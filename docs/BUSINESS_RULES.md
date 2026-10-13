@@ -409,6 +409,37 @@ Remediation session 3 (2026-10-13, owner decision D2):
 - **BR-183** Combined discount limit (D4). The limit applies to the combined effective
   discount of each line (see BR-081); a cashier can no longer stack an item discount and a
   sale discount to roughly double the limit.
+- **BR-184** One cut-off rule (R4.1). Every list, statement and report cuts its periods on
+  the merchant's local calendar days in the company's single time zone (`merchants.timezone`,
+  set once at registration, default Asia/Kuwait); the branch time zone is not used. A sale
+  belongs to the day it was completed; a refund to the day it was completed (its request
+  day while pending); cash movements, disbursements, variances and ledger entries to the day
+  they were posted. The sales history's "net" is sales of the period minus refunds completed
+  in the period (not the refunds of the listed sales), so it equals the report's "net after
+  refunds". Cash statements and the supplier statement take a period and bring the balance
+  forward. Changing the time zone re-cuts every past day: it is allowed only to
+  `merchant.settings.update`, stamped (`timezone_changed_at`), audited
+  (`merchant.timezone_changed`, from → to) and warned about in the UI.
+- **BR-185** Gross profit with missing costs (R4.3). Gross profit is always computed for the
+  costed part of the period; sales (and their refunds) without a known cost are set aside as
+  the *uncosted share* (amount and % of net after refunds) and shown beside the figure
+  instead of hiding it. The margin is on the costed net. Sales by employee carry the online
+  store as its own row so the breakdown adds up to net sales.
+- **BR-186** Unusual-activity review (R4.4). The refund-rate threshold that flags an employee
+  (`unusual_refund_rate_percent`, default 10 %) and the default review window
+  (`unusual_activity_days`, default 30) are company policy, changed by
+  `merchant.settings.update` and audited; dates chosen on the screen win over the window.
+- **BR-187** Report access log and dashboard (R4.4). Every report view is written to the audit
+  log (`report.viewed`: report, period, branches, employee) and every CSV export built in the
+  browser is reported and logged (`report.exported`: report, section, period, rows). The
+  dashboard shows today's and yesterday's sale count, net sales, refunds and net after
+  refunds in the merchant's time zone, and the open shifts, to holders of `reports.sales`
+  for their branches; a company with no sales yet is told so instead of being shown zeros.
+- **BR-188** Supplier statement (R4.5, bridge until supplier accounts payable). Per supplier:
+  goods received at order cost (receipt by receipt), cash payments and their reversals, in
+  date order with the running "received − paid" (positive = still owed to the supplier),
+  with a period and the balance brought forward; limited to the branches the viewer may
+  read purchasing for.
 
 Platform and subscriptions (Prompt 17):
 - **BR-150** Every merchant has exactly one subscription to a plan. New merchants start on
@@ -497,8 +528,9 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
   *Expenses report* = cash expenses by category, branch, source and day, and supplier payments
   by supplier, each reversal subtracted on its own date (`reports.financial`). The dashboard
   shows total cash on hand (treasuries + drawers + in transit) to `cash.custody` holders.
-- **BR-127** *Gross profit* — see ADR-0070; never shown when costs are missing or to users
-  without `reports.financial`.
+- **BR-127** *Gross profit* — see ADR-0070; never shown to users without
+  `reports.financial`; with missing costs the costed part is shown with the uncosted share
+  flagged (BR-185).
 - **BR-128** *Inventory value* = current quantity × weighted-average cost per item and
   branch; items without a known cost are counted, not valued. Purchase values are
   Σ quantity × order unit cost (half-up per line); transfer values use the cost at

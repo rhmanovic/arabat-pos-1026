@@ -16,6 +16,7 @@ import { assertCan } from '../../kernel/access/assert.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
+import { merchantTimezone, withinLocalDays } from '../../kernel/time/period.js';
 import { AuditService } from '../audit/audit.service.js';
 import { isUniqueViolation } from '../auth/registration.service.js';
 import {
@@ -357,9 +358,10 @@ export class CashControlsService {
     const filters: SQL[] = [scope ?? sql`true`];
     if (query.status === 'open') filters.push(sql`v.f_status is null`);
     if (query.status === 'resolved') filters.push(sql`v.f_status is not null`);
-    if (query.from) filters.push(sql`v.occurred_at >= ${query.from}::date`);
-    if (query.to) filters.push(sql`v.occurred_at < ${query.to}::date + 1`);
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      // Local days of the merchant, like every other list (BR-184).
+      const tz = await merchantTimezone(tx, actor.merchantId);
+      filters.push(withinLocalDays(tz, sql`v.occurred_at`, query.from, query.to));
       const rows = (
         await tx.execute(sql`select * from (${varianceRows(actor.merchantId)}) v
           where ${and(...filters)} order by v.occurred_at desc limit 200`)

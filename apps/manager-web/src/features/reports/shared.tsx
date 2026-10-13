@@ -1,10 +1,19 @@
-import type { ReportQuery } from '@arabat/contracts';
+import type { ReportExport, ReportQuery } from '@arabat/contracts';
 import { Money } from '@arabat/money';
 import { Alert, Button, DataTable, Section, Spinner, StatCard } from '@arabat/ui';
+import { useApi } from '@arabat/web-core';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, createContext, useContext, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatAmount } from '../catalog/ProductsPage.js';
+
+/**
+ * Which report (and period) the tables on screen belong to, so a CSV export can be written
+ * to the audit log (BR-187). Provided by the reports page around the active tab.
+ */
+export const ReportExportContext = createContext<Omit<ReportExport, 'section' | 'rows'> | null>(
+  null,
+);
 
 export type MoneyValue = { amount: string; currency: string };
 export const minorOf = (m: MoneyValue) => Money.parse(m.amount, 'KWD').minor;
@@ -66,7 +75,9 @@ export function ReportTable<T>({
   description?: string;
 }) {
   const { t, i18n } = useTranslation();
-  const exportCsv = () =>
+  const api = useApi();
+  const exportScope = useContext(ReportExportContext);
+  const exportCsv = () => {
     downloadText(
       `${filename}.csv`,
       toCsv(
@@ -74,6 +85,16 @@ export function ReportTable<T>({
         (rows ?? []).map((r) => columns.map((c) => c.value(r))),
       ),
     );
+    // The export happened in the browser; the server only records that it did (BR-187).
+    if (exportScope)
+      void api.reports
+        .logExport({
+          ...exportScope,
+          section: filename.replace(/-\d{4}-\d{2}-\d{2}.*$/, ''),
+          rows: rows?.length ?? 0,
+        })
+        .catch(() => undefined);
+  };
   return (
     <Section
       title={title}

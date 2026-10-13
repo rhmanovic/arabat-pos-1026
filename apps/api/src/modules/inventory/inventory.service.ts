@@ -41,12 +41,12 @@ import { assertCan } from '../../kernel/access/assert.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
+import { merchantTimezone, withinLocalDays } from '../../kernel/time/period.js';
 import { AuditService } from '../audit/audit.service.js';
 import { isUniqueViolation } from '../auth/registration.service.js';
 import { versionConflict } from '../branches/branches.service.js';
 import { branches } from '../branches/branches.schema.js';
 import { stockPolicy } from '../cash/approval-limits.js';
-import { merchants } from '../merchants/merchants.schema.js';
 import {
   damagedReturns,
   inventorySettings,
@@ -951,23 +951,14 @@ export class InventoryService {
     const scope = this.readScope(actor, query.branchId);
     const costVisible = this.costVisible(actor, scope);
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
-      const [merchant] = await tx
-        .select({ timezone: merchants.timezone })
-        .from(merchants)
-        .where(eq(merchants.id, actor.merchantId));
-      const tz = merchant?.timezone ?? 'Asia/Kuwait';
+      const tz = await merchantTimezone(tx, actor.merchantId);
       const conditions: SQL[] = [];
       const scoped = branchIn(sql`m.branch_id`, scope);
       if (scoped) conditions.push(scoped);
       if (query.variantId) conditions.push(sql`m.variant_id = ${query.variantId}`);
       if (query.type) conditions.push(sql`m.movement_type = ${query.type}`);
-      // Calendar dates in the merchant's time zone (inclusive).
-      if (query.from)
-        conditions.push(sql`m.created_at >= (${query.from}::date)::timestamp at time zone ${tz}`);
-      if (query.to)
-        conditions.push(
-          sql`m.created_at < ((${query.to}::date + 1)::timestamp at time zone ${tz})`,
-        );
+      // Calendar days in the merchant's time zone, inclusive (BR-184).
+      conditions.push(withinLocalDays(tz, sql`m.created_at`, query.from, query.to));
       const where = conditions.length ? sql.join(conditions, sql` and `) : sql`true`;
       const [total] = (
         await tx.execute(sql`select count(*)::int as n from stock_movements m where ${where}`)

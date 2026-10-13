@@ -1,7 +1,7 @@
 import { fakeApiFetch, makeSession, renderApp } from '@arabat/web-core/testing';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { i18n } from '../../i18n/index.js';
 import { routes } from '../../routes.js';
 
@@ -149,5 +149,91 @@ describe('purchase orders', () => {
     const dialog = await screen.findByRole('dialog');
     await userEvent.clear(within(dialog).getByLabelText('Receiving now'));
     expect(within(dialog).getByRole('button', { name: 'Receive delivery' })).toBeDisabled();
+  });
+});
+
+describe('supplier statement (BR-188)', () => {
+  it('shows received against paid with the running difference and a period', async () => {
+    const statement = {
+      supplier: { id: SUPPLIER, nameEn: 'Al Muhalab Trading', nameAr: null },
+      period: null,
+      openingBalance: money('0.000'),
+      totals: {
+        received: money('37.500'),
+        paid: money('10.000'),
+        reversed: money('5.000'),
+        closingBalance: money('32.500'),
+      },
+      lines: [
+        {
+          id: 'l3',
+          kind: 'reversal',
+          occurredAt: '2026-10-13T08:00:00.000Z',
+          document: 'CD-000002',
+          orderNumber: 'PO-000001',
+          reference: null,
+          branchId: BRANCH,
+          received: money('0.000'),
+          paid: money('-5.000'),
+          balance: money('32.500'),
+          createdBy: 'Owner',
+        },
+        {
+          id: 'l2',
+          kind: 'payment',
+          occurredAt: '2026-10-12T08:00:00.000Z',
+          document: 'CD-000001',
+          orderNumber: 'PO-000001',
+          reference: 'INV-77',
+          branchId: BRANCH,
+          received: money('0.000'),
+          paid: money('15.000'),
+          balance: money('27.500'),
+          createdBy: 'Owner',
+        },
+        {
+          id: 'l1',
+          kind: 'receipt',
+          occurredAt: '2026-10-11T08:00:00.000Z',
+          document: 'GR-000001',
+          orderNumber: 'PO-000001',
+          reference: 'INV-77',
+          branchId: BRANCH,
+          received: money('37.500'),
+          paid: money('0.000'),
+          balance: money('37.500'),
+          createdBy: 'Rana',
+        },
+      ],
+    };
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'branches.read', 'purchasing.read']),
+      routes: {
+        'GET /manager/branches': () => ({ status: 200, body: branches }),
+        'GET /manager/suppliers': () => ({ status: 200, body: { suppliers: [supplier] } }),
+        [`GET /manager/suppliers/${SUPPLIER}/statement`]: () => ({ status: 200, body: statement }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/suppliers', fetch });
+    await userEvent.click(await screen.findByRole('button', { name: 'Statement' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByTestId('supplier-balance')).toHaveTextContent('KWD 32.500');
+    const rows = within(dialog).getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toHaveTextContent('Payment reversed');
+    expect(rows[0]!.textContent).toMatch(/[-−]\s*(KWD\s*)?5\.000|KWD\s*[-−]5\.000/);
+    expect(rows[2]).toHaveTextContent('Goods received · PO-000001 · INV-77');
+    expect(rows[2]).toHaveTextContent('KWD 37.500');
+    // A period is sent as local days.
+    await userEvent.type(within(dialog).getByLabelText('From'), '2026-10-12');
+    await userEvent.type(within(dialog).getByLabelText('To'), '2026-10-13');
+    await vi.waitFor(() => {
+      const c = fetch.calls.find(
+        (x) =>
+          x.path === `/manager/suppliers/${SUPPLIER}/statement` &&
+          x.query === 'from=2026-10-12&to=2026-10-13',
+      );
+      if (!c) throw new Error('not yet');
+    });
   });
 });

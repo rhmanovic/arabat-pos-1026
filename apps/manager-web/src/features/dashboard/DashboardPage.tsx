@@ -1,10 +1,11 @@
-import { Alert, Badge, PageHeader, StatCard } from '@arabat/ui';
+import { Badge, PageHeader, StatCard } from '@arabat/ui';
 import { localizedName, useApi } from '@arabat/web-core';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { useBranchContext, useSession } from '../../app/context.js';
 import { formatAmount } from '../catalog/ProductsPage.js';
+import { TodayKpis } from './TodayKpis.js';
 
 /** Overview built only from data that exists (no invented sales or revenue). */
 export function DashboardPage() {
@@ -198,6 +199,8 @@ export function DashboardPage() {
         description={t('dashboard.subtitle', { company })}
       />
 
+      {can('reports.sales') ? <TodayKpis /> : null}
+
       {cash.data ? (
         <Link
           to="/cash"
@@ -275,8 +278,6 @@ export function DashboardPage() {
           )}
         </section>
       ) : null}
-
-      <Alert tone="info" title={t('dashboard.noSalesYet')} />
 
       {steps.length > 0 ? (
         <section className="rounded-lg border border-border bg-surface">

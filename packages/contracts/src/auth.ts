@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { languageSchema } from './interfaces.js';
+import { timezoneSchema } from './merchants.js';
 
 export const merchantInterfaceSchema = z.enum(['manager', 'pos']);
 export type MerchantInterface = z.infer<typeof merchantInterfaceSchema>;
@@ -35,6 +36,8 @@ export const registerRequestSchema = z.object({
       nameEn: optionalName,
       legalName: optionalName,
       defaultLanguage: languageSchema.default('ar'),
+      /** Set once at registration (BR-184); defaults to Asia/Kuwait. */
+      timezone: timezoneSchema.optional(),
     })
     .refine((c) => Boolean(c.nameAr || c.nameEn), {
       error: 'A company name in Arabic or English is required.',

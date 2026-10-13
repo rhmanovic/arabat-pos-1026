@@ -21,12 +21,23 @@ export const merchantProfileSchema = z.object({
   countryCode: z.string(),
   defaultCurrency: z.string(),
   defaultLanguage: languageSchema,
+  /** The single cut-off time zone of every list, statement and report (BR-184). */
   timezone: z.string(),
+  /** Last time the time zone was changed after registration; null = never. */
+  timezoneChangedAt: z.string().nullable().default(null),
   status: z.enum(['active', 'suspended', 'closed']),
   version: z.number().int(),
   createdAt: z.string(),
 });
 export type MerchantProfile = z.infer<typeof merchantProfileSchema>;
+
+/** IANA zone names accepted for a company (validated again on the server). */
+export const timezoneSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .regex(/^[A-Za-z_]+(\/[A-Za-z0-9_+-]+){0,2}$/, { error: 'Not an IANA time zone name.' });
 
 export const updateMerchantProfileSchema = z
   .object({
@@ -44,6 +55,8 @@ export const updateMerchantProfileSchema = z
       .nullable(),
     contactPhone: nullableText(30),
     defaultLanguage: languageSchema,
+    /** Omitted = unchanged. A change re-cuts every past day: audited and warned (BR-184). */
+    timezone: timezoneSchema.optional(),
   })
   .refine((v) => Boolean(v.nameAr || v.nameEn), {
     error: 'A company name in Arabic or English is required.',

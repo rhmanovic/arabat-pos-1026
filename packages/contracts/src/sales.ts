@@ -254,6 +254,11 @@ export const saleListSchema = z.object({
   total: z.number().int(),
   page: z.number().int(),
   pageSize: z.number().int(),
+  /**
+   * One cut-off rule (BR-184): `amount` is the total of the listed sales, `refunded` the
+   * completed refunds whose completion falls in the same period and scope (not the refunds of
+   * the listed sales), so `net` equals the sales report's "net after refunds".
+   */
   totals: z.object({
     count: z.number().int(),
     amount: moneySchema,
@@ -356,6 +361,10 @@ export const salesSettingsSchema = z.object({
   heldSaleExpiryHours: z.number().int(),
   /** Clearing a cart worth at least this much is logged (BR-182). */
   cartClearLogThreshold: moneySchema,
+  /** Employees whose refund rate is above this % of their sales are flagged (BR-186). */
+  unusualRefundRatePercent: z.string().default('10'),
+  /** Default window of the unusual-activity review in days (BR-186). */
+  unusualActivityDays: z.number().int().default(30),
   version: z.number().int(),
 });
 export type SalesSettings = z.infer<typeof salesSettingsSchema>;
@@ -388,6 +397,8 @@ export const updateSalesSettingsSchema = z.object({
   requireTenderReference: z.boolean().optional(),
   heldSaleExpiryHours: z.number().int().min(0).max(720).optional(),
   cartClearLogThreshold: moneyAmountSchema.optional(),
+  unusualRefundRatePercent: boundPercent.optional(),
+  unusualActivityDays: z.number().int().min(1).max(366).optional(),
   version: z.number().int().positive(),
 });
 

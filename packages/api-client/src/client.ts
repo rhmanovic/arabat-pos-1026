@@ -94,10 +94,13 @@ import {
   cashDisbursementSchema,
   supplierOptionsSchema,
   supplierPaymentsSchema,
+  supplierStatementSchema,
+  type SupplierStatementQuery,
   type CreateCashTransfer,
   cashBranchSchema,
   cashOverviewSchema,
   cashStatementSchema,
+  type CashStatementQuery,
   cashTransferListSchema,
   cashTransferSchema,
   type DiscrepancyReportQuery,
@@ -176,6 +179,8 @@ import {
   paymentsReportSchema,
   purchasingReportSchema,
   salesReportSchema,
+  todaySummarySchema,
+  type ReportExport,
   shiftsReportSchema,
   expensesReportSchema,
   type AddOrderItems,
@@ -552,14 +557,10 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('GET', `/manager/cash/overview?${toParams({ branchId })}`, {
           schema: cashOverviewSchema,
         }),
-      statement: (accountId: string, page = 1, pageSize = 25) =>
-        request(
-          'GET',
-          `/manager/cash/accounts/${accountId}/entries?${toParams({ page, pageSize })}`,
-          {
-            schema: cashStatementSchema,
-          },
-        ),
+      statement: (accountId: string, query: CashStatementQuery = {}) =>
+        request('GET', `/manager/cash/accounts/${accountId}/entries?${toParams(query)}`, {
+          schema: cashStatementSchema,
+        }),
       count: (accountId: string, body: CashCount) =>
         request('POST', `/manager/cash/accounts/${accountId}/counts`, {
           body,
@@ -615,6 +616,10 @@ export function createApiClient(options: ApiClientOptions = {}) {
       supplierPayments: (supplierId: string) =>
         request('GET', `/manager/suppliers/${supplierId}/payments`, {
           schema: supplierPaymentsSchema,
+        }),
+      supplierStatement: (supplierId: string, query: SupplierStatementQuery = {}) =>
+        request('GET', `/manager/suppliers/${supplierId}/statement?${toParams(query)}`, {
+          schema: supplierStatementSchema,
         }),
       payoutRequests: (query: CashPayoutRequestQuery = {}) =>
         request('GET', `/manager/cash/payout-requests?${toParams(query)}`, {
@@ -760,6 +765,8 @@ export function createApiClient(options: ApiClientOptions = {}) {
         requireTenderReference?: boolean;
         heldSaleExpiryHours?: number;
         cartClearLogThreshold?: string;
+        unusualRefundRatePercent?: string;
+        unusualActivityDays?: number;
         version: number;
       }) => request('PUT', '/manager/sales-settings', { body, schema: salesSettingsSchema }),
     },
@@ -1011,6 +1018,9 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('POST', `/pos/kitchen/tickets/${id}/status`, { body, schema: kitchenTicketSchema }),
     },
     reports: {
+      today: () => request('GET', '/manager/reports/today', { schema: todaySummarySchema }),
+      /** A CSV built in the browser: recorded in the audit log (BR-187). */
+      logExport: (body: ReportExport) => request('POST', '/manager/reports/exports', { body }),
       sales: (query: ReportQuery) =>
         request('GET', `/manager/reports/sales?${toParams(query)}`, { schema: salesReportSchema }),
       payments: (query: ReportQuery) =>

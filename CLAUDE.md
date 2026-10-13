@@ -204,4 +204,7 @@ company bounds; free sales need `sales.zero_total` and a reason (ADR-0100).
 Refunds of one's own sales wait for a second person and exchange credit goes back to the original tenders;
 non-cash methods need a settlement account and card / transfer tenders a reference; held sales expire;
 reprints and cleared carts are logged (ADR-0101). The discount limit is combined per line (D4).
+Periods are cut only through `apps/api/src/kernel/time/period.ts` in the merchant's single time zone (BR-184);
+refunds count on their completion day; report views and exports are audited; the supplier statement is
+received at order cost vs. cash paid (ADR-0102).
 See `docs/PROGRESS.md` for the current state and `docs/ROADMAP.md` for next steps.

@@ -92,6 +92,10 @@ export const salesSettings = pgTable('sales_settings', {
   cartClearLogThresholdMinor: bigint({ mode: 'bigint' })
     .notNull()
     .default(sql`5000`),
+  /** Refund rate above which an employee is flagged in the activity review (BR-186). */
+  unusualRefundRatePercent: numeric({ precision: 5, scale: 2 }).notNull().default('10'),
+  /** Default window of the activity review (BR-186). */
+  unusualActivityDays: integer().notNull().default(30),
   version: integer().notNull().default(1),
   updatedAt: updatedAt(),
 });

@@ -6,7 +6,7 @@ not yet re-verified by the audit), **Tested** (fixed and covered by automated te
 **Deferred** (outside the current retail scope or waiting for an owner decision). Update this file
 in the same session as the code.
 
-Last update: 2026-10-13 (remediation session 9). Totals: Deferred 49, Fixed 6, In Progress 3, Open 72, Tested 50.
+Last update: 2026-10-13 (remediation session 10). Totals: Deferred 49, Fixed 6, In Progress 2, Open 61, Tested 62.
 
 | Id | Finding | Severity | Ch. | Package | Status | Note |
 |---|---|---|---|---|---|---|
@@ -53,7 +53,7 @@ Last update: 2026-10-13 (remediation session 9). Totals: Deferred 49, Fixed 6, I
 | FND-304 | Non-cash payments can settle nowhere; cash fees are stored but never posted | Medium | C | R3.5 | Tested | Session 9: settlement account required on every non-cash method (set-up and till), cash fee refused and never computed (`refunds-controls.int.test.ts`, `shifts.int.test.ts`) |
 | FND-305 | Card and transfer payments are self-declared ("manual" verification) | Medium | C | R3.5 | Tested | Session 9: reference mandatory on card / transfer tenders (company switch), unreferenced tenders listed in the payments report; statement matching stays manual (`refunds-controls.int.test.ts`) |
 | FND-312 | Zero-total sales complete without a payment or a reason | Medium | C | R3.3 | Tested | Session 8: `sales.zero_total` right and a stored reason (database check), flagged and filterable in the history, counted per employee (`sales-overrides.int.test.ts`, `sales.test.tsx`) |
-| FND-317 | "Net" in the sales history differs from "net after refunds" in the reports | Medium | C | R4.1 | Open |  |
+| FND-317 | "Net" in the sales history differs from "net after refunds" in the reports | Medium | C | R4.1 | Tested | Session 10: sales history "net" = sales of the period − refunds completed in the period, same as the report (`period-controls.int.test.ts`) |
 | FND-401 | Closing is not blind | Medium | D | R1.5 | Tested | Session 1: blind counts by default (`shifts.int.test.ts`, `app.test.tsx`, `checkout.spec.ts`) |
 | FND-402 | No explanation required for a closing shortage of any size | Medium | D | R1.1 | Tested | Session 2: note required on a visible closing difference beyond the tolerance |
 | FND-403 | Tolerance is unlimited, set by the monitoring manager, and silently reclassifies differences as "balanced" | Medium | D | R1.1 | Tested | Session 2: owner-set maximum tolerance enforced on register save; checklist lists registers above it |
@@ -61,7 +61,7 @@ Last update: 2026-10-13 (remediation session 9). Totals: Deferred 49, Fixed 6, I
 | FND-405 | Opening balances by count are created without source, note or second person | Medium | D | — | Open |  |
 | FND-409 | Book balances of a drawer can change under a cashier without their count or a movement on their shift | Medium | D | — | Open |  |
 | FND-410 | Differences on branch transfers are absorbed by the company without an accountable party | Medium | D | R1.4 | Fixed | Session 3: branch-transfer differences listed with the receiver as accountable and followed up; not yet charged to a branch automatically |
-| FND-411 | Period cut-off is inconsistent across lists and reports, and statements have no period | Medium | D | R4.1 | Open |  |
+| FND-411 | Period cut-off is inconsistent across lists and reports, and statements have no period | Medium | D | R4.1 | Tested | Session 10: one period helper in the merchant zone for every list, statement and report; cash statements take a period with the balance brought forward (`period-controls.int.test.ts`) |
 | FND-413 | Processing fees are configured estimates, not settled amounts, and are not reconciled to the acquirer | Medium | D | R1.3, R3.5 | In Progress | Session 4: bank reconciliation shows which settlement entries the statement confirmed; fee settlement per acquirer waits for R3.5 (D6) |
 | FND-416 | Weak segregation of duties around the register | Medium | D | R1.6 | In Progress | Session 2: approvals above the limit need a second person; custody split (FND-422) still open |
 | FND-422 | The custody right is too coarse | Medium | D | R1.6 | Open |  |
@@ -71,10 +71,10 @@ Last update: 2026-10-13 (remediation session 9). Totals: Deferred 49, Fixed 6, I
 | FND-505 | Manual card and transfer refunds are recorded as paid immediately, with an optional reference and no acquirer reconciliation | Medium | E | R3.5 | Tested | Session 9: reference mandatory on card / transfer pay-backs (company switch), unreferenced pay-backs listed in the payments report; acquirer settlement matching stays manual (`refunds-controls.int.test.ts`) |
 | FND-507 | Restock defaults to "yes" regardless of the return reason | Medium | E | R2.8 | Tested | Session 7: damaged / defective returns stay out of stock unless the cashier says otherwise, API and POS (`inventory-valuation.int.test.ts`) |
 | FND-508 | Returned goods not restocked have no custody record or write-off document | Medium | E | R2.8 | Tested | Session 7: held custody record per non-restocked line, disposal recorded once with a note (`inventory-valuation.int.test.ts`, `returns.test.tsx`) |
-| FND-511 | Three different date bases for refunds and no period-based refund register | Medium | E | R4.1 | Open |  |
-| FND-513 | One item without a cost hides gross profit for the whole period | Medium | E | R4.3 | Open |  |
+| FND-511 | Three different date bases for refunds and no period-based refund register | Medium | E | R4.1 | Tested | Session 10: refunds cut on their completion day everywhere; refund register with period totals (`period-controls.int.test.ts`) |
+| FND-513 | One item without a cost hides gross profit for the whole period | Medium | E | R4.3 | Tested | Session 10: profit shown for the costed part with the uncosted share flagged (`period-controls.int.test.ts`, `reports.test.tsx`) |
 | FND-521 | Refunding an online order requires a POS session with an open shift at the branch | Medium | E | R7.3 | Open |  |
-| FND-525 | No supplier balances or payables view; purchases received and supplier payments live in different reports | Medium | E | R4.5, R6.2 | In Progress | Session 3: paid to date per order; supplier statement (R4.5) still open |
+| FND-525 | No supplier balances or payables view; purchases received and supplier payments live in different reports | Medium | E | R4.5, R6.2 | Tested | Session 3: paid to date per order; Session 10: supplier statement with running received − paid, period and brought-forward balance (`period-controls.int.test.ts`, `purchasing.test.tsx`); invoices / AP ledger stay R6 |
 | FND-605 | No segregation of duties on transfers | Medium | F | — | Open |  |
 | FND-606 | Only approval is segregated on purchase orders; creator or approver may receive | Medium | F | — | Open |  |
 | FND-607 | Receiving dialogs prefill the full expected quantity (no blind receiving) | Medium | F | — | Open |  |
@@ -121,7 +121,7 @@ Last update: 2026-10-13 (remediation session 9). Totals: Deferred 49, Fixed 6, I
 | FND-222 | Price and cost history exists only in the audit log | Low | B | R5.3 | Open |  |
 | FND-223 | Two cost concepts (catalog standard cost vs moving average) are not explained to users | Low | B | R2.7 | Fixed | Session 7: explained under the cost field of the product editor (BR-174) |
 | FND-303 | Above-limit discounts are not flagged and the limit in force is not kept | Low | C | R3.2 | Tested | Session 8: `above_limit` and `discount_limit_percent` stored on every POS sale and in the audit entry; `flag=above_limit` filter and per-employee counts (`sales-overrides.int.test.ts`) |
-| FND-306 | Cut-off follows a fixed merchant time zone; branch time zone is unused | Low | C | R4.1 | Open |  |
+| FND-306 | Cut-off follows a fixed merchant time zone; branch time zone is unused | Low | C | R4.1 | Tested | Session 10: decided — one company, one clock; the branch zone is unused (ADR-0102) |
 | FND-307 | Staff can attach their own or a colleague's customer profile | Low | C | — | Open |  |
 | FND-308 | Receipt contents are not fixed against a legal or commercial requirement | Low | C | — | Open |  |
 | FND-309 | Held sales: attribution drift, overwritten intent, no expiry | Low | C | R3.6 | Tested | Session 9: completer recorded, held lines kept, hold audit with details, owner-set expiry with audited discard (`sales-controls.int.test.ts`) |
@@ -143,15 +143,15 @@ Last update: 2026-10-13 (remediation session 9). Totals: Deferred 49, Fixed 6, I
 | FND-506 | Pay-backs to a tender without a financial account leave no money trace | Low | E | R3.5 | Tested | Session 9: refused with `SETTLEMENT_ACCOUNT_REQUIRED` (`refunds-controls.int.test.ts`) |
 | FND-509 | A pending request is bound to the requester's shift; once that shift closes it can only be rejected | Low | E | R3.4 | Tested | Session 9: the approver at the till pays the cash part from their own open shift, audited (`refunds-controls.int.test.ts`) |
 | FND-510 | Withdrawal of a pending request is documented but not offered on any screen | Low | E | — | Open |  |
-| FND-514 | Sales-by-employee breakdown omits online sales and so does not add up to net sales | Low | E | R4.3 | Open |  |
+| FND-514 | Sales-by-employee breakdown omits online sales and so does not add up to net sales | Low | E | R4.3 | Tested | Session 10: online store row in sales by employee (`ecommerce.int.test.ts`, `reports.test.tsx`) |
 | FND-515 | Audit event says "refund completed" for gateway refunds that are still processing | Low | E | R7.2 | Open |  |
 | FND-516 | Approved refunds are stamped with the approver as the creator of the cash and stock entries | Low | E | — | Open |  |
-| FND-517 | The manager dashboard shows no sales KPIs and a stale "no sales yet" banner | Low | E | R4.4 | Open |  |
-| FND-518 | Report access and exports are not logged; exports exist only as browser CSV | Low | E | R4.4 | Open |  |
+| FND-517 | The manager dashboard shows no sales KPIs and a stale "no sales yet" banner | Low | E | R4.4 | Tested | Session 10: dashboard KPIs from `GET /manager/reports/today`; banner only when nothing was ever sold (`period-controls.int.test.ts`, `reports.test.tsx`) |
+| FND-518 | Report access and exports are not logged; exports exist only as browser CSV | Low | E | R4.4 | Tested | Session 10: `report.viewed` / `report.exported` in the audit log (`period-controls.int.test.ts`, `reports.test.tsx`) |
 | FND-519 | Voided sales inflate sale count and average sale; exchanges gross up sales and refunds | Low | E | — | Open |  |
-| FND-520 | Unusual-activity threshold is hard-coded and the default period is all time | Low | E | R4.4 | Open |  |
-| FND-522 | "Refund allocations" uses a different date basis than the rest of the payments report | Low | E | R4.1 | Open |  |
-| FND-523 | One merchant-wide time zone; a change would re-cut all historical periods | Low | E | R4.1 | Open |  |
+| FND-520 | Unusual-activity threshold is hard-coded and the default period is all time | Low | E | R4.4 | Tested | Session 10: threshold and default window are company policy, audited (`period-controls.int.test.ts`) |
+| FND-522 | "Refund allocations" uses a different date basis than the rest of the payments report | Low | E | R4.1 | Tested | Session 10: pay-backs and allocations follow the refund completion day like the rest of the payments report (`period-controls.int.test.ts`) |
+| FND-523 | One merchant-wide time zone; a change would re-cut all historical periods | Low | E | R4.1 | Tested | Session 10: time zone set once at registration; a later change is stamped, audited and warned about (`period-controls.int.test.ts`) |
 | FND-524 | Processing fees are never reversed on refunds | Low | E | — | Open |  |
 | FND-609 | Supplier list shows company-wide purchase totals to branch-scoped users | Low | F | — | Open |  |
 | FND-610 | Supplier creation needs a merchant-wide right while the screen and the catalogue suggest branch scope | Low | F | — | Open |  |

@@ -5,6 +5,7 @@ import type { z } from 'zod';
 import { DatabaseService, type Transaction } from '../../database/database.service.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { newId } from '../../kernel/ids.js';
+import { merchantTimezone, withinLocalDays } from '../../kernel/time/period.js';
 import { auditLog } from './audit.schema.js';
 
 type AuditQuery = z.output<typeof auditListQuerySchema>;
@@ -50,15 +51,9 @@ export class AuditService {
    */
   async listForMerchant(actor: MerchantActor, query: AuditQuery): Promise<AuditList> {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
-      const [m] = (
-        await tx.execute(sql`select timezone from merchants where id = ${actor.merchantId}`)
-      ).rows as { timezone: string }[];
-      const tz = m?.timezone ?? 'Asia/Kuwait';
+      const tz = await merchantTimezone(tx, actor.merchantId);
       const where: SQL[] = [sql`a.merchant_id = ${actor.merchantId}`];
-      if (query.from)
-        where.push(sql`a.occurred_at >= (${query.from}::date)::timestamp at time zone ${tz}`);
-      if (query.to)
-        where.push(sql`a.occurred_at < ((${query.to}::date + 1)::timestamp at time zone ${tz})`);
+      where.push(withinLocalDays(tz, sql`a.occurred_at`, query.from, query.to));
       if (query.action) where.push(sql`position(lower(${query.action}) in lower(a.action)) > 0`);
       if (query.targetType) where.push(sql`a.target_type = ${query.targetType}`);
       if (query.actorId) where.push(sql`a.actor_id = ${query.actorId}`);

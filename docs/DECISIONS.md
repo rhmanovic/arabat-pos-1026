@@ -1158,3 +1158,47 @@ ADR; supersede it.
   and `sales-controls.int.test.ts`. Acquirer-statement reconciliation (matching references to
   settlements) is not built; the unreferenced list is the bridge until a terminal is integrated.
 
+## ADR-0102 — Remediation session 10: one cut-off rule, profit with uncosted share, report access log, dashboard KPIs, supplier statement
+- **Status:** Accepted (2026-10-13). Remediation plan R4.1, R4.3, R4.4, R4.5.
+- **Context:** The audit found three date bases for refunds, UTC-day filters on cash variances
+  and disbursements beside local-day filters elsewhere, statements without a period, a fixed
+  time zone nobody could set, gross profit hidden for the whole period by one costless item,
+  a by-employee breakdown that left online sales out, no trace of who read or exported which
+  report, a dashboard with a stale "no sales yet" banner, a hard-coded unusual-activity
+  threshold with an all-time default window, and no view of what a supplier is owed.
+- **Decision:**
+  - One cut-off rule (BR-184) in `apps/api/src/kernel/time/period.ts`: `merchantTimezone`,
+    `withinLocalDays`, `dayStart`/`dayEnd`, `localDay`, `todayIn`, `localDayStart`, `addDays`.
+    Sales, refunds, cash variances, disbursements, statements, audit, inventory movements,
+    shifts and reports all cut through it. The refund register filters on
+    `coalesce(completed_at, created_at)` and returns totals; the sales history's `refunded`
+    total is the refunds completed in the period and scope. `GET /manager/cash/accounts/:id/entries`
+    takes `from`/`to` and returns `period`, `openingBalance`, `totalIn`, `totalOut`,
+    `closingBalance`. The branch time zone column stays but is unused (FND-306: one company,
+    one clock). `merchants.timezone` is accepted at registration (`company.timezone`) and on
+    `PATCH /manager/merchant` (validated with `Intl`), stamped in `timezone_changed_at` and
+    audited as `merchant.timezone_changed`.
+  - Gross profit (BR-185): `profit` is always computed with `reports.financial`; it carries
+    `uncostedSales`, `uncostedSharePercent`, and `available` now only says whether every sale
+    and restocked return had a cost. `byEmployee` gains an `online` row (`membershipId: 'online'`).
+  - Report access (BR-187): `ReportsService` writes `report.viewed` inside each report
+    transaction; `POST /manager/reports/exports` records `report.exported` for CSVs built in
+    the browser (the web's `ReportTable` and the audit page call it). Server-side CSV
+    rendering was not built: the export is still the displayed table, the log is the control.
+  - Dashboard (BR-187): `GET /manager/reports/today` (`reports.sales`) returns today and
+    yesterday in the merchant's zone, open shifts and `hasSales`; the dashboard shows it and
+    drops the fixed banner.
+  - Activity review (BR-186): `sales_settings.unusual_refund_rate_percent` (10) and
+    `unusual_activity_days` (30) replace the constant; `GET /manager/refunds/activity` returns
+    `period` and defaults to the last N local days.
+  - Supplier statement (BR-188): `GET /manager/suppliers/:id/statement?from&to`
+    (`purchasing.read`, branch-scoped) unions purchase receipts valued at order cost with
+    supplier payments and reversals, computes the running balance over every line and shows
+    the period's lines with the balance brought forward.
+- **Consequences:** FND-317, FND-411, FND-511, FND-522, FND-306, FND-523, FND-513, FND-514,
+  FND-518, FND-517, FND-520 close; FND-525 moves to a tested bridge (supplier ledger with
+  invoices stays R6). Migration 0045 adds three columns only. Existing expectations changed:
+  `profit` for a complete period now carries `uncostedSales: 0.000`, the costless-item case
+  shows `grossProfit 0.000` with `marginPercent null` instead of nulls everywhere, and the
+  refunds list carries `totals`.
+

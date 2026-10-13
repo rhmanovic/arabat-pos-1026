@@ -119,13 +119,14 @@ test('expenses, a bank deposit, a branch transfer and a supplier paid from the d
   await dialog.getByRole('button', { name: 'Confirm' }).click();
   await expect(page.getByTestId('expected-cash')).toHaveText('KWD 15.000');
 
-  // The supplier's page shows what was paid.
+  // The supplier's statement shows what was paid (received − paid, BR-188).
   await page.goto('/manager/suppliers');
   await page
     .getByRole('row', { name: /Gulf Packaging/ })
-    .getByRole('button', { name: 'Payments' })
+    .getByRole('button', { name: 'Statement' })
     .click();
-  await expect(page.getByTestId('supplier-total-paid')).toContainText('KWD 5.000');
+  await expect(page.getByTestId('supplier-statement-summary')).toContainText('PaidKWD 5.000');
+  await expect(page.getByTestId('supplier-balance')).toContainText('KWD -5.000');
   await expect(page.getByRole('dialog')).toContainText('INV-55');
 
   // Reports: expenses by category and supplier, cash by type, and the dashboard total.

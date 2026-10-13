@@ -254,6 +254,8 @@ describe('sales report', () => {
     expect(r.profit).toEqual({
       available: true,
       missingCostSales: 0,
+      uncostedSales: { amount: '0.000', currency: 'KWD' },
+      uncostedSharePercent: '0.0',
       costOfSales: { amount: '2.600', currency: 'KWD' },
       restockedCost: { amount: '0.400', currency: 'KWD' },
       grossProfit: { amount: '3.300', currency: 'KWD' },
@@ -311,7 +313,7 @@ describe('sales report', () => {
     ]);
   });
 
-  it('hides profit when a sold item has no cost', async () => {
+  it('shows profit with the uncosted share when a sold item has no cost', async () => {
     const s = await setup();
     const free = (
       await s.req('POST', '/manager/products', {
@@ -329,7 +331,15 @@ describe('sales report', () => {
     });
     const r = (await s.req('GET', `/manager/reports/sales${q(today())}`)).json();
     expect(r.summary.netSales.amount).toBe('2.000');
-    expect(r.profit).toMatchObject({ available: false, missingCostSales: 1, grossProfit: null });
+    // The whole period is uncosted: nothing to compute a margin on, but nothing hidden (BR-185).
+    expect(r.profit).toMatchObject({
+      available: false,
+      missingCostSales: 1,
+      uncostedSales: { amount: '2.000' },
+      uncostedSharePercent: '100.0',
+      grossProfit: { amount: '0.000' },
+      marginPercent: null,
+    });
   });
 });
 

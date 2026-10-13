@@ -287,6 +287,11 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
   const requireTenderReference = tenderRef ?? settings.data?.requireTenderReference ?? true;
   const heldSaleExpiryHours = heldHours ?? String(settings.data?.heldSaleExpiryHours ?? '');
   const cartClearLogThreshold = clearThreshold ?? settings.data?.cartClearLogThreshold.amount ?? '';
+  // Unusual-activity review (BR-186).
+  const [rateText, setRateText] = useState<string | null>(null);
+  const [daysText, setDaysText] = useState<string | null>(null);
+  const unusualRefundRatePercent = rateText ?? settings.data?.unusualRefundRatePercent ?? '';
+  const unusualActivityDays = daysText ?? String(settings.data?.unusualActivityDays ?? '');
   const AMOUNT = /^\d{1,10}(\.\d{1,3})?$/;
   const current = value ?? settings.data?.maxDiscountPercent ?? '';
   const windowDays = days ?? String(settings.data?.refundWindowDays ?? '');
@@ -305,7 +310,10 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
     boundOk(ceiling) &&
     (floor.trim() === '' || ceiling.trim() === '' || Number(floor) <= Number(ceiling)) &&
     /^\d{1,3}$/.test(heldSaleExpiryHours.trim()) &&
-    AMOUNT.test(cartClearLogThreshold.trim());
+    AMOUNT.test(cartClearLogThreshold.trim()) &&
+    BOUND.test(unusualRefundRatePercent.trim()) &&
+    /^\d{1,3}$/.test(unusualActivityDays.trim()) &&
+    Number(unusualActivityDays) >= 1;
   const save = useMutation({
     mutationFn: () =>
       api.sales.updateSettings({
@@ -327,6 +335,8 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
         requireTenderReference,
         heldSaleExpiryHours: Number.parseInt(heldSaleExpiryHours.trim(), 10),
         cartClearLogThreshold: cartClearLogThreshold.trim(),
+        unusualRefundRatePercent: unusualRefundRatePercent.trim(),
+        unusualActivityDays: Number.parseInt(unusualActivityDays.trim(), 10),
         version: settings.data!.version,
       }),
     onSuccess: async () => {
@@ -527,6 +537,28 @@ function PolicyDialog({ onClose }: { onClose: () => void }) {
               inputMode="decimal"
               value={cartClearLogThreshold}
               onChange={(e) => setClearThreshold(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('sales.unusualRate')} hint={t('sales.unusualRateHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="decimal"
+              value={unusualRefundRatePercent}
+              onChange={(e) => setRateText(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('sales.unusualDays')} hint={t('sales.unusualDaysHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              inputMode="numeric"
+              value={unusualActivityDays}
+              onChange={(e) => setDaysText(e.target.value)}
             />
           )}
         </Field>

@@ -24,11 +24,11 @@ import { assertCan } from '../../kernel/access/assert.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
+import { merchantTimezone, withinLocalDays } from '../../kernel/time/period.js';
 import { AuditService } from '../audit/audit.service.js';
 import { isUniqueViolation } from '../auth/registration.service.js';
 import { versionConflict } from '../branches/branches.service.js';
 import { branches } from '../branches/branches.schema.js';
-import { merchants } from '../merchants/merchants.schema.js';
 import { suppliers } from '../purchasing/purchasing.schema.js';
 import { salesSettings } from '../sales/sales.schema.js';
 import {
@@ -1183,10 +1183,7 @@ export class ShiftsService {
       const conditions: SQL[] = [scope ?? sql`true`];
       if (query.registerId) conditions.push(sql`s.register_id = ${query.registerId}`);
       if (query.status !== 'all') conditions.push(sql`s.status = ${query.status}`);
-      if (query.from)
-        conditions.push(sql`s.opened_at >= (${query.from}::date)::timestamp at time zone ${tz}`);
-      if (query.to)
-        conditions.push(sql`s.opened_at < ((${query.to}::date + 1)::timestamp at time zone ${tz})`);
+      conditions.push(withinLocalDays(tz, sql`s.opened_at`, query.from, query.to));
       const out = sql`(s.status = 'closed' and abs(s.discrepancy_minor) > coalesce(s.discrepancy_tolerance_minor, 0))`;
       if (query.outcome === 'discrepancy') conditions.push(out);
       if (query.outcome === 'over') conditions.push(sql`${out} and s.discrepancy_minor > 0`);
@@ -1215,10 +1212,7 @@ export class ShiftsService {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const tz = await this.timezone(tx, actor.merchantId);
       const conditions: SQL[] = [scope ?? sql`true`, sql`s.status = 'closed'`];
-      if (query.from)
-        conditions.push(sql`s.closed_at >= (${query.from}::date)::timestamp at time zone ${tz}`);
-      if (query.to)
-        conditions.push(sql`s.closed_at < ((${query.to}::date + 1)::timestamp at time zone ${tz})`);
+      conditions.push(withinLocalDays(tz, sql`s.closed_at`, query.from, query.to));
       const where = sql.join(conditions, sql` and `);
       const out = sql`abs(s.discrepancy_minor) > coalesce(s.discrepancy_tolerance_minor, 0)`;
       // Uncounted forced closes booked no difference (ADR-0090): counted apart, never "balanced".
@@ -1249,15 +1243,10 @@ export class ShiftsService {
           from shifts s where ${where} group by s.close_type order by s.close_type`)
       ).rows as Record<string, unknown>[];
       // Openings: period by opening time, same branch scope; the first count is no difference.
-      const openConditions: SQL[] = [scope ?? sql`true`];
-      if (query.from)
-        openConditions.push(
-          sql`s.opened_at >= (${query.from}::date)::timestamp at time zone ${tz}`,
-        );
-      if (query.to)
-        openConditions.push(
-          sql`s.opened_at < ((${query.to}::date + 1)::timestamp at time zone ${tz})`,
-        );
+      const openConditions: SQL[] = [
+        scope ?? sql`true`,
+        withinLocalDays(tz, sql`s.opened_at`, query.from, query.to),
+      ];
       const openWhere = sql.join(openConditions, sql` and `);
       const betweenShifts = (
         await tx.execute(sql`select r.id, r.branch_id, r.name_en, r.name_ar, count(*)::int as n,
@@ -1269,14 +1258,7 @@ export class ShiftsService {
           order by sum(abs(s.opening_discrepancy_minor)) desc`)
       ).rows as Record<string, unknown>[];
       // Found later for an uncounted forced close: at the next opening, or a manager's count.
-      const foundWhere = (column: SQL) => {
-        const c: SQL[] = [];
-        if (query.from)
-          c.push(sql`${column} >= (${query.from}::date)::timestamp at time zone ${tz}`);
-        if (query.to)
-          c.push(sql`${column} < ((${query.to}::date + 1)::timestamp at time zone ${tz})`);
-        return c.length ? sql.join(c, sql` and `) : sql`true`;
-      };
+      const foundWhere = (column: SQL) => withinLocalDays(tz, column, query.from, query.to);
       const afterUncounted = (
         await tx.execute(sql`
           select f.id, u.full_name, r.id as register_id, r.name_en, r.name_ar, f.closed_at,
@@ -1485,12 +1467,8 @@ export class ShiftsService {
     )})`;
   }
 
-  private async timezone(tx: Transaction, merchantId: string): Promise<string> {
-    const [m] = await tx
-      .select({ tz: merchants.timezone })
-      .from(merchants)
-      .where(eq(merchants.id, merchantId));
-    return m?.tz ?? 'Asia/Kuwait';
+  private timezone(tx: Transaction, merchantId: string): Promise<string> {
+    return merchantTimezone(tx, merchantId);
   }
 
   private record(

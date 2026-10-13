@@ -1,10 +1,10 @@
 import { type MerchantProfile, updateMerchantProfileSchema } from '@arabat/contracts';
-import { Button, Field, Input, PageHeader, Section, Select, Spinner } from '@arabat/ui';
+import { Alert, Button, Field, Input, PageHeader, Section, Select, Spinner } from '@arabat/ui';
 import { ErrorState, useApi, useNotify } from '@arabat/web-core';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import type { z } from 'zod';
 import { useSession } from '../../app/context.js';
@@ -21,11 +21,19 @@ function toForm(p: MerchantProfile): FormValues {
     contactEmail: p.contactEmail ?? '',
     contactPhone: p.contactPhone ?? '',
     defaultLanguage: p.defaultLanguage,
+    timezone: p.timezone,
   };
 }
 
+/** IANA zones known to this browser; the saved one is always offered. */
+function timezoneOptions(current: string): string[] {
+  const known =
+    typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : [];
+  return known.includes(current) ? known : [current, ...known];
+}
+
 export function CompanySettingsPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const api = useApi();
   const queryClient = useQueryClient();
   const notify = useNotify();
@@ -36,6 +44,7 @@ export function CompanySettingsPage() {
     queryFn: () => api.merchant.get(),
   });
   const form = useForm<FormValues>({ resolver: zodResolver(updateMerchantProfileSchema) });
+  const watchedTimezone = useWatch({ control: form.control, name: 'timezone' });
   useEffect(() => {
     if (profile.data) form.reset(toForm(profile.data));
   }, [profile.data, form]);
@@ -54,6 +63,8 @@ export function CompanySettingsPage() {
     return <ErrorState error={profile.error} onRetry={() => void profile.refetch()} />;
   const e = form.formState.errors;
   const invalid = t('common:errors.VALIDATION_FAILED');
+  const chosenTimezone = watchedTimezone ?? profile.data.timezone;
+  const timezoneChanging = chosenTimezone !== profile.data.timezone;
 
   return (
     <div className="flex flex-col gap-6">
@@ -94,16 +105,10 @@ export function CompanySettingsPage() {
           </fieldset>
         </Section>
         <Section title={t('company.currency')} description={t('company.fixedHint')}>
-          <dl className="grid gap-4 text-sm sm:grid-cols-3">
+          <dl className="grid gap-4 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-fg-muted">{t('company.currency')}</dt>
               <dd className="font-medium">{profile.data.defaultCurrency}</dd>
-            </div>
-            <div>
-              <dt className="text-fg-muted">{t('company.timezone')}</dt>
-              <dd className="font-medium" dir="ltr">
-                {profile.data.timezone}
-              </dd>
             </div>
             <div>
               <dt className="text-fg-muted">{t('company.status')}</dt>
@@ -112,6 +117,35 @@ export function CompanySettingsPage() {
               </dd>
             </div>
           </dl>
+        </Section>
+        <Section title={t('company.timezone')} description={t('company.timezoneHint')}>
+          <fieldset disabled={!editable} className="grid gap-4 md:grid-cols-2">
+            <Field label={t('company.timezone')} error={e.timezone && invalid}>
+              {(p) => (
+                <Select {...p} {...form.register('timezone')} dir="ltr">
+                  {timezoneOptions(profile.data.timezone).map((z) => (
+                    <option key={z} value={z}>
+                      {z}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+            <p className="self-end text-sm text-fg-muted">
+              {profile.data.timezoneChangedAt
+                ? t('company.timezoneChangedAt', {
+                    when: new Date(profile.data.timezoneChangedAt).toLocaleString(i18n.language, {
+                      numberingSystem: 'latn',
+                    }),
+                  })
+                : t('company.timezoneNeverChanged')}
+            </p>
+          </fieldset>
+          {timezoneChanging ? (
+            <Alert tone="warning" title={t('company.timezoneWarningTitle')}>
+              {t('company.timezoneWarning', { from: profile.data.timezone, to: chosenTimezone })}
+            </Alert>
+          ) : null}
         </Section>
         {editable ? (
           <div className="flex justify-end">

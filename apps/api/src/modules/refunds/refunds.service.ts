@@ -23,6 +23,7 @@ import { assertCan } from '../../kernel/access/assert.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
+import { addDays, merchantTimezone, todayIn, withinLocalDays } from '../../kernel/time/period.js';
 import { AuditService } from '../audit/audit.service.js';
 import { isUniqueViolation } from '../auth/registration.service.js';
 import { StockLedgerService } from '../inventory/stock-ledger.service.js';
@@ -44,8 +45,6 @@ const money = (minor: bigint | string) => Money.ofMinor(BigInt(minor), CURRENCY)
 const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
 /** Refund statuses that hold (reserve) quantities and amounts of the sale. */
 const ACTIVE = sql`('pending_approval', 'processing', 'completed')`;
-/** Employees refunding more than this share of their sales are flagged for review. */
-const FLAG_RATE_PERCENT = '10';
 
 interface SaleState {
   id: string;
@@ -1268,12 +1267,14 @@ export class RefundsService {
     )})`;
   }
 
-  private async tz(tx: Transaction, merchantId: string) {
-    const [m] = (await tx.execute(sql`select timezone from merchants where id = ${merchantId}`))
-      .rows as { timezone: string }[];
-    return m?.timezone ?? 'Asia/Kuwait';
+  private tz(tx: Transaction, merchantId: string) {
+    return merchantTimezone(tx, merchantId);
   }
 
+  /**
+   * Refund register (BR-184): the period is cut on the refund's business date, its completion
+   * time once completed, otherwise its request time, in the merchant's time zone.
+   */
   async list(actor: MerchantActor, query: ListQuery) {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const tz = await this.tz(tx, actor.merchantId);
@@ -1281,16 +1282,18 @@ export class RefundsService {
       if (query.status) c.push(sql`r.status = ${query.status}`);
       if (query.kind) c.push(sql`r.kind = ${query.kind}`);
       if (query.saleId) c.push(sql`r.sale_id = ${query.saleId}`);
-      if (query.from)
-        c.push(sql`r.created_at >= (${query.from}::date)::timestamp at time zone ${tz}`);
-      if (query.to)
-        c.push(sql`r.created_at < ((${query.to}::date + 1)::timestamp at time zone ${tz})`);
+      const businessDate = sql`coalesce(r.completed_at, r.created_at)`;
+      c.push(withinLocalDays(tz, businessDate, query.from, query.to));
       const where = sql.join(c, sql` and `);
       const [total] = (
-        await tx.execute(sql`select count(*)::int as n from refunds r where ${where}`)
-      ).rows as { n: number }[];
+        await tx.execute(sql`select count(*)::int as n,
+            count(*) filter (where r.status = 'completed')::int as completed,
+            coalesce(sum(r.total_minor) filter (where r.status = 'completed'), 0)::text as amount
+          from refunds r where ${where}`)
+      ).rows as { n: number; completed: number; amount: string }[];
       const ids = (
-        await tx.execute(sql`select r.id from refunds r where ${where} order by r.created_at desc, r.id desc
+        await tx.execute(sql`select r.id from refunds r where ${where}
+                             order by ${businessDate} desc, r.id desc
                              limit ${query.pageSize} offset ${(query.page - 1) * query.pageSize}`)
       ).rows as { id: string }[];
       const rows = [];
@@ -1298,26 +1301,32 @@ export class RefundsService {
         const { lines: _l, payments: _p, ...rest } = await this.get(actor, id, 'manager');
         rows.push(rest);
       }
-      return { refunds: rows, total: total?.n ?? 0, page: query.page, pageSize: query.pageSize };
+      return {
+        refunds: rows,
+        total: total?.n ?? 0,
+        page: query.page,
+        pageSize: query.pageSize,
+        totals: {
+          count: total?.n ?? 0,
+          completedCount: total?.completed ?? 0,
+          amount: money(total?.amount ?? '0'),
+        },
+      };
     });
   }
 
-  /** Unusual refund activity: refund rate per employee against their own sales. */
+  /**
+   * Unusual refund activity: refund rate per employee against their own sales. The threshold
+   * and the default window are company policy (BR-186); dates given win over the window.
+   */
   async activity(actor: MerchantActor, query: ActivityQuery): Promise<RefundActivity> {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const tz = await this.tz(tx, actor.merchantId);
-      const range = (col: SQL) =>
-        sql.join(
-          [
-            query.from
-              ? sql`${col} >= (${query.from}::date)::timestamp at time zone ${tz}`
-              : sql`true`,
-            query.to
-              ? sql`${col} < ((${query.to}::date + 1)::timestamp at time zone ${tz})`
-              : sql`true`,
-          ],
-          sql` and `,
-        );
+      const policy = await this.sales.getSettingsInTx(tx, actor.merchantId);
+      const to = query.to ?? todayIn(tz);
+      const from = query.from ?? (query.to ? to : addDays(to, -(policy.unusualActivityDays - 1)));
+      const range = (col: SQL) => withinLocalDays(tz, col, from, to);
+      const threshold = policy.unusualRefundRatePercent;
       const rScope = this.scope(actor, query.branchId, sql`r.branch_id`);
       const sScope = this.scope(actor, query.branchId, sql`s.branch_id`);
       const rows = (
@@ -1342,8 +1351,12 @@ export class RefundsService {
           where s.membership_id is not null or r.membership_id is not null
           order by coalesce(r.amount, 0) desc`)
       ).rows as Record<string, unknown>[];
+      // Threshold in hundredths of a percent, exact ("12.5" → 1250).
+      const [whole, frac = ''] = threshold.split('.');
+      const thresholdBp = BigInt(whole!) * 100n + BigInt((frac + '00').slice(0, 2));
       return {
-        flagThresholdPercent: FLAG_RATE_PERCENT,
+        flagThresholdPercent: threshold,
+        period: { from, to, timezone: tz },
         byEmployee: rows.map((x) => {
           const salesAmount = BigInt(x['sales_amount'] as string);
           const refundAmount = BigInt(x['refund_amount'] as string);
@@ -1366,7 +1379,7 @@ export class RefundsService {
             refundRate: rate,
             outsideWindow: x['outside'] as number,
             ownSaleRefunds: x['own_sale'] as number,
-            flagged: rateBp > BigInt(FLAG_RATE_PERCENT) * 100n || (x['outside'] as number) > 0,
+            flagged: rateBp > thresholdBp || (x['outside'] as number) > 0,
           };
         }),
       };

@@ -37,6 +37,7 @@ import { assertCan } from '../../kernel/access/assert.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
+import { merchantTimezone, withinLocalDays } from '../../kernel/time/period.js';
 import { AuditService } from '../audit/audit.service.js';
 import { isUniqueViolation } from '../auth/registration.service.js';
 import { versionConflict } from '../branches/branches.service.js';
@@ -198,6 +199,8 @@ export class SalesService {
       requireTenderReference: row?.requireTenderReference ?? true,
       heldSaleExpiryHours: row?.heldSaleExpiryHours ?? 24,
       cartClearLogThreshold: money(row?.cartClearLogThresholdMinor ?? 5000n),
+      unusualRefundRatePercent: trimDecimal(row?.unusualRefundRatePercent ?? '10'),
+      unusualActivityDays: row?.unusualActivityDays ?? 30,
       version: row?.version ?? 1,
     };
   }
@@ -264,6 +267,10 @@ export class SalesService {
           input.cartClearLogThreshold === undefined
             ? (row?.cartClearLogThresholdMinor ?? 5000n)
             : parseAmount(input.cartClearLogThreshold, 'cartClearLogThreshold'),
+        // Unusual-activity review (BR-186): unchanged when omitted.
+        unusualRefundRatePercent:
+          input.unusualRefundRatePercent ?? row?.unusualRefundRatePercent ?? '10',
+        unusualActivityDays: input.unusualActivityDays ?? row?.unusualActivityDays ?? 30,
       };
       if (
         priceBounds.priceOverrideFloorPercent !== null &&
@@ -380,6 +387,14 @@ export class SalesService {
             from: (row?.cartClearLogThresholdMinor ?? 5000n).toString(),
             to: controls.cartClearLogThresholdMinor.toString(),
           },
+          unusualRefundRatePercent: {
+            from: trimDecimal(row?.unusualRefundRatePercent ?? '10'),
+            to: trimDecimal(controls.unusualRefundRatePercent),
+          },
+          unusualActivityDays: {
+            from: row?.unusualActivityDays ?? 30,
+            to: controls.unusualActivityDays,
+          },
         },
       });
       return this.settings(tx, actor.merchantId);
@@ -397,6 +412,8 @@ export class SalesService {
       refundApprovalLimitMinor: row?.refundApprovalLimitMinor ?? 20000n,
       refundOwnSalesNeedApproval: row?.refundOwnSalesNeedApproval ?? true,
       requireTenderReference: row?.requireTenderReference ?? true,
+      unusualRefundRatePercent: trimDecimal(row?.unusualRefundRatePercent ?? '10'),
+      unusualActivityDays: row?.unusualActivityDays ?? 30,
     };
   }
 
@@ -1845,10 +1862,7 @@ export class SalesService {
       }
     }
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
-      const [m] = (
-        await tx.execute(sql`select timezone from merchants where id = ${actor.merchantId}`)
-      ).rows as { timezone: string }[];
-      const tz = m?.timezone ?? 'Asia/Kuwait';
+      const tz = await merchantTimezone(tx, actor.merchantId);
       const conditions: SQL[] = [scope ?? sql`true`];
       if (query.shiftId) conditions.push(sql`s.shift_id = ${query.shiftId}`);
       if (query.customerId) conditions.push(sql`s.customer_id = ${query.customerId}`);
@@ -1864,18 +1878,16 @@ export class SalesService {
         conditions.push(
           sql`s.receipt_number ilike ${`%${query.q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`}`,
         );
-      if (query.from)
-        conditions.push(sql`s.created_at >= (${query.from}::date)::timestamp at time zone ${tz}`);
-      if (query.to)
-        conditions.push(
-          sql`s.created_at < ((${query.to}::date + 1)::timestamp at time zone ${tz})`,
-        );
-      const where = sql.join(conditions, sql` and `);
+      // One cut-off rule (BR-184): sales by their own local day, refunds by their completion
+      // day, both in the merchant's time zone, so "net" here equals the report's figure.
+      const scopeWhere = sql.join(conditions, sql` and `);
+      const where = sql`${scopeWhere} and ${withinLocalDays(tz, sql`s.created_at`, query.from, query.to)}`;
       const [agg] = (
         await tx.execute(
           sql`select count(*)::int as n, coalesce(sum(total_minor), 0)::text as amount,
-                     coalesce((select sum(r.total_minor) from refunds r
-                               where r.status = 'completed' and r.sale_id in (select s.id from sales s where ${where})), 0)::text as refunded
+                     coalesce((select sum(r.total_minor) from refunds r join sales s on s.id = r.sale_id
+                               where r.status = 'completed' and ${scopeWhere}
+                                 and ${withinLocalDays(tz, sql`r.completed_at`, query.from, query.to)}), 0)::text as refunded
               from sales s where ${where}`,
         )
       ).rows as { n: number; amount: string; refunded: string }[];
