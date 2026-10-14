@@ -108,12 +108,16 @@ export function toMessageParams(
   return messages.map((m) => ({ role: m.role, content: m.content }));
 }
 
-/** The visible answer of a turn: its text blocks joined. */
+/** Working notes the model sometimes writes into its text (seen in the live trial). */
+const THINKING_TAGS = /<thinking>[\s\S]*?<\/thinking>\s*/g;
+
+/** The visible answer of a turn: its text blocks joined, without the model's own notes. */
 export function textOf(message: Anthropic.Beta.BetaMessage): string {
   return message.content
     .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text')
     .map((b) => b.text)
     .join('')
+    .replace(THINKING_TAGS, '')
     .trim();
 }
 

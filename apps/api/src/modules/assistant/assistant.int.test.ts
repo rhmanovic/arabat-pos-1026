@@ -249,4 +249,31 @@ describe('POS assistant', () => {
     const fromManager = await c.client.request('GET', '/pos/assistant', { cookies: c.cookies });
     expect(fromManager.statusCode).toBe(401);
   });
+
+  it('hides a turn cut off at the output limit and the model’s own notes (live trial findings)', async () => {
+    const { c } = await store('Milk', 'حليب');
+    const cashier = await cashierWithShift(c);
+
+    // A runaway turn after a lookup: the fragment is never shown, the lookup is still reported.
+    model.reply(
+      toolTurn('t1', 'search_products', { query: 'milk' }),
+      textTurn('<invoke name="search_products">\n</invoke>\n'.repeat(40), 'max_tokens'),
+    );
+    const cut = await chat(c, cashier.cookies, question('milk price?', { language: 'en' }));
+    expect(cut.statusCode).toBe(200);
+    expect(cut.json()).toEqual({
+      reply: 'I could not answer that. Try rephrasing, or ask your supervisor.',
+      toolsUsed: ['search_products'],
+    });
+    expect(model.requests).toHaveLength(2);
+    expect(model.requests[0]?.max_tokens).toBe(1024);
+
+    // Working notes written into the text are stripped from the answer.
+    model.reset();
+    model.reply(
+      textTurn('<thinking>onHand excludes the cart line.</thinking>Milk is 2.750 KWD, 12 on hand.'),
+    );
+    const noted = await chat(c, cashier.cookies, question('milk?', { language: 'en' }));
+    expect(noted.json()).toEqual({ reply: 'Milk is 2.750 KWD, 12 on hand.', toolsUsed: [] });
+  });
 });

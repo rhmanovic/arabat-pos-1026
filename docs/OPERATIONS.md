@@ -144,7 +144,11 @@ Current staging deployment (2026-10-12): Railway project `arabat-pos`, environme
 (deploys on push to the connected branch). Verified after deploy: `/api/v1/health/ready` ok
 (database ok), `/manager`, `/pos` and `/platform` load and report the server connected. No
 volume and no SMTP yet. First platform operator created by the bootstrap (credentials only
-in the deploy log of 2026-10-12 14:42 UTC).
+in the deploy log of 2026-10-12 14:42 UTC). Since 2026-10-14 21:47 UTC the web service follows
+branch `claude/tender-wright-t34f5x` (POS assistant, ADR-0105) at the owner's request to try
+the assistant as a cashier; switch it back to the default branch in the service's Source
+settings once the branch is merged. `ANTHROPIC_API_KEY` is set on the service only with the
+owner's say-so (paid usage).
 
 ### Cash custody cutover (ADR-0090, migration 0033)
 

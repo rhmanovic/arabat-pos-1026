@@ -124,10 +124,13 @@ later turn. Answers as returned:
    correct). One of the three re-runs leaked a literal `<thinking>Note: onHand 46 likely
    excludes the one in cart (not yet sold).</thinking>` prefix into the visible reply. So the
    failure is intermittent (1 of 4) and sits in the model's output, not in the lookup or the
-   API. Not fixed in this session; proposed: treat a `max_tokens` stop with no `tool_use` block
-   as a failed turn (return `fallbackReply` instead of the truncated text), strip
-   `<thinking>…</thinking>` from `textOf`, and lower `max_tokens` (an answer never needs 2 048
-   output tokens, and the runaway turn alone cost $0.04 of the $0.07 total).
+   API. Hardened the same day: a `max_tokens` stop with no `tool_use` block is a failed turn
+   (the cashier gets `fallbackReply`, the fragment is never shown, a warning is logged),
+   `textOf` strips `<thinking>…</thinking>`, and `max_tokens` is 1 024 (an answer is a few
+   hundred tokens; the runaway turn alone cost $0.04 of the $0.07 total). Covered by the fifth
+   case in `assistant.int.test.ts` (scripted runaway turn after a lookup → fallback with
+   `toolsUsed` kept, `max_tokens` 1024 on the request; a note-prefixed answer comes back
+   clean). Run: 5 passed; `pnpm typecheck` and `pnpm test` (186) green.
 3. "بهالوردية بعت **فاتورة وحدة بس** لين الحين:\n\n- **MAIN-000001**، الساعة 00:37، فيها حبتين
    (2)، المجموع **0.300 د.ك**، انْدفعت **كاش**، عميل عابر، وما عليها أي مرتجع.\n\nالبيبسي اللي
    بالسلة الحين (0.150 د.ك) ما ينحسب بالمبيعات لين تدفعه بـ **Pay (F12)**.\n\nتبي تفتح الفاتورة

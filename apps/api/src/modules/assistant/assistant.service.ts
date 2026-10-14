@@ -31,6 +31,7 @@ type ChatInput = z.output<typeof assistantChatSchema>;
 export const ASSISTANT_LIMIT: RateLimit = { limit: 60, windowSeconds: 600 };
 /** Tool rounds per answer: a question needs one or two lookups, never a crawl. */
 const MAX_TOOL_ROUNDS = 4;
+const MAX_OUTPUT_TOKENS = 1024;
 const MAX_MATCHES = 10;
 const searchInput = z.object({ query: z.string().trim().min(1).max(100) });
 
@@ -78,7 +79,9 @@ export class AssistantService {
 
     for (let round = 0; ; round += 1) {
       const response = await this.model.complete({
-        max_tokens: 2048,
+        // An answer is a few hundred tokens; the cap bounds a runaway turn (live trial: one
+        // turn repeated a tool-call tag until the limit).
+        max_tokens: MAX_OUTPUT_TOKENS,
         system,
         // A copy per turn: the provider (and the test double) keep what they were sent.
         messages: [...messages],
@@ -95,10 +98,16 @@ export class AssistantService {
         reply = fallbackReply(input.language);
         break;
       }
-      reply = textOf(response) || reply;
       const calls = response.content.filter(
         (b): b is Anthropic.Beta.BetaToolUseBlock => b.type === 'tool_use',
       );
+      if (response.stop_reason === 'max_tokens' && calls.length === 0) {
+        // The turn ran out before an answer: its text is a fragment, never shown.
+        this.logger.warn('assistant turn hit the output limit without an answer');
+        reply = fallbackReply(input.language);
+        break;
+      }
+      reply = textOf(response) || reply;
       if (response.stop_reason !== 'tool_use' || calls.length === 0 || round >= MAX_TOOL_ROUNDS)
         break;
       messages.push({ role: 'assistant', content: response.content });
