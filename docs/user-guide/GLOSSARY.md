@@ -92,6 +92,8 @@
 | السعر الجديد (د.ك) | `pos:sale.priceOverride` · New price (KWD) | تعديل سعر صنف في عملية البيع؛ يحتاج صلاحية «تعديل الأسعار» أو موافقة مشرف. |
 | ★ سبب تعديل السعر | `pos:sale.priceReason` · Reason for the price change | سبب إلزامي عند تغيير سعر الصنف. |
 | ★ سعر القائمة | `pos:sale.listPrice` · List price | السعر الأصلي للصنف قبل التعديل. |
+| ★ بدون خصم / نسبة (%) / مبلغ (د.ك) | `pos:sale.noDiscount` / `pos:sale.discountPercent` / `pos:sale.discountAmount` · No discount / Percent / Amount | خيارات قائمة «الخصم» في نافذة الصنف ونافذة «خصم على الفاتورة». |
+| ★ خصم (زر) | `pos:sale.discountShort` · Discount | الزر تحت السلة الذي يفتح «خصم على الفاتورة». |
 | تم تعديل السعر | `pos:sale.overridden` · Price changed | علامة على صنف بيع بسعر غير سعره الأصلي. |
 | ★ يتجاوز صلاحياتك: يجب أن يعتمده مشرف عند الدفع. | `pos:sale.needsSupervisor` | تنبيه في نافذة تعديل السطر عندما يحتاج التعديل موافقة مشرف. |
 | ★ مطلوب موافقة مشرف | `pos:sale.supervisorTitle` · Supervisor approval needed | قسم داخل نافذة «الدفع» يُدخل فيه المشرف بريده وكلمة مروره على جهاز الكاشير. |
