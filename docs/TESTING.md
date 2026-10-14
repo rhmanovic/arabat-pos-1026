@@ -68,12 +68,12 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
 
 ### Results after the POS assistant (2026-10-14, cloud sandbox run)
 
-`pnpm typecheck`, `pnpm build` and `pnpm test` green (RESULTS_UNIT tests, including the two new
+`pnpm typecheck`, `pnpm build` and `pnpm test` green (186 unit/web tests, including the two new
 POS cases in `app.test.tsx`: the Assistant button and F9 open the dialog, a suggested question
 is sent with the cart as display text and the answer shown, the thread survives closing the
 dialog and a typed follow-up carries the history, "New conversation" empties it; and the
 notice with a disabled input when `GET /pos/assistant` says the assistant is off);
-`pnpm test:integration` RESULTS_INT passed, including the four new cases in
+`pnpm test:integration` 222 passed, including the four new cases in
 `assistant.int.test.ts` (off without a provider: `{ enabled: false }` and 503
 `ASSISTANT_DISABLED` with no model call; the product lookup answers from the cashier's own
 company and branch only, with price and stock, the guide as the cacheable prefix and the
@@ -82,7 +82,7 @@ as the cashier sees them, two lookups in one round, and the cut-off after four l
 a conversation not ending with the cashier is refused, a provider refusal gets the polite
 answer, a manager session is refused at the route). `pnpm lint` and `pnpm format:check` fail
 on three pre-existing files under `docs/user-guide/booklets/` (not touched here); every other
-file passes. `pnpm test:e2e`: RESULTS_E2E.
+file passes. `pnpm test:e2e` 35 passed (Mailpit must be up: the first run failed 7 cases on `ECONNREFUSED 127.0.0.1:8025` before it was started).
 
 
 
