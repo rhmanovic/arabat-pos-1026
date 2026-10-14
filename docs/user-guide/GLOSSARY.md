@@ -13,7 +13,8 @@
 داخل الشاشات (عدا اسمي اللغتين «العربية» و«English»). الاستثناء: «سجل التدقيق» يعرض أسماء
 الإجراءات وتفاصيلها كما خزّنها النظام بالإنجليزية (انظر ق-7 في `README.md`).
 
-آخر تحديث: 2026-10-13، على الالتزام `4a4c4db`. الصفوف الجديدة في هذا التحديث معلّمة بـ ★.
+آخر تحديث: 2026-10-14، على الالتزام `594d0e9` (مصطلحات الأقسام 10 و13–17). الصفوف الجديدة منذ تحديث
+2026-10-13 معلّمة بـ ★.
 
 ---
 
@@ -49,6 +50,16 @@
 | ★ الأجهزة المسجَّل دخولها | `manager:account.sessions` · Signed-in devices | كل جلسة حية لحسابك في كل شركة وتطبيق. |
 | ★ هذا الجهاز | `manager:account.thisDevice` · This device | الجلسة التي تستخدمها الآن. |
 | ★ تسجيل الخروج من كل مكان آخر | `manager:account.endOthers` · Sign out everywhere else | إنهاء كل جلساتك ما عدا هذا الجهاز. |
+| ★ لوحة التحكم | `manager:nav.dashboard` · Dashboard | أول شاشة في «الإدارة»: مؤشرات اليوم والتنبيهات وخطوات الإعداد. |
+| ★ جهّز شركتك / تم / مطلوب | `manager:dashboard.onboardingTitle` / `done` / `todo` · Get your company ready / Done / To do | خطوات إعداد الشركة في لوحة التحكم وحالة كل خطوة. |
+| ★ الفروع النشطة / الموظفون النشطون / الأدوار | `manager:dashboard.branches` / `employees` / `roles` · Active branches / Active employees / Roles | بطاقات العدّ في لوحة التحكم. |
+| ★ فتح التقارير | `manager:dashboard.openReports` · Open reports | رابط من بطاقات «اليوم» إلى التقارير. |
+| ★ العمليات / الأشخاص / المنشأة | `manager:nav.sectionOperations` / `sectionPeople` / `sectionOrganization` · Operations / People / Organization | مجموعات القائمة الجانبية في الإدارة. |
+| ★ فتح القائمة / إغلاق القائمة | `common:actions.openMenu` / `closeMenu` · Open menu / Close menu | زر القائمة الجانبية على الشاشات الصغيرة. |
+| ★ الخادم يعمل جزئياً | `common:status.apiDegraded` · Server degraded | الخادم متصل لكن بعض خدماته لا تعمل. |
+| ★ كلمة المرور الجديدة / أعد كتابة كلمة المرور الجديدة | `manager:account.newPassword` / `confirmPassword` · New password / Repeat the new password | حقلا تغيير كلمة المرور في «حسابي» (10 أحرف على الأقل). |
+| ★ الجهاز / العنوان / آخر نشاط | `manager:account.device` / `ip` / `lastSeen` · Device / Address / Last activity | أعمدة جدول «الأجهزة المسجَّل دخولها». |
+| ★ تسجيل الخروج (في جدول الأجهزة) | `manager:account.endSession` · Sign out | إنهاء جلسة جهاز آخر واحد؛ غير الخروج من جهازك. |
 
 ## 2. الأشخاص والأدوار
 
@@ -77,6 +88,7 @@
 | ★ رمز التأكيد | `manager:company.transferCode` · Confirmation code | الرمز الذي يصل المرشَّح بالبريد ليقبل الملكية. |
 | ★ قبول الملكية | `manager:company.acceptOwnership` · Accept ownership | خطوة المرشَّح الأخيرة؛ بعدها يصبح المالك ويصبح المالك السابق عضوًا عاديًا. |
 | ★ إلغاء النقل | `manager:company.cancelTransfer` · Cancel transfer | إلغاء نقل لم يقبله المرشَّح بعد. |
+| ★ إرسال بريد إعادة تعيين كلمة المرور | `manager:employees.sendReset` · Send password reset e-mail | يرسل المدير للموظف رابط اختيار كلمة مرور جديدة. |
 
 ## 3. البيع في نقطة البيع
 
@@ -132,6 +144,12 @@
 | ★ تأكيد المسح | `pos:sale.confirmClear` · Confirm clear | الضغطة الثانية المطلوبة خلال 3 ثوانٍ لمسح عملية البيع. |
 | ★ السلة ({{count}}) / المنتجات | `pos:sale.viewCart` / `pos:sale.backToProducts` · Cart / Products | على الجوال: فتح السلة فوق المنتجات / العودة إلى المنتجات. |
 | ★ المتوفر: {{qty}} | `pos:sale.inStock` · In stock: {{qty}} | كمية الصنف في مخزون الفرع على بطاقته. |
+| ★ إشارات | `manager:sales.flags` · Flags | عمود في سجل المبيعات يبيّن سبب عدّ العملية غير اعتيادية. |
+| ★ المسترجع | `manager:sales.refunded` · Refunded | ما استُرجع: في سطر الملخص للأيام المختارة، أو لعملية واحدة في تفاصيلها. |
+| ★ خصومات الأصناف / خصم الفاتورة | `manager:sales.lineDiscounts` / `orderDiscount` · Item discounts / Sale discount | جزءا خصم العملية في تفاصيل البيع. |
+| ★ تكلفة البضاعة | `manager:sales.cost` · Cost of goods | تكلفة ما بيع؛ تظهر لمن يملك صلاحية التكلفة أو التقارير المالية. |
+| ★ أكّده الكاشير / تحققت منه البوابة | `manager:sales.verification_manual` / `verification_gateway` · Confirmed by cashier / Verified by gateway | من أكّد الدفعة في تفاصيل البيع. |
+| ★ كل المبيعات / كل القنوات | `manager:sales.flagAll` / `channelAll` · All sales / All channels | خيارا «بلا تصفية» في سجل المبيعات. |
 
 ## 4. المرتجعات والاسترجاع
 
@@ -164,6 +182,14 @@
 | ★ مرتجعات محتجزة | `manager:inventory.tabReturns` · Held returns | أصناف مرتجعة لم تُعَد إلى المخزون القابل للبيع (تالفة، معيبة). |
 | ★ محتجز / تمت التصفية | `manager:inventory.returns_held` / `returns_disposed` · Held / Disposed | حالة المرتجع المحتجز قبل تسجيل ما جرى له وبعده. |
 | ★ تسجيل التصفية | `manager:inventory.dispose` · Record disposal | تسجيل ما جرى للبضاعة المحتجزة (أُتلفت، أُعيدت للمورد…) مع ملاحظة إلزامية. |
+| ★ السجل | `manager:refunds.tabAll` · History | تبويب كل الاسترجاعات والاستبدالات وإلغاءات البيع. |
+| ★ طلبه / قرّره | `manager:refunds.requestedBy` / `decidedBy` · Requested by / Decided by | من طلب الاسترجاع / من اعتمده أو رفضه. |
+| ★ قيد المعالجة / مكتمل / مرفوض | `manager:refunds.status_processing` / `status_completed` / `status_rejected` · Processing / Completed / Rejected | حالة الاسترجاع: ينتظر بوابة الدفع / دُفع كله / رُفض ولم يُدفع شيء. |
+| ★ الأصناف المرتجعة / أعيد للمخزون / لم يُعد للمخزون | `manager:refunds.items` / `restocked` / `notRestocked` · Returned items / Back to stock / Not restocked | أسطر الاسترجاع، وهل عاد كل صنف إلى المخزون. |
+| ★ المبالغ المعادة | `manager:refunds.payments` · Paid back | طرق الدفع التي عاد إليها المبلغ ومقاديرها. |
+| ★ بيانات العميل | `manager:refunds.customerContact` · Customer contact | الهاتف أو الاسم الذي كتبه الكاشير على استرجاع معلّق. |
+| ★ أتمّها المالك مباشرة (تجاوز) | `manager:refunds.ownerOverrideNote` · completed directly by the owner (override) | المالك لم ينتظر الاعتماد؛ يُسجَّل استثناءً. |
+| ★ نسبة الاسترجاع / للمراجعة / إرجاع متأخر / مبيعاته هو | `manager:refunds.rate` / `flagged` / `outsideWindow` / `ownSaleRefunds` · Refund rate / Review / Late returns / Own sales | أعمدة تبويب «نشاط غير اعتيادي»؛ الاسترجاع يُحسب على من طلبه. |
 
 ## 5. الوردية والصندوق والنقد
 
@@ -225,6 +251,19 @@
 | ★ مُفسَّر / مُسوَّى / مشطوب | `manager:cash.followup_explained` / `_settled` / `_written_off` · Explained / Settled / Written off | نتيجة متابعة الفرق؛ التسوية والشطب يحتاجان «إدارة النقدية». |
 | بين الورديات | `manager:cash.betweenShifts` · Between shifts | فرق ظهر عند فتح الوردية التالية، لا يُحمَّل على من فتحها. |
 | ★ نتيجة الإغلاق / فتح وردية جديدة | `pos:shift.result` / `pos:shift.newShift` · Closing result / Open a new shift | الشاشة بعد إغلاق الوردية: المتوقع والمعدود والفرق والنتيجة. |
+| ★ الصناديق / صندوق جديد / الرمز | `manager:cash.registersTitle` / `newRegister` / `code` · Registers / New register / Code | شاشة الصناديق؛ الرمز أحرف لاتينية وأرقام و`-` و`_` حتى 20، فريد في الفرع. |
+| ★ من يمكنه الاستخدام | `manager:cash.accessMode` · Who can use it | من يستطيع فتح وردية على الصندوق. |
+| ★ كل من يحق له العمل بورديات في الفرع / موظفون محددون فقط | `manager:cash.access_branch` / `access_restricted` · Everyone allowed to work shifts at the branch / Only selected employees | خيارا «من يمكنه الاستخدام». |
+| ★ الموظفون المسموح لهم | `manager:cash.members` · Allowed employees | الموظفون المسموح لهم بصندوق مقيّد. |
+| ★ النقد الافتتاحي الافتراضي (د.ك) | `manager:cash.defaultFloat` · Default opening cash (KWD) | يُحفظ ويُعرض فقط؛ لا يستخدمه النظام حاليًا. |
+| ★ أكبر فرق مقبول لأي صندوق (د.ك) | `manager:sales.maxTolerance` · Largest accepted difference per register (KWD) | حد الشركة لـ«الفرق المقبول» لأي صندوق؛ الافتراضي 1.000. |
+| ★ عددتُ الدرج بنفسي / أغلقها مدير | `manager:cash.forceWithCount` / `forced` · I counted the drawer myself / Closed by a manager | إغلاق المدير مع جرد؛ بدونها إغلاق بدون جرد. |
+| ★ بها فرق | `manager:cash.outcomeDiscrepancy` · With discrepancy | تصفية الورديات المغلقة بـ«زيادة» أو «عجز». |
+| ★ ورديات مغلقة / إجمالي العجز / إجمالي الزيادة / صافي الفرق | `manager:cash.totalShifts` / `totalShort` / `totalOver` / `net` · Closed shifts / Total short / Total over / Net difference | أرقام تقرير «فروقات النقد». |
+| ★ حسب طريقة الإغلاق / فروقات ظهرت بعد إغلاق بدون جرد | `manager:cash.byCloseType` / `afterUncounted` · By how shifts were closed / Found after a close without a count | أجزاء تقرير «فروقات النقد». |
+| ★ المسؤول / المتابعة / تمت متابعتها | `manager:cash.accountable` / `followup` / `varianceResolved` · Accountable / Follow-up / Followed up | أعمدة وتصفية «متابعة الفروقات». |
+| ★ إغلاق وردية / فتح (بين الورديات) / جرد / تحويل بين الفروع | `manager:cash.variance_shift_close` / `variance_shift_opening` / `variance_account_count` / `variance_branch_transfer` · Shift closing / Opening (between shifts) / Count / Transfer between branches | مصدر الفرق النقدي المسجّل. |
+| ★ الخزائن: / الصناديق: / قيد النقل: | `manager:dashboard.inTreasuries` / `inRegisters` / `inTransit` · Treasuries: / Registers: / In transit: | أسطر بطاقة «إجمالي النقد». |
 
 ## 6. المخزون والتحويلات والمشتريات
 
@@ -344,6 +383,12 @@
 | ★ حزمة نهاية الشهر | `manager:periods.packTitle` · Month-end pack | أرقام الشهر (المبيعات، الربح، النقد، المخزون، التحصيلات) محفوظة عند الإقفال، أو حية لشهر مفتوح. |
 | ★ بنود مفتوحة تنتقل إلى الشهر التالي | `manager:periods.openItems` · Open items carried forward | ما زال ينتظر قرارًا عند حساب الحزمة (فروقات، تحويلات، اعتمادات، فواتير معلّقة). |
 | ★ هذا التاريخ يقع في فترة مقفلة… | `common:errors.PERIOD_CLOSED` | رسالة عند تأريخ أمر شراء أو تسليم داخل شهر مقفل. |
+| ★ حد اعتماد المصروفات / حد اعتماد مدفوعات الموردين | `manager:sales.expenseLimit` / `supplierPaymentLimit` · Expense / Supplier payment approval limit | إعدادان في «سياسة البيع»؛ الافتراضي 20.000 / 100.000. |
+| ★ حد اعتماد تعديلات المخزون (د.ك بالتكلفة) | `manager:sales.adjustmentLimit` · Stock adjustment approval limit | إعداد في «سياسة البيع»؛ الافتراضي 50.000 بالتكلفة. |
+| ★ السحب النقدي «أخرى»: الحد لكل حركة / لكل وردية | `manager:sales.cashOutLimit` / `cashOutShiftLimit` · Cash out "other": limit per movement / per shift | إعدادان في «سياسة البيع»؛ الافتراضي 20.000 / 50.000. |
+| ★ دفعات البطاقة والتحويل تحتاج مرجعًا | `manager:sales.tenderReference` · Card and transfer payments need a reference | إعداد في «سياسة البيع»؛ مفعّل افتراضيًا. |
+| ★ نسبة الاسترجاع غير المعتادة (%) / نافذة مراجعة النشاط (أيام) | `manager:sales.unusualRate` / `unusualDays` · Unusual refund rate / Activity review window | إعدادا «نشاط غير اعتيادي»؛ الافتراضي 10% / 30 يومًا. |
+| ★ السماح بتعديل السعر إلى أقل من التكلفة | `manager:sales.priceBelowCost` · Allow price changes below cost | إعداد في «سياسة البيع»؛ غير مفعّل افتراضيًا. |
 
 ---
 
