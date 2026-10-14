@@ -298,6 +298,8 @@
 | ★ أدنى / أعلى تعديل للسعر (% من سعر القائمة) | `manager:sales.priceFloor` / `priceCeiling` | حدود لتعديل السعر لا يتجاوزها أحد، ولا تشملها موافقة المشرف. |
 | ★ المبيعات غير الاعتيادية | `manager:sales.flagFilter`، `manager:reports.exceptions` · Unusual sales | مبيعات مجانية أو فوق حد الخصم أو بسعر معدَّل أو باعتماد مشرف. |
 | ★ بيع مجاني / فوق حد الخصم / سعر معدَّل / اعتماد مشرف | `manager:sales.flag_*` · Free / Above limit / Price changed / Supervised | إشارات على عملية البيع في سجل المبيعات. |
+| ★ استثناءات على هذه العملية | `manager:sales.exceptions` · Exceptions on this sale | قسم في تفاصيل البيع يذكر تجاوز الحد وسبب البيع المجاني والمشرف الذي وافق. |
+| ★ اعتُمدت على صندوق الكاشير من قبل {{name}} | `manager:sales.supervisedBy` · Authorised at the till by {{name}} | اسم المشرف الذي وافق على البيع؛ يظهر للمدير لا في الإيصال. |
 | القناة | `manager:sales.channel` · Channel | مصدر البيع: «نقطة البيع» أو «إلكتروني». |
 | طرق الدفع | `manager:nav.payments` · Payment methods | نقدًا، بطاقة، تحويل بنكي، وغيرها، مع رسومها. |
 | الحسابات المالية | `manager:nav.accounts` · Financial accounts | الخزائن والحسابات البنكية التي تستقر فيها المدفوعات. |
