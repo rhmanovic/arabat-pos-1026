@@ -36,6 +36,12 @@
 | الدخول بحساب آخر | `common:lock.otherUser` · Sign in as someone else | خروج من الجلسة المقفلة ليدخل موظف آخر بحسابه. |
 | نسيت كلمة المرور؟ | `common:auth.forgotPassword` · Forgot your password? | طلب رابط إعادة تعيين كلمة المرور بالبريد. |
 | قبول الدعوة | `common:invite.submit` · Accept invitation | الخطوة التي ينضم بها الموظف إلى الشركة ويختار كلمة مروره. |
+| ★ تسجيل الدخول / تسجيل الخروج | `common:actions.signIn` / `common:actions.signOut` · Sign in / Sign out | بدء الجلسة بالبريد وكلمة المرور / إنهاؤها؛ الخروج لا يغلق الوردية. |
+| ★ الانتقال إلى {{app}} | `common:auth.switchTo` · Go to {{app}} | زر في أعلى الإدارة للانتقال إلى نقطة البيع لمن يملك صلاحيتها. |
+| ★ إعادة تعيين كلمة المرور / إرسال الرابط | `common:auth.forgotTitle` / `common:auth.forgotSend` · Reset your password / Send link | شاشة طلب رابط كلمة مرور جديدة بالبريد؛ الرابط صالح 30 دقيقة. |
+| ★ انضم إلى فريقك | `common:invite.title` · Join your team | شاشة قبول الدعوة؛ الدعوة صالحة 7 أيام. |
+| ★ اللغة | `common:language.label` · Language | اختيار «العربية» أو «English» للواجهة. |
+| ★ الخادم متصل / تعذّر الوصول إلى الخادم | `common:status.apiOnline` / `common:status.apiOffline` · Server online / Server unreachable | حالة الاتصال الظاهرة في شاشات الدخول. |
 | ★ يوجد تحديث جديد للنظام… / تحديث الآن | `pos:update.available` / `pos:update.reload` · A new version… / Update now | شريط في نقطة البيع: أكمل البيع الحالي ثم حدّث. |
 | ★ حسابي | `manager:nav.account`، `manager:account.title` · My account | صفحة المستخدم نفسه في الإدارة: كلمة المرور والأجهزة. |
 | ★ تغيير كلمة المرور | `manager:account.changePassword` · Change password | تغيير كلمة مرورك بإدخال الحالية؛ يُنهي جلساتك الأخرى ويبقى هذا الجهاز. |
