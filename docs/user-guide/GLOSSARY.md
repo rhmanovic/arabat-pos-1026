@@ -198,6 +198,9 @@
 | إيداع بنكي | `pos:shift.reason_bank_deposit`، `manager:cashCustody.deposit` · Bank deposit / Deposit to bank | إخراج النقد من الدرج أو الخزينة إلى حساب بنكي للشركة؛ يبقى «في الطريق» حتى يؤكده شخص ثانٍ. |
 | ★ رقم قسيمة الإيداع | `pos:shift.depositSlip`، `manager:cashCustody.depositReference` · Deposit slip number | الرقم المطبوع على قسيمة البنك، إلزامي لكل إيداع بنكي. |
 | ★ بانتظار الاعتماد / سحب الطلب | `pos:shift.status_pending` / `pos:shift.withdraw` · Waiting for approval / Withdraw request | سحب نقدي فوق الحد ينتظر مديرًا؛ لا يخرج النقد قبل الاعتماد، ويمكن سحب الطلب. |
+| ★ تصنيف المصروف | `pos:shift.category` · Expense category | تصنيف ثابت لـ«مصروف نثري» (مستلزمات، صيانة، نقل، ضيافة، خدمات، تنظيف، أخرى)؛ «أخرى» تحتاج وصفًا. |
+| ★ مُرحَّلة / مرفوضة / مسحوبة | `manager:cash.status_posted` / `_rejected` / `_withdrawn` · Posted / Rejected / Withdrawn | حالة الحركة النقدية في تفاصيل الوردية بالإدارة: سُجّلت على الدرج / رفضها مدير / سحبها صاحبها. |
+| ★ فوق الحد / تجاوز المالك | `manager:cash.limitExceeded` / `manager:cash.ownerOverride` · Over limit / Owner override | شارتان على الحركة النقدية: تجاوزت حد الاعتماد / سجّلها أو اعتمدها المالك دون شخص ثانٍ. |
 | الخزينة | `manager:cashCustody.treasury` · Treasury | مكان النقد الخاص بكل فرع خارج الأدراج. |
 | إدارة النقدية | `manager:nav.cash` · Cash custody | شاشة أرصدة الخزائن والأدراج وتحويلاتها. |
 | إجمالي النقد | `manager:dashboard.totalCash` · Total cash on hand | الخزائن + الأدراج + ما هو قيد النقل. |
@@ -364,6 +367,7 @@
 
 - **ت-1 إلى ت-23: معتمدة بقرار المالك (ق-5، 2026-10-13).**
 - **ت-24 إلى ت-27: جديدة في هذا التحديث، مقترحة وتنتظر القرار (ق-8).**
+- **ت-28: أُضيف مع القسم 10، مقترح وينتظر القرار (ق-8).**
 
 | # | المفهوم | الصيغ الموجودة (المفتاح) | الصيغة في الدليل | الحالة |
 |---|---|---|---|---|
@@ -394,6 +398,7 @@
 | ت-25 | الصافي بعد المرتجعات | «الصافي بعد المرتجعات» و«المرتجعات» (`manager:reports.netAfterRefunds`، `reports.refunds`) مقابل «الصافي بعد الاسترجاعات» و«استرجاعات اليوم» و«الاسترجاعات» (`manager:dashboard.todayNet`، `dashboard.todayRefunds_*`، `periods.netAfterRefunds`، `periods.refunds_*`) | «الصافي بعد المرتجعات» في الشرح؛ تُنقل عناوين لوحة التحكم والحزمة كما هي. | مقترحة |
 | ت-26 | طريقة الدفع | «طريقة الدفع» (`manager:nav.payments`، `reports.method`، `pos:sale.payWith`) مقابل «وسيلة الدفع» (`manager:periods.method`، `periods.collections`) | «طريقة الدفع». | مقترحة |
 | ت-27 | الشحنة / التسليم | «الشحنات» و«استلام شحنة» (`manager:purchasing.receipts`، `purchasing.receive`) مقابل «تاريخ التسليم» و«تسليم {{date}}» (`purchasing.receivedOn`، `receivedOnLabel`) و«تسليمات» (`manager:periods.documents`) | «الشحنة» للمستند، و«تاريخ التسليم» لاسم الحقل كما هو. | مقترحة |
+| ت-28 | حالة الحركة النقدية | «مرفوض» و«مسحوب» (`pos:shift.status_rejected`، `status_withdrawn`) مقابل «مرفوضة» و«مسحوبة» (`manager:cash.status_rejected`، `status_withdrawn`) — تذكير وتأنيث | يُنقل نص كل شاشة كما هو؛ وفي الشرح «مرفوض» و«مسحوب» (السحب). | مقترحة |
 
 ملاحظة: «إقفال» (الشهر) و«إغلاق» (الوردية، المتبقي في أمر الشراء) ليسا تناقضًا؛ مفهومان مختلفان
 ويُكتب كل منهما كما هو.
