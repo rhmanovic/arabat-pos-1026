@@ -144,6 +144,10 @@
 | إعادة للمخزون | `pos:returns.restock` · Back to stock | إرجاع الصنف إلى المخزون (لا يُختار للتالف). |
 | يُعاد إلى | `pos:returns.payBack` · Pay back | طريقة الدفع التي يعود إليها مبلغ الاسترجاع. |
 | رصيد المرتجع | `pos:returns.credit` · Return credit | قيمة الأصناف المرتجعة التي تُحتسب في الاستبدال (الصيغة المعتمدة: «رصيد الاستبدال» — ت-2). |
+| ★ المباع / يمكن إرجاعه / الكل | `pos:returns.sold` / `pos:returns.refundable` / `pos:returns.all` · Sold / Refundable / All | تحت كل صنف في شاشة المرتجعات؛ «الكل» يكتب كل الكمية الممكنة. |
+| ★ يدفع العميل / يُعاد للعميل | `pos:returns.due` / `pos:returns.back` · Customer pays / Back to customer | فرق الاستبدال بين الأصناف الجديدة و«رصيد المرتجع». |
+| ★ تأكيد الاسترجاع / إتمام الاستبدال | `pos:returns.confirmRefund` / `pos:returns.completeExchange` · Confirm refund / Complete exchange | زرا التنفيذ في شاشة المرتجعات. |
+| ★ الإيصال الأصلي | `pos:returns.originalReceipt` · Original receipt | رقم إيصال الشراء المطبوع على «إيصال استرجاع». |
 | مهلة الإرجاع (أيام) | `manager:sales.refundWindow` · Return window (days) | المدة التي يُقبل فيها الإرجاع بدون اعتماد. |
 | حد اعتماد الاسترجاع (د.ك) | `manager:sales.refundLimit` · Refund approval limit (KWD) | الاسترجاع فوق هذا المبلغ يحتاج اعتمادًا. |
 | ★ استرجاع المبيعات الخاصة يحتاج شخصًا ثانيًا | `manager:sales.ownSaleApproval` · Own-sale refunds need a second person | إعداد: استرجاع عملية سجّلها الطالب بنفسه ينتظر الاعتماد مهما كان المبلغ. |
