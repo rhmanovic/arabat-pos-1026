@@ -103,7 +103,7 @@
 | الدفع | `pos:sale.pay` · Pay | فتح نافذة الدفع. |
 | إضافة دفعة | `pos:sale.addPayment` · Add payment | الدفع بأكثر من طريقة في نفس عملية البيع. |
 | النقد المستلم (د.ك) | `pos:sale.tendered` · Cash received (KWD) | المبلغ النقدي الذي سلّمه العميل. |
-| المبلغ بالضبط | `pos:sale.exact` · Exact | العميل دفع المبلغ المطلوب بلا باقٍ. |
+| المبلغ بالضبط | `pos:sale.exact` · Exact | ★ النص موجود في ملف الترجمة لكنه لا يظهر في أي شاشة حاليًا؛ لا يُستخدم في الدليل. |
 | ★ المرجع (جهاز الدفع / التحويل) | `pos:sale.referenceRequired` · Reference (terminal / transfer) | رقم من جهاز البطاقة أو التحويل، إلزامي عند تفعيل ذلك في «سياسة البيع». |
 | المتبقي | `pos:sale.remaining` · Remaining | ما بقي من الإجمالي دون دفع. |
 | الباقي للعميل | `pos:sale.change` · Change | النقد الذي يُعاد للعميل عند دفعه أكثر من المطلوب. |
@@ -121,6 +121,11 @@
 | العميل | `pos:customer.label` · Customer | العميل المسجّل المرتبط بعملية البيع. |
 | عميل عابر | `pos:customer.walkIn` · Walk-in | بيع بدون عميل مسجّل. |
 | عميل جديد | `pos:customer.new` · New customer | إنشاء ملف عميل بسيط (الاسم والهاتف). |
+| ★ اختيار عميل / تغيير / إزالة | `pos:customer.choose` / `pos:customer.change` / `pos:customer.remove` · Choose customer / Change / Remove | أزرار العميل فوق السلة. |
+| ★ حفظ واستخدام | `pos:customer.save` · Save and use | حفظ العميل الجديد وربطه بعملية البيع الحالية. |
+| ★ تأكيد المسح | `pos:sale.confirmClear` · Confirm clear | الضغطة الثانية المطلوبة خلال 3 ثوانٍ لمسح عملية البيع. |
+| ★ السلة ({{count}}) / المنتجات | `pos:sale.viewCart` / `pos:sale.backToProducts` · Cart / Products | على الجوال: فتح السلة فوق المنتجات / العودة إلى المنتجات. |
+| ★ المتوفر: {{qty}} | `pos:sale.inStock` · In stock: {{qty}} | كمية الصنف في مخزون الفرع على بطاقته. |
 
 ## 4. المرتجعات والاسترجاع
 
