@@ -478,12 +478,14 @@ Remediation session 3 (2026-10-13, owner decision D2):
   re-issued) and see and end their sessions. A manager can end every session of an employee
   they manage and clear an employee's sign-in lock, without deactivating them. Ten wrong
   passwords pause sign-in for 15 minutes and the account holder is told by e-mail at once.
-- **BR-194** POS assistant (ADR-0105). The chat helper on the register only reads: it never
-  adds, changes or pays a sale, moves stock or cash, or sees another branch or company. Its
-  lookups run with the cashier's own rights (prices and stock the cashier may see, the own
-  shift's sales and figures, blind-count policy respected). It is off until the platform
-  configures a provider key (a paid decision of the owner), and every answer is advice: the
-  rules of the register are enforced by the server, not by the assistant.
+- **BR-194** Assistant (ADR-0105). The chat helper on the register and in the management app
+  only reads: it never adds, changes or pays a sale, moves stock or cash, changes a setting,
+  or sees another company. Its lookups run with the user's own rights and scope (the cashier's
+  branch; the manager's selected branch or the branches they may see), reading exactly what
+  the app's own screens show (blind-count policy respected). The cashier's assistant stays on
+  the cashier's screen and never describes management screens, settings or permission keys.
+  It is off until the platform configures a provider key (a paid decision of the owner), and
+  every answer is advice: the rules are enforced by the server, not by the assistant.
   Invitation grants are re-checked at acceptance against the inviter's authority as it
   stands then (grants the inviter can no longer give are dropped and recorded); deactivating
   an inviter revokes their pending invitations.

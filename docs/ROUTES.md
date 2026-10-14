@@ -208,9 +208,15 @@ supervisor override).
 | `GET /pos/assistant` (`{ enabled }`: false until `ANTHROPIC_API_KEY` is configured) | POS `pos.access` |
 | `POST /pos/assistant/chat` (`messages` ≤ 20 turns ending with the cashier's, `language`, `cart` as display text → `{ reply, toolsUsed }`; 503 `ASSISTANT_DISABLED` when off; 60 per cashier per 10 min) | POS `pos.access`; the lookups inside run with the cashier's rights at the session branch (`catalog.read` for stock, `sales.create` for the Pay screen's payment methods and the shift's sales, `shifts.operate` for the shift) |
 
+| `GET /manager/assistant` (`{ enabled }`) | manager `manager.access` |
+| `POST /manager/assistant/chat` (same body; `branchId` = the branch selected in the top bar or null for all → `{ reply, toolsUsed }`) | manager `manager.access`; lookups with the user's rights: `search_products` (`catalog.read`, stock with `inventory.read`), `payment_methods` (`payments.settings`), `stock_summary` (`inventory.read`), `sales_today` (`reports.sales`) |
+
 Screen: the **Assistant** button in the shift strip (phones: the "More" menu) and F9 open a
 chat dialog on the sale screen with suggested questions; the conversation is kept while the
-dialog is closed and cleared with "New conversation". The assistant only reads (BR-194).
+dialog is closed and cleared with "New conversation". In the management app a floating
+**Assistant** button sits at the bottom inline-end corner of every page (part of the layout,
+so it survives navigation) and opens a panel above the content; Escape closes it and the
+thread is kept. The assistant only reads (BR-194).
 
 ### Returns API (Prompt 11)
 

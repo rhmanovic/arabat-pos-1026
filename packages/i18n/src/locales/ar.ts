@@ -21,6 +21,7 @@ export const commonAr: CommonResources = {
     lockNow: 'قفل',
   },
   actions: {
+    close: 'إغلاق',
     retry: 'إعادة المحاولة',
     signIn: 'تسجيل الدخول',
     signOut: 'تسجيل الخروج',

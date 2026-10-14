@@ -4,22 +4,24 @@ import { CatalogModule } from '../catalog/catalog.module.js';
 import { InventoryModule } from '../inventory/inventory.module.js';
 import { PaymentsModule } from '../payments/payments.module.js';
 import { RegistersModule } from '../registers/registers.module.js';
+import { ReportsModule } from '../reports/reports.module.js';
 import { SalesModule } from '../sales/sales.module.js';
-import { PosAssistantController } from './assistant.controller.js';
+import { ManagerAssistantController, PosAssistantController } from './assistant.controller.js';
 import { AnthropicAssistantModel, AssistantModel } from './assistant.model.js';
 import { AssistantService } from './assistant.service.js';
 
-/** POS assistant (ADR-0105): a read-only chat helper over the cashier's own lookups. */
+/** Assistant (ADR-0105): a read-only chat helper over the user's own lookups, POS and manager. */
 @Module({
   imports: [
     AuthModule,
     CatalogModule,
     InventoryModule,
     PaymentsModule,
+    ReportsModule,
     SalesModule,
     RegistersModule,
   ],
-  controllers: [PosAssistantController],
+  controllers: [PosAssistantController, ManagerAssistantController],
   providers: [AssistantService, { provide: AssistantModel, useClass: AnthropicAssistantModel }],
 })
 export class AssistantModule {}

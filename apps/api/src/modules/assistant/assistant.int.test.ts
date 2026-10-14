@@ -11,7 +11,7 @@ import {
 import { DbFixtures, createCompany } from '../../testing/auth-fixtures.js';
 import { prepareIntegrationDatabase } from '../../testing/integration-db.js';
 import { InMemoryMailer, createTestApp, testEnv } from '../../testing/test-app.js';
-import { POS_GUIDE } from './assistant.prompt.js';
+import { MANAGER_GUIDE, POS_GUIDE } from './assistant.prompt.js';
 
 /**
  * POS assistant (ADR-0105): a read-only helper that looks things up as the cashier, at the
@@ -305,5 +305,131 @@ describe('POS assistant', () => {
     );
     const noted = await chat(c, cashier.cookies, question('milk?', { language: 'en' }));
     expect(noted.json()).toEqual({ reply: 'Milk is 2.750 KWD, 12 on hand.', toolsUsed: [] });
+  });
+});
+
+describe('manager assistant', () => {
+  const managerChat = (c: Co, cookies: Record<string, string>, body: Record<string, unknown>) =>
+    c.client.request('POST', '/manager/assistant/chat', { cookies, body });
+
+  it('answers the owner from the management app’s own screens, scoped to the selected branch', async () => {
+    const { c, variantId } = await store('Milk', 'حليب');
+    const other = await store('Milk', 'حليب');
+    expect(other.variantId).not.toBe(variantId);
+
+    // Products with stock at the selected branch, then the Payment methods page.
+    model.reply(
+      toolTurn('m1', 'search_products', { query: 'Milk' }),
+      textTurn('Milk: 2.750 KWD, 12 on hand.'),
+    );
+    const res = await managerChat(c, c.cookies, {
+      messages: [{ role: 'user', content: 'How much milk do we have?' }],
+      language: 'en',
+      branchId: c.main,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      reply: 'Milk: 2.750 KWD, 12 on hand.',
+      toolsUsed: ['search_products'],
+    });
+    const [first, second] = model.requests;
+    const system = first!.system as { text: string; cache_control?: unknown }[];
+    expect(system[0]!.text).toBe(MANAGER_GUIDE);
+    expect(system[0]!.cache_control).toEqual({ type: 'ephemeral' });
+    expect(system[1]!.text).toContain('Owner:');
+    expect(system[1]!.text).toContain('Branch selected in the top bar');
+    expect(system[1]!.text).toContain('holds every right');
+    expect(first!.tools?.map((t) => (t as { name: string }).name)).toEqual([
+      'search_products',
+      'payment_methods',
+      'stock_summary',
+      'sales_today',
+    ]);
+    const result = JSON.parse(
+      (second!.messages[2]!.content as { content: string }[])[0]!.content,
+    ) as { matches: { name: { en: string }; price: string; stock: { onHand: string }[] }[] };
+    expect(result.matches).toHaveLength(1);
+    expect(result.matches[0]).toMatchObject({
+      name: { en: 'Milk' },
+      status: 'active',
+      price: '2.750 KWD',
+      stock: [{ onHand: '12.000', status: 'in_stock' }],
+    });
+
+    model.reset();
+    model.reply(
+      toolTurn('m2', 'payment_methods', {}),
+      toolTurn('m3', 'sales_today', {}),
+      toolTurn('m4', 'stock_summary', {}),
+      textTurn('Five methods; no sales yet; 1 tracked item.'),
+    );
+    const more = await managerChat(c, c.cookies, {
+      messages: [{ role: 'user', content: 'Payment methods, sales and stock?' }],
+      language: 'en',
+    });
+    expect(more.statusCode).toBe(200);
+    expect(more.json().toolsUsed).toEqual(['payment_methods', 'sales_today', 'stock_summary']);
+    expect((model.requests[0]!.system as { text: string }[])[1]!.text).toContain(
+      'all branches the user may see',
+    );
+    const shown = (
+      await c.client.request('GET', '/manager/payment-methods', { cookies: c.cookies })
+    ).json().methods as { nameEn: string; status: string; availableInPos: boolean }[];
+    const methods = JSON.parse(
+      (model.requests[1]!.messages[2]!.content as { content: string }[])[0]!.content,
+    ) as { methods: { name: { en: string }; status: string; onRegister: boolean }[] };
+    expect(methods.methods.map((m) => m.name.en)).toEqual(shown.map((m) => m.nameEn));
+    expect(methods.methods[0]).toMatchObject({ status: 'active', onRegister: true });
+    const today = JSON.parse(
+      (model.requests[2]!.messages[4]!.content as { content: string }[])[0]!.content,
+    ) as { today: { sales: number }; openShifts: number };
+    expect(today.today.sales).toBe(0);
+    expect(today.openShifts).toBe(0);
+    const stock = JSON.parse(
+      (model.requests[3]!.messages[6]!.content as { content: string }[])[0]!.content,
+    ) as { trackedItems: number; stockValueAtCost: string };
+    expect(stock.trackedItems).toBe(1);
+    expect(stock.stockValueAtCost).toBe('12.000 KWD');
+  });
+
+  it('keeps a manager without the right out of a lookup, and a cashier session out of the route', async () => {
+    const { c } = await store('Milk', 'حليب');
+    const cashier = await cashierWithShift(c);
+    const fromPos = await c.client.request('GET', '/manager/assistant', {
+      cookies: cashier.cookies,
+    });
+    expect(fromPos.statusCode).toBe(401);
+
+    // A manager with access but without the Payment methods page: the lookup says so.
+    const manager = await c.hire([{ roleId: c.roles.branch_manager, branchId: c.main }], 'manager');
+    model.reply(
+      toolTurn('m1', 'payment_methods', {}),
+      textTurn('You cannot see the payment methods.'),
+    );
+    const res = await managerChat(c, manager.cookies, {
+      messages: [{ role: 'user', content: 'Which payment methods do we have?' }],
+      language: 'en',
+      branchId: c.main,
+    });
+    expect(res.statusCode).toBe(200);
+    const result = (
+      model.requests[1]!.messages[2]!.content as {
+        content: string;
+        is_error: boolean;
+      }[]
+    )[0]!;
+    expect(result.is_error).toBe(true);
+    expect(result.content).toContain('no right to the Payment methods page');
+    expect((model.requests[0]!.system as { text: string }[])[1]!.text).toContain('Manager:');
+
+    // Another company's branch is not found.
+    model.reset();
+    const foreign = await managerChat(c, c.cookies, {
+      messages: [{ role: 'user', content: 'hi' }],
+      language: 'en',
+      branchId: (await store('X', 'س')).c.main,
+    });
+    expect(foreign.statusCode).toBe(404);
+    expect(model.requests).toHaveLength(0);
   });
 });

@@ -1297,5 +1297,17 @@ ADR; supersede it.
 - **Consequences:** No tenant data is stored by the provider beyond its own processing (the
   provider's data terms apply; product names, prices, stock figures and the cart text of one
   branch are sent per question). Not built: streaming answers, per-merchant usage metering or
-  a plan limit, actions on the sale by the assistant (by design), the manager app.
+  a plan limit, actions on the sale by the assistant (by design).
+- **Amendment (2026-10-14, owner request after the staging trial): the management app.** The
+  same module serves `GET/POST /manager/assistant[/chat]` under `manager.access`, with its own
+  cacheable guide (`MANAGER_GUIDE`: the sidebar pages and what each does, no permission keys
+  in answers) and four read-only lookups that read exactly what the app's own pages show, with
+  the user's rights and the branch selected in the top bar (`branchId`, null = all readable
+  branches): `search_products` (Products page search, stock from the Inventory page when
+  readable), `payment_methods` (the Payment methods page: status, register/online, fee,
+  settlement account), `stock_summary` (the Inventory page's cards) and `sales_today` (the
+  dashboard's today card). The chat body is one shared component (`AssistantChat` in
+  `web-core`); the manager app mounts a floating button at the bottom inline-end corner of the
+  layout so it is on every page and the thread survives navigation. Same rate limit per user,
+  same `AssistantModel`, same key.
 

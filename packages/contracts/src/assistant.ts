@@ -2,8 +2,9 @@ import { z } from 'zod';
 import { moneyAmountSchema } from './catalog.js';
 
 /**
- * POS assistant (ADR-0105): a read-only chat helper on the cashier's screen. The browser
- * keeps the conversation and sends it whole on every turn; the server stores nothing.
+ * Assistant (ADR-0105): a read-only chat helper on the cashier's screen and in the
+ * management app. The browser keeps the conversation and sends it whole on every turn; the
+ * server stores nothing.
  */
 export const ASSISTANT_MAX_TURNS = 20;
 export const ASSISTANT_MAX_MESSAGE_CHARS = 2000;
@@ -35,11 +36,14 @@ export const assistantChatSchema = z
   .object({
     messages: z.array(assistantMessageSchema).min(1).max(ASSISTANT_MAX_TURNS),
     language: z.enum(['ar', 'en']),
+    /** POS only: what is on the till. */
     cart: assistantCartSchema.nullable().default(null),
+    /** Manager only: the branch selected in the top bar; null for "all branches". */
+    branchId: z.uuid().nullable().default(null),
   })
   .refine(
     (v) => v.messages[0]?.role === 'user' && v.messages[v.messages.length - 1]?.role === 'user',
-    { error: 'The conversation must start and end with the cashier.', path: ['messages'] },
+    { error: 'The conversation must start and end with the user.', path: ['messages'] },
   );
 export type AssistantChat = z.input<typeof assistantChatSchema>;
 

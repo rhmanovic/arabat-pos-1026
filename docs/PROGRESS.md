@@ -592,6 +592,21 @@ Implemented:
 Verified: see `TESTING.md` (results after the POS assistant). Not done: the key is not set
 anywhere (nothing is billed until the owner provides one); no streaming, no usage metering.
 
+### 2026-10-14 — Management assistant (ADR-0105 amendment)
+Implemented after the owner's staging trial:
+- **API**: `GET /manager/assistant` and `POST /manager/assistant/chat` (`manager.access`),
+  `MANAGER_GUIDE` (the sidebar pages, no permission keys in answers) and four lookups with the
+  user's rights and the selected branch: `search_products`, `payment_methods` (the Payment
+  methods page), `stock_summary`, `sales_today`; a foreign `branchId` is 404, a POS session is
+  refused at the route. Hardening from the live trial: a `max_tokens` stop without a tool call
+  gives the fallback reply, `<thinking>` notes are stripped, `max_tokens` 1 024.
+- **Web**: the chat body is one shared `AssistantChat` (`web-core`); the POS dialog uses it;
+  the manager app has a floating **Assistant** button at the bottom inline-end corner of every
+  page (in the layout, so the thread survives navigation), a panel above the content, Escape
+  to close, suggested questions; Arabic and English. `ANTHROPIC_API_KEY` is set on staging
+  with the owner's approval; staging follows branch `claude/tender-wright-t34f5x`.
+Verified: 8 assistant integration cases, 188 unit/web tests, lint and typecheck green.
+
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025
 before any production launch.

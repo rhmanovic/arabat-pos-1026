@@ -144,6 +144,21 @@ case: the tool result equals `GET /pos/payment-methods` of the same cashier (kin
 reference `required` for every non-cash method), `toolsUsed` reports it, and the guide carries
 both rules. Run: 6 passed (Docker had stopped between sessions: `dockerd` + `pnpm db:up`
 first); API lint and `tsc --noEmit` clean.
+
+**Management assistant** (ADR-0105 amendment, owner request the same night). Two more
+integration cases in `assistant.int.test.ts`: the owner's chat at `/manager/assistant/chat`
+gets `MANAGER_GUIDE` as the cached prefix, "Owner" and the selected branch in the context, the
+four manager tools, and lookups that match the app's pages (product search with the branch's
+on-hand `12.000`, the Payment methods list in page order with status and register flag, today's
+sales 0 / 0 open shifts, stock summary 1 tracked item worth 12.000 KWD at cost; another company's
+product is not seen); a branch manager without the Payment methods page gets an `is_error`
+tool result naming the page, a POS session gets 401 at the manager route, and another
+company's `branchId` is 404 before any model call. Web: two cases in the manager
+`app.test.tsx` (floating button on the dashboard, a suggested question posted with
+`branchId: null`, the answer shown, navigation to Products with the panel open keeps the
+thread, Escape closes and the button reopens with the thread; the "not configured" notice
+with the input disabled). Runs: 8 integration passed; `pnpm test` 188 passed (33 files);
+`pnpm typecheck` green; lint green except the three pre-existing booklet files.
 3. "بهالوردية بعت **فاتورة وحدة بس** لين الحين:\n\n- **MAIN-000001**، الساعة 00:37، فيها حبتين
    (2)، المجموع **0.300 د.ك**، انْدفعت **كاش**، عميل عابر، وما عليها أي مرتجع.\n\nالبيبسي اللي
    بالسلة الحين (0.150 د.ك) ما ينحسب بالمبيعات لين تدفعه بـ **Pay (F12)**.\n\nتبي تفتح الفاتورة

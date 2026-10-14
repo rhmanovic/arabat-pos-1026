@@ -440,6 +440,11 @@ export function createApiClient(options: ApiClientOptions = {}) {
       audit: (query: PlatformAuditQuery = {}) =>
         request('GET', `/platform/audit?${toParams(query)}`, { schema: platformAuditListSchema }),
     },
+    managerAssistant: {
+      status: () => request('GET', '/manager/assistant', { schema: assistantStatusSchema }),
+      chat: (body: AssistantChat) =>
+        request('POST', '/manager/assistant/chat', { body, schema: assistantReplySchema }),
+    },
     merchant: {
       get: () => request('GET', '/manager/merchant', { schema: merchantProfileSchema }),
       controls: () =>
