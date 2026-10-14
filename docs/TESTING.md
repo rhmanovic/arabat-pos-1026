@@ -84,6 +84,16 @@ answer, a manager session is refused at the route). `pnpm lint` and `pnpm format
 on three pre-existing files under `docs/user-guide/booklets/` (not touched here); every other
 file passes. `pnpm test:e2e` 35 passed (Mailpit must be up: the first run failed 7 cases on `ECONNREFUSED 127.0.0.1:8025` before it was started).
 
+**Live trial against the real model** (`scripts/ops/assistant-trial.mjs`: demo owner creates
+"Pepsi can" with stock and a cash method, the demo cashier opens a shift, sells two cans and asks
+three Arabic questions). Run on 2026-10-14 in the cloud sandbox: `ANTHROPIC_API_KEY` was not
+present in the session environment, so the API answered `{ enabled: false }` and 503
+`ASSISTANT_DISABLED` for all three questions with no provider call. With a deliberately
+invalid key the request did reach `api.anthropic.com` (401 `invalid x-api-key` in about
+140 ms), the API logged "The assistant API key was rejected by the provider." and answered 503
+`SERVICE_UNAVAILABLE`. The answers, `toolsUsed` and the per-turn token counts (API log line
+`assistant turn: N in / M out`) are still to be recorded from a run with the real key.
+
 
 
 `pnpm verify` green (184 unit/web tests, including the new manager `account.test.tsx` (devices
