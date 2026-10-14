@@ -131,6 +131,19 @@ later turn. Answers as returned:
    case in `assistant.int.test.ts` (scripted runaway turn after a lookup → fallback with
    `toolsUsed` kept, `max_tokens` 1024 on the request; a note-prefixed answer comes back
    clean). Run: 5 passed; `pnpm typecheck` and `pnpm test` (186) green.
+
+Owner's trial on staging the same night (cashier "سلطان عبدالرحمن", company "بقاله سلطان"):
+"كم وسيلة دفع عندنا" was answered from the guide's generic tender list (cash, card, transfer,
+split) and "كم طريقة دفع مفعلة لي" with "I cannot see that, open the management app →
+payment settings (you need payments.settings)", although the Pay screen in front of the
+cashier showed five methods. Fixed: a fourth lookup `payment_methods` returns exactly the list
+the POS fetches for the Pay screen (name, kind, reference needed), and the guide now says what
+the cashier sees on their own screen is theirs to ask about while management screens,
+settings, reports, other branches and permission keys are never described. Sixth integration
+case: the tool result equals `GET /pos/payment-methods` of the same cashier (kinds mapped,
+reference `required` for every non-cash method), `toolsUsed` reports it, and the guide carries
+both rules. Run: 6 passed (Docker had stopped between sessions: `dockerd` + `pnpm db:up`
+first); API lint and `tsc --noEmit` clean.
 3. "بهالوردية بعت **فاتورة وحدة بس** لين الحين:\n\n- **MAIN-000001**، الساعة 00:37، فيها حبتين
    (2)، المجموع **0.300 د.ك**، انْدفعت **كاش**، عميل عابر، وما عليها أي مرتجع.\n\nالبيبسي اللي
    بالسلة الحين (0.150 د.ك) ما ينحسب بالمبيعات لين تدفعه بـ **Pay (F12)**.\n\nتبي تفتح الفاتورة

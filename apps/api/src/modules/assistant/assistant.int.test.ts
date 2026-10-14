@@ -148,6 +148,7 @@ describe('POS assistant', () => {
     expect(system[1]!.text).toContain('- دهن عود × 2 @ 2.750 = 5.500 KWD');
     expect(first!.tools?.map((t) => (t as { name: string }).name)).toEqual([
       'search_products',
+      'payment_methods',
       'recent_sales',
       'shift_summary',
     ]);
@@ -248,6 +249,35 @@ describe('POS assistant', () => {
     // The manager app has no assistant: a manager session is refused at the route.
     const fromManager = await c.client.request('GET', '/pos/assistant', { cookies: c.cookies });
     expect(fromManager.statusCode).toBe(401);
+  });
+
+  it('lists the payment methods of the Pay screen, as the cashier sees them, and the guide keeps management out', async () => {
+    const { c } = await store('Milk', 'حليب');
+    const cashier = await cashierWithShift(c);
+    const shown = (
+      await c.client.request('GET', '/pos/payment-methods', { cookies: cashier.cookies })
+    ).json().methods as { kind: string; nameEn: string; nameAr: string }[];
+    expect(shown.length).toBeGreaterThan(1);
+
+    model.reply(
+      toolTurn('t1', 'payment_methods', {}),
+      textTurn('عندك: نقدًا، كي نت، فيزا / ماستركارد، رابط دفع، ومض.'),
+    );
+    const res = await chat(c, cashier.cookies, question('كم طريقة دفع مفعلة لي؟'));
+    expect(res.statusCode).toBe(200);
+    expect(res.json().toolsUsed).toEqual(['payment_methods']);
+    const results = model.requests[1]!.messages[2]!.content as { content: string }[];
+    expect(JSON.parse(results[0]!.content)).toEqual({
+      methods: shown.map((m) => ({
+        name: { en: m.nameEn, ar: m.nameAr },
+        kind: { cash: 'cash', card: 'card', bank_transfer: 'bank transfer', custom: 'other' }[
+          m.kind
+        ],
+        reference: m.kind === 'cash' ? 'none' : 'required',
+      })),
+    });
+    expect(POS_GUIDE).toContain('never quote permission keys');
+    expect(POS_GUIDE).toContain('payment_methods lookup');
   });
 
   it('hides a turn cut off at the output limit and the model’s own notes (live trial findings)', async () => {

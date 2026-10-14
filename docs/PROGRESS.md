@@ -580,8 +580,10 @@ Implemented:
 - **API**: `assistant` module with `GET /pos/assistant` and `POST /pos/assistant/chat`
   (`pos.access`); `AssistantModel` boundary with the Anthropic implementation (official SDK,
   `claude-opus-5-5` by default, low effort, server-side fallback, 60 s timeout) and a scripted
-  test double; three read-only lookups as the cashier (`search_products`, `recent_sales`,
-  `shift_summary`); rights, branch, blind count and RLS respected; four lookup rounds and 60
+  test double; four read-only lookups as the cashier (`search_products`, `payment_methods`,
+  `recent_sales`, `shift_summary`); rights, branch, blind count and RLS respected; the guide
+  keeps the assistant on the cashier's own screen (no management screens, settings or
+  permission keys in answers); four lookup rounds and 60
   requests per cashier per 10 minutes at most; off (503 `ASSISTANT_DISABLED`) without
   `ANTHROPIC_API_KEY`.
 - **POS**: Assistant button in the shift strip and the phone menu, F9, chat dialog with

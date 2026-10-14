@@ -1280,13 +1280,18 @@ ADR; supersede it.
     the button shows a notice, no request leaves the server and nothing is billed. Setting the
     key is a paid decision of the owner (CLAUDE.md §3.13).
   - The assistant is **read-only** (BR-194). It answers from a fixed guide of the register
-    (`POS_GUIDE`, the cacheable prefix) plus three lookups that run as the cashier, at the
+    (`POS_GUIDE`, the cacheable prefix) plus four lookups that run as the cashier, at the
     session branch, inside the merchant's RLS context: `search_products` (name / SKU /
-    barcode, price, stock when the cashier may see it), `recent_sales` (own shift) and
-    `shift_summary` (figures withheld under the blind count exactly as on the shift page).
-    Rights are checked with `can()` before each lookup; the cashier's rights at the branch are
-    part of the prompt so the answer says who must authorise what. At most four lookup rounds
-    per answer; 60 requests per cashier per 10 minutes (`RateLimiterService`).
+    barcode, price, stock when the cashier may see it), `payment_methods` (the Pay screen's
+    buttons, exactly the list the POS fetches; added 2026-10-14 after the owner's trial, where
+    "how many payment methods do I have" was answered generically), `recent_sales` (own
+    shift) and `shift_summary` (figures withheld under the blind count exactly as on the
+    shift page). Rights are checked with `can()` before each lookup; the cashier's rights at
+    the branch are part of the prompt so the answer says who must authorise what. The guide
+    draws the line at the cashier's own screen: what the cashier can see is answered from the
+    lookups; management screens, settings, reports, other branches and permission keys are
+    never described (owner decision, 2026-10-14). At most four lookup rounds per answer; 60
+    requests per cashier per 10 minutes (`RateLimiterService`).
   - POS: an **Assistant** button in the shift strip (and the phone "More" menu), F9, a dialog
     with suggested questions, the thread kept while the dialog is closed, "New conversation".
 - **Consequences:** No tenant data is stored by the provider beyond its own processing (the

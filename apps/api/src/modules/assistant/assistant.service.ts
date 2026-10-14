@@ -12,6 +12,7 @@ import { merchantTimezone } from '../../kernel/time/period.js';
 import { type RateLimit, RateLimiterService } from '../auth/rate-limiter.service.js';
 import { CatalogService } from '../catalog/catalog.service.js';
 import { InventoryService } from '../inventory/inventory.service.js';
+import { PaymentsService } from '../payments/payments.service.js';
 import { ShiftsService } from '../registers/shifts.service.js';
 import { SalesService } from '../sales/sales.service.js';
 import { AssistantModel, assistantDisabled } from './assistant.model.js';
@@ -54,6 +55,7 @@ export class AssistantService {
     private readonly limiter: RateLimiterService,
     private readonly catalog: CatalogService,
     private readonly inventory: InventoryService,
+    private readonly payments: PaymentsService,
     private readonly sales: SalesService,
     private readonly shifts: ShiftsService,
   ) {}
@@ -190,6 +192,8 @@ export class AssistantService {
       switch (call.name) {
         case 'search_products':
           return await this.searchProducts(actor, branchId, call.input);
+        case 'payment_methods':
+          return await this.paymentMethods(actor, branchId);
         case 'recent_sales':
           return await this.recentSales(actor, branchId);
         case 'shift_summary':
@@ -253,6 +257,28 @@ export class AssistantService {
       };
     });
     return { content: JSON.stringify({ matches: rows }), isError: false };
+  }
+
+  /** The Pay screen's buttons: the same list the POS fetches, nothing from the settings. */
+  private async paymentMethods(actor: MerchantActor, branchId: string): Promise<ToolOutcome> {
+    if (!can(actor.access, 'sales.create', branchId))
+      return { content: 'The cashier has no right to take payments.', isError: true };
+    const methods = await this.payments.posMethods(actor);
+    if (methods.length === 0)
+      return { content: 'No payment method is enabled on the Pay screen.', isError: false };
+    const KIND = {
+      cash: 'cash',
+      card: 'card',
+      bank_transfer: 'bank transfer',
+      custom: 'other',
+    } as const;
+    const rows = methods.map((m) => ({
+      name: { en: m.nameEn, ar: m.nameAr },
+      kind: KIND[m.kind],
+      // Every non-cash tender carries its terminal / transfer reference (BR-181).
+      reference: m.kind === 'cash' ? 'none' : 'required',
+    }));
+    return { content: JSON.stringify({ methods: rows }), isError: false };
   }
 
   private async recentSales(actor: MerchantActor, branchId: string): Promise<ToolOutcome> {
