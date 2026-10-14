@@ -148,7 +148,10 @@ in the deploy log of 2026-10-12 14:42 UTC). Since 2026-10-14 21:47 UTC the web s
 branch `claude/tender-wright-t34f5x` (POS assistant, ADR-0105) at the owner's request to try
 the assistant as a cashier; switch it back to the default branch in the service's Source
 settings once the branch is merged. `ANTHROPIC_API_KEY` is set on the service only with the
-owner's say-so (paid usage).
+owner's say-so (paid usage). Since 2026-10-14 it holds a dedicated Anthropic workspace key
+named `arabat-pos-staging` (rotated in from the owner's personal key, which is to be revoked
+in the Anthropic Console); rotate it again by setting the variable on the web service, which
+redeploys.
 
 ### Cash custody cutover (ADR-0090, migration 0033)
 
