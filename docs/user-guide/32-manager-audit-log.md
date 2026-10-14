@@ -10,7 +10,8 @@
 - الصلاحيات: audit.read (نطاق merchant ⇒ تعمل فقط بإسناد «كل الفروع» أو للمالك)، manager.access؛ للإحالات: catalog.read
   (سجل الأسعار)، shifts.view_all (الورديات)، sales.read (المبيعات)
 - قواعد العمل: BR-163، BR-187، BR-191 (وللسياق: BR-182، BR-184، BR-020؛ ADR-0071، ADR-0093، ADR-0104)
-- قرارات: ق-7 (جدول الرموز بالعربية)، ق-29 (صيغة من يمنح الصلاحية)، ت-24 («استرجاع» للمبيعات فقط)، ت-18 («التحويلات»)
+- قرارات: ق-7 (جدول الرموز بالعربية)، ق-29 (صيغة من يمنح الصلاحية)، ق-35 (تسجيل محاولات الدخول الفاشلة وقفل الحساب
+  في سجل الشركة — عيب كود 141 لم يُطبَّق، فالمتن يذكر أنها لا تظهر؛ «فتح الدرج بلا بيع» لا يُضاف والقسم يبقى كما هو)، ت-24 («استرجاع» للمبيعات فقط)، ت-18 («التحويلات»)
 - مفاتيح الترجمة المستخدمة:
   manager:nav.audit، manager:nav.sectionOrganization، manager:nav.products، manager:nav.shifts، manager:nav.roles،
   manager:nav.dashboard، common:actions.openMenu، manager:top.allBranches، manager:roles.merchantScope،
@@ -76,8 +77,8 @@
     shift.opened (difference بين الورديات)، auth.pos.locked / unlocked.
   * قائمة الرموز في الجدول مستخرجة من استدعاءات recordIn / record ومساعدات record في كل الوحدات (grep على
     apps/api/src/modules)، وتشمل فقط ما يُكتب بـ merchant_id.
-- رُوجع على الالتزام: 227af7d
-- الحالة: مسودة
+- رُوجع على الالتزام: c5ea8f4، ثم تصحيحات فحص الاتساق في التزام الاعتماد 1.0
+- الحالة: معتمد 1.0 (2026-10-14)
 -->
 
 ## الهدف من الشاشة

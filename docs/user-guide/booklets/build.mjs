@@ -90,7 +90,12 @@ function buildMarkdown(cfg) {
   const commitDate = git('log', '-1', '--format=%cs', '--', ...sourceFiles);
   // Sections edited after that commit: say so instead of claiming the commit's text.
   const dirty = git('status', '--porcelain', '--', ...sourceFiles) !== '';
-  const sourceLabel = dirty
+  // A release build (BOOKLET_RELEASE="1.0 (2026-10-14)") is committed together with the approved
+  // sections, so it names the release instead of a commit that cannot contain itself.
+  const release = process.env.BOOKLET_RELEASE;
+  const sourceLabel = release
+    ? `الإصدار ${release}: كل الفصول بحالة «معتمد». رقم الالتزام في سجل الإصدارات بملف README للدليل.`
+    : dirty
     ? `نصوص الفصول من الالتزام \`${commit}\` مع تعديلات لاحقة عليه (بُني في ${new Date().toISOString().slice(0, 10)}).`
     : `نصوص الفصول من الالتزام \`${commit}\` بتاريخ ${commitDate}.`;
 

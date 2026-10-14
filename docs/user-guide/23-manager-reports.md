@@ -23,7 +23,7 @@
   manager:reports.exportCsv، manager:reports.noData، manager:reports.noPrevious، manager:reports.vsPrevious،
   manager:reports.loadFailed، manager:reports.definitions،
   (المبيعات) manager:reports.netSales، manager:reports.saleCount، manager:reports.averageSale، manager:reports.refunds، manager:reports.gross، manager:reports.itemsSold، manager:reports.discounts،
-  manager:reports.orderDiscounts، manager:reports.netAfterRefunds، manager:reports.grossProfit، manager:reports.margin، manager:reports.profitUncosted (_one فقط)، manager:reports.trend، manager:reports.byHour، manager:reports.byBranch،
+  manager:reports.orderDiscounts، manager:reports.netAfterRefunds، manager:reports.grossProfit، manager:reports.margin، manager:reports.profitUncosted (_one و_other فقط: الأعداد 2–99 تظهر بالإنجليزية)، manager:reports.trend، manager:reports.byHour، manager:reports.byBranch،
   manager:reports.byChannel، manager:reports.byChannelHint، manager:reports.byEmployee، manager:reports.onlineStoreRow، manager:reports.exceptions، manager:reports.byPaymentMethod، manager:reports.byPaymentMethodHint،
   manager:reports.exchangeCredit، manager:reports.byProduct، manager:reports.refundedQty، manager:reports.byCategory، manager:reports.uncategorized، manager:reports.byDay، manager:reports.branch، manager:reports.method، manager:reports.payments، manager:reports.amount،
   manager:reports.product، manager:reports.quantity، manager:reports.category، manager:reports.date، manager:reports.def_netSales_title، manager:reports.def_netSales، manager:reports.def_gross_title، manager:reports.def_gross،
@@ -119,8 +119,11 @@
     450.000 − 25.000 + 50.000 − 300.000 = 175.000؛ −0.250 − 2.000 + 1.000 = −1.250؛
     5,000.000 + 1,200.000 − 2,300.000 + 100.000 − 50.000 + 0.004 = 3,950.004؛ الفترة السابقة لـ 01–14 أكتوبر
     = 17–30 سبتمبر.
-- رُوجع على الالتزام: 0ff793e
-- الحالة: مسودة
+- القرارات: ق-6 («أمين الخزينة» بالاسم)، ق-8 (ت-25، ت-26، ت-27)، ق-24 (فروقات النقد — CODE_FINDINGS 88؛ تصفية
+  «الموظف» لأمين الخزينة — 90؛ «تسويات المخزون» المرحَّل فقط — 91؛ السلوك الحالي موصوف مع الإشارة إلى القرار)، ق-31
+  (تجميع التقارير بالتصنيف الحالي مقبول) (README.md القسم 6).
+- رُوجع على الالتزام: a82a87d، ثم تصحيحات فحص الاتساق في التزام الاعتماد 1.0
+- الحالة: معتمد 1.0 (2026-10-14)
 -->
 
 ## الهدف من الشاشة
@@ -195,7 +198,7 @@
 ما يجب معرفته عن «الموظف»:
 
 - القائمة تُملأ من تبويب «المبيعات». تضم من باع أو طلب استرجاعًا في الفترة.
-- من لا يرى تبويب «المبيعات» (مثل أمين الخزينة) يجد «كل الموظفين» فقط.
+- من لا يرى تبويب «المبيعات» (مثل أمين الخزينة) يجد «كل الموظفين» فقط. هذا هو السلوك الحالي؛ قرّر صاحب النظام أن تُتاح هذه التصفية لأمين الخزينة (ق-24).
 
 ### المقارنة بالفترة السابقة
 
@@ -295,7 +298,7 @@
 - يُحسب «إجمالي الربح» على المبيعات المعروفة التكلفة فقط.
 - يظهر تحت البطاقة باللون الأحمر عدد هذه الفواتير ومبلغها ونسبتها من الصافي. مثال لفاتورة واحدة:
   «فاتورة أو مرتجع واحد بلا تكلفة: استُبعد 12.000 د.ك (1.3% من الصافي)».
-- إذا كان العدد أكثر من واحد يظهر هذا السطر بالإنجليزية حاليًا.
+- إذا كان العدد أكثر من واحد قد يظهر هذا السطر بالإنجليزية حاليًا.
 - حدّد تكلفة الصنف. انظر قسم «المنتجات».
 
 ### تبويب «المدفوعات والنقد»
@@ -443,7 +446,8 @@
 
 الوردية بفرق `-0.250` «متوازن»، فلا تدخل «عجز». لكنها داخلة في «صافي فرق النقد».
 
-**انتبه:** تبويب «فروقات النقد» في شاشة «الورديات» يجمع المبالغ بطريقة أخرى. هناك «إجمالي العجز» يشمل كل فرق سالب، ولو كان ضمن «الفرق المقبول»، ويُكتب موجبًا. في المثال نفسه يكون هناك `2.250 د.ك`.
+**انتبه:** تبويب «فروقات النقد» في شاشة «الورديات» يجمع المبالغ بطريقة أخرى. هناك «إجمالي العجز» يشمل كل فرق سالب، ولو كان ضمن «الفرق المقبول»، ويُكتب موجبًا. في المثال نفسه يكون هناك `2.250 د.ك`. (0.250 + 2.000 = 2.250)
+هذا هو السلوك الحالي. قرّر صاحب النظام أن يعدّ «إجمالي العجز» و«إجمالي الزيادة» هناك ما تجاوز «الفرق المقبول» فقط، كهذا التبويب (ق-24).
 لتفاصيل الفروق ومتابعتها انظر قسم «الصناديق».
 
 ### تبويب «المخزون»
@@ -505,7 +509,7 @@
 - «تسوية» و«تسويات المخزون» تعني تعديلات المخزون. انظر قسم «تعديلات المخزون».
 - «إلغاء البيع» يظهر بنوع «مرتجع»، لا «فاتورة ملغاة».
 - خسائر تحويلات المخزون المشطوبة تظهر بسطر اسمه بالإنجليزية `transfer_loss`. انظر قسم «تحويلات المخزون بين الفروع».
-- «المستندات» في «تسويات المخزون» تعدّ كل تعديل أُنشئ في الفترة، ومنه ما «بانتظار الاعتماد» أو «مرفوض» أو «مسحوب».
+- «المستندات» في «تسويات المخزون» تعدّ كل تعديل أُنشئ في الفترة، ومنه ما «بانتظار الاعتماد» أو «مرفوض» أو «مسحوب». هذا هو السلوك الحالي؛ قرّر صاحب النظام أن تعدّ المرحَّل فقط (ق-24).
 
 ### تبويب «المشتريات»
 
