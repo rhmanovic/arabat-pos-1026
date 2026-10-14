@@ -156,6 +156,9 @@
 | إغلاق الوردية | `pos:shift.close` · Close shift | عدّ الدرج في نهاية العمل وتسجيل الفرق. |
 | الوردية والنقد | `pos:shift.manage` · Shift & cash | شاشة الوردية في نقطة البيع: الحركات النقدية والإغلاق. |
 | الصندوق | `pos:shift.register` · Register | جهاز البيع ودرجه في الفرع؛ وردية واحدة مفتوحة لكل صندوق. |
+| ★ متاح / قيد الاستخدام: {{name}} | `pos:shift.free` / `pos:shift.occupied` · Free / In use: {{name}} | حالة الصندوق في شاشة «فتح وردية»؛ الصندوق قيد الاستخدام لا يمكن اختياره. |
+| ★ أول جرد لهذا الصندوق… | `pos:shift.firstCount` · First count of this register… | أول عدّ لصندوق جديد يصبح رصيده ولا يُعد فرقًا. |
+| ★ المزيد / العودة للبيع | `pos:shift.more` / `pos:shift.back` · More / Back to sale | على الجوال: قائمة الإجراءات الإضافية تحت شاشة البيع / العودة من شاشة الوردية. |
 | الدرج | `common:errors.INSUFFICIENT_CASH`، `pos:shift.expected` · drawer (Expected cash in drawer) | مكان النقد في الصندوق؛ رصيده ينتقل من وردية إلى التالية. |
 | درج الصندوق | `manager:cash.settlesInDrawer` · Register drawer | المكان الذي يُسجَّل فيه النقد المستلم من المبيعات. |
 | النقد الافتتاحي | `pos:shift.openingCash` · Opening cash | النقد في الدرج عند فتح الوردية. |
