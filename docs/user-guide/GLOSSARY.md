@@ -13,7 +13,7 @@
 داخل الشاشات (عدا اسمي اللغتين «العربية» و«English»). الاستثناء: «سجل التدقيق» يعرض أسماء
 الإجراءات وتفاصيلها كما خزّنها النظام بالإنجليزية (انظر ق-7 في `README.md`).
 
-آخر تحديث: 2026-10-14، على الالتزام `a82a87d` (مصطلحات الأقسام 10 و13–29). الصفوف الجديدة منذ تحديث
+آخر تحديث: 2026-10-14، على الالتزام `227af7d` (مصطلحات الأقسام 10 و13–34، عدا 30). الصفوف الجديدة منذ تحديث
 2026-10-13 معلّمة بـ ★.
 
 ---
@@ -464,6 +464,13 @@
 | ★ غير متصلة (بوابة) | `manager:cash.gatewayNone` · Not connected | طريقة دفع بلا بوابة. |
 | ★ رصيد الدفتر / المطابَق حتى الآن / رصيد الكشف (د.ك) / تاريخ الكشف | `manager:cash.bookBalance` / `clearedBefore` / `statementBalance` / `statementDate` · Book balance / Cleared so far / Statement balance / Statement date | أرقام «المطابقة البنكية». |
 | ★ مطابَق / حفظ المطابقة / المطابقات السابقة | `manager:cash.reconciledUpToDate` / `saveReconciliation` / `reconciliationHistory` · Reconciled / Save reconciliation / Previous reconciliations | حالة الحساب البنكي وحفظ المطابقة وسجلها. |
+| ★ الاستخدام / بدون حد | `manager:subscription.usage` / `unlimited` · Usage / unlimited | ما تستخدمه الشركة الآن من كل حد في الباقة. |
+| ★ تجريبي / نشط / متأخر السداد / ملغي / منتهي / انتهت الفترة التجريبية | `manager:subscription.status_*` · Trial / Active / Past due / Cancelled / Expired / Trial ended | حالة الاشتراك؛ لا توقف العمل اليومي. |
+| ★ تاريخ البدء / نهاية الفترة التجريبية / تاريخ الانتهاء | `manager:subscription.started` / `trialEnds` / `ends` · Started / Trial ends / Ends | تواريخ الاشتراك. |
+| ★ الفروع / الموظفون (مع الدعوات المعلّقة) / المنتجات النشطة / الصناديق | `manager:subscription.limit_*` · Branches / Employees (incl. pending invitations) / Active products / Registers | حدود الباقة. |
+| ★ المطعم / المتجر الإلكتروني / غير مشمول | `manager:subscription.feature_*` / `notIncluded` · Restaurant / Online store / not included | ميزات الباقة. |
+| ★ الباقات المتاحة / باقتك | `manager:subscription.available` / `yourPlan` · Available plans / Your plan | الباقات للمقارنة؛ التغيير من فريق المنصة فقط. |
+| ★ خطة اشتراكك لا تشمل هذه الميزة. | `common:errors.PLAN_FEATURE_UNAVAILABLE` · Your subscription plan does not include this feature. | رفض تفعيل المطعم أو نشر المتجر خارج الباقة. |
 
 ### 9.1 الرقابة والإقفال
 
@@ -477,7 +484,7 @@
 | ★ مقفل / جاهز للإقفال / مفتوح / الشهر الحالي | `manager:periods.status_*` · Closed / Ready to close / Open / Current month | حالة الشهر. |
 | ★ إقفال الشهر | `manager:periods.close` · Close month | إقفال نهائي لا تراجع عنه؛ بعده لا يُقبل مستند مؤرخ داخل الشهر. |
 | ★ حزمة نهاية الشهر | `manager:periods.packTitle` · Month-end pack | أرقام الشهر (المبيعات، الربح، النقد، المخزون، التحصيلات) محفوظة عند الإقفال، أو حية لشهر مفتوح. |
-| ★ بنود مفتوحة تنتقل إلى الشهر التالي | `manager:periods.openItems` · Open items carried forward | ما زال ينتظر قرارًا عند حساب الحزمة (فروقات، تحويلات، اعتمادات، فواتير معلّقة). |
+| ★ بنود مفتوحة تنتقل إلى الشهر التالي | `manager:periods.openItems` · Open items carried forward | ما زال ينتظر قرارًا عند حساب الحزمة (فروقات، تحويلات، اعتمادات، «فواتير معلّقة» = مبيعات معلّقة في نقطة البيع)؛ تُعدّ ولا تمنع الإقفال. |
 | ★ هذا التاريخ يقع في فترة مقفلة… | `common:errors.PERIOD_CLOSED` | رسالة عند تأريخ أمر شراء أو تسليم داخل شهر مقفل. |
 | ★ حد اعتماد المصروفات / حد اعتماد مدفوعات الموردين | `manager:sales.expenseLimit` / `supplierPaymentLimit` · Expense / Supplier payment approval limit | إعدادان في «سياسة البيع»؛ الافتراضي 20.000 / 100.000. |
 | ★ حد اعتماد تعديلات المخزون (د.ك بالتكلفة) | `manager:sales.adjustmentLimit` · Stock adjustment approval limit | إعداد في «سياسة البيع»؛ الافتراضي 50.000 بالتكلفة. |
@@ -492,6 +499,13 @@
 | ★ رأس الإيصال / تذييل الإيصال | `manager:branches.receiptHeader` / `receiptFooter` · Receipt header / Receipt footer | نص يُطبع على إيصال الفرع. |
 | ★ إيقاف هذا الفرع؟ | `manager:branches.deactivateTitle` · Deactivate this branch? | تأكيد إيقاف فرع. |
 | ★ الإبقاء على الأدوار والتفعيل / إلغاء الأدوار والتفعيل | `manager:branches.dormantKeep` / `dormantClear` · Keep the roles and activate / Clear the roles and activate | خيارا إعادة تفعيل فرع فيه «أدوار خاملة». |
+| ★ نوع السجل / كل أنواع السجلات / معرّف السجل / عنوان IP | `manager:audit.targetType` / `allTargets` / `targetId` / `ip` · Record type / All record types / Record id / IP address | تصفية «سجل التدقيق» وأعمدته (المعرّف في CSV فقط). |
+| ★ تصفية حسب الإجراء (مثل refund أو shift أو price) | `manager:audit.filterAction` · Filter by action | خانة البحث بجزء من رمز الإجراء الإنجليزي. |
+| ★ أقفله / ملاحظة (اختياري) / تم إقفال الشهر | `manager:periods.closedBy` / `note` / `closed` · Closed by / Note (optional) / Month closed | من أقفل الشهر، وملاحظة الإقفال. |
+| ★ النقد في نهاية الشهر / النقد حسب المكان في نهاية الشهر | `manager:periods.cashOnHand` / `cashByPlace` · Cash on hand at month end / Cash by place at month end | أرقام النقد في «حزمة نهاية الشهر». |
+| ★ قيمة المخزون الختامي / التحصيلات حسب وسيلة الدفع / المستحق للموردين (المستلم − المدفوع) | `manager:periods.closingStock` / `collections` / `supplierBalance` · Closing stock value / Collections by tender / Owed to suppliers | أرقام أخرى في «حزمة نهاية الشهر». |
+| ★ كلمة مرورك / اختر عضواً… | `manager:company.ownerPassword` / `chooseMember` · Your password / Choose a member… | حقلا بدء نقل الملكية. |
+| ★ تم ترشيحك مالكاً جديداً | `manager:company.transferForMeTitle` · You were named as the new owner | تنبيه المرشَّح في قسم «الملكية». |
 
 ---
 
@@ -515,6 +529,7 @@
 
 - **ت-1 إلى ت-23: معتمدة بقرار المالك (ق-5، 2026-10-13).**
 - **ت-24 إلى ت-28: معتمدة بقرار المالك (ق-8، 2026-10-14).**
+- **ت-29: جديد مع القسم 31، مقترح وينتظر القرار (ق-34).**
 
 | # | المفهوم | الصيغ الموجودة (المفتاح) | الصيغة في الدليل | الحالة |
 |---|---|---|---|---|
@@ -546,6 +561,7 @@
 | ت-26 | طريقة الدفع | «طريقة الدفع» (`manager:nav.payments`، `reports.method`، `pos:sale.payWith`) مقابل «وسيلة الدفع» (`manager:periods.method`، `periods.collections`) | «طريقة الدفع». | معتمدة |
 | ت-27 | الشحنة / التسليم | «الشحنات» و«استلام شحنة» (`manager:purchasing.receipts`، `purchasing.receive`) مقابل «تاريخ التسليم» و«تسليم {{date}}» (`purchasing.receivedOn`، `receivedOnLabel`) و«تسليمات» (`manager:periods.documents`) | «الشحنة» للمستند، و«تاريخ التسليم» لاسم الحقل كما هو. | معتمدة |
 | ت-28 | حالة الحركة النقدية | «مرفوض» و«مسحوب» (`pos:shift.status_rejected`، `status_withdrawn`) مقابل «مرفوضة» و«مسحوبة» (`manager:cash.status_rejected`، `status_withdrawn`) — تذكير وتأنيث | يُنقل نص كل شاشة كما هو؛ وفي الشرح «مرفوض» و«مسحوب» (السحب). | معتمدة |
+| ت-29 | جهة المنصة | «إدارة المنصة» (`common:errors.PLAN_LIMIT_REACHED`) مقابل «فريق المنصة» (`manager:subscription.*`) مقابل «دعم المنصة» و«الدعم» (رسائل الدخول) | «فريق المنصة»، ويُنقل نص كل رسالة كما هو. | مقترحة |
 
 ملاحظة: «إقفال» (الشهر) و«إغلاق» (الوردية، المتبقي في أمر الشراء) ليسا تناقضًا؛ مفهومان مختلفان
 ويُكتب كل منهما كما هو.
