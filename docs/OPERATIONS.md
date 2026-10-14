@@ -104,6 +104,22 @@ e-mail provider; production secrets store; backup storage location; payment gate
 choice, merchant contracts and credentials, sandbox certification (OQ-021); subscription
 pricing and billing provider (OQ-022); legal receipt fields and tax (OQ-002, OQ-009).
 
+## 7a. Domain and e-mail (ADR-0105)
+
+DNS of `arabatapp.com` is in Cloudflare. Records in place (2026-10-14):
+
+| Record | Value | Purpose |
+|---|---|---|
+| `MX arabatapp.com` | `1 smtp.google.com` | Google Workspace mailboxes |
+| `TXT arabatapp.com` | `v=spf1 include:_spf.google.com ~all` | SPF for Workspace |
+| `TXT _dmarc.arabatapp.com` | `v=DMARC1; p=none; adkim=r; aspf=r` | DMARC, monitor-only |
+
+Still to add once the owner has signed up: the Workspace verification TXT and DKIM
+(`google._domainkey`), and the Resend records of `send.arabatapp.com` (DKIM, SPF/MX of its
+bounce domain), which are unique to the Resend account. Then set in production
+`SMTP_URL=smtps://resend:<API key>@smtp.resend.com:465` and
+`MAIL_FROM=no-reply@send.arabatapp.com`, and tighten DMARC to `p=quarantine`.
+
 ## 8. Staging on Railway (approved by the owner, 2026-10-12)
 
 Files: `Dockerfile` (builds the API and the four apps; base image overridable with

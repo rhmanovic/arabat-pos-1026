@@ -575,6 +575,14 @@ sessions 1 to 12 are complete; outside it remain the supplier side (R6, decision
 online-store go-live prerequisites (R7, decision D7), server-rendered exports and
 acquirer-statement reconciliation.
 
+### 2026-10-14 — Domain and e-mail set-up (ADR-0105)
+Owner decisions: production domain `arabatapp.com`; Google Workspace for people's mail;
+Resend (free plan) for system mail on `send.arabatapp.com`; staging paused; production hosting
+on Google Cloud preferred but not approved yet (OQ-011). Done in Cloudflare: dangling A records
+of `arabatapp.com` / `www` / `app` (to an address the owner does not control) removed; Workspace
+MX and SPF and a monitor-only DMARC added. Not done: Workspace and Resend sign-ups (owner),
+their verification / DKIM records, production deployment.
+
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025
 before any production launch.

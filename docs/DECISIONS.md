@@ -1262,3 +1262,28 @@ ADR; supersede it.
   the hard lock (the lock stays at 10 wrong passwords / 15 minutes; the holder is told and a
   manager can clear it), e-mail verification at self-registration (FND-104, owner decision).
 
+
+## ADR-0105 — Domain and e-mail: arabatapp.com, Google Workspace for people, Resend for system mail
+- **Status:** Accepted (2026-10-14) by the owner. Hosting of production stays open (OQ-011);
+  the owner prefers Google Cloud (Cloud Run + Cloud SQL, Doha or Dammam region), not yet approved
+  or created. Staging is paused by the owner for now.
+- **Context:** The product needs a public domain and two kinds of e-mail: mailboxes people read
+  and answer (`info@…`), and transactional mail the API sends (password reset, invitations,
+  owner set-up, ownership transfer codes). The owner holds `arabatapp.com` and `arabatpos.com`
+  in Cloudflare. `arabatapp.com`, `www` and `app` had A records to `34.18.110.94`, an address
+  the owner does not control (dangling records).
+- **Decision:**
+  - Production domain: **`arabatapp.com`**; DNS stays in Cloudflare. The dangling A records were
+    removed (2026-10-14; a JSON backup was taken before deletion).
+  - People's mailboxes: **Google Workspace** on `arabatapp.com` (MX `smtp.google.com`, SPF
+    `include:_spf.google.com`, DKIM from the Workspace admin console).
+  - System mail: **Resend** (free plan: 3,000 e-mails / month, 100 / day) on the sub-domain
+    **`send.arabatapp.com`**, through its SMTP relay (`SMTP_URL`, `MAIL_FROM =
+    no-reply@send.arabatapp.com`). No code change: the API already sends over SMTP. A separate
+    sub-domain keeps the reputation and SPF of system mail apart from people's mail.
+  - DMARC starts as monitor-only (`p=none`) and is tightened to `quarantine` once DKIM of both
+    senders is verified.
+- **Consequences:** Above 100 system e-mails a day the free plan defers mail to the next day;
+  move to Resend Pro (USD 20 / month) when volume approaches it. Workspace sign-up, Resend
+  sign-up and the API key are the owner's accounts; the key goes only into the production
+  secret store.
