@@ -141,6 +141,9 @@
 | استرجاع | `pos:returns.refund` · Refund | إرجاع أصناف وإعادة قيمتها للعميل. |
 | استبدال | `pos:returns.exchange` · Exchange | إرجاع أصناف وأخذ أصناف جديدة في نفس العملية. |
 | إلغاء البيع | `pos:returns.void` · Cancel sale | إلغاء عملية بيع كاملة من ورديتك المفتوحة وبدون مرتجعات؛ يعود المبلغ والمخزون كاملين. |
+| ★ إلغاء عملية البيع هذه؟ | `pos:returns.voidTitle` · Cancel this sale? | نافذة تأكيد «إلغاء البيع»: يُعاد المبلغ كاملًا وتعود كل الأصناف. |
+| ★ خطأ الكاشير / ألغاها العميل | `pos:returns.reason_cashier_error` / `pos:returns.reason_customer_cancelled` · Cashier error / Customer cancelled | سببا «إلغاء البيع»؛ ليسا من أسباب الاسترجاع (ق-11). |
+| ★ إلغاء بيع | `pos:returns.kind_void`، `manager:refunds.kind_void` · Sale cancelled | نوع المستند على «إيصال استرجاع» وفي «المرتجعات» بالإدارة. |
 | إعادة للمخزون | `pos:returns.restock` · Back to stock | إرجاع الصنف إلى المخزون (لا يُختار للتالف). |
 | يُعاد إلى | `pos:returns.payBack` · Pay back | طريقة الدفع التي يعود إليها مبلغ الاسترجاع. |
 | رصيد المرتجع | `pos:returns.credit` · Return credit | قيمة الأصناف المرتجعة التي تُحتسب في الاستبدال (الصيغة المعتمدة: «رصيد الاستبدال» — ت-2). |
