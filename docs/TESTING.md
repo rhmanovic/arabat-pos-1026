@@ -91,10 +91,52 @@ present in the session environment, so the API answered `{ enabled: false }` and
 `ASSISTANT_DISABLED` for all three questions with no provider call. With a deliberately
 invalid key the request did reach `api.anthropic.com` (401 `invalid x-api-key` in about
 140 ms), the API logged "The assistant API key was rejected by the provider." and answered 503
-`SERVICE_UNAVAILABLE`. The answers, `toolsUsed` and the per-turn token counts (API log line
-`assistant turn: N in / M out, cache write W / read R`, summed with an estimated cost by the
-script's `--log` option) are still to be recorded from a run with the real key. Second
-sandbox run the same day: the four assistant integration cases pass; the full
+`SERVICE_UNAVAILABLE`.
+
+Run with the real key (2026-10-14, 21:37 UTC = 00:37 Asia/Kuwait, cloud sandbox, API started
+with `env -u ANTHROPIC_BASE_URL ANTHROPIC_API_KEY=…`, model `claude-opus-5-5`, effort low,
+`max_tokens` 2048): the key was accepted (`GET /pos/assistant` → `{ enabled: true }`, no
+401 in the log). The script created "Pepsi can" (48 in stock), opened a shift on Register 1 and
+sold two cans (receipt `MAIN-000001`, cash). Per question (token counts from the API log,
+cost at list price: input $4, output $20, cache write $5, cache read $0.20 per million):
+
+| # | Question | HTTP / time | `toolsUsed` | Turns (in / out / cache write / cache read, stop) | Cost |
+|---|----------|-------------|-------------|------------------------------------------------------|------|
+| 1 | كيف أعلّق عملية البيع؟ | 200 / 7.4 s | `[]` | 428 / 205 / 1701 / 0, `end_turn` | $0.0143 |
+| 2 | كم سعر بيبسي علبة وكم المتوفر؟ | 200 / 15.6 s | `["search_products"]` | 435 / 54 / 0 / 1701, `tool_use`; 605 / 2048 / 0 / 1701, `max_tokens` | $0.0469 |
+| 3 | شنو بعت في هالوردية؟ | 200 / 5.2 s | `["recent_sales"]` | 426 / 28 / 0 / 1701, `tool_use`; 549 / 258 / 0 / 1701, `end_turn` | $0.0103 |
+
+Total of the three: 2 443 in, 2 593 out, 1 701 cache write, 6 804 cache read, about $0.0715.
+The 1 701-token guide was written to the cache on the first question and read from it on every
+later turn. Answers as returned:
+
+1. "للتعليق: اضغط زر **Hold** أو مفتاح **F8**. البيعة الحالية (بيبسي علبة بـ 0.150 د.ك) بتنحفظ،
+   والسلة بتفضى عشان تخدم الزبون اللي بعده.\n\nولما تبي ترجع لها: من الشريط اللي فوق اضغط
+   **Held sales**، واختار البيعة وكمّلها أو ألغها.\n\nانتبه إن البيعات المعلّقة تنتهي بعد المدة
+   اللي حاطتها الشركة، فلا تطوّل عليها." — correct against the guide, no lookup needed.
+2. **Degenerate.** After the `search_products` round the second turn produced no answer: the
+   text `<invoke name="search_products">\n</invoke>\n` repeated until `max_tokens` (2 048 output
+   tokens, 14 s), and that text was returned as `reply` with `toolsUsed: ["search_products"]`.
+   The same question re-sent three times right after (same API process, same cart) answered
+   correctly every time in 4.3–6.9 s with two turns (435 / 54 then 605 / 83–144 output tokens,
+   `end_turn`, about $0.008 each), e.g. "بيبسي علبة (PEPSI-330):\n- **السعر:** 0.150 د.ك\n-
+   **المتوفر بالفرع:** 46 علبة\n\nوعندك وحدة منه الحين بالفاتورة الحالية." (46 = 48 − 2 sold:
+   correct). One of the three re-runs leaked a literal `<thinking>Note: onHand 46 likely
+   excludes the one in cart (not yet sold).</thinking>` prefix into the visible reply. So the
+   failure is intermittent (1 of 4) and sits in the model's output, not in the lookup or the
+   API. Not fixed in this session; proposed: treat a `max_tokens` stop with no `tool_use` block
+   as a failed turn (return `fallbackReply` instead of the truncated text), strip
+   `<thinking>…</thinking>` from `textOf`, and lower `max_tokens` (an answer never needs 2 048
+   output tokens, and the runaway turn alone cost $0.04 of the $0.07 total).
+3. "بهالوردية بعت **فاتورة وحدة بس** لين الحين:\n\n- **MAIN-000001**، الساعة 00:37، فيها حبتين
+   (2)، المجموع **0.300 د.ك**، انْدفعت **كاش**، عميل عابر، وما عليها أي مرتجع.\n\nالبيبسي اللي
+   بالسلة الحين (0.150 د.ك) ما ينحسب بالمبيعات لين تدفعه بـ **Pay (F12)**.\n\nتبي تفتح الفاتورة
+   أو تطبعها مرة ثانية؟ اضغط **المبيعات الأخيرة** بالشريط اللي فوق." — matches the sale
+   (receipt, time in the merchant's zone, 2 items, 0.300 KWD cash, walk-in, no refund).
+
+Spend of the whole session (three questions plus three re-runs of question 2): about $0.10.
+
+Second sandbox run the same day: the four assistant integration cases pass; the full
 `pnpm test:integration` run gave 218 passed / 4 failed, all four in report assertions
 (`sales-overrides`, `refunds-controls`, `transfers-controls`) that compute "today" as the UTC
 date while the reports are cut in the merchant's time zone (BR-184): the run started at
