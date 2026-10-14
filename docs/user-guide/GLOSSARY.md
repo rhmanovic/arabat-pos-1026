@@ -208,6 +208,7 @@
 | ★ متابعة الفروقات | `manager:cash.tabVariances` · Variance follow-up | كل فرق نقدي مسجّل وما تقرر بشأنه. |
 | ★ مُفسَّر / مُسوَّى / مشطوب | `manager:cash.followup_explained` / `_settled` / `_written_off` · Explained / Settled / Written off | نتيجة متابعة الفرق؛ التسوية والشطب يحتاجان «إدارة النقدية». |
 | بين الورديات | `manager:cash.betweenShifts` · Between shifts | فرق ظهر عند فتح الوردية التالية، لا يُحمَّل على من فتحها. |
+| ★ نتيجة الإغلاق / فتح وردية جديدة | `pos:shift.result` / `pos:shift.newShift` · Closing result / Open a new shift | الشاشة بعد إغلاق الوردية: المتوقع والمعدود والفرق والنتيجة. |
 
 ## 6. المخزون والتحويلات والمشتريات
 
