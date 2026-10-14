@@ -17,7 +17,7 @@ const partsDir = join(here, 'pos');
 
 const CHAPTERS = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10'];
 // Short names used in «انظر قسم «…»» that are not the start of the target's title.
-const REFERENCE_ALIASES = { 'الخصم وتعديل السعر': '04', 'الصناديق والورديات': '17' };
+const REFERENCE_ALIASES = {};
 
 const read = (path) => readFileSync(path, 'utf8');
 const stripComments = (text) => text.replace(/<!--[\s\S]*?-->\n?/g, '');
@@ -39,6 +39,11 @@ const git = (...args) => execFileSync('git', args, { cwd: guide, encoding: 'utf8
 const sourceFiles = chapters.map((c) => join(guide, c.file));
 const commit = git('log', '-1', '--format=%h', '--', ...sourceFiles);
 const commitDate = git('log', '-1', '--format=%cs', '--', ...sourceFiles);
+// Sections edited after that commit: say so instead of claiming the commit's text.
+const dirty = git('status', '--porcelain', '--', ...sourceFiles) !== '';
+const sourceLabel = dirty
+  ? `نصوص الفصول من الالتزام \`${commit}\` مع تعديلات لاحقة عليه (بُني في ${new Date().toISOString().slice(0, 10)}).`
+  : `نصوص الفصول من الالتزام \`${commit}\` بتاريخ ${commitDate}.`;
 
 // README index: section number → title, to resolve references outside the booklet.
 const indexTitles = {};
@@ -104,7 +109,7 @@ const part = (name) => stripComments(read(join(partsDir, name))).trim();
 const md = [];
 md.push('# دليل نقطة البيع', '');
 md.push('دليل المستخدم — الجزء الخاص بالكاشير والمشرف في «نقطة البيع».', '');
-md.push(`نصوص الفصول من الالتزام \`${commit}\` بتاريخ ${commitDate}.`, '');
+md.push(sourceLabel, '');
 md.push('# كيف تقرأ هذا الدليل', '', part('intro.md'), '');
 md.push('### الإحالات', '');
 md.push('| الإحالة في النص | أين تجدها | ترد في الفصول |', '|---|---|---|', ...referenceRows, '');
@@ -277,6 +282,6 @@ ${sectionsHtml.map(renderSection).join('\n')}
 `;
 writeFileSync(join(here, 'pos-booklet.html'), html);
 console.log(
-  `pos-booklet: ${chapters.length} chapters from ${commit} (${commitDate}), ` +
+  `pos-booklet: ${chapters.length} chapters from ${commit}${dirty ? ' + edits' : ''} (${commitDate}), ` +
     `${referenceRows.length} references, ${glossaryRows.length} glossary terms`,
 );

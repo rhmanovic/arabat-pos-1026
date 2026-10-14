@@ -13,7 +13,7 @@
 داخل الشاشات (عدا اسمي اللغتين «العربية» و«English»). الاستثناء: «سجل التدقيق» يعرض أسماء
 الإجراءات وتفاصيلها كما خزّنها النظام بالإنجليزية (انظر ق-7 في `README.md`).
 
-آخر تحديث: 2026-10-14، على الالتزام `594d0e9` (مصطلحات الأقسام 10 و13–17). الصفوف الجديدة منذ تحديث
+آخر تحديث: 2026-10-14، على الالتزام `3d4bdaa` (مصطلحات الأقسام 10 و13–21). الصفوف الجديدة منذ تحديث
 2026-10-13 معلّمة بـ ★.
 
 ---
@@ -284,7 +284,7 @@
 | متوسط التكلفة | `manager:inventory.avgCost` · Average cost | تكلفة الوحدة بالمتوسط المرجّح. |
 | قيمة المخزون | `manager:inventory.value` · Stock value | الكمية × متوسط التكلفة. |
 | تحويلات المخزون | `manager:transfers.title` · Stock transfers | نقل بضاعة من فرع إلى فرع. |
-| مطلوب / معتمد / في الطريق / مستلم | `manager:transfers.status_*` · Requested / Approved / In transit / Received | مراحل تحويل المخزون. |
+| مطلوب / معتمد / في الطريق / مستلم / ملغى | `manager:transfers.status_*` · Requested / Approved / In transit / Received / Cancelled | مراحل تحويل المخزون؛ «ملغى» لطلب لم يُرسل. «مسترجَع» في صف «استرجاع (التحويل)». |
 | إرسال / استلام | `manager:transfers.dispatch` / `manager:transfers.receive` · Dispatch / Receive | خروج البضاعة من المصدر / وصولها إلى الوجهة. |
 | الناقص | `manager:transfers.missing` · Missing | ما أُرسل ولم يصل. |
 | ★ خسائر التحويل / تسجيل خسارة | `manager:transfers.losses` / `manager:transfers.claimLoss` · Transfer losses / Record loss | شطب النقص مع تفسير؛ فوق حد الشركة يبتّ فيه معتمد الفرع المصدر. |
@@ -299,6 +299,40 @@
 | مستلم جزئيًا | `manager:purchasing.status_partially_received` · Partly received | وصل جزء من الكميات المطلوبة. |
 | استلام شحنة | `manager:purchasing.receive` · Receive delivery | إدخال البضاعة الواصلة إلى المخزون. |
 | إغلاق المتبقي | `manager:purchasing.close` · Close remaining | إنهاء أمر شراء لن يصل باقيه، مع السبب. |
+| ★ الأرصدة | `manager:inventory.tabStock` · Stock | تبويب أرصدة المخزون لكل صنف. |
+| ★ إعدادات المخزون | `manager:inventory.settings` · Inventory settings | نافذة إعداد المخزون السالب على مستوى الشركة. |
+| ★ السماح بالبيع والخصم دون الصفر (مخزون سالب) | `manager:inventory.allowNegative` · Allow selling and decreasing below zero (negative stock) | غير مفعّل افتراضيًا. |
+| ★ طريقة التكلفة: المتوسط المرجّح المتحرك | `manager:inventory.costingMethod` · Costing method: moving weighted average | للعلم فقط؛ لا تتغيّر. |
+| ★ المخزون حسب الفرع / الإجمالي | `manager:inventory.byBranch` / `total` · Stock by branch / Total | نافذة كمية الصنف في كل فرع. |
+| ★ تنبيه انخفاض المخزون | `manager:inventory.thresholdTitle` · Low-stock alert | نافذة ضبط «حد التنبيه». |
+| ★ التغيير / الرصيد | `manager:inventory.delta` / `balance` · Change / Balance | كمية الحركة والرصيد بعدها في «سجل الحركات». |
+| ★ المصدر / عرض المستند | `manager:inventory.source` / `viewAdjustment` · Source / View document | مصدر الحركة، ورابط إلى مستند التعديل. |
+| ★ يُعرض صنف واحد / عرض كل الأصناف | `manager:inventory.filteredItem` / `clearFilter` · Showing one item / Show all items | تصفية «سجل الحركات» على صنف واحد وإلغاؤها. |
+| ★ افتتاحي / تعديل / بيع / إلغاء بيع / استرجاع / تحويل صادر / تحويل وارد / استلام مشتريات | `manager:inventory.type_*` · Opening / Adjustment / Sale / … | أنواع الحركات في «سجل الحركات». |
+| ★ مرتجعات لم تُعَد إلى المخزون / سجّل ما جرى للبضاعة / ما جرى (إلزامي) | `manager:inventory.returnsTitle` / `disposeTitle` / `disposalNote` · Returned goods kept out of stock / Record what was done with the goods / What was done (required) | صفحة «مرتجعات محتجزة» وتسجيل تصفيتها مرة واحدة. |
+| ★ التعديلات | `manager:inventory.tabAdjustments` · Adjustments | تبويب مستندات تعديل المخزون. |
+| ★ القيمة بالتكلفة | `manager:inventory.valueAtCost` · Value at cost | قيمة التعديل بالتكلفة؛ تقرر هل يحتاج اعتمادًا. |
+| ★ تكلفة الوحدة | `manager:inventory.unitCost`، `manager:purchasing.unitCost` · Unit cost | تكلفة القطعة للمخزون الداخل أو في أمر الشراء. |
+| ★ المعدود / الحالي / قبل / بعد | `manager:inventory.counted` / `current` / `before` / `after` · Counted / Current / Before / After | أعمدة أسطر التعديل والجرد. |
+| ★ سحب (التعديل) / اعتمده / رفضه / سحبه | `manager:inventory.withdraw` / `decided_*` · Withdraw / Approved by / Rejected by / Withdrawn by | سحب الطالب تعديلًا معلّقًا، ومن قرّر فيه. |
+| ★ تحرّك المخزون أثناء الجرد | `manager:inventory.movedTitle` · Stock moved while you were counting | تنبيه عند حركة صنف بعد بدء الجرد. |
+| ★ من فرع / إلى فرع | `manager:transfers.from` / `to` · From branch / To branch | مصدر التحويل ووجهته. |
+| ★ تحويل جديد / طلب التحويل | `manager:transfers.newTransfer` / `create` · New transfer / Request transfer | بدء تحويل يُفتح بحالة «مطلوب». |
+| ★ المتوفر في المصدر | `manager:transfers.available` · Available at source | رصيد الصنف في الفرع المصدر عند الطلب. |
+| ★ المطلوب / المُرسل / المستلم | `manager:transfers.requested` / `dispatched` / `received` · Requested / Dispatched / Received | كميات أسطر التحويل. |
+| ★ اشرح الفرق (نقص أو زيادة) / ملاحظة الفرق | `manager:transfers.discrepancy` / `discrepancyNote` · Explain the difference / Discrepancy note | تفسير إلزامي عند الاستلام إذا اختلفت الكمية. |
+| ★ نقص لم يُشطب / خسارة بانتظار الاعتماد | `manager:transfers.shortageUnresolved` / `lossPending` · Shortage not written off / Loss awaiting approval | حالتا النقص في تحويل مستلم. |
+| ★ اعتماد الشطب / شطب النقص | `manager:transfers.approveLoss` / `claimLossTitle` · Approve write-off / Write the shortage off | قرار معتمد الفرع المصدر، ونافذة تسجيل الخسارة من جديد. |
+| ★ مشطوب / مرفوض (الخسارة) | `manager:transfers.loss_posted` / `loss_rejected` · Written off / Rejected | حالة خسارة التحويل؛ غير «مشطوب» في متابعة الفروقات النقدية. |
+| ★ تجاوز المالك فوق الحد | `manager:transfers.ownerOverride` · Owner override above the limit | خسارة المالك فوق الحد تُشطب دون انتظار. |
+| ★ رصيد مرحَّل | `manager:purchasing.openingBalance` · Brought forward | رصيد «كشف حساب» المورد قبل الفترة المختارة. |
+| ★ المستلم / المدفوع / المعكوس | `manager:purchasing.receivedValue` / `paid` / `reversed` · Received / Paid / Reversed | أرقام ملخص «كشف حساب». |
+| ★ المدفوع حتى الآن | `manager:purchasing.paidToDate` · Paid to date | دفعات الخزينة المرتبطة بأمر الشراء ناقص العكس. |
+| ★ فرع الاستلام / التاريخ المتوقع | `manager:purchasing.branch` / `expectedDate` · Receiving branch / Expected date | فرع دخول الشحنة؛ والتاريخ المتوقع للعلم فقط. |
+| ★ المطلوب / المتبقي / المستلم الآن | `manager:purchasing.ordered` / `remaining` / `receiveNow` · Ordered / Open / Receiving now | أعمدة أسطر أمر الشراء والاستلام. |
+| ★ فاتورة المورد / إذن التسليم | `manager:purchasing.supplierReference` · Supplier invoice / delivery note | المرجع المكتوب على الشحنة. |
+| ★ سجل المشتريات / قيمة المستلم / الطلبات | `manager:purchasing.history` / `purchased` / `orders` · Purchase history / Received value / Orders | أوامر مورد واحد، وعمودا قائمة الموردين (لكل الفروع). |
+| ★ شروط الدفع | `manager:purchasing.paymentTerms` · Payment terms | نص حر؛ لا يحسب النظام منه تاريخ استحقاق. |
 
 ## 7. المنتجات والعملاء
 
@@ -411,8 +445,7 @@
 عنوان بعينه يُنقل النص كما يظهر في الشاشة؛ وفي الشرح يُستخدم عمود «الصيغة في الدليل».
 
 - **ت-1 إلى ت-23: معتمدة بقرار المالك (ق-5، 2026-10-13).**
-- **ت-24 إلى ت-27: جديدة في هذا التحديث، مقترحة وتنتظر القرار (ق-8).**
-- **ت-28: أُضيف مع القسم 10، مقترح وينتظر القرار (ق-8).**
+- **ت-24 إلى ت-28: معتمدة بقرار المالك (ق-8، 2026-10-14).**
 
 | # | المفهوم | الصيغ الموجودة (المفتاح) | الصيغة في الدليل | الحالة |
 |---|---|---|---|---|
@@ -439,11 +472,11 @@
 | ت-21 | المرسَل | «المرسل» (`manager:reports.dispatched`) مقابل «المُرسل» (`manager:transfers.dispatched`) — تشكيل فقط | «المُرسل». | معتمدة |
 | ت-22 | الشحنات | «الشحنات» (`manager:purchasing.receipts`) مقابل «دفعات استلام» (`manager:reports.receiptsWord`) | «الشحنات». | معتمدة |
 | ت-23 | حد التنبيه | «حد التنبيه» (`manager:inventory.setThreshold`، `manager:reports.threshold`) مقابل «تنبيه عند» (`manager:inventory.threshold`، عنوان عمود) | «حد التنبيه». | معتمدة |
-| ت-24 | كلمة «استرجاع» | «استرجاع» = Refund للمبيعات (`pos:returns.refund`) مقابل «استرجاع» = Recall لتحويل مخزون في الطريق (`manager:transfers.recall`، `recallTitle`، `status_recalled` «مسترجَع»، `recalledBy` «استرجعه») | «استرجاع التحويل» دائمًا مع كلمة «التحويل» في القسم 20؛ و«استرجاع» وحدها للمبيعات فقط. | مقترحة |
-| ت-25 | الصافي بعد المرتجعات | «الصافي بعد المرتجعات» و«المرتجعات» (`manager:reports.netAfterRefunds`، `reports.refunds`) مقابل «الصافي بعد الاسترجاعات» و«استرجاعات اليوم» و«الاسترجاعات» (`manager:dashboard.todayNet`، `dashboard.todayRefunds_*`، `periods.netAfterRefunds`، `periods.refunds_*`) | «الصافي بعد المرتجعات» في الشرح؛ تُنقل عناوين لوحة التحكم والحزمة كما هي. | مقترحة |
-| ت-26 | طريقة الدفع | «طريقة الدفع» (`manager:nav.payments`، `reports.method`، `pos:sale.payWith`) مقابل «وسيلة الدفع» (`manager:periods.method`، `periods.collections`) | «طريقة الدفع». | مقترحة |
-| ت-27 | الشحنة / التسليم | «الشحنات» و«استلام شحنة» (`manager:purchasing.receipts`، `purchasing.receive`) مقابل «تاريخ التسليم» و«تسليم {{date}}» (`purchasing.receivedOn`، `receivedOnLabel`) و«تسليمات» (`manager:periods.documents`) | «الشحنة» للمستند، و«تاريخ التسليم» لاسم الحقل كما هو. | مقترحة |
-| ت-28 | حالة الحركة النقدية | «مرفوض» و«مسحوب» (`pos:shift.status_rejected`، `status_withdrawn`) مقابل «مرفوضة» و«مسحوبة» (`manager:cash.status_rejected`، `status_withdrawn`) — تذكير وتأنيث | يُنقل نص كل شاشة كما هو؛ وفي الشرح «مرفوض» و«مسحوب» (السحب). | مقترحة |
+| ت-24 | كلمة «استرجاع» | «استرجاع» = Refund للمبيعات (`pos:returns.refund`) مقابل «استرجاع» = Recall لتحويل مخزون في الطريق (`manager:transfers.recall`، `recallTitle`، `status_recalled` «مسترجَع»، `recalledBy` «استرجعه») | «استرجاع التحويل» دائمًا مع كلمة «التحويل» في القسم 20؛ و«استرجاع» وحدها للمبيعات فقط. | معتمدة |
+| ت-25 | الصافي بعد المرتجعات | «الصافي بعد المرتجعات» و«المرتجعات» (`manager:reports.netAfterRefunds`، `reports.refunds`) مقابل «الصافي بعد الاسترجاعات» و«استرجاعات اليوم» و«الاسترجاعات» (`manager:dashboard.todayNet`، `dashboard.todayRefunds_*`، `periods.netAfterRefunds`، `periods.refunds_*`) | «الصافي بعد المرتجعات» في الشرح؛ تُنقل عناوين لوحة التحكم والحزمة كما هي. | معتمدة |
+| ت-26 | طريقة الدفع | «طريقة الدفع» (`manager:nav.payments`، `reports.method`، `pos:sale.payWith`) مقابل «وسيلة الدفع» (`manager:periods.method`، `periods.collections`) | «طريقة الدفع». | معتمدة |
+| ت-27 | الشحنة / التسليم | «الشحنات» و«استلام شحنة» (`manager:purchasing.receipts`، `purchasing.receive`) مقابل «تاريخ التسليم» و«تسليم {{date}}» (`purchasing.receivedOn`، `receivedOnLabel`) و«تسليمات» (`manager:periods.documents`) | «الشحنة» للمستند، و«تاريخ التسليم» لاسم الحقل كما هو. | معتمدة |
+| ت-28 | حالة الحركة النقدية | «مرفوض» و«مسحوب» (`pos:shift.status_rejected`، `status_withdrawn`) مقابل «مرفوضة» و«مسحوبة» (`manager:cash.status_rejected`، `status_withdrawn`) — تذكير وتأنيث | يُنقل نص كل شاشة كما هو؛ وفي الشرح «مرفوض» و«مسحوب» (السحب). | معتمدة |
 
 ملاحظة: «إقفال» (الشهر) و«إغلاق» (الوردية، المتبقي في أمر الشراء) ليسا تناقضًا؛ مفهومان مختلفان
 ويُكتب كل منهما كما هو.
