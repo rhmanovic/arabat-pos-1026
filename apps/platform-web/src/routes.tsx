@@ -7,6 +7,7 @@ import {
 import type { RouteObject } from 'react-router';
 import { PlatformLayout } from './layouts/PlatformLayout.js';
 import { LoginPage } from './pages/LoginPage.js';
+import { AssistantUsagePage } from './pages/AssistantUsagePage.js';
 import { AuditPage } from './pages/AuditPage.js';
 import { MerchantDetailPage } from './pages/MerchantDetailPage.js';
 import { MerchantsPage } from './pages/MerchantsPage.js';
@@ -38,6 +39,7 @@ export const routes: RouteObject[] = [
       { path: 'merchants/:merchantId', element: <MerchantDetailPage /> },
       { path: 'plans', element: <PlansPage /> },
       { path: 'audit', element: <AuditPage /> },
+      { path: 'assistant', element: <AssistantUsagePage /> },
       { path: '*', element: <NotFound /> },
     ],
   },

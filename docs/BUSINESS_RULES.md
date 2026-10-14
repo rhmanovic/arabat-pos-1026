@@ -485,7 +485,11 @@ Remediation session 3 (2026-10-13, owner decision D2):
   the app's own screens show (blind-count policy respected). The cashier's assistant stays on
   the cashier's screen and never describes management screens, settings or permission keys.
   It is off until the platform configures a provider key (a paid decision of the owner), and
-  every answer is advice: the rules are enforced by the server, not by the assistant.
+  every answer is advice: the rules are enforced by the server, not by the assistant. Every
+  question is kept by the platform (question, answer, tokens, cost) for monitoring, abuse
+  detection and training, readable by the platform's super admin only; merchants never see
+  these records, and the chat tells users that conversations are kept (owner decision,
+  2026-10-14).
   Invitation grants are re-checked at acceptance against the inviter's authority as it
   stands then (grants the inviter can no longer give are dropped and recorded); deactivating
   an inviter revokes their pending invitations.

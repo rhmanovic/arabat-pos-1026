@@ -1310,4 +1310,16 @@ ADR; supersede it.
   `web-core`); the manager app mounts a floating button at the bottom inline-end corner of the
   layout so it is on every page and the thread survives navigation. Same rate limit per user,
   same `AssistantModel`, same key.
+- **Amendment (2026-10-14, owner decision): the platform keeps every question.** "The server
+  stores nothing" above is replaced: each question is appended to `assistant_requests`
+  (migration 0048) with the thread as sent, the answer, the lookups, the token counts, the
+  estimated cost at list price (`assistant.pricing.ts`, micro-USD, integer arithmetic) and the
+  outcome, also when the provider fails. Purpose stated by the owner: monitoring, abuse
+  detection, product development and training of the company's own models. Access: the
+  platform's **super admin only**, on `/platform/assistant` (`GET /platform/assistant`, JSONL
+  export); nobody in the merchant realm, owner included, sees conversations, tokens or cost
+  (INSERT-only RLS policy for the merchant context, `SECURITY DEFINER` platform read functions,
+  route gated to `platform.super_admin`). Users are told in the chat footer that conversations
+  are kept to improve the service. No retention limit for now (the owner keeps the data); the
+  browser sends a `conversationId` so turns of one conversation can be grouped.
 

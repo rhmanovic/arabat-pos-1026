@@ -13,11 +13,13 @@ const SUGGESTIONS = ['hold', 'discount', 'returns', 'shortcuts'] as const;
 export function AssistantDialog({
   thread,
   onThread,
+  conversationId,
   cart,
   onClose,
 }: {
   thread: AssistantMessage[];
   onThread: (next: AssistantMessage[]) => void;
+  conversationId: string;
   cart: AssistantCart | null;
   onClose: () => void;
 }) {
@@ -36,6 +38,7 @@ export function AssistantDialog({
               messages,
               language: i18n.resolvedLanguage === 'en' ? 'en' : 'ar',
               cart,
+              conversationId,
             })
           }
           labels={{

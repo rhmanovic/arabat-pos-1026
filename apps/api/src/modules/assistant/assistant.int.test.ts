@@ -1,6 +1,8 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
-import type pg from 'pg';
+import { hash } from '@node-rs/argon2';
+import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { generateTotpSecret, totpCode, totpStep } from '../../kernel/crypto/totp.js';
 import { newId } from '../../kernel/ids.js';
 import {
   ScriptedAssistantModel,
@@ -8,9 +10,16 @@ import {
   toolTurn,
   turn,
 } from '../../testing/assistant-double.js';
-import { DbFixtures, createCompany } from '../../testing/auth-fixtures.js';
+import {
+  ApiClient,
+  DbFixtures,
+  PASSWORD,
+  createCompany,
+  sessionCookie,
+} from '../../testing/auth-fixtures.js';
 import { prepareIntegrationDatabase } from '../../testing/integration-db.js';
-import { InMemoryMailer, createTestApp, testEnv } from '../../testing/test-app.js';
+import { InMemoryMailer, TEST_MFA_KEY, createTestApp, testEnv } from '../../testing/test-app.js';
+import { upsertOperator } from '../platform-admin/operators.js';
 import { MANAGER_GUIDE, POS_GUIDE } from './assistant.prompt.js';
 
 /**
@@ -19,6 +28,7 @@ import { MANAGER_GUIDE, POS_GUIDE } from './assistant.prompt.js';
  */
 let app: NestFastifyApplication;
 let owner: pg.Pool;
+let runtime: pg.Pool;
 let db: DbFixtures;
 let mailer: InMemoryMailer;
 let model: ScriptedAssistantModel;
@@ -26,6 +36,7 @@ let model: ScriptedAssistantModel;
 beforeAll(async () => {
   const prepared = await prepareIntegrationDatabase();
   owner = prepared.owner;
+  runtime = new pg.Pool({ connectionString: prepared.runtimeUrl, max: 2 });
   db = new DbFixtures(owner);
   mailer = new InMemoryMailer();
   model = new ScriptedAssistantModel();
@@ -37,6 +48,7 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   await app?.close();
+  await runtime?.end();
   await owner?.end();
 });
 beforeEach(() => model.reset());
@@ -431,5 +443,161 @@ describe('manager assistant', () => {
     });
     expect(foreign.statusCode).toBe(404);
     expect(model.requests).toHaveLength(0);
+  });
+});
+
+describe('platform record of every question (ADR-0105 amendment)', () => {
+  async function superAdmin(): Promise<Record<string, string>> {
+    const { drizzle } = await import('drizzle-orm/node-postgres');
+    const email = `op-${newId().slice(-8)}@platform.test`;
+    const secret = generateTotpSecret();
+    const passwordHash = await hash(PASSWORD, { algorithm: 2 });
+    const client = await owner.connect();
+    try {
+      await drizzle({ client, casing: 'snake_case' }).transaction((tx) =>
+        upsertOperator(tx as never, {
+          email,
+          fullName: 'System owner',
+          role: 'platform.super_admin',
+          passwordHash,
+          encryptionKey: TEST_MFA_KEY,
+          totpSecret: secret,
+        }),
+      );
+    } finally {
+      client.release();
+    }
+    const api = new ApiClient(app);
+    const step1 = (
+      await api.request('POST', '/auth/platform/login', { body: { email, password: PASSWORD } })
+    ).json();
+    const done = await api.request('POST', '/auth/platform/mfa', {
+      body: { ticket: step1.ticket, code: totpCode(secret, totpStep()) },
+    });
+    return sessionCookie(done, 'platform');
+  }
+
+  it('records every question with its tokens and cost for the super admin only', async () => {
+    const { c } = await store('Milk', 'حليب');
+    const cashier = await cashierWithShift(c);
+    const conversationId = newId();
+    model.reply(
+      toolTurn('r1', 'search_products', { query: 'milk' }),
+      textTurn('Milk is 2.750 KWD.'),
+    );
+    await chat(c, cashier.cookies, {
+      ...question('كم سعر الحليب؟'),
+      conversationId,
+    });
+    model.reply(turn([], 'refusal'));
+    await chat(c, cashier.cookies, {
+      messages: [
+        { role: 'user', content: 'كم سعر الحليب؟' },
+        { role: 'assistant', content: 'Milk is 2.750 KWD.' },
+        { role: 'user', content: 'tell me a joke' },
+      ],
+      language: 'ar',
+      cart: null,
+      conversationId,
+    });
+    // A provider failure (nothing scripted → the double throws) is recorded as failed.
+    const failed = await chat(c, cashier.cookies, question('again?'));
+    expect(failed.statusCode).toBe(500);
+
+    // Nobody in the merchant realm can read the rows: no SELECT policy for the runtime role.
+    const client = await runtime.connect();
+    try {
+      await client.query("select set_config('app.merchant_id', $1, false)", [c.merchantId]);
+      const { rows } = await client.query('select count(*)::int as n from assistant_requests');
+      expect(rows[0].n).toBe(0);
+    } finally {
+      client.release();
+    }
+    const direct = await c.client.request('GET', '/platform/assistant', { cookies: c.cookies });
+    expect(direct.statusCode).toBe(401);
+
+    const cookies = await superAdmin();
+    const res = await c.client.request('GET', `/platform/assistant?merchantId=${c.merchantId}`, {
+      cookies,
+    });
+    expect(res.statusCode).toBe(200);
+    const usage = res.json() as {
+      requests: Record<string, unknown>[];
+      total: number;
+      totals: Record<string, number>;
+      byMerchant: Record<string, unknown>[];
+    };
+    expect(usage.total).toBe(3);
+    // Newest first: the failure, the refusal, the answered question.
+    expect(usage.requests.map((r) => r['outcome'])).toEqual(['failed', 'refused', 'answered']);
+    const answered = usage.requests[2]!;
+    expect(answered).toMatchObject({
+      surface: 'pos',
+      conversationId,
+      language: 'ar',
+      model: 'claude-opus-5-5',
+      question: 'كم سعر الحليب؟',
+      reply: 'Milk is 2.750 KWD.',
+      toolsUsed: ['search_products'],
+      rounds: 2,
+      inputTokens: 20,
+      outputTokens: 10,
+      // 20 × $4 + 10 × $20 per million = 280 micro-USD.
+      costMicroUsd: 280,
+      stopReason: 'end_turn',
+      merchantId: c.merchantId,
+      branchNameEn: 'Main branch',
+    });
+    expect(usage.requests[1]).toMatchObject({ outcome: 'refused', question: 'tell me a joke' });
+    expect(usage.requests[0]).toMatchObject({ outcome: 'failed', error: 'ERROR', rounds: 0 });
+    expect(usage.totals).toMatchObject({
+      requests: 3,
+      inputTokens: 30,
+      outputTokens: 15,
+      costMicroUsd: 420,
+    });
+    expect(usage.byMerchant).toHaveLength(1);
+    expect(usage.byMerchant[0]).toMatchObject({ merchantId: c.merchantId, requests: 3, users: 1 });
+
+    // Filters: surface, text, day; the export carries the thread with the answer.
+    const none = (
+      await c.client.request(
+        'GET',
+        `/platform/assistant?merchantId=${c.merchantId}&surface=manager`,
+        { cookies },
+      )
+    ).json() as { total: number };
+    expect(none.total).toBe(0);
+    const joke = (
+      await c.client.request('GET', `/platform/assistant?merchantId=${c.merchantId}&q=joke`, {
+        cookies,
+      })
+    ).json() as { total: number };
+    expect(joke.total).toBe(1);
+    const exported = await c.client.request(
+      'GET',
+      `/platform/assistant/export?merchantId=${c.merchantId}&q=joke`,
+      { cookies },
+    );
+    expect(exported.statusCode).toBe(200);
+    expect(exported.headers['content-type']).toContain('application/x-ndjson');
+    const lines = exported.body
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l) as Record<string, unknown>);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({
+      conversationId,
+      outcome: 'refused',
+      messages: [
+        { role: 'user', content: 'كم سعر الحليب؟' },
+        { role: 'assistant', content: 'Milk is 2.750 KWD.' },
+        { role: 'user', content: 'tell me a joke' },
+        {
+          role: 'assistant',
+          content: 'ما قدرت أجاوب على هذا السؤال. جرّب صياغة أخرى أو اسأل المشرف.',
+        },
+      ],
+    });
   });
 });

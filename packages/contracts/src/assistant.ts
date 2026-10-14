@@ -40,6 +40,8 @@ export const assistantChatSchema = z
     cart: assistantCartSchema.nullable().default(null),
     /** Manager only: the branch selected in the top bar; null for "all branches". */
     branchId: z.uuid().nullable().default(null),
+    /** Browser-generated id of the conversation; new on "New conversation". */
+    conversationId: z.uuid().nullable().default(null),
   })
   .refine(
     (v) => v.messages[0]?.role === 'user' && v.messages[v.messages.length - 1]?.role === 'user',
@@ -59,3 +61,83 @@ export const assistantStatusSchema = z.object({
   enabled: z.boolean(),
 });
 export type AssistantStatus = z.infer<typeof assistantStatusSchema>;
+
+// ---------------------------------------------------------------- platform: usage records
+/** What the platform's super admin sees of every assistant question (ADR-0105 amendment). */
+export const assistantRequestRecordSchema = z.object({
+  id: z.string(),
+  merchantId: z.string(),
+  merchantNameEn: z.string().nullable(),
+  merchantNameAr: z.string().nullable(),
+  userName: z.string(),
+  userEmail: z.string(),
+  branchNameEn: z.string().nullable(),
+  branchNameAr: z.string().nullable(),
+  surface: z.enum(['pos', 'manager']),
+  conversationId: z.string().nullable(),
+  language: z.enum(['ar', 'en']),
+  model: z.string(),
+  question: z.string(),
+  reply: z.string().nullable(),
+  toolsUsed: z.array(z.string()),
+  rounds: z.number().int(),
+  inputTokens: z.number().int(),
+  outputTokens: z.number().int(),
+  cacheWriteTokens: z.number().int(),
+  cacheReadTokens: z.number().int(),
+  /** Micro-USD at list price; null when the model is not in the price table. */
+  costMicroUsd: z.number().int().nullable(),
+  durationMs: z.number().int(),
+  outcome: z.enum(['answered', 'fallback', 'refused', 'failed']),
+  stopReason: z.string().nullable(),
+  error: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type AssistantRequestRecord = z.infer<typeof assistantRequestRecordSchema>;
+
+export const assistantUsageTotalsSchema = z.object({
+  requests: z.number().int(),
+  inputTokens: z.number().int(),
+  outputTokens: z.number().int(),
+  cacheWriteTokens: z.number().int(),
+  cacheReadTokens: z.number().int(),
+  costMicroUsd: z.number().int(),
+});
+export type AssistantUsageTotals = z.infer<typeof assistantUsageTotalsSchema>;
+
+export const assistantUsageByMerchantSchema = assistantUsageTotalsSchema.extend({
+  merchantId: z.string(),
+  merchantNameEn: z.string().nullable(),
+  merchantNameAr: z.string().nullable(),
+  users: z.number().int(),
+  lastAt: z.string(),
+});
+
+export const assistantUsageSchema = z.object({
+  requests: z.array(assistantRequestRecordSchema),
+  total: z.number().int(),
+  page: z.number().int(),
+  pageSize: z.number().int(),
+  /** Over every request matching the filter, not only the page. */
+  totals: assistantUsageTotalsSchema,
+  byMerchant: z.array(assistantUsageByMerchantSchema),
+});
+export type AssistantUsage = z.infer<typeof assistantUsageSchema>;
+
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD');
+export const assistantUsageQuerySchema = z.object({
+  merchantId: z.uuid().optional(),
+  surface: z.enum(['pos', 'manager']).optional(),
+  /** Inclusive calendar days (UTC). */
+  from: isoDate.optional(),
+  to: isoDate.optional(),
+  q: z
+    .string()
+    .trim()
+    .max(100)
+    .optional()
+    .transform((v) => v || undefined),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(50),
+});
+export type AssistantUsageQuery = z.input<typeof assistantUsageQuerySchema>;

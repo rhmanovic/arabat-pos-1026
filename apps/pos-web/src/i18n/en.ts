@@ -373,7 +373,7 @@ export const posEn = {
     placeholder: 'Type your question…',
     send: 'Send',
     thinking: 'Thinking…',
-    note: 'The assistant only reads information; it cannot change the sale.',
+    note: 'The assistant only reads information; it cannot change the sale. Conversations are kept to improve the service.',
     clear: 'New conversation',
     suggestions: {
       hold: 'How do I hold a sale?',

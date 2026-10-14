@@ -6,7 +6,12 @@ import { PaymentsModule } from '../payments/payments.module.js';
 import { RegistersModule } from '../registers/registers.module.js';
 import { ReportsModule } from '../reports/reports.module.js';
 import { SalesModule } from '../sales/sales.module.js';
-import { ManagerAssistantController, PosAssistantController } from './assistant.controller.js';
+import { AssistantUsageService } from './assistant-usage.service.js';
+import {
+  ManagerAssistantController,
+  PlatformAssistantController,
+  PosAssistantController,
+} from './assistant.controller.js';
 import { AnthropicAssistantModel, AssistantModel } from './assistant.model.js';
 import { AssistantService } from './assistant.service.js';
 
@@ -21,7 +26,11 @@ import { AssistantService } from './assistant.service.js';
     SalesModule,
     RegistersModule,
   ],
-  controllers: [PosAssistantController, ManagerAssistantController],
-  providers: [AssistantService, { provide: AssistantModel, useClass: AnthropicAssistantModel }],
+  controllers: [PosAssistantController, ManagerAssistantController, PlatformAssistantController],
+  providers: [
+    AssistantService,
+    AssistantUsageService,
+    { provide: AssistantModel, useClass: AnthropicAssistantModel },
+  ],
 })
 export class AssistantModule {}

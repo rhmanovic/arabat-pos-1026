@@ -5,6 +5,30 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useErrorMessage } from './components.js';
 
+/**
+ * The thread and its browser-generated conversation id: the id changes when the thread is
+ * cleared, so the server can group the turns of one conversation (ADR-0105 amendment).
+ */
+export function useAssistantThread(): {
+  thread: AssistantMessage[];
+  setThread: (next: AssistantMessage[]) => void;
+  conversationId: string;
+} {
+  const [state, setState] = useState(() => ({
+    conversationId: crypto.randomUUID(),
+    thread: [] as AssistantMessage[],
+  }));
+  return {
+    thread: state.thread,
+    conversationId: state.conversationId,
+    setThread: (next) =>
+      setState((s) => ({
+        conversationId: next.length === 0 ? crypto.randomUUID() : s.conversationId,
+        thread: next,
+      })),
+  };
+}
+
 export interface AssistantLabels {
   title: string;
   intro: string;

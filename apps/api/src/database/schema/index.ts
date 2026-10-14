@@ -20,3 +20,4 @@ export * from '../../modules/transfers/transfers.schema.js';
 export * from '../../modules/restaurant/restaurant.schema.js';
 export * from '../../modules/ecommerce/ecommerce.schema.js';
 export * from '../../modules/subscriptions/subscriptions.schema.js';
+export * from '../../modules/assistant/assistant.schema.js';

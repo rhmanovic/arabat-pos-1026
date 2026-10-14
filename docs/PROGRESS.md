@@ -607,6 +607,17 @@ Implemented after the owner's staging trial:
   with the owner's approval; staging follows branch `claude/tender-wright-t34f5x`.
 Verified: 8 assistant integration cases, 188 unit/web tests, lint and typecheck green.
 
+### 2026-10-14 — Platform record of assistant usage (ADR-0105 amendment, owner decision)
+- **DB**: migration 0048 `assistant_requests` (INSERT-only for merchants, no reads; platform
+  `SECURITY DEFINER` readers). **API**: every question recorded from `AssistantService` with
+  thread, answer, lookups, tokens, estimated cost (`assistant.pricing.ts`) and outcome, also
+  on failure; `GET /platform/assistant` (list, totals, by merchant, filters) and
+  `GET /platform/assistant/export` (JSONL) for `platform.super_admin` only; `conversationId`
+  from the browser. **Web**: platform page "Assistant usage" (cards, filters, by-merchant
+  table, questions table, conversation dialog, export link), super-admin-only navigation;
+  POS and manager chats send a conversation id and say conversations are kept.
+Verified: 9 assistant integration cases, 189 unit/web tests, lint and typecheck green.
+
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025
 before any production launch.

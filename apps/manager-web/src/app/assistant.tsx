@@ -1,6 +1,5 @@
-import type { AssistantMessage } from '@arabat/contracts';
 import { cn } from '@arabat/ui';
-import { AssistantChat, useApi } from '@arabat/web-core';
+import { AssistantChat, useApi, useAssistantThread } from '@arabat/web-core';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useBranchContext } from './context.js';
@@ -17,7 +16,7 @@ export function AssistantLauncher() {
   const api = useApi();
   const { branchId } = useBranchContext();
   const [open, setOpen] = useState(false);
-  const [thread, setThread] = useState<AssistantMessage[]>([]);
+  const { thread, setThread, conversationId } = useAssistantThread();
   const panelRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -64,6 +63,7 @@ export function AssistantLauncher() {
                 messages,
                 language: i18n.resolvedLanguage === 'en' ? 'en' : 'ar',
                 branchId,
+                conversationId,
               })
             }
             labels={{

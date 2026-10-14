@@ -1755,7 +1755,7 @@ export const managerEn = {
     placeholder: 'Type your question…',
     send: 'Send',
     thinking: 'Thinking…',
-    note: 'The assistant only reads information; it cannot change anything.',
+    note: 'The assistant only reads information; it cannot change anything. Conversations are kept to improve the service.',
     clear: 'New conversation',
     suggestions: {
       product: 'How do I add a new product?',

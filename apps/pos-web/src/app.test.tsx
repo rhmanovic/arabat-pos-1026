@@ -790,6 +790,7 @@ describe('pos app', () => {
         total: '0.333',
         customer: null,
       },
+      conversationId: expect.any(String),
     });
     // Closing keeps the thread; F9 reopens it and a typed follow-up carries the history.
     await userEvent.keyboard('{Escape}');
@@ -804,6 +805,10 @@ describe('pos app', () => {
     expect(await within(dialog).findAllByTestId('assistant-assistant')).toHaveLength(2);
     const second = fetch.calls.filter((c) => c.path === '/pos/assistant/chat')[1]!;
     expect((second.body as { messages: unknown[] }).messages).toHaveLength(3);
+    // The same conversation id until "New conversation".
+    expect((second.body as { conversationId: string }).conversationId).toBe(
+      (call.body as { conversationId: string }).conversationId,
+    );
     // "New conversation" empties the thread.
     await userEvent.click(within(dialog).getByRole('button', { name: 'New conversation' }));
     expect(within(dialog).queryByTestId('assistant-user')).toBeNull();

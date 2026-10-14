@@ -217,6 +217,7 @@ describe('management assistant (ADR-0105)', () => {
       messages: [{ role: 'user', content: 'How do I add a new product?' }],
       language: 'en',
       branchId: null,
+      conversationId: expect.any(String),
     });
     // The page behind stays usable: navigate to Products with the panel open; the thread stays.
     const nav = screen.getByRole('navigation', { name: 'Manager navigation' });

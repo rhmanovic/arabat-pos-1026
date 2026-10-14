@@ -8,6 +8,7 @@ import {
 /** Test double at the model boundary: answers from a script and records every request. */
 export class ScriptedAssistantModel extends AssistantModel {
   enabled = true;
+  readonly modelId = 'claude-opus-5-5';
   readonly requests: AssistantRequest[] = [];
   private readonly script: Anthropic.Beta.BetaMessage[] = [];
 
@@ -50,7 +51,8 @@ export function turn(
     id: `msg_${Math.random().toString(36).slice(2)}`,
     type: 'message',
     role: 'assistant',
-    model: 'scripted',
+    // The priced model, so the usage record's cost estimate is exercised (10 in / 5 out).
+    model: 'claude-opus-5-5',
     content,
     stop_reason: stop,
     stop_sequence: null,

@@ -1,8 +1,8 @@
-import type { AssistantMessage, PosCatalogItem } from '@arabat/contracts';
+import type { PosCatalogItem } from '@arabat/contracts';
 import { formatMoney } from '@arabat/i18n';
 import { Money, parseQuantity } from '@arabat/money';
 import { Badge, Button, Kbd, Spinner, cn } from '@arabat/ui';
-import { ErrorState, localizedName, useApi, useAuth } from '@arabat/web-core';
+import { ErrorState, localizedName, useApi, useAssistantThread, useAuth } from '@arabat/web-core';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -94,7 +94,7 @@ export function SalePage() {
     'pay' | 'discount' | 'suspend' | 'held' | 'recent' | 'assistant' | null
   >(null);
   /** The assistant conversation survives closing its dialog (ADR-0105). */
-  const [assistantThread, setAssistantThread] = useState<AssistantMessage[]>([]);
+  const assistant = useAssistantThread();
   const [receiptId, setReceiptId] = useState<string | null>(null);
   /** Receipts opened from the list are copies; the one right after a sale is the original. */
   const [receiptIsCopy, setReceiptIsCopy] = useState(false);
@@ -517,8 +517,9 @@ export function SalePage() {
       {dialog === 'held' ? <HeldSalesDialog onClose={() => setDialog(null)} /> : null}
       {dialog === 'assistant' ? (
         <AssistantDialog
-          thread={assistantThread}
-          onThread={setAssistantThread}
+          thread={assistant.thread}
+          onThread={assistant.setThread}
+          conversationId={assistant.conversationId}
           cart={describeCart(
             pricing?.ok
               ? cart.state.lines.map((l, index) => ({

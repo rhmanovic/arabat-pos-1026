@@ -159,6 +159,26 @@ company's `branchId` is 404 before any model call. Web: two cases in the manager
 thread, Escape closes and the button reopens with the thread; the "not configured" notice
 with the input disabled). Runs: 8 integration passed; `pnpm test` 188 passed (33 files);
 `pnpm typecheck` green; lint green except the three pre-existing booklet files.
+
+**Platform record of every question** (ADR-0105 amendment, owner decision the same night: the
+system owner alone sees conversations, tokens and cost). Ninth integration case: a cashier's
+answered question (two turns), a refused follow-up in the same `conversationId` and a provider
+failure (nothing scripted → 500) each leave a row; a merchant-context `select` on
+`assistant_requests` returns 0 rows (no SELECT policy) and the manager session gets 401 on the
+platform route; a super admin created in the test (operator + TOTP sign-in) lists the three
+newest-first with outcomes `failed / refused / answered`, the answered row carrying the
+question, reply, `search_products`, 2 rounds, 20 / 10 tokens and `costMicroUsd` 280 (20 × $4
++ 10 × $20 per million), the failed row `error: 'ERROR'` and 0 rounds; totals 3 / 30 / 15 /
+420 and one merchant with one user; `surface=manager` filters to none, `q=joke` to one; the
+JSONL export returns `application/x-ndjson` with one line whose `messages` carry the thread,
+the question and the fallback answer. Web (platform `platform.test.tsx`): the billing
+operator's navigation has no "Assistant usage"; the super admin opens the page, sees the
+cost card and the row (`$0.0076`, `1,040 / 137`), the export link to `/platform/assistant/export`,
+and a row opens the conversation dialog with the reply, the lookup and the four token counts.
+POS and manager web cases now assert the `conversationId` in the chat body (same id across
+turns of one thread). Runs: 9 integration passed; `pnpm test` 189 passed (33 files);
+`pnpm typecheck` green; lint green except the three pre-existing booklet files. Migration
+0048 applied locally with `pnpm db:migrate`.
 3. "بهالوردية بعت **فاتورة وحدة بس** لين الحين:\n\n- **MAIN-000001**، الساعة 00:37، فيها حبتين
    (2)، المجموع **0.300 د.ك**، انْدفعت **كاش**، عميل عابر، وما عليها أي مرتجع.\n\nالبيبسي اللي
    بالسلة الحين (0.150 د.ك) ما ينحسب بالمبيعات لين تدفعه بـ **Pay (F12)**.\n\nتبي تفتح الفاتورة

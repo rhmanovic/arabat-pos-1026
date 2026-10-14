@@ -22,7 +22,10 @@ import { PaymentsService } from '../payments/payments.service.js';
 import { ShiftsService } from '../registers/shifts.service.js';
 import { ReportsService } from '../reports/reports.service.js';
 import { SalesService } from '../sales/sales.service.js';
+import { newId } from '../../kernel/ids.js';
 import { AssistantModel, assistantDisabled } from './assistant.model.js';
+import { type TokenUsage, estimateCostMicroUsd } from './assistant.pricing.js';
+import { assistantRequests } from './assistant.schema.js';
 import {
   ASSISTANT_TOOLS,
   type AssistantSurface,
@@ -55,6 +58,19 @@ const KIND = {
 interface ToolOutcome {
   content: string;
   isError: boolean;
+}
+
+/** What one question costs and how it went, accumulated across the model turns. */
+interface RequestRecord {
+  startedAt: number;
+  model: string;
+  usage: TokenUsage;
+  toolsUsed: string[];
+  rounds: number;
+  stopReason: string | null;
+  outcome: 'answered' | 'fallback' | 'refused' | 'failed';
+  reply: string | null;
+  error: string | null;
 }
 
 /**
@@ -93,6 +109,35 @@ export class AssistantService {
     if (surface === 'pos' && !branchId) throw AppError.forbidden();
     await this.limiter.consume(`assistant:user:${actor.userId}`, ASSISTANT_LIMIT);
 
+    // The platform's record of this question (ADR-0105 amendment): written whatever happens.
+    const record: RequestRecord = {
+      startedAt: Date.now(),
+      model: this.model.modelId,
+      usage: { inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0 },
+      toolsUsed: [],
+      rounds: 0,
+      stopReason: null,
+      outcome: 'failed',
+      reply: null,
+      error: null,
+    };
+    try {
+      return await this.converse(actor, surface, branchId, input, record);
+    } catch (error) {
+      record.error = error instanceof AppError ? error.code : 'ERROR';
+      throw error;
+    } finally {
+      await this.store(actor, surface, branchId, input, record);
+    }
+  }
+
+  private async converse(
+    actor: MerchantActor,
+    surface: AssistantSurface,
+    branchId: string | null,
+    input: ChatInput,
+    record: RequestRecord,
+  ): Promise<AssistantReply> {
     const context = await this.context(actor, surface, branchId, input);
     const system: Anthropic.Beta.BetaTextBlockParam[] = [
       {
@@ -104,7 +149,7 @@ export class AssistantService {
     ];
     const tools = surface === 'pos' ? ASSISTANT_TOOLS : MANAGER_TOOLS;
     const messages = toMessageParams(input.messages);
-    const toolsUsed: string[] = [];
+    const { toolsUsed } = record;
     let reply = '';
 
     for (let round = 0; ; round += 1) {
@@ -124,8 +169,16 @@ export class AssistantService {
       this.logger.log(
         `assistant turn: ${usage.input_tokens} in / ${usage.output_tokens} out, cache write ${usage.cache_creation_input_tokens ?? 0} / read ${usage.cache_read_input_tokens ?? 0}, stop ${response.stop_reason}`,
       );
+      record.rounds += 1;
+      record.model = response.model || record.model;
+      record.stopReason = response.stop_reason;
+      record.usage.inputTokens += usage.input_tokens;
+      record.usage.outputTokens += usage.output_tokens;
+      record.usage.cacheWriteTokens += usage.cache_creation_input_tokens ?? 0;
+      record.usage.cacheReadTokens += usage.cache_read_input_tokens ?? 0;
       if (response.stop_reason === 'refusal') {
         reply = fallbackReply(input.language, surface);
+        record.outcome = 'refused';
         break;
       }
       const calls = response.content.filter(
@@ -135,9 +188,11 @@ export class AssistantService {
         // The turn ran out before an answer: its text is a fragment, never shown.
         this.logger.warn('assistant turn hit the output limit without an answer');
         reply = fallbackReply(input.language, surface);
+        record.outcome = 'fallback';
         break;
       }
       reply = textOf(response) || reply;
+      record.outcome = 'answered';
       if (response.stop_reason !== 'tool_use' || calls.length === 0 || round >= MAX_TOOL_ROUNDS)
         break;
       messages.push({ role: 'assistant', content: response.content });
@@ -157,7 +212,48 @@ export class AssistantService {
       }
       messages.push({ role: 'user', content: results });
     }
-    return { reply: reply || fallbackReply(input.language, surface), toolsUsed };
+    if (!reply) record.outcome = 'fallback';
+    record.reply = reply || fallbackReply(input.language, surface);
+    return { reply: record.reply, toolsUsed };
+  }
+
+  /** The platform's usage record; a failure here is logged and never reaches the user. */
+  private async store(
+    actor: MerchantActor,
+    surface: AssistantSurface,
+    branchId: string | null,
+    input: ChatInput,
+    record: RequestRecord,
+  ): Promise<void> {
+    const question = input.messages[input.messages.length - 1]?.content ?? '';
+    try {
+      await this.database.withMerchantTx(actor.merchantId, (tx) =>
+        tx.insert(assistantRequests).values({
+          id: newId(),
+          merchantId: actor.merchantId,
+          userId: actor.userId,
+          membershipId: actor.membershipId,
+          branchId,
+          surface,
+          conversationId: input.conversationId,
+          language: input.language,
+          model: record.model,
+          question,
+          thread: JSON.stringify(input.messages.slice(0, -1)),
+          reply: record.reply,
+          toolsUsed: record.toolsUsed,
+          rounds: record.rounds,
+          ...record.usage,
+          costMicroUsd: estimateCostMicroUsd(record.model, record.usage),
+          durationMs: Date.now() - record.startedAt,
+          outcome: record.outcome,
+          stopReason: record.stopReason,
+          error: record.error,
+        }),
+      );
+    } catch (error) {
+      this.logger.error('assistant request could not be recorded', error);
+    }
   }
 
   // ------------------------------------------------------------ context

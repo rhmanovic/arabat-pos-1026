@@ -60,8 +60,10 @@ import {
   type AuditListQuery,
   auditListSchema,
   type AssistantChat,
+  type AssistantUsageQuery,
   assistantReplySchema,
   assistantStatusSchema,
+  assistantUsageSchema,
   posShiftSchema,
   type DecideCashMovement,
   controlsChecklistSchema,
@@ -439,6 +441,11 @@ export function createApiClient(options: ApiClientOptions = {}) {
         }),
       audit: (query: PlatformAuditQuery = {}) =>
         request('GET', `/platform/audit?${toParams(query)}`, { schema: platformAuditListSchema }),
+      assistantUsage: (query: AssistantUsageQuery = {}) =>
+        request('GET', `/platform/assistant?${toParams(query)}`, { schema: assistantUsageSchema }),
+      /** JSONL of the matching conversations (training export); the browser saves the text. */
+      assistantExportUrl: (query: AssistantUsageQuery = {}) =>
+        `${baseUrl}/platform/assistant/export?${toParams(query)}`,
     },
     managerAssistant: {
       status: () => request('GET', '/manager/assistant', { schema: assistantStatusSchema }),

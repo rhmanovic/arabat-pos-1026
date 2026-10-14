@@ -16,6 +16,8 @@ export type AssistantRequest = Omit<
  */
 export abstract class AssistantModel {
   abstract readonly enabled: boolean;
+  /** The configured model id (the response names the model that actually served). */
+  abstract readonly modelId: string;
   abstract complete(request: AssistantRequest): Promise<Anthropic.Beta.BetaMessage>;
 }
 
@@ -24,10 +26,12 @@ export class AnthropicAssistantModel extends AssistantModel {
   private readonly logger = new Logger(AnthropicAssistantModel.name);
   private readonly client: Anthropic | null;
   readonly enabled: boolean;
+  readonly modelId: string;
 
   constructor(@Inject(ENV) private readonly env: Env) {
     super();
     this.enabled = env.ANTHROPIC_API_KEY !== undefined;
+    this.modelId = env.ASSISTANT_MODEL;
     // 60 s covers a few tool rounds on a slow day; one retry on transient failures.
     this.client = this.enabled
       ? new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, timeout: 60_000, maxRetries: 1 })
