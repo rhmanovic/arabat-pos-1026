@@ -120,8 +120,8 @@ DNS of `arabatapp.com` is in Cloudflare. Records in place (2026-10-14):
 | `CNAME send.send.arabatapp.com` | `send.forge.rmta.net` (DNS only) | Resend return-path / SPF |
 
 Google Workspace (Business Starter, monthly, 14-day trial) is active on `arabatapp.com` with
-one user, the owner; further addresses are added as aliases. Resend (free plan) holds `send.arabatapp.com`; receiving is off and click / open tracking
-are off (reset and invitation links must not pass through a tracker). At deployment set in production
+one user, the owner; further addresses are added as aliases. Resend (free plan) holds `send.arabatapp.com`; receiving is off; click / open tracking
+must stay off (reset and invitation links must not pass through a tracker). At deployment set in production
 `SMTP_URL=smtps://resend:<API key>@smtp.resend.com:465` and
 `MAIL_FROM=no-reply@send.arabatapp.com`,.
 
