@@ -13,7 +13,7 @@
 داخل الشاشات (عدا اسمي اللغتين «العربية» و«English»). الاستثناء: «سجل التدقيق» يعرض أسماء
 الإجراءات وتفاصيلها كما خزّنها النظام بالإنجليزية (انظر ق-7 في `README.md`).
 
-آخر تحديث: 2026-10-14، على الالتزام `227af7d` (مصطلحات الأقسام 10 و13–34، عدا 30). الصفوف الجديدة منذ تحديث
+آخر تحديث: 2026-10-14، على الالتزام `00cc2d8` (مصطلحات الأقسام 10–34). الصفوف الجديدة منذ تحديث
 2026-10-13 معلّمة بـ ★.
 
 ---
@@ -401,6 +401,29 @@
 | الوصفة | `manager:restaurant.recipe` · Recipe | المكونات التي تُخصم من المخزون لكل صنف مباع. |
 | محطات المطبخ | `manager:restaurant.stations` · Kitchen stations | أقسام المطبخ التي تُوجَّه إليها الأصناف. |
 | المطبخ | `pos:kitchen.title` · Kitchen | شاشة المطبخ: جديد، قيد التحضير، جاهز. |
+| ★ الطاولات والطلبات / السفري والاستلام | `pos:restaurant.floor` / `queue` · Tables & orders / Takeaway & pickup | شاشة الصالة في نقطة البيع، وقائمة طلبات السفري والاستلام المفتوحة. |
+| ★ طلب سفري جديد / طلب استلام جديد / بدء الطلب / اسم العميل (اختياري) | `pos:restaurant.newTakeaway` / `newPickup` / `start` / `customerName` · New takeaway / New pickup / Start order / Customer name (optional) | بدء طلب غير الصالة. |
+| ★ متاحة | `pos:restaurant.free` · Free | طاولة بلا طلب مفتوح. |
+| ★ ابحث في القائمة | `pos:restaurant.searchMenu` · Search the menu | البحث عن صنف داخل الطلب. |
+| ★ لم يُرسل / أُرسل / قيد التحضير / جاهز / قُدّم / ملغى | `pos:restaurant.kitchen_*` · Not sent / Sent / Preparing / Ready / Served / Cancelled | حالة الصنف في المطبخ كما يراها الكاشير. |
+| ★ المستحق / المدفوع حتى الآن / إجمالي الفاتورة / ادفع | `pos:restaurant.due` / `paidTotal` / `billTotal` / `payAmount` · Due / Paid so far / Bill total / Pay | أرقام دفع فاتورة الطاولة. |
+| ★ مفتوح / مغلق / مدموج | `pos:restaurant.status_*` · Open / Closed / Combined | حالة طلب المطعم. |
+| ★ إلغاء الطلب | `pos:restaurant.cancelOrder` · Cancel order | إلغاء طلب لم يُرسل منه شيء ولم يُدفع. |
+| ★ دمج طلب آخر في هذا الطلب | `pos:restaurant.combineInto` · Combine another order into this one | نافذة دمج طلبين. |
+| ★ إلزامي / اختياري | `pos:restaurant.required` / `optional` · Required / Optional | قاعدة مجموعة الإضافات. |
+| ★ تم تحضيره (يُحسب هدراً وتُخصم المكونات) | `pos:restaurant.wasted` · It was prepared | عند إلغاء صنف أُرسل: تُخصم مكوناته هدرًا. |
+| ★ وحدة المطعم غير متاحة. | `pos:restaurant.unavailable` · The restaurant module is not available. | تظهر بدل التذاكر أو الطاولات إذا تعذّر تحميلها. |
+| ★ كل المحطات / جديد / قيد التحضير / جاهز | `pos:kitchen.allStations` / `column_*` · All stations / New / Preparing / Ready | تصفية المحطات وأعمدة شاشة المطبخ. |
+| ★ ابدأ / جاهز / تم | `pos:kitchen.action_new` / `action_preparing` / `action_ready` · Start / Ready / Done | أزرار تذكرة المطبخ؛ «تم» تُخرج التذكرة من الشاشة. |
+| ★ الإعداد / الطاولات والمحطات / القائمة | `manager:restaurant.tabSetup` / `tabFloor` / `tabMenu` · Setup / Tables & stations / Menu | تبويبات «إعداد المطعم» في الإدارة. |
+| ★ استخدام خدمة المطعم (الطاولات، شاشة المطبخ) | `manager:restaurant.enable` · Use restaurant service | مفتاح واحد للشركة كلها؛ يحتاج الباقة. |
+| ★ إرسال أصناف السفري والاستلام للمطبخ عند دفعها | `manager:restaurant.autoSend` · Send takeaway and pickup items to the kitchen when they are paid | مفعّل افتراضيًا. |
+| ★ مناطق الجلوس والطاولات / منطقة جديدة / طاولة جديدة / رمز الطاولة / المقاعد | `manager:restaurant.areasTables` / `newArea` / `newTable` / `tableCode` / `seatsLabel` · Dining areas and tables / New area / New table / Table code / Seats | إعداد الطاولات لكل فرع. |
+| ★ محطة افتراضية للأصناف التي ليس لفئتها محطة | `manager:restaurant.defaultStationLabel` · Default station for items without a routed category | المحطة التي تستقبل أصناف التصنيفات غير الموجّهة. |
+| ★ مجموعات الإضافات / مجموعة جديدة / أقل عدد / أكثر عدد | `manager:restaurant.modifierGroups` / `newGroup` / `minSelect` / `maxSelect` · Modifier groups / New group / Minimum choices / Maximum choices | مجموعات الإضافات للشركة كلها. |
+| ★ سعر إضافي | `manager:restaurant.extraPrice` · Extra price | يُضاف إلى سعر الصنف ويُثبَّت عند إضافته إلى الطلب. |
+| ★ المكوّن / الكمية لكل صنف / بدون أثر على المخزون | `manager:restaurant.ingredient` / `ingredientQty` / `noIngredient` · Ingredient / Quantity per item / No stock effect | مكوّن الإضافة أو الوصفة من المخزون. |
+| ★ أصناف القائمة / المكونات (وصفة) / الصنف نفسه / غير متابع في المخزون | `manager:restaurant.menuItems` / `byRecipe` / `byItem` / `noStock` · Menu items / Ingredients (recipe) / The item itself / Not stock-tracked | كيف يُخصم المخزون عند بيع الصنف (الصيغة في الدليل «متتبَّع»، ت-7). |
 
 ## 9. الإدارة المالية والتقارير والاشتراك
 

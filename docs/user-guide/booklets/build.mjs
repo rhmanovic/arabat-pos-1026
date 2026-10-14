@@ -4,8 +4,8 @@
 //   node docs/user-guide/booklets/build.mjs
 //
 // Two booklets, each from its sections and its hand-written parts (intro, one-page sheets):
-// - POS booklet:     sections 01..10, parts in booklets/pos/     → pos-booklet.md / .html
-// - Manager booklet: sections 13..29, 31..34 in five parts, parts in booklets/manager/
+// - POS booklet:     sections 01..12, parts in booklets/pos/     → pos-booklet.md / .html
+// - Manager booklet: sections 13..34 in five parts, parts in booklets/manager/
 //                                                                → manager-booklet.md / .html
 // Sources are never modified: the sections, GLOSSARY.md (short glossary), README.md (index).
 // No dependencies beyond Node and git.
@@ -38,7 +38,7 @@ const BOOKLETS = [
     name: 'pos',
     title: 'دليل نقطة البيع',
     subtitle: 'دليل المستخدم — الجزء الخاص بالكاشير والمشرف في «نقطة البيع».',
-    parts: [{ sections: ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10'] }],
+    parts: [{ sections: ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'] }],
     sheets: [
       { file: 'cashier-sheet.md', title: 'ورقة الكاشير في صفحة واحدة' },
       { file: 'supervisor-sheet.md', title: 'ورقة المشرف في صفحة واحدة' },
@@ -54,7 +54,7 @@ const BOOKLETS = [
       { title: 'الباب الثاني — إعداد الشركة', sections: ['25', '26', '27', '28', '31'] },
       {
         title: 'الباب الثالث — العمل اليومي',
-        sections: ['15', '16', '17', '18', '19', '20', '21', '22', '24'],
+        sections: ['15', '16', '17', '18', '19', '20', '21', '22', '24', '30'],
       },
       { title: 'الباب الرابع — المال والرقابة', sections: ['29', '23', '33', '32'] },
       { title: 'الباب الخامس — الملكية', sections: ['34'] },
