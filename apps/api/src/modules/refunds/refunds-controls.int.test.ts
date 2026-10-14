@@ -2,6 +2,7 @@ import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import type pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { newId } from '../../kernel/ids.js';
+import { DEFAULT_TIMEZONE, todayIn } from '../../kernel/time/period.js';
 import { DbFixtures, createCompany } from '../../testing/auth-fixtures.js';
 import { prepareIntegrationDatabase } from '../../testing/integration-db.js';
 import { InMemoryMailer, createTestApp, testEnv } from '../../testing/test-app.js';
@@ -425,7 +426,7 @@ describe('non-cash tender hygiene (R3.5, BR-181, D6)', () => {
       ['refund', '-5000'],
     ]);
     // The payments report shows the reversal and the net after fees.
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayIn(DEFAULT_TIMEZONE);
     const report = (
       await s.c.client.request('GET', `/manager/reports/payments?from=${today}&to=${today}`, {
         cookies: s.c.cookies,

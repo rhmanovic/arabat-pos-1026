@@ -98,8 +98,9 @@ sandbox run the same day: the four assistant integration cases pass; the full
 `pnpm test:integration` run gave 218 passed / 4 failed, all four in report assertions
 (`sales-overrides`, `refunds-controls`, `transfers-controls`) that compute "today" as the UTC
 date while the reports are cut in the merchant's time zone (BR-184): the run started at
-00:20 Asia/Kuwait, so the day's sales were already on the next business day. They pass
-outside the 21:00-24:00 UTC window; the tests should take the date in the merchant's zone.
+00:20 Asia/Kuwait, so the day's sales were already on the next business day. Fixed the same
+session: the three files now take `todayIn(DEFAULT_TIMEZONE)` from `kernel/time/period.ts`;
+re-run at 00:31 Asia/Kuwait, 10 passed (the full suite's other 218 were unchanged).
 
 
 
