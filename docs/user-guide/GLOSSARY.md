@@ -116,7 +116,11 @@
 | تعليق | `pos:sale.suspend` · Hold | حفظ عملية البيع جانبًا لإكمالها لاحقًا؛ لا تحجز مخزونًا، وتُحذف بعد المدة التي تحددها الشركة. |
 | المبيعات المعلّقة | `pos:sale.heldSales` · Held sales | قائمة عمليات البيع المعلّقة في الفرع. |
 | استئناف | `pos:sale.resume` · Resume | إعادة عملية بيع معلّقة إلى السلة. |
-| حذف | `pos:sale.discard` · Discard | حذف عملية بيع معلّقة نهائيًا. |
+| حذف | `pos:sale.discard` · Discard | حذف عملية بيع معلّقة نهائيًا، فورًا وبلا تأكيد. |
+| ★ اسم لعملية البيع المعلّقة (اختياري) | `pos:sale.suspendLabel` · Name for the held sale (optional) | اسم يميّز العملية في «المبيعات المعلّقة». |
+| ★ انتهاء المبيعات المعلّقة بعد (ساعات) | `manager:sales.heldExpiry` · Held sales expire after (hours) | إعداد في «سياسة البيع»؛ الافتراضي 24، و0 = لا تنتهي. |
+| ★ تسجيل مسح السلة من (د.ك) | `manager:sales.clearThreshold` · Log cleared carts from (KWD) | مسح سلة أو إزالة صنف بهذه القيمة أو أكثر يُسجَّل؛ الافتراضي 5.000. |
+| ★ رقم الإيصال / بحث (في «آخر المبيعات») | `pos:sale.lookupReceipt` / `pos:sale.find` · Receipt number / Find | إيجاد أي عملية في الفرع برقم إيصالها للقراءة والطباعة فقط. |
 | آخر المبيعات | `pos:sale.recent` · Recent sales | مبيعات الوردية الحالية، والبحث عن أي إيصال في الفرع برقمه، ومنها إعادة الطباعة. |
 | العميل | `pos:customer.label` · Customer | العميل المسجّل المرتبط بعملية البيع. |
 | عميل عابر | `pos:customer.walkIn` · Walk-in | بيع بدون عميل مسجّل. |
