@@ -92,7 +92,14 @@ present in the session environment, so the API answered `{ enabled: false }` and
 invalid key the request did reach `api.anthropic.com` (401 `invalid x-api-key` in about
 140 ms), the API logged "The assistant API key was rejected by the provider." and answered 503
 `SERVICE_UNAVAILABLE`. The answers, `toolsUsed` and the per-turn token counts (API log line
-`assistant turn: N in / M out`) are still to be recorded from a run with the real key.
+`assistant turn: N in / M out, cache write W / read R`, summed with an estimated cost by the
+script's `--log` option) are still to be recorded from a run with the real key. Second
+sandbox run the same day: the four assistant integration cases pass; the full
+`pnpm test:integration` run gave 218 passed / 4 failed, all four in report assertions
+(`sales-overrides`, `refunds-controls`, `transfers-controls`) that compute "today" as the UTC
+date while the reports are cut in the merchant's time zone (BR-184): the run started at
+00:20 Asia/Kuwait, so the day's sales were already on the next business day. They pass
+outside the 21:00-24:00 UTC window; the tests should take the date in the merchant's zone.
 
 
 

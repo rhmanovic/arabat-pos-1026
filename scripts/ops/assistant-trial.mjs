@@ -2,14 +2,18 @@
 // Signs in the demo owner (creates "Pepsi can" with 48 in stock at the main branch and a
 // cash method if missing), then the demo cashier (shift on Register 1, one cash sale of two
 // cans) and sends three Arabic questions to POST /pos/assistant/chat. Prints every answer
-// and `toolsUsed`; token counts per turn are in the API log ("assistant turn: N in / M out").
+// and `toolsUsed`. With `--log <api log file>` it also reads the API's per-turn usage lines
+// ("assistant turn: N in / M out, cache write W / read R") written during each question and
+// prints the token counts and the estimated cost at the list price of `ASSISTANT_MODEL`.
 //
 //   pnpm db:up && pnpm db:migrate && pnpm db:seed && pnpm build
-//   (cd apps/api && ANTHROPIC_API_KEY=… node --env-file-if-exists=../../.env dist/main.js)
-//   node scripts/ops/assistant-trial.mjs            # API_URL defaults to localhost:3000
+//   (cd apps/api && env -u ANTHROPIC_BASE_URL ANTHROPIC_API_KEY="$ARABAT_ANTHROPIC_API_KEY" \
+//     node --env-file-if-exists=../../.env dist/main.js > ../../var/api.log 2>&1 &)   # cloud sandbox
+//   node scripts/ops/assistant-trial.mjs --log var/api.log     # API_URL defaults to localhost:3000
 //
 // Without the key the API answers 503 ASSISTANT_DISABLED and nothing is billed.
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 
 const BASE = process.env['API_URL'] ?? 'http://localhost:3000/api/v1';
 const PASSWORD = 'Demo-Pass-2026';
@@ -18,6 +22,37 @@ const QUESTIONS = [
   'كم سعر بيبسي علبة وكم المتوفر؟',
   'شنو بعت في هالوردية؟',
 ];
+const LOG = process.argv.includes('--log') ? process.argv[process.argv.indexOf('--log') + 1] : null;
+const MODEL = process.env['ASSISTANT_MODEL'] ?? 'claude-opus-5-5';
+/** USD per million tokens (list prices, 2026-10): input, output, cache write (1.25×), cache read. */
+const PRICES = {
+  'claude-opus-5-5': { in: 4, out: 20, write: 5, read: 0.2 },
+  'claude-sonnet-5-5': { in: 2, out: 10, write: 2.5, read: 0.2 },
+  'claude-haiku-5-5': { in: 0.1, out: 0.5, write: 0.125, read: 0.01 },
+};
+const TURN = /assistant turn: (\d+) in \/ (\d+) out, cache write (\d+) \/ read (\d+), stop (\w+)/g;
+
+function readLog() {
+  return LOG ? readFileSync(LOG, 'utf8') : '';
+}
+
+/** Token totals and cost of the turns logged since `before`. */
+function usageSince(before) {
+  const fresh = readLog().slice(before.length);
+  const turns = [...fresh.matchAll(TURN)].map(([, i, o, w, r, stop]) => ({
+    in: Number(i),
+    out: Number(o),
+    write: Number(w),
+    read: Number(r),
+    stop,
+  }));
+  const sum = (k) => turns.reduce((t, u) => t + u[k], 0);
+  const p = PRICES[MODEL];
+  const cost = p
+    ? (sum('in') * p.in + sum('out') * p.out + sum('write') * p.write + sum('read') * p.read) / 1e6
+    : null;
+  return { turns, in: sum('in'), out: sum('out'), write: sum('write'), read: sum('read'), cost };
+}
 
 function session() {
   const cookies = new Map();
@@ -161,7 +196,9 @@ const cart = {
   total: '0.150',
   customer: null,
 };
+const total = { in: 0, out: 0, write: 0, read: 0, cost: 0 };
 for (const content of QUESTIONS) {
+  const before = readLog();
   const started = Date.now();
   const r = await cashier('POST', '/pos/assistant/chat', {
     messages: [{ role: 'user', content }],
@@ -170,4 +207,20 @@ for (const content of QUESTIONS) {
   });
   console.log(`\n=== ${content}\nHTTP ${r.status} in ${Date.now() - started} ms`);
   console.log(JSON.stringify(r.json, null, 2));
+  if (LOG) {
+    const u = usageSince(before);
+    for (const t of u.turns)
+      console.log(
+        `  turn: ${t.in} in / ${t.out} out, cache write ${t.write} / read ${t.read}, stop ${t.stop}`,
+      );
+    console.log(
+      `  tokens: ${u.in} in, ${u.out} out, ${u.write} cache write, ${u.read} cache read` +
+        (u.cost === null ? '' : ` → about $${u.cost.toFixed(4)} (${MODEL} list price)`),
+    );
+    for (const k of Object.keys(total)) total[k] += u[k] ?? 0;
+  }
 }
+if (LOG && PRICES[MODEL])
+  console.log(
+    `\nTotal: ${total.in} in, ${total.out} out, ${total.write} cache write, ${total.read} cache read → about $${total.cost.toFixed(4)}`,
+  );

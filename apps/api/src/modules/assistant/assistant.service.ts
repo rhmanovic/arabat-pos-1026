@@ -86,8 +86,10 @@ export class AssistantService {
         // Chat answers are short; low effort keeps the till responsive.
         output_config: { effort: 'low' },
       });
+      // One line per model turn: the cost record (scripts/ops/assistant-trial.mjs sums it).
+      const usage = response.usage;
       this.logger.log(
-        `assistant turn: ${response.usage.input_tokens} in / ${response.usage.output_tokens} out, stop ${response.stop_reason}`,
+        `assistant turn: ${usage.input_tokens} in / ${usage.output_tokens} out, cache write ${usage.cache_creation_input_tokens ?? 0} / read ${usage.cache_read_input_tokens ?? 0}, stop ${response.stop_reason}`,
       );
       if (response.stop_reason === 'refusal') {
         reply = fallbackReply(input.language);
