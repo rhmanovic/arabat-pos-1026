@@ -10,8 +10,8 @@
   catalog.prices.manage (حقل «تكلفة الوحدة»، على مستوى الشركة)، reports.inventory أو catalog.prices.manage
   («القيمة بالتكلفة» وعمود «تكلفة الوحدة» في التفاصيل)، merchant.settings.update (الحد والجرد الأعمى في
   «سياسة البيع»)، manager.access، merchant.settings.read (تنبيه «الرقابة الداخلية» فقط)
-- قواعد العمل: BR-065، BR-066، BR-169، BR-170 (كما في الفهرس)، وأيضًا BR-063، BR-064، BR-171، BR-174،
-  BR-175 للسياق. ملاحظة: BR-065 (حد التنبيه) لا يخص هذا القسم؛ يخص قسم «المخزون».
+- قواعد العمل: BR-063، BR-064، BR-066، BR-169، BR-170 (كما في الفهرس بعد تصحيحه)؛ وBR-171، BR-174،
+  BR-175 للسياق.
 - مفاتيح الترجمة المستخدمة:
   manager:nav.inventory، manager:nav.sectionOperations، manager:top.branchContext، manager:top.allBranches،
   manager:inventory.title، manager:inventory.tabStock، manager:inventory.tabAdjustments،

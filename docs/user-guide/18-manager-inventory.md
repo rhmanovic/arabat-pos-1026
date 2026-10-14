@@ -10,8 +10,8 @@
 - الصلاحيات: inventory.read (الشاشات الثلاث والقائمة)، inventory.adjust (زر «حد التنبيه» و«تسجيل التصفية»،
   ورابط «تعديل» وزر «تعديل جديد» المحالان إلى القسم 19)، merchant.settings.update (زر «إعدادات المخزون»
   والحفظ؛ نطاقه الشركة)، catalog.prices.manage أو reports.inventory (التكلفة والقيمة)، manager.access
-- قواعد العمل: BR-060، BR-061، BR-062، BR-063، BR-064، BR-171، BR-174، BR-175 (وBR-065 لحد التنبيه
-  والحالات، BR-066 لرؤية التكلفة، BR-173 و BR-184 للسياق)
+- قواعد العمل: BR-060، BR-061، BR-062، BR-065 (حد التنبيه والحالات)، BR-066 (رؤية التكلفة)، BR-171،
+  BR-174، BR-175 (كما في الفهرس بعد تصحيحه)؛ وBR-063، BR-064، BR-173، BR-184 للسياق
 - مفاتيح الترجمة المستخدمة:
   manager:nav.inventory، manager:nav.sectionOperations، manager:top.branchContext، manager:top.allBranches،
   manager:inventory.title، manager:inventory.subtitle، manager:inventory.tabStock، manager:inventory.tabAdjustments،

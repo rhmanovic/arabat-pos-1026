@@ -13,7 +13,7 @@
 داخل الشاشات (عدا اسمي اللغتين «العربية» و«English»). الاستثناء: «سجل التدقيق» يعرض أسماء
 الإجراءات وتفاصيلها كما خزّنها النظام بالإنجليزية (انظر ق-7 في `README.md`).
 
-آخر تحديث: 2026-10-14، على الالتزام `3d4bdaa` (مصطلحات الأقسام 10 و13–21). الصفوف الجديدة منذ تحديث
+آخر تحديث: 2026-10-14، على الالتزام `0ff793e` (مصطلحات الأقسام 10 و13–25). الصفوف الجديدة منذ تحديث
 2026-10-13 معلّمة بـ ★.
 
 ---
@@ -60,6 +60,8 @@
 | ★ كلمة المرور الجديدة / أعد كتابة كلمة المرور الجديدة | `manager:account.newPassword` / `confirmPassword` · New password / Repeat the new password | حقلا تغيير كلمة المرور في «حسابي» (10 أحرف على الأقل). |
 | ★ الجهاز / العنوان / آخر نشاط | `manager:account.device` / `ip` / `lastSeen` · Device / Address / Last activity | أعمدة جدول «الأجهزة المسجَّل دخولها». |
 | ★ تسجيل الخروج (في جدول الأجهزة) | `manager:account.endSession` · Sign out | إنهاء جلسة جهاز آخر واحد؛ غير الخروج من جهازك. |
+| ★ أنشئ حساب شركتك / اسم الشركة / إنشاء الحساب | `manager:register.title` / `companyName` / `submit` · Create your company account / Company name / Create account | شاشة تسجيل شركة جديدة (لصاحب الشركة فقط). |
+| ★ شركة جديدة؟ / إنشاء حساب / لديك حساب؟ | `common:auth.noAccount` / `createAccount` / `haveAccount` · New company? / Create an account / Already registered? | روابط بين شاشة الدخول وشاشة التسجيل. |
 
 ## 2. الأشخاص والأدوار
 
@@ -351,6 +353,12 @@
 | العملاء | `manager:customers.title` · Customers | ملفات العملاء ومشترياتهم. |
 | الملاحظات | `manager:customers.notes` · Notes | ملاحظات على العميل؛ لا تُعدَّل ولا تُحذف. |
 | صافي الإنفاق | `manager:customers.netSpend` · Net spend | إجمالي مشتريات العميل ناقص ما استرده. |
+| ★ عميل جديد / تعديل العميل / الاسم الكامل | `manager:customers.new` / `edit` / `fullName` · New customer / Edit customer / Full name | إنشاء ملف عميل في الإدارة؛ «الاسم الكامل» الحقل الإلزامي الوحيد. |
+| ★ اللغة المفضلة | `manager:customers.language` · Preferred language | تُحفظ ولا تُستخدم حاليًا. |
+| ★ إجمالي المشتريات / المسترد / متوسط الفاتورة / آخر شراء | `manager:customers.spent` / `refunded` / `average` / `lastPurchase` · Total purchases / Refunded / Average sale / Last purchase | أرقام ملف العميل في الفروع المسموح لك برؤيتها. |
+| ★ آخر نشاط / الأعلى إنفاقاً | `manager:customers.sortRecent` / `sortSpend` · Recent activity / Highest spend | ترتيب قائمة العملاء. |
+| ★ سجل المشتريات (العميل) / رقم الاسترداد | `manager:customers.purchaseHistory` / `refundNumber` · Purchase history / Refund no. | عمليات العميل ومرتجعاته في ملفه (ت-1: «الاسترجاع»). |
+| ★ ملاحظة جديدة / إضافة ملاحظة | `manager:customers.newNote` / `addNote` · New note / Add note | ملاحظات على العميل تُضاف ولا تُعدَّل. |
 
 ## 8. المطعم
 
@@ -402,6 +410,24 @@
 | تصدير CSV | `manager:reports.exportCsv`، `manager:audit.export` · Export CSV | تنزيل جدول التقرير أو سجل التدقيق لفتحه في برنامج جداول؛ كل عرض وتصدير للتقارير يُسجَّل. |
 | الاشتراك / الباقة الحالية | `manager:subscription.title` / `manager:subscription.current` · Subscription / Current plan | باقة الشركة وحدودها؛ يغيّرها فريق المنصة فقط. |
 | ★ المنطقة الزمنية | `manager:company.timezone` · Time zone | منطقة الشركة التي تُقطع عندها كل الأيام في القوائم والكشوف والتقارير؛ تغييرها يعيد قطع الأيام السابقة. |
+| ★ متوسط الفاتورة (التقارير) | `manager:reports.averageSale` · Average sale | صافي المبيعات ÷ عدد المبيعات. |
+| ★ المردود للعملاء / صافي المحصّل / الصافي بعد الرسوم / رسوم مستردّة | `manager:reports.paidBack` / `netCollected` / `netAfterFees` / `feesReversed` · Paid back / Net collected / Net after fees / Fees given back | أرقام تبويب «المدفوعات والنقد»: المحصّل ناقص المردود، ثم ناقص الرسوم وزائد المسترد منها. |
+| ★ النقد حسب النوع (الصناديق والخزائن) | `manager:reports.cashByType` · Cash by type (registers and treasuries) | كل تغيّر في نقد الأدراج والخزائن في الفترة. |
+| ★ المخزون الختامي حتى … / تدوير رصيد المخزون / تقريب المتوسطات | `manager:reports.asAtTitle` / `rollForward` / `rounding` · Closing stock as at … / Stock roll-forward / Rounding of averages | المخزون في نهاية الفترة، ومن الافتتاحي إلى الختامي عبر حركات الفترة. |
+| ★ أوامر مفتوحة | `manager:reports.openOrders` · Open orders | أوامر الشراء «معتمد» و«مستلم جزئيًا» الآن، بلا فترة. |
+| ★ صافي فرق النقد / مطابقة الصناديق / غير مجرودة | `manager:reports.netDiscrepancy` / `registerReconciliation` / `uncounted` · Net cash difference / Register reconciliation / Not counted | أرقام تبويب «الورديات» في التقارير. |
+| ★ تواريخ مخصصة / مقارنة بالفترة السابقة | `manager:reports.preset_custom` / `vsPrevious` · Custom dates / vs previous period | اختيار الفترة، والمقارنة بنفس عدد الأيام قبلها. |
+| ★ الطلبات / إعدادات المتجر / المنتجات المعروضة | `manager:online.tabOrders` / `tabSettings` / `tabProducts` · Orders / Store settings / Products online | تبويبات شاشة المتجر الإلكتروني. |
+| ★ طلب إلكتروني | `manager:online.order` · Online order | طلب من المتجر؛ يصبح عملية بيع بعد الدفع. |
+| ★ بانتظار الدفع / مدفوع / قيد التجهيز / جاهز للاستلام / خرج للتوصيل / مكتمل / منتهي / فشل الدفع / ملغي | `manager:online.status_*` · Waiting for payment … Cancelled | حالات الطلب الإلكتروني («ملغي» كما في الواجهة؛ الصيغة في الدليل «ملغى»، ت-9). |
+| ★ بدء التجهيز / تعيين كمكتمل / إلغاء الطلب | `manager:online.action_*` · Start preparing / Mark completed / Cancel order | أزرار خطوات الطلب. |
+| ★ فحص المدفوعات المعلّقة | `manager:online.reconcile` · Check pending payments | يسأل البوابة عن الطلبات غير المدفوعة، ويُنهي ما تجاوز مدة حجزه. |
+| ★ مدة الحجز (بالدقائق) | `manager:online.reservationMinutes` · Reservation time (minutes) | مدة حجز المخزون لطلب لم يُدفع؛ الافتراضي 30. |
+| ★ عنوان المتجر / الحد الأدنى للطلب (د.ك) / رسوم التوصيل | `manager:online.slug` / `minimumOrder` / `deliveryFee` · Store address / Minimum order / Delivery fee | إعدادات المتجر؛ الحد الأدنى لا يشمل رسوم التوصيل. |
+| ★ محاولات الدفع / السجل (الطلب) | `manager:online.paymentAttempts` / `timeline` · Payment attempts / History | تفاصيل الطلب الإلكتروني. |
+| ★ جاهزة / غير متصلة (تحتاج موافقة وبيانات اعتماد) | `manager:online.gatewayReady` / `gatewayNotConnected` · Ready / Not connected | حالة بوابة الدفع في إعدادات المتجر. |
+| ★ تجريبية (مدفوعات اختبار فقط) | `manager:cash.gatewayMock` · Sandbox (test payments only) | البوابة المتاحة حاليًا: لا يصل منها مال حقيقي. |
+| ★ عرض في المتجر / إزالة من المتجر / معروض / غير معروض | `manager:online.list` / `unlist` / `listedYes` / `listedNo` · List online / Remove from store / Listed / Not listed | اختيار المنتجات المعروضة في المتجر. |
 
 ### 9.1 الرقابة والإقفال
 
@@ -423,6 +449,13 @@
 | ★ دفعات البطاقة والتحويل تحتاج مرجعًا | `manager:sales.tenderReference` · Card and transfer payments need a reference | إعداد في «سياسة البيع»؛ مفعّل افتراضيًا. |
 | ★ نسبة الاسترجاع غير المعتادة (%) / نافذة مراجعة النشاط (أيام) | `manager:sales.unusualRate` / `unusualDays` · Unusual refund rate / Activity review window | إعدادا «نشاط غير اعتيادي»؛ الافتراضي 10% / 30 يومًا. |
 | ★ السماح بتعديل السعر إلى أقل من التكلفة | `manager:sales.priceBelowCost` · Allow price changes below cost | إعداد في «سياسة البيع»؛ غير مفعّل افتراضيًا. |
+| ★ بيانات الشركة | `manager:company.title` · Company profile | شاشة «الإعدادات» لبيانات الشركة. |
+| ★ الاسم القانوني / رقم السجل التجاري / بريد التواصل / هاتف التواصل / اللغة الافتراضية | `manager:company.legalName` / `crNumber` / `contactEmail` / `contactPhone` / `defaultLanguage` · Legal name / Commercial registration no. / Contact e-mail / Contact phone / Default language | حقول بيانات الشركة. |
+| ★ العملة / حالة الحساب | `manager:company.currency` / `status` · Currency / Account status | للعرض فقط. |
+| ★ رئيسي / إضافة فرع / الرمز (الفرع) | `manager:branches.main` / `add` / `code` · Main / Add branch / Code | الفرع الرئيسي لا يُوقف؛ الرمز فريد في الشركة. |
+| ★ رأس الإيصال / تذييل الإيصال | `manager:branches.receiptHeader` / `receiptFooter` · Receipt header / Receipt footer | نص يُطبع على إيصال الفرع. |
+| ★ إيقاف هذا الفرع؟ | `manager:branches.deactivateTitle` · Deactivate this branch? | تأكيد إيقاف فرع. |
+| ★ الإبقاء على الأدوار والتفعيل / إلغاء الأدوار والتفعيل | `manager:branches.dormantKeep` / `dormantClear` · Keep the roles and activate / Clear the roles and activate | خيارا إعادة تفعيل فرع فيه «أدوار خاملة». |
 
 ---
 
