@@ -1262,3 +1262,35 @@ ADR; supersede it.
   the hard lock (the lock stays at 10 wrong passwords / 15 minutes; the holder is told and a
   manager can clear it), e-mail verification at self-registration (FND-104, owner decision).
 
+## ADR-0105 — POS assistant: a read-only chat helper on the cashier screen
+- **Status:** Accepted (2026-10-14). Owner request: a chat button on the register so the
+  cashier can ask an AI for help.
+- **Context:** New cashiers ask the same questions (how to hold a sale, give a discount, process
+  a return, what a shortcut does) and look up prices and stock by hand. The owner wants a chat
+  helper on the register itself.
+- **Decision:**
+  - A new `assistant` module (`apps/api/src/modules/assistant`) exposes `GET /pos/assistant`
+    (enabled or not) and `POST /pos/assistant/chat` under `pos.access`. The browser keeps the
+    conversation (at most 20 turns of 2 000 characters) and sends it whole on every request,
+    with the cart as display text; the server stores nothing and logs only token counts.
+  - The model provider sits behind the `AssistantModel` boundary (like `Mailer`): the real
+    `AnthropicAssistantModel` uses the official `@anthropic-ai/sdk` with `ASSISTANT_MODEL`
+    (default `claude-opus-5-5`, low effort for short answers, server-side fallback on a policy
+    decline, one retry, 60 s timeout). Without `ANTHROPIC_API_KEY` the assistant is **off**:
+    the button shows a notice, no request leaves the server and nothing is billed. Setting the
+    key is a paid decision of the owner (CLAUDE.md §3.13).
+  - The assistant is **read-only** (BR-194). It answers from a fixed guide of the register
+    (`POS_GUIDE`, the cacheable prefix) plus three lookups that run as the cashier, at the
+    session branch, inside the merchant's RLS context: `search_products` (name / SKU /
+    barcode, price, stock when the cashier may see it), `recent_sales` (own shift) and
+    `shift_summary` (figures withheld under the blind count exactly as on the shift page).
+    Rights are checked with `can()` before each lookup; the cashier's rights at the branch are
+    part of the prompt so the answer says who must authorise what. At most four lookup rounds
+    per answer; 60 requests per cashier per 10 minutes (`RateLimiterService`).
+  - POS: an **Assistant** button in the shift strip (and the phone "More" menu), F9, a dialog
+    with suggested questions, the thread kept while the dialog is closed, "New conversation".
+- **Consequences:** No tenant data is stored by the provider beyond its own processing (the
+  provider's data terms apply; product names, prices, stock figures and the cart text of one
+  branch are sent per question). Not built: streaming answers, per-merchant usage metering or
+  a plan limit, actions on the sale by the assistant (by design), the manager app.
+

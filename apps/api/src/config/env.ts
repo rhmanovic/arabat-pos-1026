@@ -79,6 +79,12 @@ export const envSchema = z.object({
     }),
   /** Local directory for uploaded files (product images). */
   FILE_STORAGE_DIR: z.string().default('var/uploads'),
+  /**
+   * POS assistant (ADR-0105). Without a key the assistant is off: no request leaves the
+   * server and nothing is billed. Set only with the owner's approval (paid usage).
+   */
+  ANTHROPIC_API_KEY: z.string().trim().min(1).optional(),
+  ASSISTANT_MODEL: z.string().trim().min(1).default('claude-opus-5-5'),
 });
 
 export type Env = z.infer<typeof envSchema>;

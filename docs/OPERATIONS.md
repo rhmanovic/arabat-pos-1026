@@ -126,6 +126,7 @@ Variables of the web service:
 | `PUBLIC_MANAGER_URL` / `PUBLIC_POS_URL` / `PUBLIC_STORE_URL` | `https://${{RAILWAY_PUBLIC_DOMAIN}}/manager` / `/pos` / `/store` |
 | `PAYMENT_MOCK_ENABLED`, `PAYMENT_MOCK_SECRET` | `true` and a random string **on staging only**: test payments create sales and bank entries without money (FND-709); the API logs a warning when it is on in a production build, and it must never be set for an environment used by a real merchant (owner decision D7) |
 | `SMTP_URL`, `MAIL_FROM` | optional; without them password reset and invitation e-mails are not delivered |
+| `ANTHROPIC_API_KEY`, `ASSISTANT_MODEL` | optional; the POS assistant (ADR-0105) is off without the key. Paid usage per question: set only with the owner's approval; `ASSISTANT_MODEL` defaults to `claude-opus-5-5` |
 
 Generate a public domain under the web service's Networking settings. Railway injects
 `PORT=8080`, so the domain's target port must be **8080** (not the Dockerfile's `EXPOSE

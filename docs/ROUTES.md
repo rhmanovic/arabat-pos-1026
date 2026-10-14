@@ -201,6 +201,17 @@ Manager `/manager/sales` (list, filters incl. unusual sales, flags, totals, sell
 price-change bounds) and `/manager/sales/:id` (exceptions block: above limit, free-sale reason,
 supervisor override).
 
+### POS assistant API (ADR-0105)
+
+| Method & path | Permission |
+|---|---|
+| `GET /pos/assistant` (`{ enabled }`: false until `ANTHROPIC_API_KEY` is configured) | POS `pos.access` |
+| `POST /pos/assistant/chat` (`messages` ≤ 20 turns ending with the cashier's, `language`, `cart` as display text → `{ reply, toolsUsed }`; 503 `ASSISTANT_DISABLED` when off; 60 per cashier per 10 min) | POS `pos.access`; the lookups inside run with the cashier's rights at the session branch (`catalog.read` for stock, `sales.create` for the shift's sales, `shifts.operate` for the shift) |
+
+Screen: the **Assistant** button in the shift strip (phones: the "More" menu) and F9 open a
+chat dialog on the sale screen with suggested questions; the conversation is kept while the
+dialog is closed and cleared with "New conversation". The assistant only reads (BR-194).
+
 ### Returns API (Prompt 11)
 
 | Method & path | Permission |

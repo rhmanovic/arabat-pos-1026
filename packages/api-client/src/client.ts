@@ -59,6 +59,9 @@ import {
   salesSettingsSchema,
   type AuditListQuery,
   auditListSchema,
+  type AssistantChat,
+  assistantReplySchema,
+  assistantStatusSchema,
   posShiftSchema,
   type DecideCashMovement,
   controlsChecklistSchema,
@@ -763,6 +766,11 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('POST', '/pos/shifts/current/cash-movements', { body, schema: posShiftSchema }),
       close: (body: CloseShift) =>
         request('POST', '/pos/shifts/current/close', { body, schema: shiftSchema }),
+    },
+    assistant: {
+      status: () => request('GET', '/pos/assistant', { schema: assistantStatusSchema }),
+      chat: (body: AssistantChat) =>
+        request('POST', '/pos/assistant/chat', { body, schema: assistantReplySchema }),
     },
     sales: {
       settings: () => request('GET', '/pos/sales/settings', { schema: salesSettingsSchema }),

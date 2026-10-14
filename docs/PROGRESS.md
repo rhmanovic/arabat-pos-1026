@@ -575,6 +575,21 @@ sessions 1 to 12 are complete; outside it remain the supplier side (R6, decision
 online-store go-live prerequisites (R7, decision D7), server-rendered exports and
 acquirer-statement reconciliation.
 
+### 2026-10-14 — POS assistant (ADR-0105, BR-194)
+Implemented:
+- **API**: `assistant` module with `GET /pos/assistant` and `POST /pos/assistant/chat`
+  (`pos.access`); `AssistantModel` boundary with the Anthropic implementation (official SDK,
+  `claude-opus-5-5` by default, low effort, server-side fallback, 60 s timeout) and a scripted
+  test double; three read-only lookups as the cashier (`search_products`, `recent_sales`,
+  `shift_summary`); rights, branch, blind count and RLS respected; four lookup rounds and 60
+  requests per cashier per 10 minutes at most; off (503 `ASSISTANT_DISABLED`) without
+  `ANTHROPIC_API_KEY`.
+- **POS**: Assistant button in the shift strip and the phone menu, F9, chat dialog with
+  suggested questions, the cart sent as display text, thread kept while closed, "New
+  conversation", notice when the assistant is not configured; Arabic and English.
+Verified: see `TESTING.md` (results after the POS assistant). Not done: the key is not set
+anywhere (nothing is billed until the owner provides one); no streaming, no usage metering.
+
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025
 before any production launch.

@@ -27,6 +27,7 @@ import { IamModule } from './modules/iam/iam.module.js';
 import { MerchantsModule } from './modules/merchants/merchants.module.js';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module.js';
 import { PlatformAdminModule } from './modules/platform-admin/platform-admin.module.js';
+import { AssistantModule } from './modules/assistant/assistant.module.js';
 
 /** Root module of the modular monolith. Domain modules are registered here per milestone. */
 @Module({})
@@ -62,6 +63,7 @@ export class AppModule {
         PeriodsModule,
         RestaurantModule,
         EcommerceModule,
+        AssistantModule,
       ],
     };
   }

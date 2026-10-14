@@ -364,6 +364,24 @@ export const posEn = {
     cancel: 'Cancel',
     confirm: 'Confirm',
   },
+  assistant: {
+    open: 'Assistant',
+    title: 'Cashier assistant',
+    intro:
+      'Ask how to do something at the till, or about a product, price or stock at your branch.',
+    disabled: 'The assistant is not enabled for this system yet. Ask your manager.',
+    placeholder: 'Type your question…',
+    send: 'Send',
+    thinking: 'Thinking…',
+    note: 'The assistant only reads information; it cannot change the sale.',
+    clear: 'New conversation',
+    suggestions: {
+      hold: 'How do I hold a sale?',
+      discount: 'How do I give a discount?',
+      returns: 'How do I process a return?',
+      shortcuts: 'What are the keyboard shortcuts?',
+    },
+  },
   register: {
     cartTitle: 'Current sale',
     cartEmpty: 'Scan a barcode or pick a product to start a sale.',
