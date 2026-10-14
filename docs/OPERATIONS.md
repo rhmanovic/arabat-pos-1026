@@ -113,9 +113,11 @@ DNS of `arabatapp.com` is in Cloudflare. Records in place (2026-10-14):
 | `MX arabatapp.com` | `1 smtp.google.com` | Google Workspace mailboxes |
 | `TXT arabatapp.com` | `v=spf1 include:_spf.google.com ~all` | SPF for Workspace |
 | `TXT _dmarc.arabatapp.com` | `v=DMARC1; p=none; adkim=r; aspf=r` | DMARC, monitor-only |
+| `TXT arabatapp.com` | `google-site-verification=…` | Workspace domain verification (verified 2026-10-14) |
+| `TXT google._domainkey.arabatapp.com` | `v=DKIM1; k=rsa; p=…` (2048-bit) | Workspace DKIM |
 
-Still to add once the owner has signed up: the Workspace verification TXT and DKIM
-(`google._domainkey`), and the Resend records of `send.arabatapp.com` (DKIM, SPF/MX of its
+Google Workspace (Business Starter, monthly, 14-day trial) is active on `arabatapp.com` with
+one user, the owner; further addresses are added as aliases. Still to add: the Resend records of `send.arabatapp.com` (DKIM, SPF/MX of its
 bounce domain), which are unique to the Resend account. Then set in production
 `SMTP_URL=smtps://resend:<API key>@smtp.resend.com:465` and
 `MAIL_FROM=no-reply@send.arabatapp.com`, and tighten DMARC to `p=quarantine`.
