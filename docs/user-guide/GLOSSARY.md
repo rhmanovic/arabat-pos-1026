@@ -13,7 +13,7 @@
 داخل الشاشات (عدا اسمي اللغتين «العربية» و«English»). الاستثناء: «سجل التدقيق» يعرض أسماء
 الإجراءات وتفاصيلها كما خزّنها النظام بالإنجليزية (انظر ق-7 في `README.md`).
 
-آخر تحديث: 2026-10-14، على الالتزام `0ff793e` (مصطلحات الأقسام 10 و13–25). الصفوف الجديدة منذ تحديث
+آخر تحديث: 2026-10-14، على الالتزام `a82a87d` (مصطلحات الأقسام 10 و13–29). الصفوف الجديدة منذ تحديث
 2026-10-13 معلّمة بـ ★.
 
 ---
@@ -91,6 +91,13 @@
 | ★ قبول الملكية | `manager:company.acceptOwnership` · Accept ownership | خطوة المرشَّح الأخيرة؛ بعدها يصبح المالك ويصبح المالك السابق عضوًا عاديًا. |
 | ★ إلغاء النقل | `manager:company.cancelTransfer` · Cancel transfer | إلغاء نقل لم يقبله المرشَّح بعد. |
 | ★ إرسال بريد إعادة تعيين كلمة المرور | `manager:employees.sendReset` · Send password reset e-mail | يرسل المدير للموظف رابط اختيار كلمة مرور جديدة. |
+| ★ الأدوار والفروع / إضافة دور / إزالة / حفظ الأدوار | `manager:employees.assignments` / `addAssignment` / `remove` / `saveRoles` · Roles and branches / Add role / Remove / Save roles | إسناد دور لموظف على فرع أو على «كل الفروع»؛ «حفظ الأدوار» يستبدل كل إسناداته. |
+| ★ رابط الدعوة يفتح | `manager:employees.firstApp` · Invitation link opens | أي واجهة يفتحها رابط الدعوة. |
+| ★ إعادة الإرسال / إلغاء (الدعوة) / منتهية / تنتهي … | `manager:employees.resend` / `revoke` / `expired` / `expires` · Resend / Revoke / Expired / Expires … | إدارة الدعوات المعلّقة؛ إعادة الإرسال رابط جديد صالح 7 أيام. |
+| ★ المسمى الوظيفي / الرقم الوظيفي / آخر دخول | `manager:employees.jobTitle` / `employeeCode` / `lastLogin` · Job title / Employee code / Last login | حقول ملف الموظف وعمود في القائمة. |
+| ★ دور جديد / للعرض فقط / مُسند | `manager:roles.add` / `common.readOnly` / `roles.assigned` · New role / Read only / Assigned | عناصر شاشة الأدوار. |
+| ★ لكل فرع / على مستوى الشركة فقط | `manager:roles.branchScope` / `merchantScope` · Per branch / Company-wide only | نطاق كل صلاحية: تُمنح على فرع، أو تحتاج «كل الفروع». |
+| ★ لا تملك هذه الصلاحية | `manager:roles.notGrantable` · You do not hold this permission | لا يمنح أحد صلاحية لا يملكها هو. |
 
 ## 3. البيع في نقطة البيع
 
@@ -233,7 +240,7 @@
 | إدارة النقدية | `manager:nav.cash` · Cash custody | شاشة أرصدة الخزائن والأدراج وتحويلاتها. |
 | إجمالي النقد | `manager:dashboard.totalCash` · Total cash on hand | الخزائن + الأدراج + ما هو قيد النقل. |
 | جرد | `manager:cashCustody.count` · Count | عدّ النقد فعليًا ومقارنته بالرصيد في النظام. |
-| لم تُجرد بعد | `manager:cashCustody.notCounted` · Not yet counted | خزينة أو صندوق لم يُسجَّل له جرد افتتاحي. |
+| لم تُجرد بعد | `manager:cashCustody.notCounted` · Not yet counted | خزينة لم يُسجَّل لها جرد افتتاحي (الصندوق يظهر «يحتاج جرد»). |
 | كشف | `manager:cashCustody.statement` · Statement | كل الحركات على خزينة أو صندوق مع الرصيد. |
 | تحويل نقدي | `manager:cashCustody.transfer` · Transfer cash | نقل نقد بين صندوق وخزينة فرعه. |
 | تحويل لفرع آخر | `manager:cashCustody.sendToBranch` · Send to branch | إرسال نقد من خزينة فرع إلى خزينة فرع آخر. |
@@ -266,6 +273,15 @@
 | ★ المسؤول / المتابعة / تمت متابعتها | `manager:cash.accountable` / `followup` / `varianceResolved` · Accountable / Follow-up / Followed up | أعمدة وتصفية «متابعة الفروقات». |
 | ★ إغلاق وردية / فتح (بين الورديات) / جرد / تحويل بين الفروع | `manager:cash.variance_shift_close` / `variance_shift_opening` / `variance_account_count` / `variance_branch_transfer` · Shift closing / Opening (between shifts) / Count / Transfer between branches | مصدر الفرق النقدي المسجّل. |
 | ★ الخزائن: / الصناديق: / قيد النقل: | `manager:dashboard.inTreasuries` / `inRegisters` / `inTransit` · Treasuries: / Registers: / In transit: | أسطر بطاقة «إجمالي النقد». |
+| ★ يحتاج جرد | `manager:cashCustody.needsCount` · Needs a count | شارة صندوق جديد أو أُغلقت ورديته بدون جرد. |
+| ★ رصيد افتتاحي بالجرد | `manager:cashCustody.source_treasury_opening_count` · Opening balance by count | أول جرد للخزينة كما يظهر في كشفها. |
+| ★ الأرصدة / التحويلات / المصروفات والدفعات / بين الفروع | `manager:cashCustody.tabBalances` / `tabTransfers` / `tabPayouts` / `tabBranchTransfers` · Balances / Transfers / Expenses & payments / Between branches | تبويبات «إدارة النقدية» (غير «الأرصدة» في المخزون). |
+| ★ الاتجاه / من الصندوق إلى الخزينة (سحب) / من الخزينة إلى الصندوق (تعزيز) | `manager:cashCustody.direction` / `toTreasury` / `toRegister` · Direction / Register to treasury (drop) / Treasury to register (top-up) | اختيار اتجاه «تحويل نقدي». |
+| ★ رصيد مرحَّل / وارد / صادر / الرصيد الختامي | `manager:cashCustody.openingBalance` / `totalIn` / `totalOut` / `closingBalance` · Brought forward / In / Out / Closing balance | ملخص الكشف لفترة مختارة. |
+| ★ قرار / بانتظار شخص آخر | `manager:cashCustody.decide` / `awaitingOther` · Decide / Awaiting another person | زر القرار على صرف معلّق؛ ومن سجّل الإيداع لا يؤكده بنفسه. |
+| ★ مرجع البنك (اختياري) / سبب الإرجاع (إلزامي للإرجاع) | `manager:cashCustody.bankReference` / `returnReason` · Bank reference / Reason for returning | حقلا تأكيد الإيداع البنكي أو إرجاعه. |
+| ★ مصدر الدفع / صافي المصروف: / عكس / معكوس | `manager:cashCustody.paidFrom` / `netPaid` / `reversal` / `reversed` · Paid from / Net paid / Reversal / Reversed | قائمة المصروفات والدفعات وشارتا العكس. |
+| ★ تم الاستلام (تحويل نقدي بين الفروع) | `manager:cashCustody.status_received` · Received | حالة تحويل نقد بين الفروع بعد تأكيد الاستلام. |
 
 ## 6. المخزون والتحويلات والمشتريات
 
@@ -359,6 +375,15 @@
 | ★ آخر نشاط / الأعلى إنفاقاً | `manager:customers.sortRecent` / `sortSpend` · Recent activity / Highest spend | ترتيب قائمة العملاء. |
 | ★ سجل المشتريات (العميل) / رقم الاسترداد | `manager:customers.purchaseHistory` / `refundNumber` · Purchase history / Refund no. | عمليات العميل ومرتجعاته في ملفه (ت-1: «الاسترجاع»). |
 | ★ ملاحظة جديدة / إضافة ملاحظة | `manager:customers.newNote` / `addNote` · New note / Add note | ملاحظات على العميل تُضاف ولا تُعدَّل. |
+| ★ منتج جديد / البيانات الأساسية | `manager:catalog.newProduct` / `basics` · New product / Basics | إنشاء منتج وبياناته الأساسية؛ يحتاج صلاحيتي المنتجات والأسعار. |
+| ★ النوع / سلعة | `manager:catalog.type` / `typeStandard` · Type / Goods | سلعة أو خدمة (غير «الأنواع» = المتغيرات). |
+| ★ اسم النوع / إضافة نوع / إزالة (النوع) | `manager:catalog.variantName` / `addVariant` / `removeVariant` · Variant name / Add variant / Remove | أنواع المنتج؛ النوع المُزال يُؤرشف ولا يُحذف. |
+| ★ بدون تصنيف | `manager:catalog.noCategory` · No category | منتج بلا تصنيف. |
+| ★ تتبع مخزون هذا المنتج | `manager:catalog.trackInventory` · Track stock for this product | لا يُلغى ما دام للصنف رصيد. |
+| ★ متوفر في كل الفروع / في فروع محددة فقط | `manager:catalog.allBranches` / `selectedBranches` · Available at all branches / Only at selected branches | أين يُباع المنتج. |
+| ★ الصور / رفع صورة / حذف الصورة | `manager:catalog.images` / `upload` / `removeImage` · Images / Upload image / Remove image | JPEG أو PNG أو WebP، حتى 2 ميغابايت للصورة و8 صور للمنتج. |
+| ★ متى / ماذا / من → إلى / بواسطة | `manager:catalog.changedAt` / `changedWhat` / `fromTo` / `changedBy` · When / What / From → to / By | أعمدة «سجل الأسعار والتكاليف». |
+| ★ تصنيف جديد / التصنيف الأب / ترتيب العرض | `manager:catalog.newCategory` / `parent` / `sortOrder` · New category / Parent category / Display order | نافذة التصنيف؛ «ترتيب العرض» يحدد الترتيب في نقطة البيع. |
 
 ## 8. المطعم
 
@@ -428,6 +453,17 @@
 | ★ جاهزة / غير متصلة (تحتاج موافقة وبيانات اعتماد) | `manager:online.gatewayReady` / `gatewayNotConnected` · Ready / Not connected | حالة بوابة الدفع في إعدادات المتجر. |
 | ★ تجريبية (مدفوعات اختبار فقط) | `manager:cash.gatewayMock` · Sandbox (test payments only) | البوابة المتاحة حاليًا: لا يصل منها مال حقيقي. |
 | ★ عرض في المتجر / إزالة من المتجر / معروض / غير معروض | `manager:online.list` / `unlist` / `listedYes` / `listedNo` · List online / Remove from store / Listed / Not listed | اختيار المنتجات المعروضة في المتجر. |
+| ★ طريقة دفع جديدة / حساب جديد | `manager:cash.newMethod` / `newAccount` · New payment method / New account | إنشاء طريقة دفع أو حساب مالي. |
+| ★ يستقر في حساب | `manager:cash.account` · Settles into | الحساب الذي يذهب إليه مال طريقة الدفع غير النقدية. |
+| ★ بدون رسوم / مبلغ ثابت / نسبة مئوية / ثابت + نسبة | `manager:cash.fee_none` / `fee_fixed` / `fee_percentage` / `fee_fixed_plus_percentage` · No fee / Fixed amount / Percentage / Fixed + percentage | أنواع رسوم طريقة الدفع. |
+| ★ الرسوم الثابتة (د.ك) / النسبة (%) / مبلغ للمعاينة (د.ك) | `manager:cash.feeFixed` / `feePercent` / `previewAmount` · Fixed fee / Percentage / Preview amount | حقول الرسوم ومعاينتها. |
+| ★ يحتفظ المزوّد بالرسوم / تُستردّ الرسوم بالتناسب | `manager:cash.refundFee_keep` / `refundFee_reverse` · The provider keeps the fee / The fee is given back pro rata | خيارا «الرسوم عند الاسترجاع». |
+| ★ متاحة في نقطة البيع / متاحة في المتجر الإلكتروني | `manager:cash.availableInPos` / `availableOnline` · Available at the POS / in the online store | أين تظهر طريقة الدفع. |
+| ★ بنك / تسوية بطاقات / محفظة / أخرى | `manager:cash.accountKind_*` · Bank / Card clearing / Wallet / Other | أنواع الحسابات المالية؛ «بنك» وحده يُطابَق ويستقبل الإيداعات. |
+| ★ مؤرشف (سجل قديم) | `manager:cash.archived` · Archived (history) | حساب قديم للعرض فقط. |
+| ★ غير متصلة (بوابة) | `manager:cash.gatewayNone` · Not connected | طريقة دفع بلا بوابة. |
+| ★ رصيد الدفتر / المطابَق حتى الآن / رصيد الكشف (د.ك) / تاريخ الكشف | `manager:cash.bookBalance` / `clearedBefore` / `statementBalance` / `statementDate` · Book balance / Cleared so far / Statement balance / Statement date | أرقام «المطابقة البنكية». |
+| ★ مطابَق / حفظ المطابقة / المطابقات السابقة | `manager:cash.reconciledUpToDate` / `saveReconciliation` / `reconciliationHistory` · Reconciled / Save reconciliation / Previous reconciliations | حالة الحساب البنكي وحفظ المطابقة وسجلها. |
 
 ### 9.1 الرقابة والإقفال
 
