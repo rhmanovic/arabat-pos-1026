@@ -77,8 +77,20 @@ export const envSchema = z.object({
       }
       return value.split(',').map((s) => s.trim());
     }),
-  /** Local directory for uploaded files (product images). */
+  /** Where uploaded files (product images) live: local disk or Google Cloud Storage. */
+  FILE_STORAGE_DRIVER: z.enum(['local', 'gcs']).default('local'),
+  /** Local directory for uploaded files (FILE_STORAGE_DRIVER=local). */
   FILE_STORAGE_DIR: z.string().default('var/uploads'),
+  /** Bucket for uploaded files (FILE_STORAGE_DRIVER=gcs), e.g. `arabat-prod-uploads`. */
+  GCS_BUCKET: z.string().min(3).optional(),
+  /** Cloud Storage JSON API endpoint (overridden only by tests). */
+  GCS_API_URL: z.url().default('https://storage.googleapis.com'),
+  /** Access token source: the Cloud Run metadata server (overridden only by tests). */
+  GCS_TOKEN_URL: z
+    .url()
+    .default(
+      'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+    ),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -126,6 +138,8 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
     const issues: string[] = [];
     if (DEV_SECRETS.has(env.MFA_ENCRYPTION_KEY))
       issues.push('MFA_ENCRYPTION_KEY: the development key from .env.example cannot be used');
+    if (env.FILE_STORAGE_DRIVER === 'gcs' && !env.GCS_BUCKET)
+      issues.push('GCS_BUCKET: required when FILE_STORAGE_DRIVER=gcs');
     if (mockPaymentsEnabled(env) && env.PAYMENT_MOCK_SECRET === DEV_MOCK_SECRET)
       issues.push('PAYMENT_MOCK_SECRET: set a real secret when mock payments are enabled');
     if (issues.length > 0) throw new InvalidEnvironmentError(issues);

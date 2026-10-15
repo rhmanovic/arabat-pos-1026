@@ -163,16 +163,18 @@ Before reporting work as done, run `pnpm verify`, `pnpm test:integration` and
 - Fonts must not be inlined as `data:` URIs (CSP `font-src 'self'`).
 - Drizzle renders bare column names inside correlated `sql` subqueries; qualify outer
   columns explicitly (`sql.raw('"products"."id"')`) or the subquery binds to itself.
-- `app_owner` bypasses RLS: seeds, migrations and test fixtures must filter by
-  `merchant_id` themselves.
+- `app_owner` is not filtered by RLS (it owns the tables; no BYPASSRLS, ADR-0105): seeds,
+  migrations and test fixtures must filter by `merchant_id` themselves. Never write
+  `force row level security` in a migration (Cloud SQL would then lock the owner out).
 - Prettier reformats long literals; scripted text edits must assert that the target
   string exists before replacing.
 - Merchant status and subscription updates need `app.operator_id` (database trigger), also in
   owner-role fixtures: `select set_config('app.operator_id', gen_random_uuid()::text, true)`.
 - Uploaded files go through `FileStorage` (`apps/api/src/kernel/storage`); never write
   to disk directly. Local storage lives in `var/` (git-ignored).
-- In this cloud sandbox: Node 24 is at `~/.local/node24/bin`, Docker must be started
-  with `dockerd &`, and Playwright needs
+- In this cloud sandbox: Node 24 is at `~/.local/node24/bin` (if missing, unpack the official
+  linux-x64 tarball there), Docker must be started with `dockerd &`, Docker Hub may answer 429
+  (pull `mirror.gcr.io/library/postgres:18` and tag it `postgres:18`), and Playwright needs
   `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium`.
 
 ## 10. Repository status
@@ -211,4 +213,7 @@ pack; `assertPeriodOpen` refuses purchasing documents dated in a closed month (A
 Ownership moves only through `OwnershipService` (owner flow with e-mailed code, or platform with a reason); a
 frozen owner is refused at login and on every request; audit entries carry `changes` from `diffFields`;
 variant price / cost changes are appended to `price_history` (ADR-0104, BR-020/191/192/193).
+Production is prepared for Google Cloud in Doha (Cloud Run + Cloud SQL, `infra/gcp/`, OPERATIONS.md §9,
+ADR-0105) but not created; `hosted-start` works without SUPERUSER/BYPASSRLS
+(`scripts/verify-managed-postgres.sh`); `FILE_STORAGE_DRIVER=gcs` stores images in Cloud Storage.
 See `docs/PROGRESS.md` for the current state and `docs/ROADMAP.md` for next steps.

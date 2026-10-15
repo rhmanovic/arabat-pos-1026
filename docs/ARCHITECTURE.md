@@ -488,8 +488,9 @@ Internet ─► CDN / TLS edge ─► Load balancer / reverse proxy
 - Backups: PITR + daily snapshots; restore tested periodically.
 - CI (GitHub Actions): lint, typecheck, unit, integration (PostgreSQL service),
   E2E, build. CD only after owner approval of a hosting provider (OQ-011).
-- Cloud provider, region and data residency are **business decisions** (cost,
-  Kuwait/GCC residency) — not chosen yet.
+- Cloud provider and region: **Google Cloud, Doha (`me-central1`)** — Cloud Run, Cloud SQL
+  PostgreSQL 18, Cloud Storage, external load balancer (ADR-0105, OPERATIONS.md §9; prepared,
+  not created). Staging stays on Railway (ADR-0087).
 
 ---
 

@@ -1,0 +1,45 @@
+# Exports the production database to Cloud Storage with a dated file name (ADR-0105,
+# OPERATIONS.md §9.5). Started by Cloud Scheduler (daily/ and monthly/ prefixes); the
+# bucket's retention policy keeps each file at least 90 days, nobody can overwrite it.
+# Argument: {"project", "instance", "database", "bucket", "prefix"}.
+main:
+  params: [input]
+  steps:
+    - name_file:
+        assign:
+          - stamp: ${text.replace_all(text.split(time.format(sys.now()), ".")[0], ":", "-")}
+          - uri: ${"gs://" + input.bucket + "/" + input.prefix + "/" + input.database + "-" + stamp + ".sql.gz"}
+    - export:
+        call: http.post
+        args:
+          url: ${"https://sqladmin.googleapis.com/v1/projects/" + input.project + "/instances/" + input.instance + "/export"}
+          auth:
+            type: OAuth2
+          body:
+            exportContext:
+              fileType: SQL
+              uri: ${uri}
+              databases:
+                - ${input.database}
+              # Serverless export: runs on a temporary instance, no load on production.
+              offload: true
+        result: operation
+    - wait:
+        call: sys.sleep
+        args:
+          seconds: 30
+    - check:
+        call: http.get
+        args:
+          url: ${operation.body.selfLink}
+          auth:
+            type: OAuth2
+        result: status
+    - done_yet:
+        switch:
+          - condition: ${status.body.status != "DONE"}
+            next: wait
+          - condition: '${"error" in status.body}'
+            raise: '${"Export failed " + json.encode_to_string(status.body.error)}'
+    - finish:
+        return: ${uri}

@@ -147,7 +147,7 @@ ADR; supersede it.
   Background jobs, when needed, use pg-boss — no Redis/broker initially.
 
 ## ADR-0018 — Deployment shape (design only)
-- **Date:** 2026-10-11 · **Status:** Proposed — provider/region need owner approval (OQ-011)
+- **Date:** 2026-10-11 · **Status:** Realised for production by ADR-0105 (Google Cloud, Doha)
 - **Decision:** One container image (API + worker entrypoints), static SPAs on
   CDN/proxy, managed PostgreSQL 18 with PITR, object storage, GitHub Actions CI.
   No deployment until approved.
@@ -241,7 +241,7 @@ ADR; supersede it.
   e-mail provider needs owner approval (cost).
 
 ## ADR-0031 — Migration role bypasses RLS
-- **Date:** 2026-10-11 · **Status:** Accepted
+- **Date:** 2026-10-11 · **Status:** Superseded by ADR-0105 (table ownership instead of BYPASSRLS)
 - **Decision:** `app_owner` (migrations, seeds, CLI) has `BYPASSRLS` so data migrations
   and template sync can touch every merchant. It is never used by the API; the
   runtime role stays without bypass. Owner-role code filters by `merchant_id`
@@ -1262,3 +1262,53 @@ ADR; supersede it.
   the hard lock (the lock stays at 10 wrong passwords / 15 minutes; the holder is told and a
   manager can clear it), e-mail verification at self-registration (FND-104, owner decision).
 
+
+## ADR-0105 — Production on Google Cloud (Doha); RLS without BYPASSRLS
+- **Date:** 2026-10-15 · **Status:** Accepted for preparation (owner, in conversation). Nothing is
+  created or billed until the owner opens the Google Cloud account and approves the go-live
+  (CLAUDE.md §3.13). Answers OQ-011 except the location of the second backup copy.
+- **Context:** The owner wants real merchants in production at the lowest sound cost, with the
+  application and the database in one Gulf region for latency, and a stronger backup than daily
+  snapshots. Doha (`me-central1`) offers Cloud Run, Cloud SQL for PostgreSQL 18 (the default
+  major version), Cloud Storage, Secret Manager, Artifact Registry, Cloud Build, Cloud Scheduler
+  and Workflows; Dammam (`me-central2`) needs invoiced billing (or CNTXT for KSA billing), so it is
+  not the main region. Cloud Run domain mapping is not offered in Doha. Cloud SQL never grants
+  SUPERUSER or BYPASSRLS, which `app_owner` relied on (ADR-0031).
+- **Decision:**
+  - **Shape ("economic production"):** one container image on Cloud Run (`min 1`, `max 3`,
+    1 vCPU / 1 GiB, CPU always allocated because the API reconciles online payments every minute,
+    ingress only through the load balancer); Cloud SQL Enterprise `db-custom-1-3840`, 20 GB SSD
+    with auto-increase, **no HA** at first (switched on before larger merchants, one setting);
+    an external Application Load Balancer with a Google-managed certificate for the domain;
+    product images in a private Cloud Storage bucket (`FILE_STORAGE_DRIVER=gcs`, `GcsStorage`
+    over the JSON API with the Cloud Run metadata token, no key file); secrets generated into
+    Secret Manager. Estimated USD 140–190 per month including the backups below (owner was shown
+    the table; exact Doha prices are read from the account before go-live).
+  - **Backups (raised level):** Cloud SQL daily backups kept 90 and PITR 7 days (the Enterprise
+    maximum); final backup on deletion kept 365 days; deletion protection; enhanced backups in a
+    Backup and DR vault (hourly kept 90 days, monthly kept 1 year, enforced retention, separate
+    from the project) where the region offers it; a daily and a monthly SQL export (serverless
+    export, Workflows + Cloud Scheduler) into a bucket with a 90-day retention policy that is
+    locked once the owner confirms; a monthly restore drill. The bucket's location is the
+    owner's open choice (Doha only, Dammam, or an EU region for a second-region copy).
+  - **RLS without BYPASSRLS:** `app_owner` owns every table and no table forces RLS (migration
+    0048), so the owner is exempt by ownership while `app_runtime`, which owns nothing, is
+    filtered by every policy exactly as before. `hosted-start` creates roles with default
+    attributes only, takes `SET` membership of `app_owner` when the admin is not a superuser
+    (PostgreSQL 16+), serialises role setup and migrations with advisory locks, removes
+    BYPASSRLS from older databases after 0048 (superuser admins only) and gains
+    `--migrate-only` (Cloud Run job before each release) and `--roles-only` (restore target).
+    Local Docker and CI create `app_owner` without BYPASSRLS, so every test runs the Cloud SQL
+    model. Supersedes ADR-0031's mechanism (not its rule that owner-role code filters by
+    `merchant_id`).
+  - **Move:** Railway stays as staging until the move; the database moves once with
+    `pg_dump`/`pg_restore` (`infra/gcp/move-from-railway.sh`) into the empty Cloud SQL database,
+    then Railway is kept stopped for two weeks. Whether Railway's pilot data (test payments
+    included, FND-709) moves at all is the owner's decision.
+- **Consequences:** `infra/gcp/` (`provision.sh`, `deploy.sh`, `move-from-railway.sh`,
+  `backup-export.workflow.yaml`, `config.example.env`) and `scripts/verify-managed-postgres.sh`
+  (rehearsal on a non-superuser admin). These scripts cannot be run here without the account:
+  their `gcloud` flags were checked against SDK 570, the database half was rehearsed locally.
+  Open: second backup location, e-mail provider (SMTP), domain, the `TRUST_PROXY` hop count
+  behind the load balancer (checked after the first deploy), whether Backup and DR is offered in
+  Doha, and Railway's data.

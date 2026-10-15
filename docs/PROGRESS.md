@@ -28,7 +28,7 @@ must be labeled as such.
 | Automated tests | Passing | 155 unit/web, 171 integration, 35 E2E (local, 2026-10-12, cash custody phase C) |
 | CI | Written, not yet run | `.github/workflows/ci.yml` |
 | Business modules | Not started | Begin in M1 |
-| Deployment | Not planned | Requires owner approval |
+| Deployment | Staging on Railway; production prepared, not created | Google Cloud Doha (ADR-0105, OPERATIONS.md §9); needs the owner's account and go-live approval |
 
 ## Log
 
@@ -575,6 +575,36 @@ sessions 1 to 12 are complete; outside it remain the supplier side (R6, decision
 online-store go-live prerequisites (R7, decision D7), server-rendered exports and
 acquirer-statement reconciliation.
 
+### 2026-10-15 — Production on Google Cloud, Doha: prepared (ADR-0105)
+Owner decisions in conversation: Google Cloud, Doha (`me-central1`), application and database in
+one region; the "economic production" plan (Cloud Run 1 vCPU / 1 GiB min 1 max 3, Cloud SQL
+`db-custom-1-3840` without HA, load balancer, about USD 140–190 a month) with raised backups;
+everything ready before the move starts.
+Implemented:
+- **Cloud SQL compatibility**: Cloud SQL never grants BYPASSRLS. Migration 0048 removes
+  `FORCE ROW LEVEL SECURITY` (the owner is exempt by ownership, `app_runtime` still filtered);
+  `hosted-start` / `hosted-setup.ts` create roles without privileged attributes, take `SET`
+  membership of `app_owner` as a non-superuser admin, serialise role setup and migrations with
+  advisory locks (the rehearsal found two instances colliding on `CREATE ROLE`), drop BYPASSRLS
+  from older databases after 0048, and gain `--migrate-only` / `--roles-only`. Docker and CI
+  create `app_owner` without BYPASSRLS.
+- **Images in Cloud Storage**: `GcsStorage` (`FILE_STORAGE_DRIVER=gcs`, `GCS_BUCKET`) over the
+  JSON API with the metadata-server token; create-only writes like the local adapter.
+- **Infrastructure scripts** `infra/gcp/`: `provision.sh` (APIs, Artifact Registry, service
+  accounts, Cloud SQL with 90 daily backups, PITR 7 days, final backup, deletion protection,
+  secrets generated into Secret Manager, buckets, daily/monthly exports via Workflows +
+  Scheduler, Backup and DR vault, load balancer + managed certificate + HTTP redirect, uptime
+  check, `--lock-backup-bucket`), `deploy.sh` (Cloud Build → migration job → Cloud Run with
+  probes), `move-from-railway.sh` (dump / restore / row counts), runbook OPERATIONS.md §9.
+- **Rehearsal** `scripts/verify-managed-postgres.sh`, also added to CI.
+Verified: see `TESTING.md` (results 2026-10-15).
+Not done (needs the owner): no Google Cloud account yet, so nothing was created or billed and
+the `gcloud` scripts have not run against Google (flags checked against SDK 570 only); second
+backup location; e-mail provider; domain; whether Railway's pilot data (with test payments)
+moves; `TRUST_PROXY` hop count and Backup and DR availability in Doha are checked at the first
+deploy.
+
 ## Next step
-First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025
-before any production launch.
+Owner: Google Cloud account with billing and the open choices of ADR-0105; then
+`provision.sh`, the move (or an empty start) and `deploy.sh` with the owner's go-live approval.
+Staging: first platform operator, SMTP; owner decisions OQ-021–025.

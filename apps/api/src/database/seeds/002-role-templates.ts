@@ -8,7 +8,7 @@ import type { Seed } from './seed.types.js';
 /**
  * Ensures every merchant has every default role template (new templates are added for
  * existing merchants). Existing roles are never changed: merchants may have customized them.
- * Runs as app_owner (BYPASSRLS) across merchants; idempotent.
+ * Runs as app_owner (table owner, not filtered by RLS) across merchants; idempotent.
  */
 export const roleTemplatesSeed: Seed = {
   name: '002-role-templates',

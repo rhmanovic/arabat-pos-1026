@@ -1,8 +1,8 @@
 # Operations runbook
 
-Status: prepared and verified locally (Prompt 18). **Nothing is deployed**; hosting,
-domain, e-mail provider and payment gateways need the owner's approval first (OQ-011,
-OQ-021, OQ-022). Commands below were run in the development environment unless marked
+Status: staging runs on Railway (§8). Production on Google Cloud in Doha is prepared but not
+created (§9, ADR-0105); domain, e-mail provider and payment gateways still need the owner's
+decision (OQ-021, OQ-022). Commands below were run in the development environment unless marked
 "production".
 
 ## 1. Components
@@ -99,7 +99,8 @@ never from the repository.
 
 ## 7. Deployment prerequisites (owner decisions)
 
-Hosting provider and region / data residency (OQ-011); domain and TLS; transactional
+Hosting provider and region: Google Cloud, Doha (ADR-0105; §9), second backup location
+open; domain and TLS; transactional
 e-mail provider; production secrets store; backup storage location; payment gateway
 choice, merchant contracts and credentials, sandbox certification (OQ-021); subscription
 pricing and billing provider (OQ-022); legal receipt fields and tax (OQ-002, OQ-009).
@@ -164,3 +165,107 @@ Applied automatically. Each merchant gets one "Cash in transit" account. The own
 `cash.deposit` implicitly; grant it to other roles (it is in no template) before they deposit
 cash to a bank. Supplier payments and expenses already recorded at the POS before this release
 as plain cash-out movements stay as they are (cash movements, not disbursements).
+
+## 9. Production on Google Cloud, Doha (ADR-0105) — prepared, not created
+
+Nothing below exists yet: it needs the owner's Google Cloud account (billing on) and the
+owner's approval of the go-live. Files: `infra/gcp/config.example.env` (copy to the
+git-ignored `infra/gcp/config.env`), `provision.sh`, `deploy.sh`, `move-from-railway.sh`,
+`backup-export.workflow.yaml`. Run them from a machine with `gcloud` signed in as a project
+owner (or Cloud Shell), Docker and Node 24 (`pnpm build` first).
+
+### 9.1 Components
+
+| Part | Google service | Setting |
+|---|---|---|
+| API + four apps | Cloud Run service `arabat-web` | 1 vCPU / 1 GiB, min 1 / max 3 instances, CPU always allocated (the API reconciles online payments every minute), ingress only from the load balancer, startup probe `/api/v1/health/ready`, liveness `/api/v1/health/live` |
+| Migrations | Cloud Run job `arabat-migrate` | `hosted-start.js --migrate-only`, run by `deploy.sh` before each release |
+| Database | Cloud SQL PostgreSQL 18 Enterprise `db-custom-1-3840` | zonal (no HA), 20 GB SSD auto-increase, connector-only access (no authorised networks), TLS required, deletion protection |
+| Images | Cloud Storage `UPLOADS_BUCKET` | private, uniform access, 30-day soft delete; `FILE_STORAGE_DRIVER=gcs` |
+| Domain / TLS | External Application Load Balancer | static IP, Google-managed certificate, HTTP → HTTPS redirect |
+| Secrets | Secret Manager (`me-central1` only) | `db-admin-url`, `app-owner-password`, `app-runtime-password`, `mfa-encryption-secret`, `smtp-url` |
+| Builds | Cloud Build → Artifact Registry `arabat` | image tag = commit |
+
+Database connection: Cloud Run mounts the Cloud SQL socket, so `db-admin-url` is
+`postgresql://postgres:…@localhost/arabat?host=/cloudsql/PROJECT:me-central1:INSTANCE`;
+`hosted-start` derives the `app_owner` / `app_runtime` URLs from it. Cloud SQL's `postgres`
+user has no SUPERUSER and no BYPASSRLS: `app_owner` is exempt from RLS only as table owner
+(migration 0048); `app_runtime` always goes through RLS.
+
+### 9.2 First set-up
+1. Owner: Google Cloud account, project, billing, budget alert; give the engineer the
+   Owner role on the project.
+2. `cp infra/gcp/config.example.env infra/gcp/config.env` and fill in project, domain,
+   alert e-mail and `BACKUP_BUCKET_LOCATION` (owner's choice, §9.5).
+3. `bash infra/gcp/provision.sh` — APIs, repository, service accounts, Cloud SQL, secrets,
+   buckets, exports, enhanced backups, load balancer, uptime check. It prints the IP.
+4. Data: either `move-from-railway.sh` (§9.6) or nothing (an empty start).
+5. `bash infra/gcp/deploy.sh` (§9.3). First platform operator: set
+   `PLATFORM_BOOTSTRAP_EMAIL` on the job once (`gcloud run jobs update arabat-migrate
+   --update-env-vars PLATFORM_BOOTSTRAP_EMAIL=…`), execute it, read the one-time credentials in
+   the job's log, then remove the variable.
+6. DNS: `A` record of the domain → the printed IP; wait until
+   `gcloud compute ssl-certificates describe arabat-cert --global` shows `ACTIVE`.
+7. E-mail: put the provider's SMTP URL into the `smtp-url` secret
+   (`printf %s 'smtps://…' | gcloud secrets versions add smtp-url --data-file=-`), redeploy.
+8. Monitoring → Alerting: an e-mail channel; alert policies on the `arabat-ready` uptime
+   check, on Cloud SQL backup failures and on failed `arabat-db-export` executions.
+9. Checks in §9.4, then the first restore drill (§9.5).
+
+### 9.3 Release
+`bash infra/gcp/deploy.sh` from a clean, green commit: Cloud Build image → migration job
+(the release stops if it fails) → new Cloud Run revision, which receives traffic only once
+its readiness probe passes. Roll back: `gcloud run services update-traffic arabat-web
+--region=me-central1 --to-revisions=PREVIOUS=100` (migrations are expand-only, §3).
+Production releases need the owner's approval each time; the standing approval covers
+Railway staging only (ADR-0088).
+
+### 9.4 Checks after the first deploy
+- `https://DOMAIN/api/v1/health/ready` → `ok`; `/manager`, `/pos`, `/platform`, `/store`
+  load; the `run.app` address answers 404/403 (ingress closed).
+- Client IP: sign in once and look at the newest `audit_log` / session row: the address must
+  be the client's public IP, not a Google address (`35.191.x`, `130.211.x`). If it is
+  Google's, change `TRUST_PROXY` in `config.env` and redeploy.
+- Upload a product image, redeploy, the image is still there (Cloud Storage).
+- `PAYMENT_MOCK_ENABLED` is `false` (deploy.sh sets it); no test payments in production.
+
+### 9.5 Backups and restore
+| Layer | What | Kept |
+|---|---|---|
+| Cloud SQL automated backups | daily at 23:00 UTC (02:00 Kuwait) | 90 backups |
+| Point-in-time recovery | transaction logs | 7 days (Enterprise maximum) |
+| Final backup | taken if the instance is ever deleted | 365 days |
+| Enhanced backups (Backup and DR vault) | hourly + monthly, enforced retention, outside the project's control | 90 days / 1 year |
+| SQL exports (Workflows + Scheduler) | daily `daily/arabat-<time>.sql.gz`, monthly `monthly/…` | ≥ 90 days (retention policy), daily deleted at 95 days, monthly to Coldline after 30 and deleted at 370 days |
+
+- If Backup and DR is not offered in Doha, `provision.sh` fails at that step: remove the
+  step and rely on the other four layers (record it in PROGRESS.md).
+- After the owner confirms 90 days: `bash infra/gcp/provision.sh --lock-backup-bucket` — the
+  retention can then never be shortened or removed, not even by the project owner.
+- Restore (never over the live instance): `gcloud sql backups list --instance=…`; restore a
+  backup or a point in time into a **new** instance (`gcloud sql instances clone … 
+  --point-in-time=…`), check it (§4 restore checks), then point `db-admin-url` at it and redeploy.
+- Monthly drill: clone to a temporary instance at a recent point in time, run the §4 checks
+  (row counts, RLS policies, `app_runtime` sees nothing without a merchant), delete the clone,
+  note the date and duration in PROGRESS.md.
+
+### 9.6 Moving Railway's database (once, before production opens)
+Decide first whether the pilot data moves at all: it contains test payments made with the
+mock gateway (FND-709). If it moves:
+1. Release this commit to Railway (migration 0048 must have run there).
+2. Stop Railway writes (web service → 0 replicas) at a quiet hour.
+3. `RAILWAY_DATABASE_URL=… bash infra/gcp/move-from-railway.sh` (Railway's public Postgres
+   URL). It refuses unless Cloud SQL is still empty, restores in one transaction, runs the
+   migrations (nothing pending) and compares row counts table by table. A copy of the dump
+   stays in `var/`.
+4. `bash infra/gcp/deploy.sh`, checks in §9.4, then switch the domain.
+5. Keep Railway stopped, not deleted, for two weeks as the way back.
+Railway staging has no volume (§8), so there are no product images to copy.
+
+Rehearsal (2026-10-15, local): `bash scripts/verify-managed-postgres.sh` — PostgreSQL 18 with
+an admin that has CREATEROLE/CREATEDB but no SUPERUSER/BYPASSRLS: two `--migrate-only` in
+parallel (one waits for the lock), a third run idempotent, API ready as `app_runtime`, dump
+of the development database restored with `--roles-only` + `pg_restore --role=app_owner`,
+row counts equal, `app_runtime` sees 0 branches without a merchant and `app_owner` all 3.
+The upgrade of a pre-0048 database (BYPASSRLS owner, forced RLS) was rehearsed with a
+superuser admin: 0048 applied, BYPASSRLS removed, no table forced.

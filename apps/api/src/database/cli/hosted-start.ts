@@ -1,75 +1,70 @@
 /**
- * Start command for managed hosting (Railway; OPERATIONS.md §3). The platform gives one
- * superuser connection (DATABASE_ADMIN_URL); this script:
- *   1. creates or updates the roles app_owner (schema owner, BYPASSRLS) and app_runtime
- *      (API, no BYPASSRLS) with the passwords from APP_OWNER_PASSWORD / APP_RUNTIME_PASSWORD,
- *   2. applies migrations and the reference seeds as app_owner,
+ * Start command for managed hosting (Railway, Google Cloud Run; OPERATIONS.md §8–9). The
+ * platform gives one administrative connection (DATABASE_ADMIN_URL); this script:
+ *   1. creates or updates the roles app_owner (schema owner) and app_runtime (API) with the
+ *      passwords from APP_OWNER_PASSWORD / APP_RUNTIME_PASSWORD (hosted-setup.ts),
+ *   2. applies migrations and the reference seeds as app_owner, under an advisory lock so
+ *      instances starting together migrate once,
  *   3. starts the API as app_runtime — the same separation as Docker Compose and CI.
  * Every step is idempotent, so it runs on every deploy.
+ *
+ * `--migrate-only` stops after step 2 (Cloud Run job run before each release);
+ * `--roles-only` stops after step 1 (target database of a restore, OPERATIONS.md §9.6).
  */
 import pg from 'pg';
+import {
+  dropOwnerBypass,
+  hostedRolesFromEnv,
+  prepareRoles,
+  withMigrationLock,
+  withUser,
+} from './hosted-setup.js';
 
-function required(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`${name} is required`);
-  return value;
-}
+const mode = process.argv.includes('--roles-only')
+  ? 'roles'
+  : process.argv.includes('--migrate-only')
+    ? 'migrate'
+    : 'serve';
 
-function withUser(url: string, user: string, password: string): string {
-  const u = new URL(url);
-  u.username = user;
-  u.password = password;
-  return u.toString();
-}
-
-const adminUrl = required('DATABASE_ADMIN_URL');
-const ownerPassword = required('APP_OWNER_PASSWORD');
-const runtimePassword = required('APP_RUNTIME_PASSWORD');
-if (ownerPassword.length < 16 || runtimePassword.length < 16)
-  throw new Error('APP_OWNER_PASSWORD and APP_RUNTIME_PASSWORD need at least 16 characters');
+const adminUrl = process.env['DATABASE_ADMIN_URL'];
+if (!adminUrl) throw new Error('DATABASE_ADMIN_URL is required');
+const roles = hostedRolesFromEnv(process.env);
 
 const admin = new pg.Client({ connectionString: adminUrl });
 await admin.connect();
 try {
-  const database = (await admin.query('select current_database() as db')).rows[0].db as string;
-  const ident = (v: string) => admin.escapeIdentifier(v);
-  const literal = (v: string) => admin.escapeLiteral(v);
-  for (const [role, password, extra] of [
-    ['app_owner', ownerPassword, 'NOSUPERUSER NOCREATEROLE BYPASSRLS'],
-    ['app_runtime', runtimePassword, 'NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS'],
-  ] as const) {
-    const exists = (await admin.query('select 1 from pg_roles where rolname = $1', [role]))
-      .rowCount;
-    await admin.query(
-      `${exists ? 'ALTER' : 'CREATE'} ROLE ${ident(role)} LOGIN PASSWORD ${literal(password)} ${extra}`,
-    );
-  }
-  await admin.query(`REVOKE ALL ON DATABASE ${ident(database)} FROM PUBLIC`);
-  await admin.query(`GRANT CONNECT, TEMPORARY ON DATABASE ${ident(database)} TO app_runtime`);
-  await admin.query(`GRANT CONNECT, TEMPORARY, CREATE ON DATABASE ${ident(database)} TO app_owner`);
-  await admin.query('ALTER SCHEMA public OWNER TO app_owner');
-  await admin.query('REVOKE CREATE ON SCHEMA public FROM PUBLIC');
-  // Extensions need more rights than the schema owner has on managed databases.
-  for (const ext of ['citext', 'pg_trgm'])
-    await admin.query(`CREATE EXTENSION IF NOT EXISTS ${ident(ext)} SCHEMA public`);
-  console.log(`Database roles ready on ${database}.`);
+  for (const line of await prepareRoles(admin, roles)) console.log(line);
 } finally {
   await admin.end();
 }
+if (mode === 'roles') {
+  console.log('Database roles ready; --roles-only, stopping.');
+  process.exit(0);
+}
 
-process.env['DATABASE_OWNER_URL'] = withUser(adminUrl, 'app_owner', ownerPassword);
-process.env['DATABASE_URL'] = withUser(adminUrl, 'app_runtime', runtimePassword);
+process.env['DATABASE_OWNER_URL'] = withUser(adminUrl, 'app_owner', roles.ownerPassword);
+process.env['DATABASE_URL'] = withUser(adminUrl, 'app_runtime', roles.runtimePassword);
 
 const { runMigrations } = await import('../migrate.js');
 const { runSeeds } = await import('../seeds/run-seeds.js');
 const { SEEDS } = await import('../seeds/index.js');
 const { loadEnv } = await import('../../config/env.js');
 const env = loadEnv();
-const owner = new pg.Pool({ connectionString: env.DATABASE_OWNER_URL, max: 2 });
+const owner = new pg.Pool({ connectionString: env.DATABASE_OWNER_URL, max: 3 });
 try {
-  await runMigrations(owner);
-  for (const r of await runSeeds(owner, env.NODE_ENV, SEEDS))
-    console.log(`[${r.status}] ${r.name}: ${r.summary}`);
+  await withMigrationLock(owner, async () => {
+    await runMigrations(owner);
+    const cleanup = new pg.Client({ connectionString: adminUrl });
+    await cleanup.connect();
+    try {
+      if (await dropOwnerBypass(cleanup))
+        console.log('Removed BYPASSRLS from app_owner (ADR-0105).');
+    } finally {
+      await cleanup.end();
+    }
+    for (const r of await runSeeds(owner, env.NODE_ENV, SEEDS))
+      console.log(`[${r.status}] ${r.name}: ${r.summary}`);
+  });
   const bootstrapEmail = process.env['PLATFORM_BOOTSTRAP_EMAIL'];
   if (bootstrapEmail) {
     const { drizzle } = await import('drizzle-orm/node-postgres');
@@ -94,6 +89,10 @@ try {
   }
 } finally {
   await owner.end();
+}
+if (mode === 'migrate') {
+  console.log('Migrations and reference data applied; --migrate-only, stopping.');
+  process.exit(0);
 }
 console.log('Migrations and reference data applied; starting the API.');
 await import('../../main.js');

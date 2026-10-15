@@ -39,12 +39,11 @@ describe('database (PostgreSQL integration)', () => {
       drop table if exists rls_probe;
       create table rls_probe (id serial primary key, merchant_id uuid not null, label text not null);
       alter table rls_probe enable row level security;
-      alter table rls_probe force row level security;
       create policy merchant_isolation on rls_probe
         using (merchant_id = app_current_merchant_id())
         with check (merchant_id = app_current_merchant_id());
     `);
-    // The owner bypasses nothing either (FORCE), so seed rows through the merchant setting.
+    // Seed through the merchant setting, as the API would.
     for (const [merchant, label] of [
       [MERCHANT_A, 'a1'],
       [MERCHANT_A, 'a2'],
@@ -89,6 +88,30 @@ describe('database (PostgreSQL integration)', () => {
       sql`select current_user as name, rolsuper, rolbypassrls from pg_roles where rolname = current_user`,
     );
     expect(result.rows[0]).toEqual({ name: 'app_runtime', rolsuper: false, rolbypassrls: false });
+  });
+
+  it('runs migrations as a table owner without superuser or BYPASSRLS (ADR-0105)', async () => {
+    const { rows } = await owner.query(
+      `select current_user as name, rolsuper, rolbypassrls from pg_roles where rolname = current_user`,
+    );
+    expect(rows[0]).toEqual({ name: 'app_owner', rolsuper: false, rolbypassrls: false });
+    // Managed PostgreSQL cannot grant BYPASSRLS: the owner is exempt only because no table
+    // forces RLS, and the runtime role owns nothing, so every policy applies to the API.
+    const forced = await owner.query(
+      `select relname from pg_class where relnamespace = 'public'::regnamespace
+         and relkind in ('r', 'p') and relforcerowsecurity`,
+    );
+    expect(forced.rows).toEqual([]);
+    const notOwned = await owner.query(
+      `select relname from pg_class where relnamespace = 'public'::regnamespace
+         and relkind in ('r', 'p') and pg_get_userbyid(relowner) <> 'app_owner'`,
+    );
+    expect(notOwned.rows).toEqual([]);
+  });
+
+  it('lets the owner role see every merchant for data migrations', async () => {
+    const { rows } = await owner.query('select label from rls_probe order by label');
+    expect(rows.map((r) => r.label)).toEqual(['a1', 'a2', 'b1']);
   });
 
   it('reports readiness with a real database', async () => {

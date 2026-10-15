@@ -76,7 +76,7 @@ export async function registerOwner(
 
 /**
  * Owner-role helpers that write fixtures directly (setup only; never used by the app).
- * app_owner has BYPASSRLS, so every query here filters by merchant explicitly.
+ * app_owner owns the tables and is not filtered by RLS, so every query here filters by merchant explicitly.
  */
 export class DbFixtures {
   constructor(private readonly owner: pg.Pool) {}

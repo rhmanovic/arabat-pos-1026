@@ -13,3 +13,6 @@ playwright-report/
 test-results/
 *.tsbuildinfo
 var/
+
+# Google Cloud production settings (infra/gcp/config.example.env)
+infra/gcp/config.env

@@ -70,6 +70,10 @@ jobs:
       - run: pnpm db:migrate
       - run: pnpm db:seed
       - run: pnpm test:integration
+      - name: Cloud SQL rehearsal (admin without SUPERUSER / BYPASSRLS, ADR-0105)
+        run: bash scripts/verify-managed-postgres.sh
+        env:
+          LOCAL_DEV_SUPERUSER_URL: postgres://postgres:postgres_ci@localhost:5432/arabat_dev
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
       - uses: actions/upload-artifact@v4
