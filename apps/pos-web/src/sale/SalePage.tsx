@@ -90,11 +90,14 @@ export function SalePage() {
     const id = setTimeout(() => setConfirmClear(false), 3000);
     return () => clearTimeout(id);
   }, [confirmClear]);
+  /** The assistant conversation survives closing its dialog and a reload (ADR-0105). */
+  const assistant = useAssistantThread('pos');
   const [dialog, setDialog] = useState<
     'pay' | 'discount' | 'suspend' | 'held' | 'recent' | 'assistant' | null
-  >(null);
-  /** The assistant conversation survives closing its dialog (ADR-0105). */
-  const assistant = useAssistantThread();
+  >(() => (assistant.open ? 'assistant' : null));
+  const assistantOpen = dialog === 'assistant';
+  const { setOpen: setAssistantOpen } = assistant;
+  useEffect(() => setAssistantOpen(assistantOpen), [assistantOpen, setAssistantOpen]);
   const [receiptId, setReceiptId] = useState<string | null>(null);
   /** Receipts opened from the list are copies; the one right after a sale is the original. */
   const [receiptIsCopy, setReceiptIsCopy] = useState(false);

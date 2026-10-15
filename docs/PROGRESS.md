@@ -673,6 +673,11 @@ fills the screen below `sm`.
   only). **Web**: "My past conversations" in the chat footer (list, reopen, continue with the
   same conversation id) in the POS dialog and the manager panel; `useAssistantThread().load`.
 Verified: 10 assistant integration cases, 206 web tests, lint and typecheck green.
+Owner's phone the same hour: the register's silent reload on a new deployment (empty cart)
+closed the chat and lost the thread. `useAssistantThread(key)` now keeps the thread, its id
+and the open state in session storage per app; the POS dialog and the manager panel reopen on
+the same thread after a reload. Web test setup clears session and local storage after each
+case. Verified: 208 web tests.
 
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025

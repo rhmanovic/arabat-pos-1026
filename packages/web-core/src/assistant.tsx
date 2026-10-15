@@ -13,29 +13,70 @@ import { useTranslation } from 'react-i18next';
 import { AssistantMarkup } from './assistant-markup.js';
 import { useErrorMessage } from './components.js';
 
+interface ThreadState {
+  conversationId: string;
+  thread: AssistantMessage[];
+  /** Whether the chat was open: a reload (new deployment) reopens it on the same thread. */
+  open: boolean;
+}
+
+const fresh = (): ThreadState => ({ conversationId: crypto.randomUUID(), thread: [], open: false });
+
+/** The tab's copy of the thread: survives a reload, gone when the tab closes. */
+function readThread(key: string): ThreadState {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return fresh();
+    const parsed = JSON.parse(raw) as Partial<ThreadState>;
+    if (typeof parsed.conversationId !== 'string' || !Array.isArray(parsed.thread)) return fresh();
+    return {
+      conversationId: parsed.conversationId,
+      thread: parsed.thread,
+      open: parsed.open === true,
+    };
+  } catch {
+    return fresh();
+  }
+}
+
+function writeThread(key: string, state: ThreadState): void {
+  try {
+    if (state.thread.length === 0 && !state.open) sessionStorage.removeItem(key);
+    else sessionStorage.setItem(key, JSON.stringify(state));
+  } catch {
+    // Storage unavailable: the thread lives for this page only.
+  }
+}
+
 /**
  * The thread and its browser-generated conversation id: the id changes when the thread is
- * cleared, so the server can group the turns of one conversation (ADR-0105 amendment).
+ * cleared, so the server can group the turns of one conversation (ADR-0105 amendment). Kept
+ * in session storage under `key` so the silent reload on a new deployment does not lose it.
  */
-export function useAssistantThread(): {
+export function useAssistantThread(key: string): {
   thread: AssistantMessage[];
   setThread: (next: AssistantMessage[]) => void;
   conversationId: string;
   /** Reopens a past conversation: its turns and its id, so the next question continues it. */
   load: (conversationId: string, thread: AssistantMessage[]) => void;
+  open: boolean;
+  setOpen: (open: boolean) => void;
 } {
-  const [state, setState] = useState<{ conversationId: string; thread: AssistantMessage[] }>(
-    () => ({ conversationId: crypto.randomUUID(), thread: [] }),
-  );
+  const storageKey = `arabat.assistant.${key}`;
+  const [state, setState] = useState<ThreadState>(() => readThread(storageKey));
+  useEffect(() => writeThread(storageKey, state), [storageKey, state]);
   return {
     thread: state.thread,
     conversationId: state.conversationId,
+    open: state.open,
     setThread: (next) =>
       setState((s) => ({
+        ...s,
         conversationId: next.length === 0 ? crypto.randomUUID() : s.conversationId,
         thread: next,
       })),
-    load: (conversationId, thread) => setState({ conversationId, thread }),
+    load: (conversationId, thread) => setState((s) => ({ ...s, conversationId, thread })),
+    setOpen: (open) => setState((s) => (s.open === open ? s : { ...s, open })),
   };
 }
 

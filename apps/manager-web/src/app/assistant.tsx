@@ -1,6 +1,6 @@
 import { cn } from '@arabat/ui';
 import { AssistantChat, useApi, useAssistantThread } from '@arabat/web-core';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useBranchContext } from './context.js';
 
@@ -15,8 +15,7 @@ export function AssistantLauncher() {
   const { t, i18n } = useTranslation();
   const api = useApi();
   const { branchId } = useBranchContext();
-  const [open, setOpen] = useState(false);
-  const { thread, setThread, conversationId, load } = useAssistantThread();
+  const { thread, setThread, conversationId, load, open, setOpen } = useAssistantThread('manager');
   const panelRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -30,7 +29,7 @@ export function AssistantLauncher() {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open]);
+  }, [open, setOpen]);
 
   return (
     <>
@@ -97,7 +96,7 @@ export function AssistantLauncher() {
             ? 'bg-surface text-fg ring-1 ring-border hover:bg-surface-muted max-sm:hidden'
             : 'bg-primary text-primary-fg hover:opacity-90',
         )}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => setOpen(!open)}
       >
         <span aria-hidden="true" className="text-lg leading-none">
           ✦
