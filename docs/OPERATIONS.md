@@ -167,7 +167,12 @@ creating a new one in the Resend dashboard, setting `MAIL_API_KEY` on the web se
 (redeploys) and revoking the old one. After the redeploy of 2026-10-15 00:28 UTC the start-up
 warning "E-mail delivery is not configured" no longer appears in the deploy log; a sent
 message logs `E-mail "<subject>" sent` from `ResendMailer`, a failed password reset logs
-`Password reset request failed`.
+`Password reset request failed`. `POST /auth/password/forgot` for an address that has no
+active merchant user answers 202 and logs nothing (anti-enumeration), so the end-to-end
+check needs an existing account. `.github/workflows/staging-smoke.yml` (manual
+`workflow_dispatch`, once the file is on the default branch) runs the readiness check or
+such a reset request from a GitHub runner; the first run on 2026-10-15 00:41 UTC got 202 for
+an address without a staging account, so no e-mail was sent yet.
 
 ### Cash custody cutover (ADR-0090, migration 0033)
 
