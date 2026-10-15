@@ -214,12 +214,13 @@ supervisor override).
 | `GET /manager/assistant/conversations`, `GET /manager/assistant/conversations/:id` (the same for the user's own management conversations) | manager `manager.access` |
 | `POST /manager/assistant/chat` (same body; `branchId` = the branch selected in the top bar or null for all → `{ reply, toolsUsed }`) | manager `manager.access`; lookups with the user's rights: `search_products` (`catalog.read`, stock with `inventory.read`), `payment_methods` (`payments.settings`), `stock_summary` (`inventory.read`), `sales_today` (`reports.sales`) |
 
-Screen: the **Assistant** button in the shift strip (phones: the "More" menu) and F9 open a
-chat dialog on the sale screen with suggested questions; the conversation is kept while the
-dialog is closed and cleared with "New conversation". In the management app a floating
-**Assistant** button sits at the bottom inline-end corner of every page (part of the layout,
-so it survives navigation) and opens a panel above the content; Escape closes it and the
-thread is kept. Answers are rendered from a small allowed markup (paragraphs, "-" bullets,
+Screen: one shared launcher (`AssistantLauncher` in `web-core`) in both apps, mounted in the
+layout: a floating **Assistant** button at the bottom inline-end corner of every page opens a
+panel above the content (full screen on phones); Escape closes it and the active conversation
+is kept across pages. The register also opens it with F9 and sends the sale as display text
+(the sale screen publishes it through `AssistantCartProvider`); the management app sends the
+branch selected in the top bar. Each app contributes only its bindings and strings
+(`PosAssistant`, `ManagerAssistant`). Answers are rendered from a small allowed markup (paragraphs, "-" bullets,
 "1." steps, **bold**, `code`) by `AssistantMarkup` in `web-core`, as React elements, never as
 HTML; the guides tell the model to use nothing else. On phones the manager panel fills the
 screen (the launcher hides under it) and the input is not focused automatically, so the

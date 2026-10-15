@@ -12,6 +12,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Outlet } from 'react-router';
+import { AssistantCartProvider, PosAssistant } from '../sale/assistant.js';
 import { CartProvider } from '../sale/cart.js';
 import { useShiftSummary } from '../pages/ShiftPages.js';
 import { UpdateBanner } from './update-check.js';
@@ -151,9 +152,13 @@ export function POSLayout() {
           </Menu>
         </header>
         <UpdateBanner />
-        <main className="min-h-0 flex-1">
-          <Outlet />
-        </main>
+        <AssistantCartProvider>
+          <main className="min-h-0 flex-1">
+            <Outlet />
+          </main>
+          {/* On every page, like the management app: the conversation survives navigation. */}
+          <PosAssistant />
+        </AssistantCartProvider>
       </div>
     </CartProvider>
   );

@@ -680,6 +680,11 @@ rather than browser storage: `AssistantChat` now shows the user's conversations 
 the middle and a growing composer; on open with an untouched state it resumes the latest
 conversation from the server when its last turn is within 30 minutes. No session storage.
 Web test setup clears browser storage after each case. Verified: 208 web tests.
+Owner request the same morning: the register's assistant identical to the management one.
+`AssistantLauncher` (`web-core`) now holds the floating button, the panel, the hotkey and the
+conversation state for both apps; the POS mounts it in its layout with F9 and the sale text
+from `AssistantCartProvider` (set by the sale screen), the strip button and the sale-screen
+dialog are gone; the manager app is a thin binding. Verified: 208 web tests.
 
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025

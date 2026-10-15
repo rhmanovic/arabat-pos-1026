@@ -2,14 +2,14 @@ import type { PosCatalogItem } from '@arabat/contracts';
 import { formatMoney } from '@arabat/i18n';
 import { Money, parseQuantity } from '@arabat/money';
 import { Badge, Button, Kbd, Spinner, cn } from '@arabat/ui';
-import { ErrorState, localizedName, useApi, useAssistantThread, useAuth } from '@arabat/web-core';
+import { ErrorState, localizedName, useApi, useAuth } from '@arabat/web-core';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ShiftMoreMenu, ShiftStrip, type StripAction } from '../pages/ShiftPages.js';
 import { useRestaurantEnabled } from '../restaurant/RestaurantPages.js';
 import { type CartLine, formatQty, priceLines, requiredRights, useCart } from './cart.js';
-import { AssistantDialog, describeCart } from './assistant.js';
+import { describeCart, useAssistantCart } from './assistant.js';
 import { CustomerBar } from './customer.js';
 import {
   HeldSalesDialog,
@@ -90,11 +90,9 @@ export function SalePage() {
     const id = setTimeout(() => setConfirmClear(false), 3000);
     return () => clearTimeout(id);
   }, [confirmClear]);
-  const [dialog, setDialog] = useState<
-    'pay' | 'discount' | 'suspend' | 'held' | 'recent' | 'assistant' | null
-  >(null);
-  /** The active assistant conversation survives closing its dialog (ADR-0105). */
-  const assistant = useAssistantThread();
+  const [dialog, setDialog] = useState<'pay' | 'discount' | 'suspend' | 'held' | 'recent' | null>(
+    null,
+  );
   const [receiptId, setReceiptId] = useState<string | null>(null);
   /** Receipts opened from the list are copies; the one right after a sale is the original. */
   const [receiptIsCopy, setReceiptIsCopy] = useState(false);
@@ -159,7 +157,6 @@ export function SalePage() {
   };
 
   const stripActions: StripAction[] = [
-    { key: 'assistant', label: t('assistant.open'), onSelect: () => setDialog('assistant') },
     { key: 'recent', label: t('sale.recent'), onSelect: () => setDialog('recent') },
     { key: 'held', label: t('sale.heldSales'), onSelect: () => setDialog('held') },
     ...(restaurant && hasPermission('restaurant.orders')
@@ -172,7 +169,8 @@ export function SalePage() {
       ? [{ key: 'returns', label: t('returns.open'), to: '/returns' }]
       : []),
   ];
-  // Desktop shortcuts: F2 search, F4 customer, F8 hold, F9 assistant, F12 pay, Esc clears the search box.
+  // Desktop shortcuts: F2 search, F4 customer, F8 hold, F12 pay, Esc clears the search box
+  // (F9, the assistant, is handled by its launcher in the layout).
   const ready = cart.state.lines.length > 0 && pricing?.ok === true;
   const busy = dialog !== null || editing !== null || receiptId !== null;
   const hasSearch = search !== '';
@@ -184,7 +182,6 @@ export function SalePage() {
       else if (e.key === 'F4')
         document.querySelector<HTMLButtonElement>('[data-shortcut="customer"]')?.click();
       else if (e.key === 'F8' && ready) setDialog('suspend');
-      else if (e.key === 'F9') setDialog('assistant');
       else if (e.key === 'F12' && ready) setDialog('pay');
       else if (e.key === 'Escape' && hasSearch) {
         setSearch('');
@@ -196,6 +193,35 @@ export function SalePage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [busy, ready, hasSearch]);
   const total = pricing?.ok ? pricing.cart.totalMinor : null;
+
+  // The assistant (in the layout) sees the sale as the cashier does (ADR-0105).
+  const { setCart: setAssistantCart } = useAssistantCart();
+  const assistantCart = useMemo(
+    () =>
+      describeCart(
+        pricing?.ok
+          ? cart.state.lines.map((l, index) => ({
+              name: items.has(l.variantId)
+                ? itemLabel(items.get(l.variantId)!, i18n.language)
+                : '…',
+              quantity: l.quantity,
+              unitPriceMinor:
+                l.priceOverride !== null
+                  ? Money.parse(l.priceOverride, 'KWD').minor
+                  : Money.fromJSON(
+                      items.get(l.variantId)!.price as { amount: string; currency: 'KWD' },
+                    ).minor,
+              netMinor: pricing.cart.lines[index]!.netMinor,
+            }))
+          : [],
+        total,
+        cart.state.customer?.fullName ?? null,
+      ),
+    [pricing, cart.state.lines, cart.state.customer, items, i18n.language, total],
+  );
+  useEffect(() => setAssistantCart(assistantCart), [assistantCart, setAssistantCart]);
+  useEffect(() => () => setAssistantCart(null), [setAssistantCart]);
+
   // Cleared carts and removed lines above the company threshold leave a trace (BR-182).
   const threshold = policy.data
     ? Money.fromJSON(policy.data.cartClearLogThreshold as { amount: string; currency: 'KWD' }).minor
@@ -515,31 +541,6 @@ export function SalePage() {
       {dialog === 'discount' ? <OrderDiscountDialog onClose={() => setDialog(null)} /> : null}
       {dialog === 'suspend' ? <SuspendDialog onClose={() => setDialog(null)} /> : null}
       {dialog === 'held' ? <HeldSalesDialog onClose={() => setDialog(null)} /> : null}
-      {dialog === 'assistant' ? (
-        <AssistantDialog
-          state={assistant}
-          cart={describeCart(
-            pricing?.ok
-              ? cart.state.lines.map((l, index) => ({
-                  name: items.has(l.variantId)
-                    ? itemLabel(items.get(l.variantId)!, i18n.language)
-                    : '…',
-                  quantity: l.quantity,
-                  unitPriceMinor:
-                    l.priceOverride !== null
-                      ? Money.parse(l.priceOverride, 'KWD').minor
-                      : Money.fromJSON(
-                          items.get(l.variantId)!.price as { amount: string; currency: 'KWD' },
-                        ).minor,
-                  netMinor: pricing.cart.lines[index]!.netMinor,
-                }))
-              : [],
-            total,
-            cart.state.customer?.fullName ?? null,
-          )}
-          onClose={() => setDialog(null)}
-        />
-      ) : null}
       {dialog === 'recent' ? (
         <RecentSalesDialog
           onClose={() => setDialog(null)}

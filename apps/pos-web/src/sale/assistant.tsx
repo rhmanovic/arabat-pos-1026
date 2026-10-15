@@ -1,60 +1,64 @@
 import type { AssistantCart } from '@arabat/contracts';
 import { Money } from '@arabat/money';
-import { Dialog } from '@arabat/ui';
-import { AssistantChat, type AssistantThread, useApi } from '@arabat/web-core';
+import { AssistantLauncher, assistantLabels, useApi } from '@arabat/web-core';
+import { type ReactNode, createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const SUGGESTIONS = ['hold', 'discount', 'returns', 'shortcuts'] as const;
 
 /**
- * Chat helper for the cashier (ADR-0105): the active conversation lives in the parent so
- * closing and reopening the dialog keeps it; the record of every conversation is on the server.
+ * What is on the till, as display text, for the assistant's context: the sale screen sets it
+ * (it alone knows the catalog names and the priced lines); the launcher in the layout reads it.
  */
-export function AssistantDialog({
-  state,
-  cart,
-  onClose,
-}: {
-  state: AssistantThread;
+const CartContext = createContext<{
   cart: AssistantCart | null;
-  onClose: () => void;
-}) {
+  setCart: (cart: AssistantCart | null) => void;
+} | null>(null);
+
+export function AssistantCartProvider({ children }: { children: ReactNode }) {
+  const [cart, setState] = useState<AssistantCart | null>(null);
+  // Stable setter: the sale screen's effects depend on it, and it recomputes the text on
+  // every render, so only a real change may re-render anything.
+  const setCart = useCallback(
+    (next: AssistantCart | null) =>
+      setState((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next)),
+    [],
+  );
+  const value = useMemo(() => ({ cart, setCart }), [cart, setCart]);
+  return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
+}
+
+export function useAssistantCart() {
+  const ctx = useContext(CartContext);
+  if (!ctx) throw new Error('useAssistantCart needs AssistantCartProvider');
+  return ctx;
+}
+
+/** The cashier's assistant (ADR-0105): the shared launcher bound to the POS endpoints, F9. */
+export function PosAssistant() {
   const { t, i18n } = useTranslation();
   const api = useApi();
+  const { cart } = useAssistantCart();
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()} title={t('assistant.title')} size="lg">
-      <div className="flex h-[70dvh] min-h-72 flex-col">
-        <AssistantChat
-          state={state}
-          statusKey={['pos', 'assistant', 'status']}
-          status={() => api.assistant.status()}
-          conversations={() => api.assistant.conversations()}
-          conversation={(id) => api.assistant.conversation(id)}
-          chat={(messages) =>
-            api.assistant.chat({
-              messages,
-              language: i18n.resolvedLanguage === 'en' ? 'en' : 'ar',
-              cart,
-              conversationId: state.conversationId,
-            })
-          }
-          labels={{
-            title: t('assistant.title'),
-            intro: t('assistant.intro'),
-            disabled: t('assistant.disabled'),
-            placeholder: t('assistant.placeholder'),
-            send: t('assistant.send'),
-            thinking: t('assistant.thinking'),
-            note: t('assistant.note'),
-            newChat: t('assistant.clear'),
-            conversations: t('assistant.history'),
-            historyEmpty: t('assistant.historyEmpty'),
-            back: t('assistant.back'),
-          }}
-          suggestions={SUGGESTIONS.map((s) => t(`assistant.suggestions.${s}`))}
-        />
-      </div>
-    </Dialog>
+    <AssistantLauncher
+      id="pos-assistant"
+      hotkey="F9"
+      bindings={{
+        statusKey: ['pos', 'assistant', 'status'],
+        status: () => api.assistant.status(),
+        conversations: () => api.assistant.conversations(),
+        conversation: (id) => api.assistant.conversation(id),
+        chat: (messages, conversationId) =>
+          api.assistant.chat({
+            messages,
+            language: i18n.resolvedLanguage === 'en' ? 'en' : 'ar',
+            cart,
+            conversationId,
+          }),
+      }}
+      labels={assistantLabels(t)}
+      suggestions={SUGGESTIONS.map((s) => t(`assistant.suggestions.${s}`))}
+    />
   );
 }
 

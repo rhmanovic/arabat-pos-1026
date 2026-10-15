@@ -171,7 +171,13 @@ clicks a conversation in the side list (scoped to the "My conversations" navigat
 suggestion chips share its text) and continues it; the POS case uses the first "New
 conversation" button (the phone row and the side list both render in jsdom). The resume rule
 is not auto-triggered in those cases (their `lastAt` is an hour old). `vitest.web-setup.ts`
-clears session and local storage after every case. Run: `pnpm test` 208 passed (37 files). Run: 4 passed; `pnpm test` 205 passed (36 files, including the mail cases of ADR-0106).
+clears session and local storage after every case. Run: `pnpm test` 208 passed (37 files).
+Shared launcher (2026-10-15): the POS cases now open the assistant from the floating button
+and F9 of the layout's launcher (the strip entry is gone) and assert the same body as before,
+cart included; the first run hung in a render loop because the sale screen published a new
+cart object on every render and the provider's setter changed identity with the cart (two
+effects ping-ponged). Fixed with a stable setter that ignores an equal value. Run: `pnpm test`
+208 passed. Run: 4 passed; `pnpm test` 205 passed (36 files, including the mail cases of ADR-0106).
 
 Owner's trial on staging the same night (cashier "سلطان عبدالرحمن", company "بقاله سلطان"):
 "كم وسيلة دفع عندنا" was answered from the guide's generic tender list (cash, card, transfer,

@@ -24,7 +24,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet } from 'react-router';
-import { AssistantLauncher } from '../app/assistant.js';
+import { ManagerAssistant } from '../app/assistant.js';
 import { BranchContextProvider, useBranchContext } from '../app/context.js';
 import { NAV, type NavItem } from '../app/navigation.js';
 
@@ -137,7 +137,7 @@ function Shell() {
         </main>
       </div>
       {/* Above every page, on every page: the thread survives navigation. */}
-      <AssistantLauncher />
+      <ManagerAssistant />
     </div>
   );
 }

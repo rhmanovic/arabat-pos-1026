@@ -1,106 +1,32 @@
-import { cn } from '@arabat/ui';
-import { AssistantChat, useApi, useAssistantThread } from '@arabat/web-core';
-import { useEffect, useRef, useState } from 'react';
+import { AssistantLauncher, assistantLabels, useApi } from '@arabat/web-core';
 import { useTranslation } from 'react-i18next';
 import { useBranchContext } from './context.js';
 
 const SUGGESTIONS = ['product', 'employee', 'payments', 'today'] as const;
 
-/**
- * The management assistant (ADR-0105): a floating button at the bottom inline-end corner of
- * every page, opening a chat panel above the content with the user's conversations down the
- * side. The active conversation lives here, in the layout, so it survives navigation; every
- * conversation is on the server, so a reload resumes the latest one.
- */
-export function AssistantLauncher() {
+/** The management assistant (ADR-0105): the shared launcher bound to the manager endpoints. */
+export function ManagerAssistant() {
   const { t, i18n } = useTranslation();
   const api = useApi();
   const { branchId } = useBranchContext();
-  const [open, setOpen] = useState(false);
-  const state = useAssistantThread();
-  const buttonRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setOpen(false);
-        buttonRef.current?.focus();
-      }
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open]);
-
   return (
-    <>
-      {open ? (
-        <div
-          id="manager-assistant"
-          role="dialog"
-          aria-label={t('assistant.title')}
-          className="fixed inset-2 z-50 flex flex-col rounded-xl border border-border bg-surface p-4 shadow-xl sm:inset-auto sm:end-4 sm:bottom-20 sm:h-[min(40rem,calc(100dvh-7rem))] sm:w-[min(46rem,calc(100vw-2rem))]"
-        >
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="text-base font-semibold">{t('assistant.title')}</h2>
-            <button
-              type="button"
-              aria-label={t('common:actions.close')}
-              className="grid size-9 place-items-center rounded-md text-lg text-fg-muted hover:bg-surface-muted"
-              onClick={() => setOpen(false)}
-            >
-              ✕
-            </button>
-          </div>
-          <AssistantChat
-            state={state}
-            statusKey={['manager', 'assistant', 'status']}
-            status={() => api.managerAssistant.status()}
-            conversations={() => api.managerAssistant.conversations()}
-            conversation={(id) => api.managerAssistant.conversation(id)}
-            chat={(messages) =>
-              api.managerAssistant.chat({
-                messages,
-                language: i18n.resolvedLanguage === 'en' ? 'en' : 'ar',
-                branchId,
-                conversationId: state.conversationId,
-              })
-            }
-            labels={{
-              title: t('assistant.title'),
-              intro: t('assistant.intro'),
-              disabled: t('assistant.disabled'),
-              placeholder: t('assistant.placeholder'),
-              send: t('assistant.send'),
-              thinking: t('assistant.thinking'),
-              note: t('assistant.note'),
-              newChat: t('assistant.clear'),
-              conversations: t('assistant.history'),
-              historyEmpty: t('assistant.historyEmpty'),
-              back: t('assistant.back'),
-            }}
-            suggestions={SUGGESTIONS.map((s) => t(`assistant.suggestions.${s}`))}
-          />
-        </div>
-      ) : null}
-      <button
-        ref={buttonRef}
-        type="button"
-        aria-expanded={open}
-        aria-controls={open ? 'manager-assistant' : undefined}
-        className={cn(
-          'fixed end-4 bottom-4 z-50 flex h-12 items-center gap-2 rounded-full px-4 text-sm font-semibold shadow-lg transition-colors',
-          open
-            ? 'bg-surface text-fg ring-1 ring-border hover:bg-surface-muted max-sm:hidden'
-            : 'bg-primary text-primary-fg hover:opacity-90',
-        )}
-        onClick={() => setOpen(!open)}
-      >
-        <span aria-hidden="true" className="text-lg leading-none">
-          ✦
-        </span>
-        {t('assistant.open')}
-      </button>
-    </>
+    <AssistantLauncher
+      id="manager-assistant"
+      bindings={{
+        statusKey: ['manager', 'assistant', 'status'],
+        status: () => api.managerAssistant.status(),
+        conversations: () => api.managerAssistant.conversations(),
+        conversation: (id) => api.managerAssistant.conversation(id),
+        chat: (messages, conversationId) =>
+          api.managerAssistant.chat({
+            messages,
+            language: i18n.resolvedLanguage === 'en' ? 'en' : 'ar',
+            branchId,
+            conversationId,
+          }),
+      }}
+      labels={assistantLabels(t)}
+      suggestions={SUGGESTIONS.map((s) => t(`assistant.suggestions.${s}`))}
+    />
   );
 }
