@@ -13,6 +13,15 @@ source ./config.env
 gc() { gcloud --project="$PROJECT_ID" --quiet "$@"; }
 exists() { gc "$@" >/dev/null 2>&1; }
 step() { printf '\n== %s\n' "$*"; }
+bind_project_role() { # member role — retried: a new service account takes a while to be visible to IAM
+  local i
+  for i in 1 2 3 4 5 6; do
+    gc projects add-iam-policy-binding "$PROJECT_ID" --member="$1" --role="$2" --condition=None \
+      >/dev/null && return 0
+    sleep $((i * 5))
+  done
+  return 1
+}
 random_secret() { openssl rand -base64 48 | tr -d '/+=\n' | cut -c1-48; }
 put_secret() { # name value — creates the secret once; never overwrites a stored value
   if exists secrets describe "$1"; then
@@ -52,12 +61,10 @@ exists iam service-accounts describe "$RUN_SA" ||
 exists iam service-accounts describe "$BACKUP_SA" ||
   gc iam service-accounts create arabat-backup --display-name="Arabat database exports"
 for role in roles/cloudsql.client roles/secretmanager.secretAccessor roles/logging.logWriter; do
-  gc projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$RUN_SA" \
-    --role="$role" --condition=None >/dev/null
+  bind_project_role "serviceAccount:$RUN_SA" "$role"
 done
 for role in roles/cloudsql.viewer roles/cloudsql.editor roles/workflows.invoker roles/logging.logWriter; do
-  gc projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$BACKUP_SA" \
-    --role="$role" --condition=None >/dev/null
+  bind_project_role "serviceAccount:$BACKUP_SA" "$role"
 done
 
 step "Cloud SQL $SQL_INSTANCE: PostgreSQL 18, $SQL_TIER, no HA, daily backups + 7 days PITR"
@@ -134,7 +141,7 @@ for job in daily monthly; do
   fi
 done
 
-step "Enhanced backups: hourly, immutable, in a backup vault ($BACKUP_VAULT_RETENTION_DAYS days)"
+step "Enhanced backups: every 6 hours (the minimum for Cloud SQL), immutable, in a backup vault ($BACKUP_VAULT_RETENTION_DAYS days)"
 # If Backup and DR is not offered in $REGION the commands fail here; the standard backups
 # (90 daily, PITR 7 days) and the exports above still apply (OPERATIONS.md §9.5).
 if ! exists backup-dr backup-vaults describe arabat-vault --location="$REGION"; then
@@ -145,12 +152,18 @@ if ! exists backup-dr backup-plans describe arabat-sql-plan --location="$REGION"
   gc backup-dr backup-plans create arabat-sql-plan --location="$REGION" \
     --resource-type=sqladmin.googleapis.com/Instance \
     --backup-vault="projects/$PROJECT_ID/locations/$REGION/backupVaults/arabat-vault" \
-    --backup-rule="rule-id=hourly,retention-days=$BACKUP_VAULT_RETENTION_DAYS,recurrence=HOURLY,hourly-frequency=1,time-zone=UTC,backup-window-start=0,backup-window-end=24" \
+    --backup-rule="rule-id=six-hourly,retention-days=$BACKUP_VAULT_RETENTION_DAYS,recurrence=HOURLY,hourly-frequency=6,time-zone=UTC,backup-window-start=0,backup-window-end=24" \
     --backup-rule="rule-id=monthly,retention-days=365,recurrence=MONTHLY,days-of-month=1,time-zone=UTC,backup-window-start=0,backup-window-end=6"
 fi
+# The plan is created asynchronously; it can be associated only once ACTIVE.
+for _ in $(seq 1 60); do
+  [[ "$(gc backup-dr backup-plans describe arabat-sql-plan --location="$REGION" \
+    --format='value(state)')" == ACTIVE ]] && break
+  sleep 5
+done
 exists backup-dr backup-plan-associations describe arabat-sql --location="$REGION" ||
   gc backup-dr backup-plan-associations create arabat-sql --location="$REGION" \
-    --workload-project="$PROJECT_ID" --resource="$SQL_INSTANCE" \
+    --workload-project="$PROJECT_ID" --resource="projects/$PROJECT_ID/instances/$SQL_INSTANCE" \
     --resource-type=sqladmin.googleapis.com/Instance \
     --backup-plan="projects/$PROJECT_ID/locations/$REGION/backupPlans/arabat-sql-plan"
 
@@ -160,12 +173,14 @@ exists compute addresses describe arabat-ip --global ||
 exists compute network-endpoint-groups describe arabat-neg --region="$REGION" ||
   gc compute network-endpoint-groups create arabat-neg --region="$REGION" \
     --network-endpoint-type=serverless --cloud-run-service="$SERVICE"
-if ! exists compute backend-services describe arabat-backend --global; then
+# No --protocol / port name: a serverless NEG backend refuses a port name.
+exists compute backend-services describe arabat-backend --global ||
   gc compute backend-services create arabat-backend --global \
-    --load-balancing-scheme=EXTERNAL_MANAGED --protocol=HTTPS
+    --load-balancing-scheme=EXTERNAL_MANAGED
+[[ -n "$(gc compute backend-services describe arabat-backend --global \
+  --format='value(backends[].group)')" ]] ||
   gc compute backend-services add-backend arabat-backend --global \
     --network-endpoint-group=arabat-neg --network-endpoint-group-region="$REGION"
-fi
 exists compute url-maps describe arabat-https --global ||
   gc compute url-maps create arabat-https --global --default-service=arabat-backend
 exists compute ssl-certificates describe arabat-cert --global ||
@@ -196,8 +211,7 @@ exists compute forwarding-rules describe arabat-http-rule --global ||
     --target-http-proxy=arabat-http-proxy --ports=80
 
 step "Uptime check and alerts to $ALERT_EMAIL"
-UPTIME=$(gc monitoring uptime list-configs --filter='displayName=arabat-ready' --format='value(name)')
-[[ -n "$UPTIME" ]] ||
+gc monitoring uptime list-configs --format='value(displayName)' | grep -qx arabat-ready ||
   gc monitoring uptime create arabat-ready --resource-type=uptime-url \
     --resource-labels="host=$DOMAIN,project_id=$PROJECT_ID" --path=/api/v1/health/ready \
     --protocol=https --period=1 --timeout=10
