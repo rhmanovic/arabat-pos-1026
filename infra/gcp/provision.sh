@@ -167,7 +167,7 @@ exists backup-dr backup-plan-associations describe arabat-sql --location="$REGIO
     --resource-type=sqladmin.googleapis.com/Instance \
     --backup-plan="projects/$PROJECT_ID/locations/$REGION/backupPlans/arabat-sql-plan"
 
-step "Load balancer with a Google-managed certificate for $DOMAIN"
+step "Load balancer with Google-managed certificates for $DOMAIN ${REDIRECT_DOMAINS:-}"
 exists compute addresses describe arabat-ip --global ||
   gc compute addresses create arabat-ip --global --ip-version=IPV4
 exists compute network-endpoint-groups describe arabat-neg --region="$REGION" ||
@@ -181,13 +181,43 @@ exists compute backend-services describe arabat-backend --global ||
   --format='value(backends[].group)')" ]] ||
   gc compute backend-services add-backend arabat-backend --global \
     --network-endpoint-group=arabat-neg --network-endpoint-group-region="$REGION"
-exists compute url-maps describe arabat-https --global ||
-  gc compute url-maps create arabat-https --global --default-service=arabat-backend
-exists compute ssl-certificates describe arabat-cert --global ||
-  gc compute ssl-certificates create arabat-cert --global --domains="$DOMAIN"
-exists compute target-https-proxies describe arabat-https-proxy --global ||
+# $DOMAIN is served; each of $REDIRECT_DOMAINS answers 301 to https://$DOMAIN (same path).
+# The map is re-imported on every run so a change of domains in config.env takes effect.
+cat >"${TMPDIR:-/tmp}/arabat-https.yaml" <<YAML
+name: arabat-https
+defaultService: https://www.googleapis.com/compute/v1/projects/$PROJECT_ID/global/backendServices/arabat-backend
+YAML
+if [[ -n "${REDIRECT_DOMAINS:-}" ]]; then
+  cat >>"${TMPDIR:-/tmp}/arabat-https.yaml" <<YAML
+hostRules:
+- hosts: [$(echo $REDIRECT_DOMAINS | sed 's/ /, /g')]
+  pathMatcher: to-primary
+pathMatchers:
+- name: to-primary
+  defaultUrlRedirect:
+    hostRedirect: $DOMAIN
+    httpsRedirect: true
+    stripQuery: false
+    redirectResponseCode: MOVED_PERMANENTLY_DEFAULT
+YAML
+fi
+gc compute url-maps import arabat-https --global --source="${TMPDIR:-/tmp}/arabat-https.yaml"
+# One Google-managed certificate per host name: each turns ACTIVE on its own once its DNS
+# record points here, so adding a host never takes the others' certificate down.
+CERTS=()
+for host in $DOMAIN ${REDIRECT_DOMAINS:-}; do
+  cert="arabat-cert-${host//./-}"
+  exists compute ssl-certificates describe "$cert" --global ||
+    gc compute ssl-certificates create "$cert" --global --domains="$host"
+  CERTS+=("$cert")
+done
+CERT_LIST=$(IFS=,; echo "${CERTS[*]}")
+if exists compute target-https-proxies describe arabat-https-proxy --global; then
+  gc compute target-https-proxies update arabat-https-proxy --global --ssl-certificates="$CERT_LIST"
+else
   gc compute target-https-proxies create arabat-https-proxy --global \
-    --url-map=arabat-https --ssl-certificates=arabat-cert
+    --url-map=arabat-https --ssl-certificates="$CERT_LIST"
+fi
 exists compute forwarding-rules describe arabat-https-rule --global ||
   gc compute forwarding-rules create arabat-https-rule --global \
     --load-balancing-scheme=EXTERNAL_MANAGED --address=arabat-ip \
@@ -211,7 +241,15 @@ exists compute forwarding-rules describe arabat-http-rule --global ||
     --target-http-proxy=arabat-http-proxy --ports=80
 
 step "Uptime check and alerts to $ALERT_EMAIL"
-gc monitoring uptime list-configs --format='value(displayName)' | grep -qx arabat-ready ||
+# Re-created when the domain changes (an uptime check's host cannot be edited).
+read -r UPTIME UPTIME_HOST < <(gc monitoring uptime list-configs \
+  --format='value(displayName,name,monitoredResource.labels.host)' |
+  awk '$1 == "arabat-ready" { print $2, $3; exit }') || true
+if [[ -n "${UPTIME:-}" && "$UPTIME_HOST" != "$DOMAIN" ]]; then
+  gc monitoring uptime delete "$UPTIME"
+  UPTIME=""
+fi
+[[ -n "${UPTIME:-}" ]] ||
   gc monitoring uptime create arabat-ready --resource-type=uptime-url \
     --resource-labels="host=$DOMAIN,project_id=$PROJECT_ID" --path=/api/v1/health/ready \
     --protocol=https --period=1 --timeout=10
@@ -222,7 +260,7 @@ cat <<DONE
 Provisioned. Next (OPERATIONS.md §9):
   0. Data: either move Railway's database (move-from-railway.sh) or start empty; then
      bash infra/gcp/deploy.sh   (first image, migrations, Cloud Run service)
-  1. DNS: A record $DOMAIN → $IP (the certificate turns ACTIVE only after that, up to 60 min).
+  1. DNS: A records $DOMAIN ${REDIRECT_DOMAINS:-} → $IP (the certificate turns ACTIVE only after that, up to 60 min).
   2. Monitoring → Alerting: notification channel $ALERT_EMAIL; policies for the uptime check
      arabat-ready and for failed backups / exports (§9.5).
   3. E-mail provider: replace the smtp-url secret, then redeploy.
