@@ -209,7 +209,9 @@ supervisor override).
 | `GET /pos/assistant` (`{ enabled }`: false until `ANTHROPIC_API_KEY` is configured) | POS `pos.access` |
 | `POST /pos/assistant/chat` (`messages` ≤ 20 turns ending with the cashier's, `language`, `cart` as display text, `conversationId` from the browser → `{ reply, toolsUsed }`; 503 `ASSISTANT_DISABLED` when off; 60 per cashier per 10 min; every question is recorded in `assistant_requests` for the platform) | POS `pos.access`; the lookups inside run with the cashier's rights at the session branch (`catalog.read` for stock, `sales.create` for the Pay screen's payment methods and the shift's sales, `shifts.operate` for the shift) |
 
+| `GET /pos/assistant/conversations`, `GET /pos/assistant/conversations/:id` (the cashier's own past conversations on the register: first question, times, turns; one conversation as questions and answers; never tokens or cost) | POS `pos.access` |
 | `GET /manager/assistant` (`{ enabled }`) | manager `manager.access` |
+| `GET /manager/assistant/conversations`, `GET /manager/assistant/conversations/:id` (the same for the user's own management conversations) | manager `manager.access` |
 | `POST /manager/assistant/chat` (same body; `branchId` = the branch selected in the top bar or null for all → `{ reply, toolsUsed }`) | manager `manager.access`; lookups with the user's rights: `search_products` (`catalog.read`, stock with `inventory.read`), `payment_methods` (`payments.settings`), `stock_summary` (`inventory.read`), `sales_today` (`reports.sales`) |
 
 Screen: the **Assistant** button in the shift strip (phones: the "More" menu) and F9 open a
@@ -221,8 +223,10 @@ thread is kept. Answers are rendered from a small allowed markup (paragraphs, "-
 "1." steps, **bold**, `code`) by `AssistantMarkup` in `web-core`, as React elements, never as
 HTML; the guides tell the model to use nothing else. On phones the manager panel fills the
 screen (the launcher hides under it) and the input is not focused automatically, so the
-on-screen keyboard does not cover the answer; sending blurs the box. The assistant only
-reads (BR-194).
+on-screen keyboard does not cover the answer; sending blurs the box. "My past conversations"
+in the chat footer lists the user's own conversations of that app (newest first, 50 at most)
+and reopens one with its id, so the next question continues it. The assistant only reads
+(BR-194).
 
 ### Returns API (Prompt 11)
 

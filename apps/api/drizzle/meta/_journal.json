@@ -344,6 +344,13 @@
       "when": 1792019813479,
       "tag": "0048_assistant_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1792019814479,
+      "tag": "0049_assistant_own_conversations",
+      "breakpoints": true
     }
   ]
 }

@@ -239,6 +239,75 @@ describe('management assistant (ADR-0105)', () => {
     ).toBeInTheDocument();
   });
 
+  it('lists the user’s own past conversations and reopens one to continue it', async () => {
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access']),
+      routes: {
+        'GET /manager/assistant': () => ({ status: 200, body: { enabled: true } }),
+        'GET /manager/assistant/conversations': () => ({
+          status: 200,
+          body: {
+            conversations: [
+              {
+                id: '0190a000-0000-7000-8000-0000000000c1',
+                startedAt: '2026-10-15T03:05:00.000Z',
+                lastAt: '2026-10-15T03:06:00.000Z',
+                firstQuestion: 'How do I add a new product?',
+                turns: 2,
+              },
+            ],
+          },
+        }),
+        'GET /manager/assistant/conversations/0190a000-0000-7000-8000-0000000000c1': () => ({
+          status: 200,
+          body: {
+            id: '0190a000-0000-7000-8000-0000000000c1',
+            startedAt: '2026-10-15T03:05:00.000Z',
+            lastAt: '2026-10-15T03:06:00.000Z',
+            messages: [
+              { role: 'user', content: 'How do I add a new product?' },
+              { role: 'assistant', content: 'Open Products and press New product.' },
+            ],
+          },
+        }),
+        'POST /manager/assistant/chat': () => ({
+          status: 200,
+          body: { reply: 'Yes, from the same page.', toolsUsed: [] },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, fetch });
+    await screen.findByRole('heading', { name: 'Welcome, Test User' });
+    await userEvent.click(screen.getByRole('button', { name: 'Assistant' }));
+    const panel = await screen.findByRole('dialog', { name: 'Management assistant' });
+    await userEvent.click(
+      await within(panel).findByRole('button', { name: 'My past conversations' }),
+    );
+    await userEvent.click(
+      await within(panel).findByRole('button', { name: /How do I add a new product\?/ }),
+    );
+    // The old thread is back, and a follow-up continues the same conversation id.
+    expect(await within(panel).findByTestId('assistant-assistant')).toHaveTextContent(
+      'Open Products and press New product.',
+    );
+    await userEvent.type(
+      within(panel).getByLabelText('Type your question…'),
+      'and a variant?{Enter}',
+    );
+    expect(await within(panel).findAllByTestId('assistant-assistant')).toHaveLength(2);
+    const call = fetch.calls.find(
+      (c) => c.method === 'POST' && c.path === '/manager/assistant/chat',
+    )!;
+    expect(call.body).toMatchObject({
+      conversationId: '0190a000-0000-7000-8000-0000000000c1',
+      messages: [
+        { role: 'user', content: 'How do I add a new product?' },
+        { role: 'assistant', content: 'Open Products and press New product.' },
+        { role: 'user', content: 'and a variant?' },
+      ],
+    });
+  });
+
   it('says when the assistant is not configured', async () => {
     const fetch = fakeApiFetch({
       session: makeSession('manager', ['manager.access']),

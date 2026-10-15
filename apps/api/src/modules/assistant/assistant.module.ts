@@ -6,6 +6,7 @@ import { PaymentsModule } from '../payments/payments.module.js';
 import { RegistersModule } from '../registers/registers.module.js';
 import { ReportsModule } from '../reports/reports.module.js';
 import { SalesModule } from '../sales/sales.module.js';
+import { AssistantHistoryService } from './assistant-history.service.js';
 import { AssistantUsageService } from './assistant-usage.service.js';
 import {
   ManagerAssistantController,
@@ -30,6 +31,7 @@ import { AssistantService } from './assistant.service.js';
   providers: [
     AssistantService,
     AssistantUsageService,
+    AssistantHistoryService,
     { provide: AssistantModel, useClass: AnthropicAssistantModel },
   ],
 })

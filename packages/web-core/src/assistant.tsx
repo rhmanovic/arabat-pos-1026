@@ -1,6 +1,13 @@
-import type { AssistantMessage, AssistantReply, AssistantStatus } from '@arabat/contracts';
+import type {
+  AssistantConversation,
+  AssistantConversationList,
+  AssistantMessage,
+  AssistantReply,
+  AssistantStatus,
+} from '@arabat/contracts';
+import { formatDateTime } from '@arabat/i18n';
 import { Alert, Button, Spinner, cn } from '@arabat/ui';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AssistantMarkup } from './assistant-markup.js';
@@ -14,11 +21,12 @@ export function useAssistantThread(): {
   thread: AssistantMessage[];
   setThread: (next: AssistantMessage[]) => void;
   conversationId: string;
+  /** Reopens a past conversation: its turns and its id, so the next question continues it. */
+  load: (conversationId: string, thread: AssistantMessage[]) => void;
 } {
-  const [state, setState] = useState(() => ({
-    conversationId: crypto.randomUUID(),
-    thread: [] as AssistantMessage[],
-  }));
+  const [state, setState] = useState<{ conversationId: string; thread: AssistantMessage[] }>(
+    () => ({ conversationId: crypto.randomUUID(), thread: [] }),
+  );
   return {
     thread: state.thread,
     conversationId: state.conversationId,
@@ -27,6 +35,7 @@ export function useAssistantThread(): {
         conversationId: next.length === 0 ? crypto.randomUUID() : s.conversationId,
         thread: next,
       })),
+    load: (conversationId, thread) => setState({ conversationId, thread }),
   };
 }
 
@@ -44,6 +53,9 @@ export interface AssistantLabels {
   thinking: string;
   note: string;
   clear: string;
+  history: string;
+  historyEmpty: string;
+  back: string;
 }
 
 /**
@@ -54,32 +66,57 @@ export interface AssistantLabels {
 export function AssistantChat({
   thread,
   onThread,
+  onLoad,
   status,
   chat,
+  conversations,
+  conversation,
   statusKey,
   labels,
   suggestions,
 }: {
   thread: AssistantMessage[];
   onThread: (next: AssistantMessage[]) => void;
+  /** Reopen a past conversation of the user (from `useAssistantThread().load`). */
+  onLoad: (conversationId: string, thread: AssistantMessage[]) => void;
   status: () => Promise<AssistantStatus>;
   chat: (messages: AssistantMessage[]) => Promise<AssistantReply>;
+  conversations: () => Promise<AssistantConversationList>;
+  conversation: (id: string) => Promise<AssistantConversation>;
   /** Query key of the status probe (one per app surface). */
   statusKey: readonly string[];
   labels: AssistantLabels;
   /** Ready-made questions shown on an empty thread. */
   suggestions: string[];
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const errorMessage = useErrorMessage();
+  const queryClient = useQueryClient();
   const [draft, setDraft] = useState('');
+  const [showHistory, setShowHistory] = useState(false);
+  const historyKey = [...statusKey.slice(0, -1), 'conversations'];
+  const history = useQuery({
+    queryKey: historyKey,
+    queryFn: conversations,
+    enabled: showHistory,
+  });
+  const reopen = useMutation({
+    mutationFn: conversation,
+    onSuccess: (c) => {
+      onLoad(c.id, c.messages);
+      setShowHistory(false);
+    },
+  });
   const inputRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const probe = useQuery({ queryKey: statusKey, queryFn: status, staleTime: 5 * 60_000 });
   const ask = useMutation({
     mutationFn: chat,
-    onSuccess: (reply, messages) =>
-      onThread([...messages, { role: 'assistant', content: reply.reply }]),
+    onSuccess: (reply, messages) => {
+      onThread([...messages, { role: 'assistant', content: reply.reply }]);
+      // The list of past conversations now has this one on top.
+      void queryClient.invalidateQueries({ queryKey: historyKey });
+    },
   });
   const send = (text: string) => {
     const content = text.trim();
@@ -117,7 +154,57 @@ export function AssistantChat({
         </Alert>
       ) : null}
       {probe.isError ? <Alert tone="danger">{errorMessage(probe.error)}</Alert> : null}
+      {showHistory ? (
+        <div
+          className="min-h-0 flex-1 overflow-y-auto rounded-md bg-surface-muted p-3"
+          data-testid="assistant-history"
+        >
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold">{labels.history}</h3>
+            <button
+              type="button"
+              className="text-xs underline"
+              onClick={() => setShowHistory(false)}
+            >
+              {labels.back}
+            </button>
+          </div>
+          {history.isPending ? (
+            <div className="flex justify-center p-4 text-primary">
+              <Spinner label={t('common:status.loading')} />
+            </div>
+          ) : history.isError ? (
+            <Alert tone="danger">{errorMessage(history.error)}</Alert>
+          ) : history.data.conversations.length === 0 ? (
+            <p className="text-sm text-fg-muted">{labels.historyEmpty}</p>
+          ) : (
+            <ul className="flex flex-col gap-1">
+              {history.data.conversations.map((c) => (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    disabled={reopen.isPending}
+                    onClick={() => reopen.mutate(c.id)}
+                    className="w-full rounded-md bg-surface px-3 py-2 text-start text-sm hover:border-primary border border-transparent"
+                  >
+                    <span className="line-clamp-2">{c.firstQuestion}</span>
+                    <span className="mt-0.5 block text-xs text-fg-muted" dir="auto">
+                      {formatDateTime(c.lastAt, i18n.language)} · {c.turns}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {reopen.isError ? (
+            <p role="alert" className="mt-2 text-sm text-danger">
+              {errorMessage(reopen.error)}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       <div
+        hidden={showHistory}
         role="log"
         aria-label={labels.title}
         aria-live="polite"
@@ -201,20 +288,27 @@ export function AssistantChat({
           {labels.send}
         </Button>
       </form>
-      <div className="flex items-center justify-between gap-2 text-xs text-fg-muted">
-        <span>{labels.note}</span>
-        {thread.length > 0 ? (
-          <button
-            type="button"
-            className="shrink-0 underline"
-            onClick={() => {
-              ask.reset();
-              onThread([]);
-            }}
-          >
-            {labels.clear}
-          </button>
-        ) : null}
+      <div className="flex items-center justify-between gap-3 text-xs text-fg-muted">
+        <span className="min-w-0">{labels.note}</span>
+        <span className="flex shrink-0 gap-3">
+          {enabled ? (
+            <button type="button" className="underline" onClick={() => setShowHistory((v) => !v)}>
+              {labels.history}
+            </button>
+          ) : null}
+          {thread.length > 0 ? (
+            <button
+              type="button"
+              className="underline"
+              onClick={() => {
+                ask.reset();
+                onThread([]);
+              }}
+            >
+              {labels.clear}
+            </button>
+          ) : null}
+        </span>
       </div>
     </div>
   );

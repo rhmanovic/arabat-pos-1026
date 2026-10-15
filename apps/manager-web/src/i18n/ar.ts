@@ -1729,6 +1729,9 @@ export const managerAr: ManagerResources = {
     thinking: 'جاري التفكير…',
     note: 'المساعد يقرأ المعلومات فقط ولا يغيّر شيئاً. تُحفظ المحادثات لتحسين الخدمة.',
     clear: 'محادثة جديدة',
+    history: 'محادثاتي السابقة',
+    historyEmpty: 'لا محادثات سابقة بعد.',
+    back: 'رجوع',
     suggestions: {
       product: 'كيف أضيف منتجاً جديداً؟',
       employee: 'كيف أدعو موظفاً وأعطيه صلاحيات؟',

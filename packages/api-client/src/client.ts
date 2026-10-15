@@ -61,6 +61,8 @@ import {
   auditListSchema,
   type AssistantChat,
   type AssistantUsageQuery,
+  assistantConversationListSchema,
+  assistantConversationSchema,
   assistantReplySchema,
   assistantStatusSchema,
   assistantUsageSchema,
@@ -451,6 +453,14 @@ export function createApiClient(options: ApiClientOptions = {}) {
       status: () => request('GET', '/manager/assistant', { schema: assistantStatusSchema }),
       chat: (body: AssistantChat) =>
         request('POST', '/manager/assistant/chat', { body, schema: assistantReplySchema }),
+      conversations: () =>
+        request('GET', '/manager/assistant/conversations', {
+          schema: assistantConversationListSchema,
+        }),
+      conversation: (id: string) =>
+        request('GET', `/manager/assistant/conversations/${id}`, {
+          schema: assistantConversationSchema,
+        }),
     },
     merchant: {
       get: () => request('GET', '/manager/merchant', { schema: merchantProfileSchema }),
@@ -783,6 +793,12 @@ export function createApiClient(options: ApiClientOptions = {}) {
       status: () => request('GET', '/pos/assistant', { schema: assistantStatusSchema }),
       chat: (body: AssistantChat) =>
         request('POST', '/pos/assistant/chat', { body, schema: assistantReplySchema }),
+      conversations: () =>
+        request('GET', '/pos/assistant/conversations', { schema: assistantConversationListSchema }),
+      conversation: (id: string) =>
+        request('GET', `/pos/assistant/conversations/${id}`, {
+          schema: assistantConversationSchema,
+        }),
     },
     sales: {
       settings: () => request('GET', '/pos/sales/settings', { schema: salesSettingsSchema }),

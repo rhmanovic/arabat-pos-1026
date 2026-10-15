@@ -601,3 +601,88 @@ describe('platform record of every question (ADR-0105 amendment)', () => {
     });
   });
 });
+
+describe('the user’s own past conversations (ADR-0105 amendment, 2026-10-15)', () => {
+  it('lists and reopens only the signed-in user’s conversations of the same app', async () => {
+    const { c } = await store('Milk', 'حليب');
+    const cashier = await cashierWithShift(c);
+    // A colleague at the same branch (no shift: the chat only needs the bound branch).
+    const other = await c.hire([{ roleId: c.roles.cashier, branchId: c.main }], 'pos');
+    const first = newId();
+    const second = newId();
+    model.reply(textTurn('اضغط F8.'));
+    await chat(c, cashier.cookies, { ...question('كيف أعلّق البيع؟'), conversationId: first });
+    model.reply(textTurn('من الشريط: المبيعات المعلّقة.'));
+    await chat(c, cashier.cookies, {
+      messages: [
+        { role: 'user', content: 'كيف أعلّق البيع؟' },
+        { role: 'assistant', content: 'اضغط F8.' },
+        { role: 'user', content: 'وكيف أرجعها؟' },
+      ],
+      language: 'ar',
+      cart: null,
+      conversationId: first,
+    });
+    model.reply(textTurn('0.150 د.ك.'));
+    await chat(c, cashier.cookies, { ...question('كم سعر الحليب؟'), conversationId: second });
+    // Another cashier of the same company, and the owner in the management app.
+    model.reply(textTurn('—'));
+    await chat(c, other.cookies, { ...question('سؤال زميل'), conversationId: newId() });
+    model.reply(textTurn('—'));
+    await c.client.request('POST', '/manager/assistant/chat', {
+      cookies: c.cookies,
+      body: {
+        messages: [{ role: 'user', content: 'سؤال المالك' }],
+        language: 'ar',
+        conversationId: newId(),
+      },
+    });
+
+    const list = await c.client.request('GET', '/pos/assistant/conversations', {
+      cookies: cashier.cookies,
+    });
+    expect(list.statusCode).toBe(200);
+    const mine = list.json().conversations as {
+      id: string;
+      firstQuestion: string;
+      turns: number;
+    }[];
+    // Newest first; nobody else's, and nothing from the management app.
+    expect(mine.map((x) => [x.id, x.firstQuestion, x.turns])).toEqual([
+      [second, 'كم سعر الحليب؟', 1],
+      [first, 'كيف أعلّق البيع؟', 2],
+    ]);
+    expect(JSON.stringify(list.json())).not.toContain('Tokens');
+    expect(Object.keys(mine[0]!)).toEqual(['id', 'startedAt', 'lastAt', 'firstQuestion', 'turns']);
+
+    const opened = await c.client.request('GET', `/pos/assistant/conversations/${first}`, {
+      cookies: cashier.cookies,
+    });
+    expect(opened.statusCode).toBe(200);
+    expect(opened.json().messages).toEqual([
+      { role: 'user', content: 'كيف أعلّق البيع؟' },
+      { role: 'assistant', content: 'اضغط F8.' },
+      { role: 'user', content: 'وكيف أرجعها؟' },
+      { role: 'assistant', content: 'من الشريط: المبيعات المعلّقة.' },
+    ]);
+    // The colleague cannot open it, nor can the owner from the management app.
+    expect(
+      (
+        await c.client.request('GET', `/pos/assistant/conversations/${first}`, {
+          cookies: other.cookies,
+        })
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await c.client.request('GET', `/manager/assistant/conversations/${first}`, {
+          cookies: c.cookies,
+        })
+      ).statusCode,
+    ).toBe(404);
+    const ownerList = (
+      await c.client.request('GET', '/manager/assistant/conversations', { cookies: c.cookies })
+    ).json().conversations as { firstQuestion: string }[];
+    expect(ownerList.map((x) => x.firstQuestion)).toEqual(['سؤال المالك']);
+  });
+});

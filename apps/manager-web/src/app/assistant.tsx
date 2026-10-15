@@ -16,7 +16,7 @@ export function AssistantLauncher() {
   const api = useApi();
   const { branchId } = useBranchContext();
   const [open, setOpen] = useState(false);
-  const { thread, setThread, conversationId } = useAssistantThread();
+  const { thread, setThread, conversationId, load } = useAssistantThread();
   const panelRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -56,8 +56,11 @@ export function AssistantLauncher() {
           <AssistantChat
             thread={thread}
             onThread={setThread}
+            onLoad={load}
             statusKey={['manager', 'assistant', 'status']}
             status={() => api.managerAssistant.status()}
+            conversations={() => api.managerAssistant.conversations()}
+            conversation={(id) => api.managerAssistant.conversation(id)}
             chat={(messages) =>
               api.managerAssistant.chat({
                 messages,
@@ -75,6 +78,9 @@ export function AssistantLauncher() {
               thinking: t('assistant.thinking'),
               note: t('assistant.note'),
               clear: t('assistant.clear'),
+              history: t('assistant.history'),
+              historyEmpty: t('assistant.historyEmpty'),
+              back: t('assistant.back'),
             }}
             suggestions={SUGGESTIONS.map((s) => t(`assistant.suggestions.${s}`))}
           />

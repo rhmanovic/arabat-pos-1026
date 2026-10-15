@@ -1757,6 +1757,9 @@ export const managerEn = {
     thinking: 'Thinking…',
     note: 'The assistant only reads information; it cannot change anything. Conversations are kept to improve the service.',
     clear: 'New conversation',
+    history: 'My past conversations',
+    historyEmpty: 'No past conversations yet.',
+    back: 'Back',
     suggestions: {
       product: 'How do I add a new product?',
       employee: 'How do I invite an employee and give them rights?',

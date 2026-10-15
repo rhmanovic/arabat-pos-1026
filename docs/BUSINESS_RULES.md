@@ -488,8 +488,9 @@ Remediation session 3 (2026-10-13, owner decision D2):
   every answer is advice: the rules are enforced by the server, not by the assistant. Every
   question is kept by the platform (question, answer, tokens, cost) for monitoring, abuse
   detection and training, readable by the platform's super admin only; merchants never see
-  these records, and the chat tells users that conversations are kept (owner decision,
-  2026-10-14).
+  these records beyond their own questions and answers (each user may reopen their own past
+  conversations of the same app; never another user's, never tokens or cost), and the chat
+  tells users that conversations are kept (owner decisions, 2026-10-14 and 2026-10-15).
   Invitation grants are re-checked at acceptance against the inviter's authority as it
   stands then (grants the inviter can no longer give are dropped and recorded); deactivating
   an inviter revokes their pending invitations.

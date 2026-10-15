@@ -666,6 +666,14 @@ tests, 9 assistant integration cases. Phones (owner report): the input is focuse
 automatically only with a fine pointer, sending drops the keyboard, and the manager panel
 fills the screen below `sm`.
 
+### 2026-10-15 — The user's own conversation history (ADR-0105 amendment)
+- **DB**: migration 0049 (`own_select` policy by merchant and user; index). **API**:
+  `AssistantHistoryService` reading under `withContext({ merchantId, userId })`;
+  `GET /pos|manager/assistant/conversations[/:id]` (own, same app, questions and answers
+  only). **Web**: "My past conversations" in the chat footer (list, reopen, continue with the
+  same conversation id) in the POS dialog and the manager panel; `useAssistantThread().load`.
+Verified: 10 assistant integration cases, 206 web tests, lint and typecheck green.
+
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025
 before any production launch.

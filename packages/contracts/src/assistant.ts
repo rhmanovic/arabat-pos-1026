@@ -141,3 +141,25 @@ export const assistantUsageQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(50),
 });
 export type AssistantUsageQuery = z.input<typeof assistantUsageQuerySchema>;
+
+// ---------------------------------------------------------------- the user's own history
+/** One past conversation of the signed-in user (their own only; no tokens, no cost). */
+export const assistantConversationSummarySchema = z.object({
+  id: z.string(),
+  startedAt: z.string(),
+  lastAt: z.string(),
+  firstQuestion: z.string(),
+  turns: z.number().int(),
+});
+export const assistantConversationListSchema = z.object({
+  conversations: z.array(assistantConversationSummarySchema),
+});
+export type AssistantConversationList = z.infer<typeof assistantConversationListSchema>;
+
+export const assistantConversationSchema = z.object({
+  id: z.string(),
+  startedAt: z.string(),
+  lastAt: z.string(),
+  messages: z.array(assistantMessageSchema),
+});
+export type AssistantConversation = z.infer<typeof assistantConversationSchema>;

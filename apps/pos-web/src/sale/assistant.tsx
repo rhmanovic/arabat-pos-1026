@@ -13,12 +13,14 @@ const SUGGESTIONS = ['hold', 'discount', 'returns', 'shortcuts'] as const;
 export function AssistantDialog({
   thread,
   onThread,
+  onLoad,
   conversationId,
   cart,
   onClose,
 }: {
   thread: AssistantMessage[];
   onThread: (next: AssistantMessage[]) => void;
+  onLoad: (conversationId: string, thread: AssistantMessage[]) => void;
   conversationId: string;
   cart: AssistantCart | null;
   onClose: () => void;
@@ -31,8 +33,11 @@ export function AssistantDialog({
         <AssistantChat
           thread={thread}
           onThread={onThread}
+          onLoad={onLoad}
           statusKey={['pos', 'assistant', 'status']}
           status={() => api.assistant.status()}
+          conversations={() => api.assistant.conversations()}
+          conversation={(id) => api.assistant.conversation(id)}
           chat={(messages) =>
             api.assistant.chat({
               messages,
@@ -50,6 +55,9 @@ export function AssistantDialog({
             thinking: t('assistant.thinking'),
             note: t('assistant.note'),
             clear: t('assistant.clear'),
+            history: t('assistant.history'),
+            historyEmpty: t('assistant.historyEmpty'),
+            back: t('assistant.back'),
           }}
           suggestions={SUGGESTIONS.map((s) => t(`assistant.suggestions.${s}`))}
         />

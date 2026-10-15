@@ -519,6 +519,7 @@ export function SalePage() {
         <AssistantDialog
           thread={assistant.thread}
           onThread={assistant.setThread}
+          onLoad={assistant.load}
           conversationId={assistant.conversationId}
           cart={describeCart(
             pricing?.ok

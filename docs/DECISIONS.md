@@ -1322,6 +1322,13 @@ ADR; supersede it.
   route gated to `platform.super_admin`). Users are told in the chat footer that conversations
   are kept to improve the service. No retention limit for now (the owner keeps the data); the
   browser sends a `conversationId` so turns of one conversation can be grouped.
+- **Amendment (2026-10-15, owner decision): a user sees their own conversations.** Each user
+  may list and reopen their own past conversations of the app they are in (migration 0049:
+  SELECT policy on merchant **and** user of the session; `GET …/assistant/conversations[/:id]`
+  under the app's access permission). Nobody sees another user's conversations, and merchant
+  users still never see tokens, cost or outcomes: the history returns questions and answers
+  only. Reopening restores the thread with its id, so the next question continues it; turns
+  recorded before the id existed are not listed.
 
 ## ADR-0106 — E-mail through a provider's HTTP API (Railway blocks SMTP)
 - **Date:** 2026-10-15 · **Status:** Accepted (owner request: "enable the forgot-password button fully")
