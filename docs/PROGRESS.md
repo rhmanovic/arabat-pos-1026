@@ -328,9 +328,14 @@ Later the same day: the owner verified `arabatapp.com` at Resend (sending subdom
 `send.arabatapp.com`, DKIM + CNAMEs on Cloudflare) and created the sending-only key
 `arabat-pos-staging`; `MAIL_PROVIDER=resend`, `MAIL_API_KEY` and
 `MAIL_FROM=Arabat POS <no-reply@arabatapp.com>` set on the Railway web service (deploy
-464b140f green, start-up warning gone, password routes mapped). Not yet done: a real reset
-e-mail received on staging (the sandbox cannot reach the staging URL; the owner is to try
-«نسيت كلمة المرور؟» and the deploy log is then checked for `E-mail … sent`).
+464b140f green, start-up warning gone, password routes mapped). The owner's first try
+(00:48 UTC) logged `ResendMailer: provider answered 401 API key is invalid`: the value first
+stored in `MAIL_API_KEY` was not the owner's key; corrected and the service redeployed
+(4da17c04, 04:06 UTC). Not yet done: a reset e-mail actually received. Requests for
+`eng.dugaim@gmail.com` from the smoke workflow answer 202 and log nothing, so no active
+merchant user has that address on staging; the owner's account there uses another spelling.
+Next: the owner requests a reset for the address the account was registered with (or
+registers with the right one), then the deploy log is checked for `E-mail … sent`.
 
 ### 2026-10-12 — Staging on Railway (ADR-0087)
 Deployed with the owner's approval: Railway project `arabat-pos` (Postgres + web), URL
