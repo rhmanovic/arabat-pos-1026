@@ -156,18 +156,30 @@ in the Anthropic Console); rotate it again by setting the variable on the web se
 redeploys.
 
 E-mail on staging (2026-10-15, ADR-0106): the web service sends through **Resend** with
-`MAIL_PROVIDER=resend`, `MAIL_FROM=Arabat POS <no-reply@arabatapp.com>` and `MAIL_API_KEY`
-holding the Resend key named `arabat-pos-staging` (sending access only, restricted to the
-domain, created 2026-10-15; it lives only in the Railway variable, never in the repository).
-The domain `arabatapp.com` is verified at Resend with the sending subdomain
-`send.arabatapp.com`; its records are on Cloudflare: DKIM TXT
-`resend._domainkey.send.arabatapp.com` and the CNAMEs `send.send.arabatapp.com` and
-`rsend.send.arabatapp.com` (Resend's SPF / return-path and tracking hosts). Rotate the key by
-creating a new one in the Resend dashboard, setting `MAIL_API_KEY` on the web service
-(redeploys) and revoking the old one. After the redeploy of 2026-10-15 00:28 UTC the start-up
-warning "E-mail delivery is not configured" no longer appears in the deploy log; a sent
-message logs `E-mail "<subject>" sent` from `ResendMailer`, a failed password reset logs
-`Password reset request failed`. `POST /auth/password/forgot` for an address that has no
+`MAIL_PROVIDER=resend`, `MAIL_FROM=Arabat POS <no-reply@send.arabatapp.com>` and
+`MAIL_API_KEY` holding the Resend key named `arabat-pos-staging` (sending access only,
+restricted to the domain, created 2026-10-15; it lives only in the Railway variable, never in
+the repository). The domain verified at Resend is the **subdomain `send.arabatapp.com`**, not
+the root (the root's MX, SPF and DKIM belong to Google Workspace): its records on Cloudflare
+are the DKIM TXT `resend._domainkey.send.arabatapp.com` and the CNAMEs
+`send.send.arabatapp.com` and `rsend.send.arabatapp.com` (return-path and tracking hosts).
+Sending from `no-reply@arabatapp.com` is refused by Resend with
+`403 The arabatapp.com domain is not verified`; verify the root domain at Resend first if a
+root-domain sender is ever wanted. Rotate the key by creating a new one in the Resend
+dashboard, setting `MAIL_API_KEY` on the web service and revoking the old one. Verified
+2026-10-15 04:23 UTC: a password reset requested on `/manager/forgot-password` logged
+`E-mail "إعادة تعيين كلمة المرور | Reset your password" sent` from `ResendMailer`; a failure
+logs `Password reset request failed: ResendMailer: provider answered <status> <body>`.
+
+**Railway gotcha (2026-10-15):** a deployment triggered by a variable change or by
+"Redeploy" is built from the service's stored source, which keeps reverting to the
+repository's default branch (`claude/busy-babbage-yty2bo`, which has no `MAIL_PROVIDER`
+code: it falls back to SMTP and logs `connect ECONNREFUSED ::1:1025`). After any variable
+change, set it with deploys skipped and run `connect-service-source` (repo
+`rhmanovic/arabat-pos-1026`, branch `claude/tender-wright-t34f5x`) so the build comes from
+the right branch; `list-deployments` shows each deployment's `meta.branch`. Pushes to the
+branch are also not picked up reliably; reconnect the source after pushing.
+`POST /auth/password/forgot` for an address that has no
 active merchant user answers 202 and logs nothing (anti-enumeration), so the end-to-end
 check needs an existing account. `.github/workflows/staging-smoke.yml` (manual
 `workflow_dispatch`, once the file is on the default branch) runs the readiness check or

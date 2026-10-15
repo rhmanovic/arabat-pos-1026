@@ -331,11 +331,16 @@ Later the same day: the owner verified `arabatapp.com` at Resend (sending subdom
 464b140f green, start-up warning gone, password routes mapped). The owner's first try
 (00:48 UTC) logged `ResendMailer: provider answered 401 API key is invalid`: the value first
 stored in `MAIL_API_KEY` was not the owner's key; corrected and the service redeployed
-(4da17c04, 04:06 UTC). Not yet done: a reset e-mail actually received. Requests for
-`eng.dugaim@gmail.com` from the smoke workflow answer 202 and log nothing, so no active
-merchant user has that address on staging; the owner's account there uses another spelling.
-Next: the owner requests a reset for the address the account was registered with (or
-registers with the right one), then the deploy log is checked for `E-mail … sent`.
+(4da17c04, 04:06 UTC). Two more causes found and fixed the same night: every
+variable-triggered or "Redeploy" deployment was built from the default branch
+`claude/busy-babbage-yty2bo` (no mail-provider code → SMTP fallback, `ECONNREFUSED
+::1:1025`), so the source was reconnected to `claude/tender-wright-t34f5x`; and Resend
+refused the root-domain sender (`403 arabatapp.com domain is not verified`: only
+`send.arabatapp.com` is verified), so `MAIL_FROM` became `no-reply@send.arabatapp.com`.
+**Verified 04:23 UTC** on deployment 32f0a34b (b84e0ca): the owner's request on
+`/manager/forgot-password` logged `E-mail "إعادة تعيين كلمة المرور | Reset your password"
+sent` from `ResendMailer`. Resend's per-e-mail limit (5 per hour) answered 429 to one of the
+retries, as designed.
 
 ### 2026-10-12 — Staging on Railway (ADR-0087)
 Deployed with the owner's approval: Railway project `arabat-pos` (Postgres + web), URL
