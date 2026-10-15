@@ -1262,3 +1262,34 @@ ADR; supersede it.
   the hard lock (the lock stays at 10 wrong passwords / 15 minutes; the holder is told and a
   manager can clear it), e-mail verification at self-registration (FND-104, owner decision).
 
+
+## ADR-0105 — Market direction: global, fully online self-service SaaS, regional focus waves
+- **Status:** Accepted (2026-10-15). Business decision by the product owner.
+- **Context:** The product has reached a feature level the owner considers competitive. Selling
+  door to door to local shops does not scale. The owner wants the product positioned globally for
+  businesses that want a system that is 100% online, with sign-up and subscription done online,
+  marketing to one region at a time ("focus waves").
+- **Decision:**
+  - Target customer: any business that signs up, configures and pays **without talking to us**.
+    No field sales and no on-site installation are assumed by the product.
+  - Go-to-market is global, with marketing concentrated on one region per wave. The product must
+    therefore be region-neutral in its core, with region specifics (currency, tax, receipt legal
+    fields, payment methods, language, data residency) as per-merchant configuration, never code
+    forks.
+  - Kuwait stays a supported region; KWD stays the default only for merchants in Kuwait (BR-030
+    unchanged for them).
+  - Permanent requirements in `CLAUDE.md` §3 are unchanged (Arabic and English remain mandatory;
+    more languages are additive). No real billing, live payments or paid hosting is activated
+    without the owner's explicit approval (CLAUDE.md §3.13).
+- **Consequences (engineering, see ROADMAP M12):**
+  - Currency per merchant: today `'KWD'` is hard-coded in about ten services; `currencies` reference
+    data and `Money` already support any ISO 4217 exponent. Resolves OQ-004 as "one currency per
+    merchant" (multi-currency inside one merchant stays out of scope).
+  - Tax becomes configurable per merchant (OQ-002 is no longer optional for regions with VAT/GST).
+  - Self-service must be complete: verified e-mail at registration (OQ-025), guided onboarding,
+    trial, online plan purchase, invoices, dunning and lapse rules (OQ-022).
+  - Hosting region and data residency are chosen per wave (OQ-011); the first wave decides the
+    first region.
+  - Public website (pricing, sign-up, help centre) and the user guide become part of the product.
+- **Open (owner):** first focus region (OQ-027), subscription billing provider and price list in
+  which currencies (OQ-022), trial length and whether a free plan exists (OQ-028).

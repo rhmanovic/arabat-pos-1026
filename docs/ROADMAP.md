@@ -167,6 +167,26 @@ Acceptance criteria:
 - **Phase C ✅ (2026-10-12):** cash report categories, expenses and supplier payments reports, discrepancy report
   sections (close type, after an uncounted forced close, between shifts), dashboard total-cash card.
 
+## M12 — Global self-service readiness (ADR-0105)
+Status: planned. Region-specific work starts once the first focus region is chosen (OQ-027).
+
+Acceptance criteria:
+1. **Currency per merchant:** chosen at registration from `currencies` (with its exponent); no
+   hard-coded `'KWD'` left in services, reports, receipts or the storefront; tests with exponent
+   0, 2 and 3 currencies.
+2. **Region profile at registration:** country, currency, time zone, default language, number
+   format — defaulted from the country, changeable under the existing rules (BR-184).
+3. **Tax:** configurable tax rates per merchant (inclusive / exclusive pricing), per-line half-up
+   rounding (BR-033), tax shown on receipts and reports; zero tax remains the Kuwait default.
+4. **Trustworthy self sign-up:** e-mail verification (OQ-025), abuse protection (rate limits,
+   captcha-ready hook), guided onboarding checklist (first branch, products, register, first sale).
+5. **Online subscription:** trial, plan selection and payment through a billing provider, invoices,
+   failed-payment retries, grace period and lapse behaviour (OQ-022) — sandbox first, live only with
+   the owner's approval.
+6. **Public site:** landing, pricing per region, sign-up, help centre built from the user guide;
+   Arabic and English, other languages additive.
+7. **Operations:** hosting region per wave, data residency notes, status page, backups (OQ-011).
+
 ## Later / to be decided
 Offline POS (OQ-005), loyalty, PIN quick switch (OQ-006), card terminal / KNET
-integration (OQ-013), deployment (OQ-011), multi-currency (OQ-004).
+integration (OQ-013), country e-invoicing / fiscal receipts per focus region (decided per wave).
