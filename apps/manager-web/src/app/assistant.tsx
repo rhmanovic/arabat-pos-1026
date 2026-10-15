@@ -40,7 +40,7 @@ export function AssistantLauncher() {
           id="manager-assistant"
           role="dialog"
           aria-label={t('assistant.title')}
-          className="fixed end-4 bottom-20 z-50 flex h-[min(32rem,calc(100dvh-7rem))] w-[min(26rem,calc(100vw-2rem))] flex-col rounded-xl border border-border bg-surface p-4 shadow-xl"
+          className="fixed inset-2 z-50 flex flex-col rounded-xl border border-border bg-surface p-4 shadow-xl sm:inset-auto sm:end-4 sm:bottom-20 sm:h-[min(32rem,calc(100dvh-7rem))] sm:w-[min(26rem,calc(100vw-2rem))]"
         >
           <div className="mb-3 flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold">{t('assistant.title')}</h2>
@@ -88,7 +88,7 @@ export function AssistantLauncher() {
         className={cn(
           'fixed end-4 bottom-4 z-50 flex h-12 items-center gap-2 rounded-full px-4 text-sm font-semibold shadow-lg transition-colors',
           open
-            ? 'bg-surface text-fg ring-1 ring-border hover:bg-surface-muted'
+            ? 'bg-surface text-fg ring-1 ring-border hover:bg-surface-muted max-sm:hidden'
             : 'bg-primary text-primary-fg hover:opacity-90',
         )}
         onClick={() => setOpen((o) => !o)}

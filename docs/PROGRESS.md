@@ -662,7 +662,9 @@ Answers showed raw `**bold**` and list markers. `AssistantMarkup` (`web-core`) r
 allowed subset (paragraphs, bullets, numbered steps, bold, inline code) as React elements, no
 HTML; used by the POS dialog, the manager panel and the platform conversation dialog. Both
 guides now state that subset as the only formatting. Verified: 3 markup unit cases, 192 web
-tests, 9 assistant integration cases.
+tests, 9 assistant integration cases. Phones (owner report): the input is focused
+automatically only with a fine pointer, sending drops the keyboard, and the manager panel
+fills the screen below `sm`.
 
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025

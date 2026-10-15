@@ -30,6 +30,11 @@ export function useAssistantThread(): {
   };
 }
 
+/** A mouse or trackpad is attached (false on phones and tablets, and in jsdom). */
+export function hasFinePointer(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia?.('(pointer: fine)').matches === true;
+}
+
 export interface AssistantLabels {
   title: string;
   intro: string;
@@ -84,6 +89,8 @@ export function AssistantChat({
     while (messages[0]?.role === 'assistant') messages.shift();
     onThread(messages);
     setDraft('');
+    // On a phone, drop the keyboard so the answer has the screen.
+    if (!hasFinePointer()) inputRef.current?.blur();
     ask.mutate(messages);
   };
   useEffect(() => {
@@ -91,7 +98,9 @@ export function AssistantChat({
     endRef.current?.scrollIntoView?.({ block: 'end' });
   }, [thread.length, ask.isPending]);
   useEffect(() => {
-    if (!ask.isPending) inputRef.current?.focus();
+    // Keyboard users get the box back after each answer; on a phone, focusing would raise
+    // the on-screen keyboard over the answer, so the user taps the box when they want it.
+    if (!ask.isPending && hasFinePointer()) inputRef.current?.focus();
   }, [ask.isPending]);
   const enabled = probe.data?.enabled === true;
 

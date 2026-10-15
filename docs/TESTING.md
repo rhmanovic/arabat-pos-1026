@@ -148,7 +148,10 @@ raw text. `packages/web-core/src/assistant-markup.test.tsx` (3 cases): parsing o
 bullets with an indented continuation, a bold-only line and numbered steps; rendering of
 bold as `<strong>`, inline code as `<code>`, `<ul>` then `<ol>`, with a literal `<b>` in the
 text staying text (no element created); stray asterisks, single line breaks as `<br>`, and a
-heading marker dropped. Run: 3 passed; the POS, manager and platform suites unchanged.
+heading marker dropped. Run: 3 passed; the POS, manager and platform suites unchanged. Phone
+keyboard (owner report, 2026-10-15): `hasFinePointer()` is false in jsdom and true when
+`matchMedia('(pointer: fine)')` matches (fourth case in the same file); the chat focuses the
+box only then and blurs it on send otherwise. Run: 4 passed; `pnpm test` 205 passed (36 files, including the mail cases of ADR-0106).
 
 Owner's trial on staging the same night (cashier "سلطان عبدالرحمن", company "بقاله سلطان"):
 "كم وسيلة دفع عندنا" was answered from the guide's generic tender list (cash, card, transfer,

@@ -219,7 +219,10 @@ dialog is closed and cleared with "New conversation". In the management app a fl
 so it survives navigation) and opens a panel above the content; Escape closes it and the
 thread is kept. Answers are rendered from a small allowed markup (paragraphs, "-" bullets,
 "1." steps, **bold**, `code`) by `AssistantMarkup` in `web-core`, as React elements, never as
-HTML; the guides tell the model to use nothing else. The assistant only reads (BR-194).
+HTML; the guides tell the model to use nothing else. On phones the manager panel fills the
+screen (the launcher hides under it) and the input is not focused automatically, so the
+on-screen keyboard does not cover the answer; sending blurs the box. The assistant only
+reads (BR-194).
 
 ### Returns API (Prompt 11)
 

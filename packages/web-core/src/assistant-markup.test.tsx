@@ -37,3 +37,14 @@ describe('assistant markup', () => {
     expect(screen.getByText(/عنوان/).textContent).not.toContain('#');
   });
 });
+
+describe('assistant input focus', () => {
+  it('reports no fine pointer where matchMedia says so (phones) and in jsdom', async () => {
+    const { hasFinePointer } = await import('./assistant.js');
+    expect(hasFinePointer()).toBe(false);
+    const original = window.matchMedia;
+    window.matchMedia = ((q: string) => ({ matches: q === '(pointer: fine)' })) as never;
+    expect(hasFinePointer()).toBe(true);
+    window.matchMedia = original;
+  });
+});
