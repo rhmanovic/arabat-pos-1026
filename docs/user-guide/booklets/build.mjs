@@ -96,8 +96,8 @@ function buildMarkdown(cfg) {
   const sourceLabel = release
     ? `الإصدار ${release}: كل الفصول بحالة «معتمد». رقم الالتزام في سجل الإصدارات بملف README للدليل.`
     : dirty
-    ? `نصوص الفصول من الالتزام \`${commit}\` مع تعديلات لاحقة عليه (بُني في ${new Date().toISOString().slice(0, 10)}).`
-    : `نصوص الفصول من الالتزام \`${commit}\` بتاريخ ${commitDate}.`;
+      ? `نصوص الفصول من الالتزام \`${commit}\` مع تعديلات لاحقة عليه (بُني في ${new Date().toISOString().slice(0, 10)}).`
+      : `نصوص الفصول من الالتزام \`${commit}\` بتاريخ ${commitDate}.`;
 
   // ---------------------------------------------------------------- references table
   const references = new Map();
@@ -109,13 +109,16 @@ function buildMarkdown(cfg) {
     }
   }
   const resolve = (name) => {
-    const inBooklet = chapters.find((c) => c.title.replace(/[«»]/g, '').startsWith(name.replace(/[«»]/g, '')));
+    const inBooklet = chapters.find((c) =>
+      c.title.replace(/[«»]/g, '').startsWith(name.replace(/[«»]/g, '')),
+    );
     if (inBooklet) return { chapter: inBooklet.chapter };
     const alias = REFERENCE_ALIASES[name];
     const aliased = alias && chapters.find((c) => c.num === alias);
     if (aliased) return { chapter: aliased.chapter };
     const section =
-      alias ?? Object.keys(indexTitles).find((k) => indexTitles[k].startsWith(name.replace(/[«»]/g, '')));
+      alias ??
+      Object.keys(indexTitles).find((k) => indexTitles[k].startsWith(name.replace(/[«»]/g, '')));
     return { section };
   };
   const unresolved = [];
@@ -139,7 +142,12 @@ function buildMarkdown(cfg) {
   for (const line of read(join(guide, 'GLOSSARY.md')).split('\n')) {
     const heading = /^## (\d+)\./.exec(line);
     if (heading) inScope = Number(heading[1]) <= 9; // §10 and §11 are notes for writers
-    if (!inScope || !line.startsWith('| ') || line.startsWith('| المصطلح') || line.startsWith('|---'))
+    if (
+      !inScope ||
+      !line.startsWith('| ') ||
+      line.startsWith('| المصطلح') ||
+      line.startsWith('|---')
+    )
       continue;
     const cells = line.split(' | ');
     if (cells.length < 3) continue;
@@ -149,7 +157,9 @@ function buildMarkdown(cfg) {
     // A row counts when the chapters quote each of its forms as on screen («term»); a form with a
     // placeholder ({{count}}) counts by the text before the placeholder.
     const quoted = (v) =>
-      v.includes('{{') ? bookletText.includes(`«${v.split('{{')[0]}`) : bookletText.includes(`«${v}»`);
+      v.includes('{{')
+        ? bookletText.includes(`«${v.split('{{')[0]}`)
+        : bookletText.includes(`«${v}»`);
     if (variants.every(quoted))
       glossaryRows.push(`| ${term.replace(/\{\{\w+\}\}/g, '…')} | ${definition} |`);
   }
@@ -171,11 +181,17 @@ function buildMarkdown(cfg) {
   let k = chapters.length;
   if (parts.some((p) => p.title)) md.push('');
   for (const sh of cfg.sheets) md.push(`${++k}. ملحق: ${sh.title}`);
-  md.push(`${++k}. ملحق: قاموس مختصر`, '');
+  md.push(`${k + 1}. ملحق: قاموس مختصر`, '');
   for (const p of parts) {
     if (p.title)
-      md.push(`# ${p.title}`, '', ...p.chapters.map((c) => `- الفصل ${toArabicDigits(c.chapter)} — ${c.title}`), '');
-    for (const c of p.chapters) md.push(`# الفصل ${toArabicDigits(c.chapter)} — ${c.title}`, '', c.body, '');
+      md.push(
+        `# ${p.title}`,
+        '',
+        ...p.chapters.map((c) => `- الفصل ${toArabicDigits(c.chapter)} — ${c.title}`),
+        '',
+      );
+    for (const c of p.chapters)
+      md.push(`# الفصل ${toArabicDigits(c.chapter)} — ${c.title}`, '', c.body, '');
   }
   for (const sh of cfg.sheets) md.push(`# ملحق: ${sh.title}`, '', part(sh.file), '');
   md.push('# ملحق: قاموس مختصر', '');
@@ -184,7 +200,17 @@ function buildMarkdown(cfg) {
   const markdown = md.join('\n').replace(/\n{3,}/g, '\n\n');
   writeFileSync(join(here, `${cfg.name}-booklet.md`), markdown);
   const partTitles = new Set(parts.map((p) => p.title).filter(Boolean));
-  return { markdown, partTitles, chapters, commit, dirty, commitDate, referenceRows, glossaryRows, unresolved };
+  return {
+    markdown,
+    partTitles,
+    chapters,
+    commit,
+    dirty,
+    commitDate,
+    referenceRows,
+    glossaryRows,
+    unresolved,
+  };
 }
 
 // ------------------------------------------------------------------ html
@@ -215,12 +241,26 @@ function blocksToHtml(text) {
     if (line.startsWith('|')) {
       const rows = [];
       while (i < lines.length && lines[i].startsWith('|')) rows.push(lines[i++]);
-      const cells = (r) => r.replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+      const cells = (r) =>
+        r
+          .replace(/^\|/, '')
+          .replace(/\|$/, '')
+          .split('|')
+          .map((c) => c.trim());
       const [head, , ...body] = rows;
       out.push('<table><thead><tr>');
-      out.push(cells(head).map((c) => `<th>${inline(c)}</th>`).join(''));
+      out.push(
+        cells(head)
+          .map((c) => `<th>${inline(c)}</th>`)
+          .join(''),
+      );
       out.push('</tr></thead><tbody>');
-      for (const r of body) out.push(`<tr>${cells(r).map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`);
+      for (const r of body)
+        out.push(
+          `<tr>${cells(r)
+            .map((c) => `<td>${inline(c)}</td>`)
+            .join('')}</tr>`,
+        );
       out.push('</tbody></table>');
       continue;
     }
@@ -228,7 +268,13 @@ function blocksToHtml(text) {
       const items = [];
       while (i < lines.length && lines[i].trim() && (isList(lines[i]) || /^\s+\S/.test(lines[i]))) {
         const m = /^(\s*)(\d+\.|-) (.*)$/.exec(lines[i]);
-        if (m) items.push({ indent: m[1].length, ordered: m[2] !== '-', num: parseInt(m[2]), text: m[3] });
+        if (m)
+          items.push({
+            indent: m[1].length,
+            ordered: m[2] !== '-',
+            num: parseInt(m[2]),
+            text: m[3],
+          });
         else items[items.length - 1].text += ' ' + lines[i].trim();
         i++;
       }
@@ -236,7 +282,12 @@ function blocksToHtml(text) {
       continue;
     }
     const para = [];
-    while (i < lines.length && lines[i].trim() && !/^(#{2,3} |\|)/.test(lines[i]) && !isList(lines[i]))
+    while (
+      i < lines.length &&
+      lines[i].trim() &&
+      !/^(#{2,3} |\|)/.test(lines[i]) &&
+      !isList(lines[i])
+    )
       para.push(lines[i++].trim());
     out.push(`<p>${inline(para.join(' '))}</p>`);
   }
@@ -327,8 +378,10 @@ function buildHtml(cfg, { markdown, partTitles }) {
           : title.startsWith('ملحق: ورقة')
             ? 'chapter sheet'
             : 'chapter';
-    if (kind === 'part') toc.push(`<li class="toc-part"><a href="#${id}">${inline(title)}</a></li>`);
-    else if (kind !== 'cover' && title !== 'الفهرس') toc.push(`<li><a href="#${id}">${inline(title)}</a></li>`);
+    if (kind === 'part')
+      toc.push(`<li class="toc-part"><a href="#${id}">${inline(title)}</a></li>`);
+    else if (kind !== 'cover' && title !== 'الفهرس')
+      toc.push(`<li><a href="#${id}">${inline(title)}</a></li>`);
     sectionsHtml.push({ id, kind, title, body: rest.join('\n') });
   }
   const renderSection = (s) => {

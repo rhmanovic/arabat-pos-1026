@@ -48,6 +48,20 @@ describe('loadEnv', () => {
     ).toThrow(/PAYMENT_MOCK_SECRET/);
   });
 
+  it('requires the provider key for HTTP e-mail delivery', () => {
+    const base = {
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      MFA_ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+    };
+    expect(loadEnv(base).MAIL_PROVIDER).toBe('smtp');
+    expect(() => loadEnv({ ...base, MAIL_PROVIDER: 'resend' })).toThrow(/MAIL_API_KEY/);
+    expect(() => loadEnv({ ...base, MAIL_PROVIDER: 'sendgrid' })).toThrow(/MAIL_PROVIDER/);
+    expect(loadEnv({ ...base, MAIL_PROVIDER: 'brevo', MAIL_API_KEY: ' k ' })).toMatchObject({
+      MAIL_PROVIDER: 'brevo',
+      MAIL_API_KEY: 'k',
+    });
+  });
+
   it('derives the MFA key from a long random secret (hosting platforms)', () => {
     const env = loadEnv({
       DATABASE_URL: 'postgres://u:p@localhost:5432/db',

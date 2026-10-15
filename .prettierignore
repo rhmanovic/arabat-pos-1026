@@ -5,3 +5,6 @@ playwright-report
 test-results
 apps/api/drizzle/meta
 *.md
+
+# Generated booklets (docs/user-guide/booklets/build.mjs)
+docs/user-guide/booklets/*.html

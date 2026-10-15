@@ -1323,3 +1323,24 @@ ADR; supersede it.
   are kept to improve the service. No retention limit for now (the owner keeps the data); the
   browser sends a `conversationId` so turns of one conversation can be grouped.
 
+## ADR-0106 — E-mail through a provider's HTTP API (Railway blocks SMTP)
+- **Date:** 2026-10-15 · **Status:** Accepted (owner request: "enable the forgot-password button fully")
+- **Context:** The password recovery flow (forgot → e-mailed single-use link → reset, BR-043)
+  has been complete in code and tests since the authentication milestone, but staging never
+  delivered the e-mail: the web service has no mail configuration, so `SMTP_URL` falls back to
+  the local Mailpit default and the background send fails. Railway disables outbound SMTP on
+  the Free, Trial and Hobby plans (docs.railway.com/networking/outbound-networking), so an
+  SMTP relay would not work there either.
+- **Decision:** `Mailer` gets HTTP implementations selected by `MAIL_PROVIDER`: `smtp`
+  (default, nodemailer, Mailpit locally), `resend` (api.resend.com) and `brevo`
+  (api.brevo.com), each authenticated with `MAIL_API_KEY` (`loadEnv` refuses an HTTP provider
+  without a key) and sending from `MAIL_FROM`. The same `MailMessage` boundary stays, so the
+  in-memory outbox of the tests and every caller are unchanged. In a production build with the
+  local SMTP default the API logs a warning at start-up instead of failing silently per e-mail.
+  Which provider staging uses, and its key, are the owner's (external account); the first
+  choice offered is Brevo's free tier (300 e-mails/day, verified sender address, no domain
+  needed) or Resend (3,000/month, needs a verified domain to send to other people).
+- **Consequences:** Password reset, employee invitations and platform-created owner set-up
+  links work on staging once `MAIL_PROVIDER`, `MAIL_API_KEY` and `MAIL_FROM` are set on the
+  web service. Production needs a sender domain verified at the provider (SPF/DKIM) before
+  real merchants receive e-mail. Fallback to a second provider is not implemented.

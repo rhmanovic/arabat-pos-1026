@@ -66,6 +66,17 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results after e-mail delivery over HTTP (2026-10-15, cloud sandbox run)
+
+`pnpm verify` green (196 unit/web tests, including the new `mailer.test.ts`: `MAIL_FROM`
+parsing, the Resend and Brevo request shapes against a stubbed `fetch`, a provider refusal
+surfaces as an error, `createMailer` picks the provider and warns in a production build left
+at the local SMTP default; `env.test.ts` refuses an HTTP provider without `MAIL_API_KEY`);
+`pnpm test:integration` 227 passed; `pnpm test:e2e` 35 passed (1.3 min). Also fixed on the
+way: a `no-useless-assignment` lint error and Prettier drift in
+`docs/user-guide/booklets/build.mjs` (merged from the user-guide branch), and the generated
+booklet HTML files are now Prettier-ignored.
+
 ### Results after the POS assistant (2026-10-14, cloud sandbox run)
 
 `pnpm typecheck`, `pnpm build` and `pnpm test` green (186 unit/web tests, including the two new

@@ -22,7 +22,9 @@ Single-instance limitation: the **mock** payment gateway keeps its charges in me
 Required in production: `NODE_ENV=production`, `DATABASE_URL` (app_runtime),
 `DATABASE_OWNER_URL` (only for migrations/CLI jobs, not the API process),
 `MFA_ENCRYPTION_KEY` (32 random bytes, base64 — **back it up**: without it no operator can
-sign in), `SMTP_URL`, `MAIL_FROM`, `PUBLIC_MANAGER_URL`, `PUBLIC_POS_URL`,
+sign in), e-mail delivery (`MAIL_PROVIDER=smtp` with a reachable `SMTP_URL`, or
+`MAIL_PROVIDER=resend|brevo` with `MAIL_API_KEY`; the API warns at start-up when it is left at
+the local Mailpit default), `MAIL_FROM`, `PUBLIC_MANAGER_URL`, `PUBLIC_POS_URL`,
 `PUBLIC_STORE_URL`, `TRUST_PROXY` (hop count or proxy CIDRs of the load balancer).
 The API refuses to start in production with the development `MFA_ENCRYPTION_KEY` or the
 default mock-gateway secret, and refuses `TRUST_PROXY=true`. Never put `NODE_ENV` in a
@@ -125,7 +127,7 @@ Variables of the web service:
 | `TRUST_PROXY` | `1` (Railway's edge proxy) |
 | `PUBLIC_MANAGER_URL` / `PUBLIC_POS_URL` / `PUBLIC_STORE_URL` | `https://${{RAILWAY_PUBLIC_DOMAIN}}/manager` / `/pos` / `/store` |
 | `PAYMENT_MOCK_ENABLED`, `PAYMENT_MOCK_SECRET` | `true` and a random string **on staging only**: test payments create sales and bank entries without money (FND-709); the API logs a warning when it is on in a production build, and it must never be set for an environment used by a real merchant (owner decision D7) |
-| `SMTP_URL`, `MAIL_FROM` | optional; without them password reset and invitation e-mails are not delivered |
+| `MAIL_PROVIDER`, `MAIL_API_KEY`, `MAIL_FROM` | Railway blocks outbound SMTP below the Pro plan, so staging sends through a provider's HTTP API: `MAIL_PROVIDER=resend` or `brevo` with the provider's `MAIL_API_KEY` and a `MAIL_FROM` sender the provider has verified (ADR-0106). Without them password reset, invitation and account set-up e-mails are not delivered (the API logs a warning at start-up) |
 | `ANTHROPIC_API_KEY`, `ASSISTANT_MODEL` | optional; the POS assistant (ADR-0105) is off without the key. Paid usage per question: set only with the owner's approval; `ASSISTANT_MODEL` defaults to `claude-opus-5-5`. Every model turn is logged as `assistant turn: N in / M out, cache write W / read R, stop …` (the cost record); `scripts/ops/assistant-trial.mjs --log <api log>` runs three demo questions and sums them at list price. Every question is also recorded in `assistant_requests` with its cost at the list prices in `apps/api/src/modules/assistant/assistant.pricing.ts` (update that table, and the trial script's, when Anthropic's price list changes); the super admin reads and exports them on `/platform/assistant` |
 
 Generate a public domain under the web service's Networking settings. Railway injects
