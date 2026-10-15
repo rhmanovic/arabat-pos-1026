@@ -1317,6 +1317,9 @@ ADR; supersede it.
   Service** SMTP (`smtps://api_token:<token>@smtp.mx.cloudflare.net:465`, Workers Paid plan and
   a token with *Email Sending: Edit*); production starts **empty** (recommended; Railway's pilot
   data holds test payments and stays on Railway).
+  Owner, 2026-10-15 (after go-live): the primary address is **`www.arabatapp.com`**;
+  `arabatapp.com` and `app.arabatpos.com` answer 301 to it (one managed certificate per host;
+  `arabatapp.com` already carries the company's Google Workspace and Resend mail records).
   Open: the `TRUST_PROXY` hop count
   behind the load balancer (checked after the first deploy), whether Backup and DR is offered in
   Doha, and Railway's data.

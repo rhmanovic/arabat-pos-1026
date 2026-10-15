@@ -214,6 +214,6 @@ Ownership moves only through `OwnershipService` (owner flow with e-mailed code, 
 frozen owner is refused at login and on every request; audit entries carry `changes` from `diffFields`;
 variant price / cost changes are appended to `price_history` (ADR-0104, BR-020/191/192/193).
 Production is prepared for Google Cloud in Doha (Cloud Run + Cloud SQL, `infra/gcp/`, OPERATIONS.md §9,
-ADR-0105) and live since 2026-10-15 at `https://app.arabatpos.com` (started empty); `hosted-start` works without SUPERUSER/BYPASSRLS
+ADR-0105) and live since 2026-10-15 at `https://www.arabatapp.com` (started empty); `hosted-start` works without SUPERUSER/BYPASSRLS
 (`scripts/verify-managed-postgres.sh`); `FILE_STORAGE_DRIVER=gcs` stores images in Cloud Storage.
 See `docs/PROGRESS.md` for the current state and `docs/ROADMAP.md` for next steps.

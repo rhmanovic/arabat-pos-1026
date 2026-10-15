@@ -28,7 +28,7 @@ must be labeled as such.
 | Automated tests | Passing | 155 unit/web, 171 integration, 35 E2E (local, 2026-10-12, cash custody phase C) |
 | CI | Written, not yet run | `.github/workflows/ci.yml` |
 | Business modules | Not started | Begin in M1 |
-| Deployment | Staging on Railway; production live on Google Cloud, Doha (2026-10-15) | `https://app.arabatpos.com` (ADR-0105, OPERATIONS.md §9); started empty; SMTP, alert policies and the backup-bucket lock still open |
+| Deployment | Staging on Railway; production live on Google Cloud, Doha (2026-10-15) | `https://www.arabatapp.com` (ADR-0105, OPERATIONS.md §9); started empty; SMTP, alert policies and the backup-bucket lock still open |
 
 ## Log
 
@@ -633,6 +633,18 @@ Not done / open:
 - Monitoring notification channel and alert policies (§9.2 step 8): not created.
 - `provision.sh --lock-backup-bucket` (irreversible): waits for the owner.
 - First restore drill (§9.5).
+
+### 2026-10-15 — Production address: www.arabatapp.com
+Owner: `www.arabatapp.com` is the primary address. `provision.sh` now takes `REDIRECT_DOMAINS`
+(here `arabatapp.com app.arabatpos.com`, 301 to `https://www.arabatapp.com` through a host rule
+of the URL map), one managed certificate per host (`arabat-cert-<host>`), re-creates the uptime
+check when the domain changes, and `deploy.sh` sends from `no-reply@MAIL_DOMAIN`
+(`arabatapp.com`). Cloudflare `A` records `www.arabatapp.com` and `arabatapp.com` → 34.49.242.209
+(not proxied). Released `d47939c9f04f` (revision `arabat-web-00002-4r9`).
+Checks from Cloud Build after the three certificates turned ACTIVE (12:39 UTC; the old
+`arabat-cert` was then detached and deleted): health ok with database ok, the four apps 200,
+`https://arabatapp.com/…` and `https://app.arabatpos.com/…?x=1` → 301 to the same path (and query)
+on `https://www.arabatapp.com`, `http://` → 301 to `https://`, `run.app` 404.
 
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket

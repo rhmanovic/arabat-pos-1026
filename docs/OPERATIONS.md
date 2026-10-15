@@ -173,8 +173,8 @@ Created on 2026-10-15 with the owner's approval (cost, go-live, DNS). Project `a
 
 | Resource | Name / value |
 |---|---|
-| Domain | `https://app.arabatpos.com` — Cloudflare `A` record → `34.49.242.209`, DNS only (not proxied) |
-| Load balancer | static IP `arabat-ip` 34.49.242.209; `arabat-https-rule` (443) → `arabat-https-proxy` (cert `arabat-cert`) → `arabat-https` → `arabat-backend` → serverless NEG `arabat-neg`; `arabat-http-rule` (80) → `arabat-http-redirect` (301 to HTTPS) |
+| Domain | `https://www.arabatapp.com` (primary, owner 2026-10-15); `arabatapp.com` and `app.arabatpos.com` → 301 to it. Cloudflare `A` records (zones `arabatapp.com`, `arabatpos.com`) → `34.49.242.209`, DNS only (not proxied) |
+| Load balancer | static IP `arabat-ip` 34.49.242.209; `arabat-https-rule` (443) → `arabat-https-proxy` (certs `arabat-cert-<host>`, one per host) → `arabat-https` (host rule: redirect hosts → 301 to `DOMAIN`) → `arabat-backend` → serverless NEG `arabat-neg`; `arabat-http-rule` (80) → `arabat-http-redirect` (301 to HTTPS) |
 | Cloud Run | service `arabat-web` (ingress internal + load balancer; `https://arabat-web-881032041590.me-central1.run.app` is closed), job `arabat-migrate` |
 | Cloud SQL | `arabat-prod-db` (PostgreSQL 18, `db-custom-1-3840`, zonal), database `arabat`, connection `arabat-511416:me-central1:arabat-prod-db`; started **empty** (Railway untouched) |
 | Images | Artifact Registry `me-central1-docker.pkg.dev/arabat-511416/arabat/arabat:<commit>` |
@@ -221,7 +221,7 @@ user has no SUPERUSER and no BYPASSRLS: `app_owner` is exempt from RLS only as t
    the job's log, then remove the variable.
 6. DNS: `A` record of the domain → the printed IP; wait until
    `gcloud compute ssl-certificates describe arabat-cert --global` shows `ACTIVE`.
-7. E-mail (Cloudflare Email Service): onboard `arabatpos.com` under Email Service → Email
+7. E-mail (Cloudflare Email Service): onboard `arabatapp.com` (`MAIL_DOMAIN`) under Email Service → Email
    Sending (adds SPF/DKIM/DMARC on `cf-bounce`), create an API token with *Email Sending: Edit*,
    and put `smtps://api_token:<token>@smtp.mx.cloudflare.net:465` into the `smtp-url` secret
    (`printf %s 'smtps://…' | gcloud secrets versions add smtp-url --data-file=-`), redeploy.
