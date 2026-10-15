@@ -1286,7 +1286,7 @@ ADR; supersede it.
     the table; exact Doha prices are read from the account before go-live).
   - **Backups (raised level):** Cloud SQL daily backups kept 90 and PITR 7 days (the Enterprise
     maximum); final backup on deletion kept 365 days; deletion protection; enhanced backups in a
-    Backup and DR vault (hourly kept 90 days, monthly kept 1 year, enforced retention, separate
+    Backup and DR vault (every 6 hours — the Cloud SQL minimum, found at creation — kept 90 days, monthly kept 1 year, enforced retention, separate
     from the project) where the region offers it; a daily and a monthly SQL export (serverless
     export, Workflows + Cloud Scheduler) into a bucket with a 90-day retention policy that is
     locked once the owner confirms; a monthly restore drill. The bucket's location is the

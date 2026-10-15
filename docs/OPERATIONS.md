@@ -166,10 +166,25 @@ Applied automatically. Each merchant gets one "Cash in transit" account. The own
 cash to a bank. Supplier payments and expenses already recorded at the POS before this release
 as plain cash-out movements stay as they are (cash movements, not disbursements).
 
-## 9. Production on Google Cloud, Doha (ADR-0105) — prepared, not created
+## 9. Production on Google Cloud, Doha (ADR-0105) — created 2026-10-15
 
-Nothing below exists yet: it needs the owner's Google Cloud account (billing on) and the
-owner's approval of the go-live. Files: `infra/gcp/config.example.env` (copy to the
+Created on 2026-10-15 with the owner's approval (cost, go-live, DNS). Project `arabat-511416`
+(number 881032041590), region `me-central1`. What exists:
+
+| Resource | Name / value |
+|---|---|
+| Domain | `https://app.arabatpos.com` — Cloudflare `A` record → `34.49.242.209`, DNS only (not proxied) |
+| Load balancer | static IP `arabat-ip` 34.49.242.209; `arabat-https-rule` (443) → `arabat-https-proxy` (cert `arabat-cert`) → `arabat-https` → `arabat-backend` → serverless NEG `arabat-neg`; `arabat-http-rule` (80) → `arabat-http-redirect` (301 to HTTPS) |
+| Cloud Run | service `arabat-web` (ingress internal + load balancer; `https://arabat-web-881032041590.me-central1.run.app` is closed), job `arabat-migrate` |
+| Cloud SQL | `arabat-prod-db` (PostgreSQL 18, `db-custom-1-3840`, zonal), database `arabat`, connection `arabat-511416:me-central1:arabat-prod-db`; started **empty** (Railway untouched) |
+| Images | Artifact Registry `me-central1-docker.pkg.dev/arabat-511416/arabat/arabat:<commit>` |
+| Buckets | `arabat-prod-uploads` (me-central1), `arabat-prod-db-exports` (europe-west3, 90-day retention **not locked**) |
+| Secrets | `db-admin-url`, `app-owner-password`, `app-runtime-password`, `mfa-encryption-secret`, `smtp-url` (**placeholder** `smtp://localhost:25` until the Cloudflare token) |
+| Service accounts | `arabat-run` (Cloud Run), `arabat-backup` (exports), `arabat-admin` (Owner; used to run the scripts) |
+| Backups | Cloud SQL backups + PITR; Backup and DR vault `arabat-vault`, plan `arabat-sql-plan` (every 6 hours — the Cloud SQL minimum — kept 90 days; monthly kept 1 year), association `arabat-sql`; workflow `arabat-db-export` with scheduler jobs `arabat-db-export-daily` / `-monthly` |
+| Monitoring | uptime check `arabat-ready`; **no notification channel or alert policies yet** (§9.2 step 8) |
+
+The rest of this section is the runbook. Files: `infra/gcp/config.example.env` (copy to the
 git-ignored `infra/gcp/config.env`), `provision.sh`, `deploy.sh`, `move-from-railway.sh`,
 `backup-export.workflow.yaml`. Run them from a machine with `gcloud` signed in as a project
 owner (or Cloud Shell), Docker and Node 24 (`pnpm build` first).
@@ -231,17 +246,21 @@ Railway staging only (ADR-0088).
 - Upload a product image, redeploy, the image is still there (Cloud Storage).
 - `PAYMENT_MOCK_ENABLED` is `false` (deploy.sh sets it); no test payments in production.
 
+Results of the first deploy (2026-10-15, from Cloud Build): health ok, the four apps 200,
+HTTP → 301 HTTPS, `run.app` 404, mock payments off. Open: client IP (a failed sign-in for
+`ip-check@arabatpos.com` came from 34.18.38.234 — its audit row must show that address) and the
+image-upload-survives-redeploy check (needs a first merchant).
+
 ### 9.5 Backups and restore
 | Layer | What | Kept |
 |---|---|---|
 | Cloud SQL automated backups | daily at 23:00 UTC (02:00 Kuwait) | 90 backups |
 | Point-in-time recovery | transaction logs | 7 days (Enterprise maximum) |
 | Final backup | taken if the instance is ever deleted | 365 days |
-| Enhanced backups (Backup and DR vault) | hourly + monthly, enforced retention, outside the project's control | 90 days / 1 year |
+| Enhanced backups (Backup and DR vault) | every 6 hours (Cloud SQL minimum) + monthly, enforced retention, outside the project's control | 90 days / 1 year |
 | SQL exports (Workflows + Scheduler) | daily `daily/arabat-<time>.sql.gz`, monthly `monthly/…` | ≥ 90 days (retention policy), daily deleted at 95 days, monthly to Coldline after 30 and deleted at 370 days |
 
-- If Backup and DR is not offered in Doha, `provision.sh` fails at that step: remove the
-  step and rely on the other four layers (record it in PROGRESS.md).
+- Backup and DR is offered in Doha (checked 2026-10-15); it refuses a backup more often than every 6 hours for Cloud SQL.
 - After the owner confirms 90 days: `bash infra/gcp/provision.sh --lock-backup-bucket` — the
   retention can then never be shortened or removed, not even by the project owner.
 - Restore (never over the live instance): `gcloud sql backups list --instance=…`; restore a

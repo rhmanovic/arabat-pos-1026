@@ -28,7 +28,7 @@ must be labeled as such.
 | Automated tests | Passing | 155 unit/web, 171 integration, 35 E2E (local, 2026-10-12, cash custody phase C) |
 | CI | Written, not yet run | `.github/workflows/ci.yml` |
 | Business modules | Not started | Begin in M1 |
-| Deployment | Staging on Railway; production prepared, not created | Google Cloud Doha (ADR-0105, OPERATIONS.md §9); needs the owner's account and go-live approval |
+| Deployment | Staging on Railway; production live on Google Cloud, Doha (2026-10-15) | `https://app.arabatpos.com` (ADR-0105, OPERATIONS.md §9); started empty; SMTP, alert policies and the backup-bucket lock still open |
 
 ## Log
 
@@ -604,7 +604,37 @@ backup location; e-mail provider; domain; whether Railway's pilot data (with tes
 moves; `TRUST_PROXY` hop count and Backup and DR availability in Doha are checked at the first
 deploy.
 
+### 2026-10-15 — Production on Google Cloud, Doha: created (ADR-0105)
+With the owner's approval in conversation (cost USD 140–190 a month, go-live, DNS) the scripts ran
+against project `arabat-511416` as `arabat-admin` (Owner). Resource names: OPERATIONS.md §9.
+- `provision.sh`: everything created, including the Backup and DR vault (offered in Doha).
+  Bugs found on the first real run and fixed (commit 766fc7e): IAM bindings retried until a new
+  service account is visible; Backup and DR every 6 hours (Cloud SQL refuses hourly), wait for
+  the plan to be ACTIVE, full instance path in the association; serverless NEG backend service
+  without a port name; uptime check lookup that matches on re-run.
+- `deploy.sh`: image `766fc7eaa03b` built by Cloud Build, migration job succeeded on the empty
+  database, revision `arabat-web-00001-v8f` serving. Production starts **empty**; Railway untouched.
+- First platform operator created with `PLATFORM_BOOTSTRAP_EMAIL` (the owner's e-mail) on the
+  job, credentials read once from the job log and handed to the owner in chat only; the
+  variable was removed from the job afterwards.
+- Cloudflare: `A app.arabatpos.com → 34.49.242.209`, not proxied. Certificate `arabat-cert`
+  ACTIVE at 11:59 UTC (Google Trust Services).
+- §9.4 checks, run from Cloud Build (the engineering sandbox cannot reach the domain):
+  `/api/v1/health/ready` → ok with database ok; `/manager/`, `/pos/`, `/platform/`, `/store/` → 200
+  with their titles; `http://` → 301 to `https://`; the `run.app` address → 404 (ingress closed);
+  Cloud Run env `PAYMENT_MOCK_ENABLED=false`, `FILE_STORAGE_DRIVER=gcs`, `TRUST_PROXY=2`.
+Not done / open:
+- Client IP (`TRUST_PROXY=2`) not yet confirmed: a failed sign-in for `ip-check@arabatpos.com`
+  was sent from 34.18.38.234 (Cloud Build); its `auth.login.failed` audit row must show that
+  address (the platform audit log); reading production data from the sandbox was not allowed.
+- Image upload surviving a redeploy: not tested (no merchant exists in the empty production).
+- `smtp-url` is still the placeholder: no e-mail is sent until the owner's Cloudflare Email
+  Service token (possibly the Workers Paid plan) is stored.
+- Monitoring notification channel and alert policies (§9.2 step 8): not created.
+- `provision.sh --lock-backup-bucket` (irreversible): waits for the owner.
+- First restore drill (§9.5).
+
 ## Next step
-Owner: Google Cloud account with billing and the open choices of ADR-0105; then
-`provision.sh`, the move (or an empty start) and `deploy.sh` with the owner's go-live approval.
+Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
+lock, first restore drill.
 Staging: first platform operator, SMTP; owner decisions OQ-021–025.
