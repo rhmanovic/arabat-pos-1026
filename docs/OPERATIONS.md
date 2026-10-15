@@ -145,7 +145,7 @@ Current staging deployment (2026-10-12): Railway project `arabat-pos`, environme
 `production`, services `Postgres` + `web`, URL `https://web-production-bf628.up.railway.app`
 (deploys on push to the connected branch). Verified after deploy: `/api/v1/health/ready` ok
 (database ok), `/manager`, `/pos` and `/platform` load and report the server connected. No
-volume and no SMTP yet. First platform operator created by the bootstrap (credentials only
+volume yet; e-mail goes through Resend (below). First platform operator created by the bootstrap (credentials only
 in the deploy log of 2026-10-12 14:42 UTC). Since 2026-10-14 21:47 UTC the web service follows
 branch `claude/tender-wright-t34f5x` (POS assistant, ADR-0105) at the owner's request to try
 the assistant as a cashier; switch it back to the default branch in the service's Source
@@ -154,6 +154,20 @@ owner's say-so (paid usage). Since 2026-10-14 it holds a dedicated Anthropic wor
 named `arabat-pos-staging` (rotated in from the owner's personal key, which is to be revoked
 in the Anthropic Console); rotate it again by setting the variable on the web service, which
 redeploys.
+
+E-mail on staging (2026-10-15, ADR-0106): the web service sends through **Resend** with
+`MAIL_PROVIDER=resend`, `MAIL_FROM=Arabat POS <no-reply@arabatapp.com>` and `MAIL_API_KEY`
+holding the Resend key named `arabat-pos-staging` (sending access only, restricted to the
+domain, created 2026-10-15; it lives only in the Railway variable, never in the repository).
+The domain `arabatapp.com` is verified at Resend with the sending subdomain
+`send.arabatapp.com`; its records are on Cloudflare: DKIM TXT
+`resend._domainkey.send.arabatapp.com` and the CNAMEs `send.send.arabatapp.com` and
+`rsend.send.arabatapp.com` (Resend's SPF / return-path and tracking hosts). Rotate the key by
+creating a new one in the Resend dashboard, setting `MAIL_API_KEY` on the web service
+(redeploys) and revoking the old one. After the redeploy of 2026-10-15 00:28 UTC the start-up
+warning "E-mail delivery is not configured" no longer appears in the deploy log; a sent
+message logs `E-mail "<subject>" sent` from `ResendMailer`, a failed password reset logs
+`Password reset request failed`.
 
 ### Cash custody cutover (ADR-0090, migration 0033)
 

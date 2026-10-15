@@ -324,6 +324,13 @@ staging because Railway blocks outbound SMTP below Pro. New `MAIL_PROVIDER` (`sm
 `resend` | `brevo`) with `MAIL_API_KEY`; HTTP mailers unit-tested against a stubbed `fetch`;
 production warns at start-up when delivery is unconfigured. Pending the owner: provider
 account and key on the web service, then a real reset on staging.
+Later the same day: the owner verified `arabatapp.com` at Resend (sending subdomain
+`send.arabatapp.com`, DKIM + CNAMEs on Cloudflare) and created the sending-only key
+`arabat-pos-staging`; `MAIL_PROVIDER=resend`, `MAIL_API_KEY` and
+`MAIL_FROM=Arabat POS <no-reply@arabatapp.com>` set on the Railway web service (deploy
+464b140f green, start-up warning gone, password routes mapped). Not yet done: a real reset
+e-mail received on staging (the sandbox cannot reach the staging URL; the owner is to try
+«نسيت كلمة المرور؟» and the deploy log is then checked for `E-mail … sent`).
 
 ### 2026-10-12 — Staging on Railway (ADR-0087)
 Deployed with the owner's approval: Railway project `arabat-pos` (Postgres + web), URL
