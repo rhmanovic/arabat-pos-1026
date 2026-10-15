@@ -810,7 +810,7 @@ describe('pos app', () => {
       (call.body as { conversationId: string }).conversationId,
     );
     // "New conversation" empties the thread.
-    await userEvent.click(within(dialog).getByRole('button', { name: 'New conversation' }));
+    await userEvent.click(within(dialog).getAllByRole('button', { name: /New conversation/ })[0]!);
     expect(within(dialog).queryByTestId('assistant-user')).toBeNull();
   });
 

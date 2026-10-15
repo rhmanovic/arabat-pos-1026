@@ -1,39 +1,31 @@
-import type { AssistantCart, AssistantMessage } from '@arabat/contracts';
+import type { AssistantCart } from '@arabat/contracts';
 import { Money } from '@arabat/money';
 import { Dialog } from '@arabat/ui';
-import { AssistantChat, useApi } from '@arabat/web-core';
+import { AssistantChat, type AssistantThread, useApi } from '@arabat/web-core';
 import { useTranslation } from 'react-i18next';
 
 const SUGGESTIONS = ['hold', 'discount', 'returns', 'shortcuts'] as const;
 
 /**
- * Chat helper for the cashier (ADR-0105): the thread lives in the parent so closing and
- * reopening the dialog keeps the conversation; the server stores nothing.
+ * Chat helper for the cashier (ADR-0105): the active conversation lives in the parent so
+ * closing and reopening the dialog keeps it; the record of every conversation is on the server.
  */
 export function AssistantDialog({
-  thread,
-  onThread,
-  onLoad,
-  conversationId,
+  state,
   cart,
   onClose,
 }: {
-  thread: AssistantMessage[];
-  onThread: (next: AssistantMessage[]) => void;
-  onLoad: (conversationId: string, thread: AssistantMessage[]) => void;
-  conversationId: string;
+  state: AssistantThread;
   cart: AssistantCart | null;
   onClose: () => void;
 }) {
   const { t, i18n } = useTranslation();
   const api = useApi();
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()} title={t('assistant.title')} size="md">
-      <div className="flex h-[60dvh] min-h-64 flex-col">
+    <Dialog open onOpenChange={(o) => !o && onClose()} title={t('assistant.title')} size="lg">
+      <div className="flex h-[70dvh] min-h-72 flex-col">
         <AssistantChat
-          thread={thread}
-          onThread={onThread}
-          onLoad={onLoad}
+          state={state}
           statusKey={['pos', 'assistant', 'status']}
           status={() => api.assistant.status()}
           conversations={() => api.assistant.conversations()}
@@ -43,7 +35,7 @@ export function AssistantDialog({
               messages,
               language: i18n.resolvedLanguage === 'en' ? 'en' : 'ar',
               cart,
-              conversationId,
+              conversationId: state.conversationId,
             })
           }
           labels={{
@@ -54,8 +46,8 @@ export function AssistantDialog({
             send: t('assistant.send'),
             thinking: t('assistant.thinking'),
             note: t('assistant.note'),
-            clear: t('assistant.clear'),
-            history: t('assistant.history'),
+            newChat: t('assistant.clear'),
+            conversations: t('assistant.history'),
             historyEmpty: t('assistant.historyEmpty'),
             back: t('assistant.back'),
           }}

@@ -674,10 +674,12 @@ fills the screen below `sm`.
   same conversation id) in the POS dialog and the manager panel; `useAssistantThread().load`.
 Verified: 10 assistant integration cases, 206 web tests, lint and typecheck green.
 Owner's phone the same hour: the register's silent reload on a new deployment (empty cart)
-closed the chat and lost the thread. `useAssistantThread(key)` now keeps the thread, its id
-and the open state in session storage per app; the POS dialog and the manager panel reopen on
-the same thread after a reload. Web test setup clears session and local storage after each
-case. Verified: 208 web tests.
+closed the chat and lost the thread. The owner asked for a server-backed, chat-app layout
+rather than browser storage: `AssistantChat` now shows the user's conversations down the side
+(server list, newest first, "New conversation" on top; a switch on phones), the active one in
+the middle and a growing composer; on open with an untouched state it resumes the latest
+conversation from the server when its last turn is within 30 minutes. No session storage.
+Web test setup clears browser storage after each case. Verified: 208 web tests.
 
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025

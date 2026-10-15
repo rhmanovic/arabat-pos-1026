@@ -226,10 +226,13 @@ screen (the launcher hides under it) and the input is not focused automatically,
 on-screen keyboard does not cover the answer; sending blurs the box. "My past conversations"
 in the chat footer lists the user's own conversations of that app (newest first, 50 at most)
 and reopens one with its id, so the next question continues it; a question recorded without
-an id (older browser) is listed on its own. The thread, its id and whether the chat was open
-live in the tab's session storage (`arabat.assistant.pos` / `.manager`), so the silent reload
-of the register on a new deployment (and any reload) brings the same conversation back, open
-if it was open. The assistant only reads (BR-194).
+an id (older browser) is listed on its own. The chat is laid out like a chat app (owner
+request): the user's conversations down the side with "New conversation" on top (phones: a
+"My conversations" switch), the active one in the middle, a growing composer below (Enter
+sends on a keyboard, breaks the line on a touch screen). Nothing is kept in the browser: when
+the chat opens on an untouched state it resumes the user's latest conversation from the server
+if its last turn is within 30 minutes, so a reload (the register's silent one included) comes
+back to the same conversation. The assistant only reads (BR-194).
 
 ### Returns API (Prompt 11)
 

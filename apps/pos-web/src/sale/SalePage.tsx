@@ -90,14 +90,11 @@ export function SalePage() {
     const id = setTimeout(() => setConfirmClear(false), 3000);
     return () => clearTimeout(id);
   }, [confirmClear]);
-  /** The assistant conversation survives closing its dialog and a reload (ADR-0105). */
-  const assistant = useAssistantThread('pos');
   const [dialog, setDialog] = useState<
     'pay' | 'discount' | 'suspend' | 'held' | 'recent' | 'assistant' | null
-  >(() => (assistant.open ? 'assistant' : null));
-  const assistantOpen = dialog === 'assistant';
-  const { setOpen: setAssistantOpen } = assistant;
-  useEffect(() => setAssistantOpen(assistantOpen), [assistantOpen, setAssistantOpen]);
+  >(null);
+  /** The active assistant conversation survives closing its dialog (ADR-0105). */
+  const assistant = useAssistantThread();
   const [receiptId, setReceiptId] = useState<string | null>(null);
   /** Receipts opened from the list are copies; the one right after a sale is the original. */
   const [receiptIsCopy, setReceiptIsCopy] = useState(false);
@@ -520,10 +517,7 @@ export function SalePage() {
       {dialog === 'held' ? <HeldSalesDialog onClose={() => setDialog(null)} /> : null}
       {dialog === 'assistant' ? (
         <AssistantDialog
-          thread={assistant.thread}
-          onThread={assistant.setThread}
-          onLoad={assistant.load}
-          conversationId={assistant.conversationId}
+          state={assistant}
           cart={describeCart(
             pricing?.ok
               ? cart.state.lines.map((l, index) => ({

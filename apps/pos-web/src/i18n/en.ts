@@ -375,7 +375,7 @@ export const posEn = {
     thinking: 'Thinking…',
     note: 'The assistant only reads information; it cannot change the sale. Conversations are kept to improve the service.',
     clear: 'New conversation',
-    history: 'My past conversations',
+    history: 'My conversations',
     historyEmpty: 'No past conversations yet.',
     back: 'Back',
     suggestions: {

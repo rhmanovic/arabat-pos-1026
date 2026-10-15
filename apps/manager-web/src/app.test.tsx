@@ -239,7 +239,7 @@ describe('management assistant (ADR-0105)', () => {
     ).toBeInTheDocument();
   });
 
-  it('lists the user’s own past conversations and reopens one to continue it', async () => {
+  it('lists the user’s own conversations down the side and reopens one to continue it', async () => {
     const fetch = fakeApiFetch({
       session: makeSession('manager', ['manager.access']),
       routes: {
@@ -280,11 +280,10 @@ describe('management assistant (ADR-0105)', () => {
     await screen.findByRole('heading', { name: 'Welcome, Test User' });
     await userEvent.click(screen.getByRole('button', { name: 'Assistant' }));
     const panel = await screen.findByRole('dialog', { name: 'Management assistant' });
+    // The conversations are down the side; the old one (an hour ago) is not resumed by itself.
+    const side = within(panel).getByRole('navigation', { name: 'My conversations' });
     await userEvent.click(
-      await within(panel).findByRole('button', { name: 'My past conversations' }),
-    );
-    await userEvent.click(
-      await within(panel).findByRole('button', { name: /How do I add a new product\?/ }),
+      await within(side).findByRole('button', { name: /How do I add a new product\?/ }),
     );
     // The old thread is back, and a follow-up continues the same conversation id.
     expect(await within(panel).findByTestId('assistant-assistant')).toHaveTextContent(

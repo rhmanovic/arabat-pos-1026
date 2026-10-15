@@ -1,6 +1,6 @@
 import { cn } from '@arabat/ui';
 import { AssistantChat, useApi, useAssistantThread } from '@arabat/web-core';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useBranchContext } from './context.js';
 
@@ -8,15 +8,16 @@ const SUGGESTIONS = ['product', 'employee', 'payments', 'today'] as const;
 
 /**
  * The management assistant (ADR-0105): a floating button at the bottom inline-end corner of
- * every page, opening a panel that stays above the content so the user can keep reading the
- * page they asked about. The thread lives here, in the layout, so it survives navigation.
+ * every page, opening a chat panel above the content with the user's conversations down the
+ * side. The active conversation lives here, in the layout, so it survives navigation; every
+ * conversation is on the server, so a reload resumes the latest one.
  */
 export function AssistantLauncher() {
   const { t, i18n } = useTranslation();
   const api = useApi();
   const { branchId } = useBranchContext();
-  const { thread, setThread, conversationId, load, open, setOpen } = useAssistantThread('manager');
-  const panelRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const state = useAssistantThread();
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -29,17 +30,16 @@ export function AssistantLauncher() {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, setOpen]);
+  }, [open]);
 
   return (
     <>
       {open ? (
         <div
-          ref={panelRef}
           id="manager-assistant"
           role="dialog"
           aria-label={t('assistant.title')}
-          className="fixed inset-2 z-50 flex flex-col rounded-xl border border-border bg-surface p-4 shadow-xl sm:inset-auto sm:end-4 sm:bottom-20 sm:h-[min(32rem,calc(100dvh-7rem))] sm:w-[min(26rem,calc(100vw-2rem))]"
+          className="fixed inset-2 z-50 flex flex-col rounded-xl border border-border bg-surface p-4 shadow-xl sm:inset-auto sm:end-4 sm:bottom-20 sm:h-[min(40rem,calc(100dvh-7rem))] sm:w-[min(46rem,calc(100vw-2rem))]"
         >
           <div className="mb-3 flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold">{t('assistant.title')}</h2>
@@ -53,9 +53,7 @@ export function AssistantLauncher() {
             </button>
           </div>
           <AssistantChat
-            thread={thread}
-            onThread={setThread}
-            onLoad={load}
+            state={state}
             statusKey={['manager', 'assistant', 'status']}
             status={() => api.managerAssistant.status()}
             conversations={() => api.managerAssistant.conversations()}
@@ -65,7 +63,7 @@ export function AssistantLauncher() {
                 messages,
                 language: i18n.resolvedLanguage === 'en' ? 'en' : 'ar',
                 branchId,
-                conversationId,
+                conversationId: state.conversationId,
               })
             }
             labels={{
@@ -76,8 +74,8 @@ export function AssistantLauncher() {
               send: t('assistant.send'),
               thinking: t('assistant.thinking'),
               note: t('assistant.note'),
-              clear: t('assistant.clear'),
-              history: t('assistant.history'),
+              newChat: t('assistant.clear'),
+              conversations: t('assistant.history'),
               historyEmpty: t('assistant.historyEmpty'),
               back: t('assistant.back'),
             }}

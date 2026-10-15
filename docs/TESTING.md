@@ -164,12 +164,14 @@ held the older bundle): the same case now sends a three-turn thread without an i
 it listed on its own under the request id, newest first, reopening with all four turns. Runs:
 10 integration passed; `pnpm test` 206 passed; migration 0049 applied locally. Reload
 (owner's phone, 2026-10-15): the register reloaded itself on a new deployment and the chat came
-back empty. `packages/web-core/src/assistant.test.tsx` (2 cases): the thread, its id and the
-open flag survive an unmount and remount under the same key, another key starts empty,
-clearing the thread issues a new id and closing removes the entry; `load` sets the given id
-and turns. `vitest.web-setup.ts` now clears session and local storage after every case (the
-POS suite failed once because a stored open flag reopened the dialog in the next case). Run:
-`pnpm test` 208 passed (37 files). Run: 4 passed; `pnpm test` 205 passed (36 files, including the mail cases of ADR-0106).
+back empty. `packages/web-core/src/assistant.test.tsx` (2 cases): the id is kept across
+turns, a new chat issues a new id and empties the thread, nothing lands in session storage,
+and `load` sets the given id and turns with the untouched flag cleared. The manager web case
+clicks a conversation in the side list (scoped to the "My conversations" navigation, since the
+suggestion chips share its text) and continues it; the POS case uses the first "New
+conversation" button (the phone row and the side list both render in jsdom). The resume rule
+is not auto-triggered in those cases (their `lastAt` is an hour old). `vitest.web-setup.ts`
+clears session and local storage after every case. Run: `pnpm test` 208 passed (37 files). Run: 4 passed; `pnpm test` 205 passed (36 files, including the mail cases of ADR-0106).
 
 Owner's trial on staging the same night (cashier "سلطان عبدالرحمن", company "بقاله سلطان"):
 "كم وسيلة دفع عندنا" was answered from the guide's generic tender list (cash, card, transfer,
