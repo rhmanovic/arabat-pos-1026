@@ -22,6 +22,7 @@ import { generateToken, hashToken } from '../../kernel/crypto/tokens.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
 import { Mailer } from '../../kernel/mail/mailer.js';
+import { renderEmail } from '../../kernel/mail/template.js';
 import { diffFields } from '../../kernel/audit-diff.js';
 import { AuditService } from '../audit/audit.service.js';
 import { sessions } from '../auth/auth.schema.js';
@@ -551,18 +552,22 @@ export class EmployeesService {
     const base = appInterface === 'pos' ? this.env.PUBLIC_POS_URL : this.env.PUBLIC_MANAGER_URL;
     const link = `${base.replace(/\/$/, '')}/accept-invite?token=${encodeURIComponent(token)}`;
     try {
+      const companyEn = merchant?.nameEn ?? company;
       await this.mailer.send({
         to: email,
-        subject: `دعوة للانضمام إلى ${company} | Invitation to join ${merchant?.nameEn ?? company}`,
-        text: [
-          `مرحباً ${fullName}،`,
-          `تمت دعوتك للانضمام إلى ${company}. افتح الرابط خلال ${INVITATION_TTL_DAYS} أيام لإعداد حسابك:`,
-          link,
-          '',
-          `Hello ${fullName},`,
-          `You were invited to join ${merchant?.nameEn ?? company}. Open this link within ${INVITATION_TTL_DAYS} days to set up your account:`,
-          link,
-        ].join('\n'),
+        ...renderEmail({
+          title: { ar: `دعوة للانضمام إلى ${company}`, en: `Invitation to join ${companyEn}` },
+          name: fullName,
+          intro: {
+            ar: `تمت دعوتك للانضمام إلى فريق ${company} على Arabat POS. اضغط الزر التالي خلال ${INVITATION_TTL_DAYS} أيام لإعداد حسابك واختيار كلمة المرور:`,
+            en: `You have been invited to join the ${companyEn} team on Arabat POS. Use the button below within ${INVITATION_TTL_DAYS} days to set up your account and choose a password:`,
+          },
+          action: { label: { ar: 'قبول الدعوة', en: 'Accept invitation' }, url: link },
+          note: {
+            ar: 'إن لم تكن تتوقع هذه الدعوة فتجاهل الرسالة.',
+            en: 'If you were not expecting this invitation, ignore this e-mail.',
+          },
+        }),
       });
     } catch (error) {
       // The invitation exists; the manager can resend it.

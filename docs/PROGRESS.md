@@ -342,6 +342,17 @@ refused the root-domain sender (`403 arabatapp.com domain is not verified`: only
 sent` from `ResendMailer`. Resend's per-e-mail limit (5 per hour) answered 429 to one of the
 retries, as designed.
 
+### 2026-10-15 — Branded bilingual e-mail template
+Owner request after seeing the first plain-text reset e-mail. `apps/api/src/kernel/mail/template.ts`
+(`renderEmail`) renders every outgoing message as one layout: "Arabat POS" header in the UI
+primary colour, an Arabic RTL block then an English LTR block (heading, greeting, text, a
+button with the link repeated under it, an optional confirmation-code box, a small note) and
+an automated-message footer; the subject is "ar | en"; all caller text is HTML-escaped; the
+plain-text part keeps the previous structure (Arabic, blank line, English; link or code on its
+own line). Applied to password reset, platform-created owner set-up, employee invitation,
+sign-in lock-out and ownership transfer e-mails. Runs: `pnpm verify` (201 unit/web tests, 5
+new in `template.test.ts`), `pnpm test:integration` 227 passed, `pnpm test:e2e` 35 passed.
+
 ### 2026-10-12 — Staging on Railway (ADR-0087)
 Deployed with the owner's approval: Railway project `arabat-pos` (Postgres + web), URL
 `https://web-production-bf628.up.railway.app`. Build, migrations and seeds ran on Railway;

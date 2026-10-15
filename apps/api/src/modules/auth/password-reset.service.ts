@@ -8,6 +8,7 @@ import { generateToken, hashToken } from '../../kernel/crypto/tokens.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
 import { Mailer } from '../../kernel/mail/mailer.js';
+import { renderEmail } from '../../kernel/mail/template.js';
 import { AuditService } from '../audit/audit.service.js';
 import { users } from '../iam/iam.schema.js';
 import { passwordResetTokens } from './auth.schema.js';
@@ -98,18 +99,19 @@ export class PasswordResetService {
     const minutes = RESET_TOKEN_TTL_SECONDS / 60;
     await this.mailer.send({
       to: email,
-      subject: 'إعادة تعيين كلمة المرور | Reset your password',
-      text: [
-        `مرحباً ${user.fullName}،`,
-        `لإعادة تعيين كلمة المرور افتح الرابط التالي خلال ${minutes} دقيقة:`,
-        link,
-        'إذا لم تطلب ذلك فتجاهل هذه الرسالة.',
-        '',
-        `Hello ${user.fullName},`,
-        `Open this link within ${minutes} minutes to reset your password:`,
-        link,
-        'If you did not request this, ignore this e-mail.',
-      ].join('\n'),
+      ...renderEmail({
+        title: { ar: 'إعادة تعيين كلمة المرور', en: 'Reset your password' },
+        name: user.fullName,
+        intro: {
+          ar: `وصلنا طلب لإعادة تعيين كلمة المرور لحسابك. اضغط الزر التالي خلال ${minutes} دقيقة لاختيار كلمة مرور جديدة:`,
+          en: `We received a request to reset the password of your account. Use the button below within ${minutes} minutes to choose a new password:`,
+        },
+        action: { label: { ar: 'إعادة تعيين كلمة المرور', en: 'Reset password' }, url: link },
+        note: {
+          ar: 'إذا لم تطلب ذلك فتجاهل هذه الرسالة؛ كلمة المرور الحالية لن تتغير.',
+          en: 'If you did not request this, ignore this e-mail; your current password stays unchanged.',
+        },
+      }),
     });
   }
 
@@ -140,16 +142,19 @@ export class PasswordResetService {
       send: () =>
         this.mailer.send({
           to: user.email,
-          subject: `حساب ${companyName} جاهز | Your ${companyName} account is ready`,
-          text: [
-            `مرحباً ${user.fullName}،`,
-            `تم إنشاء حساب شركتك "${companyName}". لتعيين كلمة المرور افتح الرابط خلال ${SETUP_TOKEN_TTL_HOURS} ساعة:`,
-            link,
-            '',
-            `Hello ${user.fullName},`,
-            `Your company account "${companyName}" has been created. Set your password within ${SETUP_TOKEN_TTL_HOURS} hours:`,
-            link,
-          ].join('\n'),
+          ...renderEmail({
+            title: { ar: `حساب ${companyName} جاهز`, en: `Your ${companyName} account is ready` },
+            name: user.fullName,
+            intro: {
+              ar: `تم إنشاء حساب شركتك "${companyName}" على Arabat POS. اضغط الزر التالي خلال ${SETUP_TOKEN_TTL_HOURS} ساعة لتعيين كلمة المرور والدخول إلى لوحة الإدارة:`,
+              en: `Your company account "${companyName}" has been created on Arabat POS. Use the button below within ${SETUP_TOKEN_TTL_HOURS} hours to set your password and open the management dashboard:`,
+            },
+            action: { label: { ar: 'تعيين كلمة المرور', en: 'Set my password' }, url: link },
+            note: {
+              ar: 'الرابط صالح لمرة واحدة. إن انتهت صلاحيته فاطلب إعادة تعيين كلمة المرور من صفحة الدخول.',
+              en: 'The link works once. If it expires, request a password reset from the sign-in page.',
+            },
+          }),
         }),
     };
   }

@@ -10,6 +10,7 @@ import { generateToken, hashToken } from '../../kernel/crypto/tokens.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
 import { Mailer } from '../../kernel/mail/mailer.js';
+import { renderEmail } from '../../kernel/mail/template.js';
 import { AuditService } from '../audit/audit.service.js';
 import { sessions } from '../auth/auth.schema.js';
 import { PasswordService } from '../auth/password.service.js';
@@ -318,16 +319,20 @@ export class OwnershipService {
     try {
       await this.mailer.send({
         to,
-        subject: 'ملكية الشركة | Company ownership',
-        text: [
-          `مرحباً ${name}،`,
-          body.ar,
-          ...(body.token ? [body.token, link] : []),
-          '',
-          `Hello ${name},`,
-          body.en,
-          ...(body.token ? [body.token, link] : []),
-        ].join('\n'),
+        ...renderEmail({
+          title: { ar: 'ملكية الشركة', en: 'Company ownership' },
+          name,
+          intro: body,
+          ...(body.token
+            ? {
+                code: body.token,
+                action: {
+                  label: { ar: 'فتح إعدادات الشركة', en: 'Open company settings' },
+                  url: link,
+                },
+              }
+            : {}),
+        }),
       });
     } catch (error) {
       this.logger.error(`Ownership e-mail failed: ${(error as Error).message}`);
