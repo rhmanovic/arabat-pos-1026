@@ -1309,6 +1309,14 @@ ADR; supersede it.
   `backup-export.workflow.yaml`, `config.example.env`) and `scripts/verify-managed-postgres.sh`
   (rehearsal on a non-superuser admin). These scripts cannot be run here without the account:
   their `gcloud` flags were checked against SDK 570, the database half was rehearsed locally.
-  Open: second backup location, e-mail provider (SMTP), domain, the `TRUST_PROXY` hop count
+  Owner answers (2026-10-15): approval of the plan, the cost and the go-live; project
+  `arabat-511416` (service account `arabat-admin`); second backup copy "the most suitable,
+  perhaps the UAE" — Google has no UAE region and Dammam needs invoiced billing, so the export
+  bucket is in **Frankfurt (`europe-west3`)**; domain **`app.arabatpos.com`** (Cloudflare DNS,
+  record not proxied so Google's certificate validates); e-mail through **Cloudflare Email
+  Service** SMTP (`smtps://api_token:<token>@smtp.mx.cloudflare.net:465`, Workers Paid plan and
+  a token with *Email Sending: Edit*); production starts **empty** (recommended; Railway's pilot
+  data holds test payments and stays on Railway).
+  Open: the `TRUST_PROXY` hop count
   behind the load balancer (checked after the first deploy), whether Backup and DR is offered in
   Doha, and Railway's data.

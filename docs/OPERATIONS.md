@@ -206,7 +206,9 @@ user has no SUPERUSER and no BYPASSRLS: `app_owner` is exempt from RLS only as t
    the job's log, then remove the variable.
 6. DNS: `A` record of the domain → the printed IP; wait until
    `gcloud compute ssl-certificates describe arabat-cert --global` shows `ACTIVE`.
-7. E-mail: put the provider's SMTP URL into the `smtp-url` secret
+7. E-mail (Cloudflare Email Service): onboard `arabatpos.com` under Email Service → Email
+   Sending (adds SPF/DKIM/DMARC on `cf-bounce`), create an API token with *Email Sending: Edit*,
+   and put `smtps://api_token:<token>@smtp.mx.cloudflare.net:465` into the `smtp-url` secret
    (`printf %s 'smtps://…' | gcloud secrets versions add smtp-url --data-file=-`), redeploy.
 8. Monitoring → Alerting: an e-mail channel; alert policies on the `arabat-ready` uptime
    check, on Cloud SQL backup failures and on failed `arabat-db-export` executions.
