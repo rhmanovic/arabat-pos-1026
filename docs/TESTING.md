@@ -158,8 +158,11 @@ two, newest first, with the fields `id, startedAt, lastAt, firstQuestion, turns`
 else; reopening returns the four turns in order; the colleague and the owner's management
 session get 404 on it; the owner's management list has only the owner's. Manager web case:
 "My past conversations" lists a conversation, reopening shows its answer, and a typed
-follow-up posts the restored thread with the same `conversationId`. Runs: 10 integration
-passed; `pnpm test` 206 passed; migration 0049 applied locally. Run: 4 passed; `pnpm test` 205 passed (36 files, including the mail cases of ADR-0106).
+follow-up posts the restored thread with the same `conversationId`. The owner's phone showed
+an empty history because the five staging questions were recorded without an id (the browser
+held the older bundle): the same case now sends a three-turn thread without an id and expects
+it listed on its own under the request id, newest first, reopening with all four turns. Runs:
+10 integration passed; `pnpm test` 206 passed; migration 0049 applied locally. Run: 4 passed; `pnpm test` 205 passed (36 files, including the mail cases of ADR-0106).
 
 Owner's trial on staging the same night (cashier "سلطان عبدالرحمن", company "بقاله سلطان"):
 "كم وسيلة دفع عندنا" was answered from the guide's generic tender list (cash, card, transfer,

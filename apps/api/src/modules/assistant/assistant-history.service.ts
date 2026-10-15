@@ -16,7 +16,8 @@ const MAX_CONVERSATIONS = 50;
 /**
  * The signed-in user's own past conversations (ADR-0105 amendment, 2026-10-15): read under
  * the `own_select` policy of migration 0049 (merchant and user of the session), per surface.
- * Only questions and answers come back; the platform keeps the tokens and the cost.
+ * Only questions and answers come back; the platform keeps the tokens and the cost. A question
+ * recorded without a conversation id (older browsers) is listed on its own, under its own id.
  */
 @Injectable()
 export class AssistantHistoryService {
@@ -28,13 +29,15 @@ export class AssistantHistoryService {
   ): Promise<AssistantConversationList> {
     const rows = await this.read(
       actor,
-      sql`select conversation_id, min(created_at) as started_at, max(created_at) as last_at,
+      // A question recorded before the browser sent a conversation id stands on its own.
+      sql`select coalesce(conversation_id, id) as conversation_id,
+                 min(created_at) as started_at, max(created_at) as last_at,
                  count(*)::int as turns,
                  (array_agg(question order by created_at))[1] as first_question
           from assistant_requests
           where merchant_id = ${actor.merchantId} and user_id = ${actor.userId}
-            and surface = ${surface} and conversation_id is not null
-          group by conversation_id
+            and surface = ${surface}
+          group by coalesce(conversation_id, id)
           order by max(created_at) desc
           limit ${MAX_CONVERSATIONS}`,
     );
@@ -57,13 +60,19 @@ export class AssistantHistoryService {
   ): Promise<AssistantConversation> {
     const rows = await this.read(
       actor,
-      sql`select question, reply, created_at from assistant_requests
+      sql`select question, reply, thread, conversation_id, created_at from assistant_requests
           where merchant_id = ${actor.merchantId} and user_id = ${actor.userId}
-            and surface = ${surface} and conversation_id = ${id}
+            and surface = ${surface}
+            and (conversation_id = ${id} or (conversation_id is null and id = ${id}))
           order by created_at, id`,
     );
     if (rows.length === 0) throw AppError.notFound('Conversation not found.');
     const messages: AssistantMessage[] = [];
+    if (rows.length === 1 && rows[0]!['conversation_id'] === null) {
+      // No id was sent: the turns before this question are in the thread it carried.
+      const earlier = JSON.parse((rows[0]!['thread'] as string) || '[]') as AssistantMessage[];
+      messages.push(...earlier);
+    }
     for (const r of rows) {
       messages.push({ role: 'user', content: r['question'] as string });
       const reply = r['reply'] as string | null;

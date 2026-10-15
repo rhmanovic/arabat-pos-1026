@@ -684,5 +684,35 @@ describe('the user’s own past conversations (ADR-0105 amendment, 2026-10-15)',
       await c.client.request('GET', '/manager/assistant/conversations', { cookies: c.cookies })
     ).json().conversations as { firstQuestion: string }[];
     expect(ownerList.map((x) => x.firstQuestion)).toEqual(['سؤال المالك']);
+
+    // A question sent without a conversation id (older browser) is listed on its own and
+    // reopens with the turns it carried.
+    model.reply(textTurn('نعم.'));
+    await chat(c, cashier.cookies, {
+      messages: [
+        { role: 'user', content: 'سؤال قديم' },
+        { role: 'assistant', content: 'جواب قديم' },
+        { role: 'user', content: 'متابعة قديمة' },
+      ],
+      language: 'ar',
+      cart: null,
+    });
+    const withOld = (
+      await c.client.request('GET', '/pos/assistant/conversations', { cookies: cashier.cookies })
+    ).json().conversations as { id: string; firstQuestion: string; turns: number }[];
+    expect(withOld.map((x) => [x.firstQuestion, x.turns])).toEqual([
+      ['متابعة قديمة', 1],
+      ['كم سعر الحليب؟', 1],
+      ['كيف أعلّق البيع؟', 2],
+    ]);
+    const old = await c.client.request('GET', `/pos/assistant/conversations/${withOld[0]!.id}`, {
+      cookies: cashier.cookies,
+    });
+    expect(old.json().messages).toEqual([
+      { role: 'user', content: 'سؤال قديم' },
+      { role: 'assistant', content: 'جواب قديم' },
+      { role: 'user', content: 'متابعة قديمة' },
+      { role: 'assistant', content: 'نعم.' },
+    ]);
   });
 });

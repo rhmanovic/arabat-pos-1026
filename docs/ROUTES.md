@@ -225,8 +225,8 @@ HTML; the guides tell the model to use nothing else. On phones the manager panel
 screen (the launcher hides under it) and the input is not focused automatically, so the
 on-screen keyboard does not cover the answer; sending blurs the box. "My past conversations"
 in the chat footer lists the user's own conversations of that app (newest first, 50 at most)
-and reopens one with its id, so the next question continues it. The assistant only reads
-(BR-194).
+and reopens one with its id, so the next question continues it; a question recorded without
+an id (older browser) is listed on its own. The assistant only reads (BR-194).
 
 ### Returns API (Prompt 11)
 

@@ -1327,8 +1327,9 @@ ADR; supersede it.
   SELECT policy on merchant **and** user of the session; `GET …/assistant/conversations[/:id]`
   under the app's access permission). Nobody sees another user's conversations, and merchant
   users still never see tokens, cost or outcomes: the history returns questions and answers
-  only. Reopening restores the thread with its id, so the next question continues it; turns
-  recorded before the id existed are not listed.
+  only. Reopening restores the thread with its id, so the next question continues it; a
+  question recorded before the browser sent an id is listed on its own (under the request
+  id) and reopens with the turns it carried.
 
 ## ADR-0106 — E-mail through a provider's HTTP API (Railway blocks SMTP)
 - **Date:** 2026-10-15 · **Status:** Accepted (owner request: "enable the forgot-password button fully")
