@@ -657,6 +657,13 @@ Verified: 8 assistant integration cases, 188 unit/web tests, lint and typecheck 
   POS and manager chats send a conversation id and say conversations are kept.
 Verified: 9 assistant integration cases, 189 unit/web tests, lint and typecheck green.
 
+### 2026-10-15 — Assistant answers rendered (owner request)
+Answers showed raw `**bold**` and list markers. `AssistantMarkup` (`web-core`) renders the
+allowed subset (paragraphs, bullets, numbered steps, bold, inline code) as React elements, no
+HTML; used by the POS dialog, the manager panel and the platform conversation dialog. Both
+guides now state that subset as the only formatting. Verified: 3 markup unit cases, 192 web
+tests, 9 assistant integration cases.
+
 ## Next step
 First platform operator on staging, SMTP and volume if wanted; owner decisions OQ-011/021–025
 before any production launch.

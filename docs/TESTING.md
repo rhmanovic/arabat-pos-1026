@@ -143,6 +143,13 @@ later turn. Answers as returned:
    `toolsUsed` kept, `max_tokens` 1024 on the request; a note-prefixed answer comes back
    clean). Run: 5 passed; `pnpm typecheck` and `pnpm test` (186) green.
 
+Answer rendering (2026-10-15): the owner's screenshots showed `**bold**` and `-` markers as
+raw text. `packages/web-core/src/assistant-markup.test.tsx` (3 cases): parsing of paragraphs,
+bullets with an indented continuation, a bold-only line and numbered steps; rendering of
+bold as `<strong>`, inline code as `<code>`, `<ul>` then `<ol>`, with a literal `<b>` in the
+text staying text (no element created); stray asterisks, single line breaks as `<br>`, and a
+heading marker dropped. Run: 3 passed; the POS, manager and platform suites unchanged.
+
 Owner's trial on staging the same night (cashier "سلطان عبدالرحمن", company "بقاله سلطان"):
 "كم وسيلة دفع عندنا" was answered from the guide's generic tender list (cash, card, transfer,
 split) and "كم طريقة دفع مفعلة لي" with "I cannot see that, open the management app →

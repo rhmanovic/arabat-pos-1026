@@ -11,7 +11,7 @@ import {
   StatCard,
   buttonVariants,
 } from '@arabat/ui';
-import { ErrorState, useApi } from '@arabat/web-core';
+import { AssistantMarkup, ErrorState, useApi } from '@arabat/web-core';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -323,9 +323,9 @@ export function AssistantUsagePage() {
             </div>
             {open.reply ? (
               <div className="flex justify-start">
-                <p className="max-w-[85%] rounded-lg bg-surface px-3 py-2 text-sm whitespace-pre-wrap text-fg">
-                  {open.reply}
-                </p>
+                <div className="max-w-[85%] rounded-lg bg-surface px-3 py-2 text-sm leading-relaxed text-fg">
+                  <AssistantMarkup text={open.reply} />
+                </div>
               </div>
             ) : (
               <p className="text-sm text-fg-muted">{t('assistant.noReply')}</p>

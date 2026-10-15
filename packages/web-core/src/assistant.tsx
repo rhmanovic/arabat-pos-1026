@@ -3,6 +3,7 @@ import { Alert, Button, Spinner, cn } from '@arabat/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { AssistantMarkup } from './assistant-markup.js';
 import { useErrorMessage } from './components.js';
 
 /**
@@ -138,14 +139,15 @@ export function AssistantChat({
             className={cn('flex', m.role === 'user' ? 'justify-end' : 'justify-start')}
             data-testid={`assistant-${m.role}`}
           >
-            <p
-              className={cn(
-                'max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap',
-                m.role === 'user' ? 'bg-primary text-primary-fg' : 'bg-surface text-fg',
-              )}
-            >
-              {m.content}
-            </p>
+            {m.role === 'user' ? (
+              <p className="max-w-[85%] rounded-lg bg-primary px-3 py-2 text-sm whitespace-pre-wrap text-primary-fg">
+                {m.content}
+              </p>
+            ) : (
+              <div className="max-w-[85%] rounded-lg bg-surface px-3 py-2 text-sm leading-relaxed text-fg">
+                <AssistantMarkup text={m.content} />
+              </div>
+            )}
           </div>
         ))}
         {ask.isPending ? (

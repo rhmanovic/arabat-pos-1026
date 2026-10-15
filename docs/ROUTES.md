@@ -217,7 +217,9 @@ chat dialog on the sale screen with suggested questions; the conversation is kep
 dialog is closed and cleared with "New conversation". In the management app a floating
 **Assistant** button sits at the bottom inline-end corner of every page (part of the layout,
 so it survives navigation) and opens a panel above the content; Escape closes it and the
-thread is kept. The assistant only reads (BR-194).
+thread is kept. Answers are rendered from a small allowed markup (paragraphs, "-" bullets,
+"1." steps, **bold**, `code`) by `AssistantMarkup` in `web-core`, as React elements, never as
+HTML; the guides tell the model to use nothing else. The assistant only reads (BR-194).
 
 ### Returns API (Prompt 11)
 

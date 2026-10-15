@@ -6,3 +6,4 @@ export * from './guards.js';
 export * from './auth-forms.js';
 export * from './lock-screen.js';
 export * from './assistant.js';
+export * from './assistant-markup.js';
