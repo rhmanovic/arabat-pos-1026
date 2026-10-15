@@ -66,6 +66,19 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-15 (Google Cloud preparation, ADR-0105, local run)
+
+Local PostgreSQL 18 recreated with `app_owner` **without BYPASSRLS** (all 49 migrations from
+an empty database, then seeds). `pnpm verify` green (193 unit/web tests, including
+`gcs-storage.test.ts` — store / read / delete against a stand-in Cloud Storage and metadata
+server, create-only writes, one token reused, unsafe keys refused, API errors reported — and
+`hosted-setup.test.ts` — role URLs, Cloud SQL socket kept, password rules); `pnpm
+test:integration` 220 passed (two new cases in `database.int.test.ts`: the owner role has no
+SUPERUSER/BYPASSRLS, no table forces RLS, every table is owned by `app_owner`, the owner sees
+every merchant); `pnpm test:e2e` 35 passed. `bash scripts/verify-managed-postgres.sh` passed
+(OPERATIONS.md §9.6); a pre-0048 database upgrade was rehearsed by hand. `shellcheck` clean on
+`infra/gcp/*.sh`. Not testable here: the `gcloud` commands against a real project.
+
 ### Results after remediation session 12 (2026-10-13, local run)
 
 `pnpm verify` green (184 unit/web tests, including the new manager `account.test.tsx` (devices
