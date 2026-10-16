@@ -107,6 +107,27 @@ e-mail provider; production secrets store; backup storage location; payment gate
 choice, merchant contracts and credentials, sandbox certification (OQ-021); subscription
 pricing and billing provider (OQ-022); legal receipt fields and tax (OQ-002, OQ-009).
 
+## 7a. Domain and e-mail (ADR-0105)
+
+DNS of `arabatapp.com` is in Cloudflare. Records in place (2026-10-14):
+
+| Record | Value | Purpose |
+|---|---|---|
+| `MX arabatapp.com` | `1 smtp.google.com` | Google Workspace mailboxes |
+| `TXT arabatapp.com` | `v=spf1 include:_spf.google.com ~all` | SPF for Workspace |
+| `TXT _dmarc.arabatapp.com` | `v=DMARC1; p=quarantine; adkim=r; aspf=r; pct=100` | DMARC (tightened after a test message showed SPF, DKIM and DMARC pass) |
+| `TXT arabatapp.com` | `google-site-verification=…` | Workspace domain verification (verified 2026-10-14) |
+| `TXT google._domainkey.arabatapp.com` | `v=DKIM1; k=rsa; p=…` (2048-bit) | Workspace DKIM |
+| `TXT resend._domainkey.send.arabatapp.com` | `p=…` | Resend DKIM (region eu-west-1) |
+| `CNAME rsend.send.arabatapp.com` | `rsend-euw1.forge.rmta.net` (DNS only) | Resend sending / SPF |
+| `CNAME send.send.arabatapp.com` | `send.forge.rmta.net` (DNS only) | Resend return-path / SPF |
+
+Google Workspace (Business Starter, monthly, 14-day trial) is active on `arabatapp.com` with
+one user, the owner; further addresses are added as aliases. Resend (free plan) holds `send.arabatapp.com`; receiving is off; click / open tracking
+must stay off (reset and invitation links must not pass through a tracker). At deployment set in production
+`SMTP_URL=smtps://resend:<API key>@smtp.resend.com:465` and
+`MAIL_FROM=no-reply@send.arabatapp.com`,.
+
 ## 8. Staging on Railway (approved by the owner, 2026-10-12)
 
 Files: `Dockerfile` (builds the API and the four apps; base image overridable with

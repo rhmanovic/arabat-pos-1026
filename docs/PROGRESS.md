@@ -772,6 +772,14 @@ history, platform usage record, e-mail through Resend / Brevo) into the Google C
 Verified: `pnpm verify` (217 unit/web), 230 integration, 35 E2E (local).
 Not done (needs the owner): storing the key in Secret Manager and the production release.
 
+### 2026-10-14 — Domain and e-mail set-up (ADR-0105)
+Owner decisions: production domain `arabatapp.com`; Google Workspace for people's mail;
+Resend (free plan) for system mail on `send.arabatapp.com`; staging paused; production hosting
+on Google Cloud preferred but not approved yet (OQ-011). Done in Cloudflare: dangling A records
+of `arabatapp.com` / `www` / `app` (to an address the owner does not control) removed; Workspace
+MX and SPF and a monitor-only DMARC added. Not done: Workspace and Resend sign-ups (owner),
+their verification / DKIM records, production deployment.
+
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.
