@@ -137,12 +137,19 @@ function escape(value: string): string {
 
 const kwd = (minor: bigint) => `${Money.ofMinor(minor, 'KWD').toDecimalString()} د.ك`;
 
+/** "16/10/2026 15:37" in the merchant's zone: plain digits, so it never reorders in RTL text. */
 function dateTime(date: Date, timezone: string): string {
-  return new Intl.DateTimeFormat('ar-KW-u-nu-latn', {
+  return new Intl.DateTimeFormat('en-GB', {
     timeZone: timezone,
-    dateStyle: 'short',
-    timeStyle: 'short',
-  }).format(date);
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+    .format(date)
+    .replace(',', '');
 }
 
 /** A label / value row; null values are skipped. `ltr` keeps numbers and codes in order. */
@@ -170,7 +177,8 @@ p { margin: 0; overflow-wrap: anywhere; }
 section { border-top: 1px dashed #000; margin-top: 1.5mm; padding-top: 1.5mm; }
 .row { display: flex; justify-content: space-between; align-items: flex-start; gap: 2mm; break-inside: avoid; }
 .row .k { flex: 0 0 auto; max-width: 50%; }
-.row .v { flex: 1 1 auto; min-width: 0; text-align: end; overflow-wrap: anywhere; }
+/* The document is right to left: labels on the right, values flush with the left edge. */
+.row .v { flex: 1 1 auto; min-width: 0; text-align: left; overflow-wrap: anywhere; }
 .big { font-size: 15px; font-weight: 700; }
 .item { break-inside: avoid; padding: 0.5mm 0; }
 .mods { font-size: 11px; padding-inline-start: 2mm; }
@@ -211,7 +219,7 @@ export function renderReceiptHtml(data: ReceiptData, printedAt: Date, copy = fal
         (l.modifiers.length
           ? `<p class="mods" dir="auto">${escape(l.modifiers.join('، '))}</p>`
           : '') +
-        `<div class="row" dir="ltr"><span>${escape(l.quantity)} × ${Money.ofMinor(l.unitPriceMinor, 'KWD').toDecimalString()}</span><span>${Money.ofMinor(l.grossMinor, 'KWD').toDecimalString()}</span></div>` +
+        `<div class="row"><span class="k" dir="ltr">${escape(l.quantity)} × ${Money.ofMinor(l.unitPriceMinor, 'KWD').toDecimalString()}</span><span class="v" dir="ltr">${Money.ofMinor(l.grossMinor, 'KWD').toDecimalString()}</span></div>` +
         (l.lineDiscountMinor > 0n
           ? row('خصم', `-${Money.ofMinor(l.lineDiscountMinor, 'KWD').toDecimalString()}`, {
               ltr: true,
