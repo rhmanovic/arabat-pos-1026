@@ -772,8 +772,9 @@ history, platform usage record, e-mail through Resend / Brevo) into the Google C
 Verified: `pnpm verify` (217 unit/web), 230 integration, 35 E2E (local).
 Released to production 2026-10-16: image `8ae3a5bb7549`, migrations 0049 / 0050 by the job,
 revision `arabat-web-00003-7hh` serving 100 %. Not done: the secret `anthropic-api-key` does not
-exist yet in Secret Manager, so the assistant is off in production (the panel says "not enabled") until it is
-stored and `deploy.sh` runs again.
+exist yet in Secret Manager, so the assistant was off at first. Same day: secret `anthropic-api-key` created from the
+owner's key, released `ca227effa051` (revision `arabat-web-00004-pp4`, `ANTHROPIC_API_KEY` set);
+the key answers 200 at Anthropic and lists `claude-opus-5-5`; no error logs on the revision.
 
 ### 2026-10-14 — Domain and e-mail set-up (ADR-0108)
 Owner decisions: production domain `arabatapp.com`; Google Workspace for people's mail;
