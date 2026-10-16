@@ -565,7 +565,12 @@ export function SalePage() {
         />
       ) : null}
       {receiptId ? (
-        <ReceiptDialog saleId={receiptId} copy={receiptIsCopy} onClose={() => setReceiptId(null)} />
+        <ReceiptDialog
+          saleId={receiptId}
+          copy={receiptIsCopy}
+          autoPrint={!receiptIsCopy}
+          onClose={() => setReceiptId(null)}
+        />
       ) : null}
     </div>
   );

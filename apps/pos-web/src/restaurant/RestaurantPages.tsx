@@ -249,6 +249,8 @@ export function OrderPage() {
   const [dialog, setDialog] = useState<'bill' | 'move' | 'merge' | null>(null);
   const [cancelling, setCancelling] = useState<RestaurantOrderItem | null>(null);
   const [receiptId, setReceiptId] = useState<string | null>(null);
+  /** The bill was just paid: its receipt prints by itself. */
+  const [justPaid, setJustPaid] = useState(false);
   const update = (o: RestaurantOrder) => {
     queryClient.setQueryData(orderKey(o.id), o);
     void queryClient.invalidateQueries({ queryKey: floorKey });
@@ -476,7 +478,10 @@ export function OrderPage() {
                 <button
                   type="button"
                   className="text-primary"
-                  onClick={() => setReceiptId(b.saleId)}
+                  onClick={() => {
+                    setJustPaid(false);
+                    setReceiptId(b.saleId);
+                  }}
                 >
                   <span dir="ltr">{b.receiptNumber}</span> · <span dir="ltr">{fmt(b.total)}</span>
                 </button>
@@ -512,6 +517,7 @@ export function OrderPage() {
           onPaid={(next, saleId) => {
             update(next);
             setDialog(null);
+            setJustPaid(true);
             setReceiptId(saleId);
           }}
         />
@@ -527,7 +533,9 @@ export function OrderPage() {
           }}
         />
       ) : null}
-      {receiptId ? <ReceiptDialog saleId={receiptId} onClose={() => setReceiptId(null)} /> : null}
+      {receiptId ? (
+        <ReceiptDialog saleId={receiptId} autoPrint={justPaid} onClose={() => setReceiptId(null)} />
+      ) : null}
     </div>
   );
 }

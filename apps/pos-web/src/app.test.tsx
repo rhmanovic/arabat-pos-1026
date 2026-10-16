@@ -1,6 +1,6 @@
 import { flattenKeys } from '@arabat/i18n';
 import { fakeApiFetch, makeSession, renderApp } from '@arabat/web-core/testing';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { i18n, resources } from './i18n/index.js';
@@ -708,6 +708,7 @@ describe('pos app', () => {
         }),
       },
     });
+    const print = vi.spyOn(window, 'print').mockImplementation(() => {});
     renderApp({ routes, appInterface: 'pos', i18n, fetch });
     await screen.findByText('Juice');
     await userEvent.click(screen.getByTestId('product-tile'));
@@ -729,6 +730,9 @@ describe('pos app', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Add payment' }));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Complete sale' }));
     expect((await screen.findAllByTestId('receipt-customer'))[0]).toHaveTextContent('Noura');
+    // The receipt prints by itself right after the sale, once.
+    await waitFor(() => expect(print).toHaveBeenCalledTimes(1));
+    print.mockRestore();
     const created = fetch.calls.find((c) => c.method === 'POST' && c.path === '/pos/customers')!;
     expect(created.body).toEqual({ fullName: 'Noura', phone: '99990000' });
     const checkout = fetch.calls.find((c) => c.method === 'POST' && c.path === '/pos/sales')!;

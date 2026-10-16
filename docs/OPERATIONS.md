@@ -362,6 +362,7 @@ of the development database restored with `--roles-only` + `pg_restore --role=ap
 row counts equal, `app_runtime` sees 0 branches without a merchant and `app_owner` all 3.
 The upgrade of a pre-0048 database (BYPASSRLS owner, forced RLS) was rehearsed with a
 superuser admin: 0048 applied, BYPASSRLS removed, no table forced.
+
 ## 10. Receipt printer at the till (browser printing)
 
 The POS prints receipts with the browser's `window.print()`; nothing is sent from the server.

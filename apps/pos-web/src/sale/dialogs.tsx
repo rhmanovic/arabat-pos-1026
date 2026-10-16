@@ -10,7 +10,7 @@ import { Badge, Button, Dialog, Field, Input, Select, Spinner } from '@arabat/ui
 import { ApiError } from '@arabat/api-client';
 import { localizedName, useApi, useAuth, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { shiftKey } from '../pages/ShiftPages.js';
 import { type CartLine, formatQty, useCart } from './cart.js';
@@ -891,9 +891,12 @@ export function ReceiptDialog({
   saleId,
   onClose,
   copy = false,
+  autoPrint = false,
 }: {
   saleId: string;
   onClose: () => void;
+  /** Right after the sale: print the receipt as soon as it is loaded, without a click. */
+  autoPrint?: boolean;
   /** Opened after the sale: the first print. Otherwise every print is a logged copy (BR-182). */
   copy?: boolean;
 }) {
@@ -914,6 +917,17 @@ export function ReceiptDialog({
     },
     onError: notify.fail,
   });
+  const autoPrinted = useRef(false);
+  const loaded = Boolean(receipt.data);
+  useEffect(() => {
+    if (!autoPrint || copy || !loaded || autoPrinted.current) return;
+    autoPrinted.current = true;
+    // After the commit, so the print portal holds the receipt.
+    setTimeout(() => {
+      setPrinted(true);
+      window.print();
+    }, 0);
+  }, [autoPrint, copy, loaded]);
   const print = () => {
     if (copy || printed) reprint.mutate();
     else {
