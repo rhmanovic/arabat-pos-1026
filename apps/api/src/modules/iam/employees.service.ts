@@ -551,6 +551,11 @@ export class EmployeesService {
     const company = merchant?.nameAr ?? merchant?.nameEn ?? '';
     const base = appInterface === 'pos' ? this.env.PUBLIC_POS_URL : this.env.PUBLIC_MANAGER_URL;
     const link = `${base.replace(/\/$/, '')}/accept-invite?token=${encodeURIComponent(token)}`;
+    // The address the employee keeps using after the first sign-in (owner request, 2026-10-16).
+    const appName =
+      appInterface === 'pos'
+        ? { ar: 'نقطة البيع (الكاشير)', en: 'the register (POS)' }
+        : { ar: 'تطبيق الإدارة', en: 'the management app' };
     try {
       const companyEn = merchant?.nameEn ?? company;
       await this.mailer.send({
@@ -564,8 +569,8 @@ export class EmployeesService {
           },
           action: { label: { ar: 'قبول الدعوة', en: 'Accept invitation' }, url: link },
           note: {
-            ar: 'إن لم تكن تتوقع هذه الدعوة فتجاهل الرسالة.',
-            en: 'If you were not expecting this invitation, ignore this e-mail.',
+            ar: `بعد اختيار كلمة المرور ادخل ${appName.ar} كل يوم من: ${base} — إن لم تكن تتوقع هذه الدعوة فتجاهل الرسالة.`,
+            en: `After choosing your password, open ${appName.en} every day at: ${base} — if you were not expecting this invitation, ignore this e-mail.`,
           },
         }),
       });

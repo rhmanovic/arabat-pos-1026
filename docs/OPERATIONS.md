@@ -287,6 +287,11 @@ user has no SUPERUSER and no BYPASSRLS: `app_owner` is exempt from RLS only as t
    Sending (adds SPF/DKIM/DMARC on `cf-bounce`), create an API token with *Email Sending: Edit*,
    and put `smtps://api_token:<token>@smtp.mx.cloudflare.net:465` into the `smtp-url` secret
    (`printf %s 'smtps://…' | gcloud secrets versions add smtp-url --data-file=-`), redeploy.
+7b. E-mail through Resend (the domain verified there is `send.arabatapp.com`, `MAIL_DOMAIN`):
+   store a Resend key with sending access as the secret `mail-api-key`
+   (`printf %s 're_…' | gcloud secrets create mail-api-key --replication-policy=user-managed --locations=me-central1 --data-file=-`)
+   and redeploy; `deploy.sh` then sets `MAIL_PROVIDER=resend` and `MAIL_API_KEY`. Without it
+   e-mail goes to `smtp-url` (still the placeholder: invitations and password resets are not sent).
 7a. Assistant (paid Anthropic usage, owner approval): store the key once with
    `printf %s 'sk-ant-…' | gcloud secrets create anthropic-api-key --replication-policy=user-managed --locations=me-central1 --data-file=-`
    (later keys: `gcloud secrets versions add anthropic-api-key --data-file=-`), then redeploy;

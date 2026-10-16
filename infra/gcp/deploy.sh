@@ -30,7 +30,17 @@ if gc secrets describe anthropic-api-key >/dev/null 2>&1; then
 else
   echo "== Assistant: off (no secret anthropic-api-key)"
 fi
-ENV_VARS="APP_VERSION=$TAG,PAYMENT_MOCK_ENABLED=false,FILE_STORAGE_DRIVER=gcs,GCS_BUCKET=$UPLOADS_BUCKET,TRUST_PROXY=$TRUST_PROXY,PUBLIC_MANAGER_URL=https://$DOMAIN/manager,PUBLIC_POS_URL=https://$DOMAIN/pos,PUBLIC_STORE_URL=https://$DOMAIN/store,MAIL_FROM=Arabat POS <no-reply@${MAIL_DOMAIN:-$DOMAIN}>"
+# E-mail (invitations, password reset): through Resend's HTTP API when the secret `mail-api-key`
+# exists (the domain verified at Resend is MAIL_DOMAIN, send.arabatapp.com); otherwise SMTP_URL.
+MAIL_VARS=""
+if gc secrets describe mail-api-key >/dev/null 2>&1; then
+  SECRETS="$SECRETS,MAIL_API_KEY=mail-api-key:latest"
+  MAIL_VARS=",MAIL_PROVIDER=resend"
+  echo "== E-mail: Resend (secret mail-api-key)"
+else
+  echo "== E-mail: SMTP_URL (no secret mail-api-key)"
+fi
+ENV_VARS="APP_VERSION=$TAG,PAYMENT_MOCK_ENABLED=false,FILE_STORAGE_DRIVER=gcs,GCS_BUCKET=$UPLOADS_BUCKET,TRUST_PROXY=$TRUST_PROXY,PUBLIC_MANAGER_URL=https://$DOMAIN/manager,PUBLIC_POS_URL=https://$DOMAIN/pos,PUBLIC_STORE_URL=https://$DOMAIN/store,MAIL_FROM=Arabat POS <no-reply@${MAIL_DOMAIN:-$DOMAIN}>$MAIL_VARS"
 
 echo "== Build $IMAGE"
 if ! gc artifacts docker images describe "$IMAGE" >/dev/null 2>&1; then

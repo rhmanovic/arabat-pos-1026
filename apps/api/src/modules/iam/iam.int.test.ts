@@ -117,6 +117,11 @@ describe('employee invitations', () => {
     expect(res.body).not.toMatch(/token|password/i);
 
     const token = inviteToken(email);
+    // The e-mail sets the password on the POS and gives the register's everyday address.
+    const mail = [...mailer.outbox].reverse().find((m) => m.to === email)!;
+    expect(mail.text).toMatch(/\/pos\/accept-invite\?token=/);
+    expect(mail.text).toContain('نقطة البيع (الكاشير)');
+    expect(mail.html).toContain('/pos/accept-invite?token=');
     const preview = (
       await c.client.request('POST', '/auth/invitations/preview', { body: { token } })
     ).json();
