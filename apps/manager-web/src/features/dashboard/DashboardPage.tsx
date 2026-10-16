@@ -40,6 +40,37 @@ export function DashboardPage() {
     queryFn: () => api.merchant.controls(),
     enabled: can('merchant.settings.read'),
   });
+  // Setup checklist (owner request 2026-10-16): each step reads a live fact, never a guess.
+  const methods = useQuery({
+    queryKey: ['manager', 'payment-methods'],
+    queryFn: () => api.payments.methods(),
+    enabled: can('payments.settings'),
+  });
+  const registers = useQuery({
+    queryKey: ['manager', 'registers', 'all'],
+    queryFn: () => api.registers.list(),
+    enabled: can('registers.manage'),
+  });
+  const categories = useQuery({
+    queryKey: ['manager', 'categories'],
+    queryFn: () => api.catalog.categories(),
+    enabled: can('catalog.manage'),
+  });
+  const productCount = useQuery({
+    queryKey: ['manager', 'onboarding', 'products'],
+    queryFn: () => api.catalog.products({ pageSize: 1 }),
+    enabled: can('catalog.manage'),
+  });
+  const stock = useQuery({
+    queryKey: ['manager', 'onboarding', 'stock'],
+    queryFn: () => api.inventory.summary(null),
+    enabled: can('inventory.adjust'),
+  });
+  const firstSale = useQuery({
+    queryKey: ['manager', 'onboarding', 'sales'],
+    queryFn: () => api.sales.list({ pageSize: 1 }),
+    enabled: can('sales.read'),
+  });
   const names = (xs: { nameEn: string | null; nameAr: string | null }[]) =>
     xs.map((x) => localizedName(x, i18n.language)).join(', ');
   const warnings = controls.data
@@ -169,27 +200,81 @@ export function DashboardPage() {
   const activeBranches = branches.filter((b) => b.status === 'active').length;
   const customRoles = roles.data?.roles.filter((r) => !r.templateKey).length ?? 0;
 
-  const steps = [
-    {
-      key: 'stepProfile',
-      to: '/settings',
-      done: Boolean(profile.data?.legalName && profile.data.contactPhone),
-      visible: can('merchant.settings.update'),
-    },
-    {
-      key: 'stepBranch',
-      to: '/branches',
-      done: branches.length > 1,
-      visible: can('branches.manage'),
-    },
-    {
-      key: 'stepEmployees',
-      to: '/employees',
-      done: (employees.data?.employees.length ?? 0) > 1 || (pendingInvites ?? 0) > 0,
-      visible: can('employees.manage'),
-    },
-    { key: 'stepRoles', to: '/roles', done: customRoles > 0, visible: can('roles.manage') },
-  ].filter((s) => s.visible);
+  const tracked = stock.data?.trackedVariants ?? 0;
+  // In the order a new company works through them; optional steps never block the setup.
+  const steps: { key: string; to: string; done: boolean; visible: boolean; optional?: boolean }[] =
+    [
+      {
+        key: 'stepProfile',
+        to: '/settings',
+        done: Boolean(profile.data?.legalName && profile.data.contactPhone),
+        visible: can('merchant.settings.update'),
+      },
+      {
+        key: 'stepPayments',
+        to: '/payments',
+        done: (methods.data?.methods.filter((m) => m.status === 'active').length ?? 0) > 0,
+        visible: can('payments.settings'),
+      },
+      {
+        key: 'stepRegisters',
+        to: '/registers',
+        done: (registers.data?.registers.length ?? 0) > 0,
+        visible: can('registers.manage'),
+      },
+      {
+        key: 'stepCategories',
+        to: '/categories',
+        done: (categories.data?.categories.length ?? 0) > 0,
+        visible: can('catalog.manage'),
+      },
+      {
+        key: 'stepProducts',
+        to: '/products/new',
+        done: (productCount.data?.total ?? 0) > 0,
+        visible: can('catalog.manage'),
+      },
+      {
+        key: 'stepStock',
+        to: '/inventory/adjustments/new',
+        done: tracked > 0 && (stock.data?.outOfStock ?? 0) < tracked,
+        visible: can('inventory.adjust'),
+      },
+      {
+        key: 'stepEmployees',
+        to: '/employees',
+        done: (employees.data?.employees.length ?? 0) > 1 || (pendingInvites ?? 0) > 0,
+        visible: can('employees.manage'),
+      },
+      {
+        key: 'stepTreasurer',
+        to: '/employees',
+        done: Boolean(controls.data?.treasurerAssigned),
+        visible: can('employees.manage') && can('merchant.settings.read'),
+      },
+      {
+        key: 'stepFirstSale',
+        to: '/sales',
+        done: (firstSale.data?.total ?? 0) > 0,
+        visible: can('sales.read'),
+      },
+      {
+        key: 'stepBranch',
+        to: '/branches',
+        done: branches.length > 1,
+        visible: can('branches.manage'),
+        optional: true,
+      },
+      {
+        key: 'stepRoles',
+        to: '/roles',
+        done: customRoles > 0,
+        visible: can('roles.manage'),
+        optional: true,
+      },
+    ].filter((s) => s.visible);
+  const required = steps.filter((s) => !s.optional);
+  const doneCount = required.filter((s) => s.done).length;
 
   const company = session.merchant ? localizedName(session.merchant, i18n.language) : '';
   return (
@@ -281,9 +366,12 @@ export function DashboardPage() {
 
       {steps.length > 0 ? (
         <section className="rounded-lg border border-border bg-surface">
-          <h2 className="border-b border-border p-5 font-semibold">
-            {t('dashboard.onboardingTitle')}
-          </h2>
+          <div className="flex items-center justify-between gap-3 border-b border-border p-5">
+            <h2 className="font-semibold">{t('dashboard.onboardingTitle')}</h2>
+            <span className="text-sm text-fg-muted" data-testid="onboarding-progress">
+              {t('dashboard.onboardingProgress', { done: doneCount, total: required.length })}
+            </span>
+          </div>
           <ul className="divide-y divide-border">
             {steps.map((step) => (
               <li key={step.key}>
@@ -294,8 +382,12 @@ export function DashboardPage() {
                 >
                   <span className="text-sm">{t(`dashboard.${step.key}`)}</span>
                   <span className="flex items-center gap-3">
-                    <Badge tone={step.done ? 'success' : 'warning'}>
-                      {step.done ? t('dashboard.done') : t('dashboard.todo')}
+                    <Badge tone={step.done ? 'success' : step.optional ? 'neutral' : 'warning'}>
+                      {step.done
+                        ? t('dashboard.done')
+                        : step.optional
+                          ? t('dashboard.optional')
+                          : t('dashboard.todo')}
                     </Badge>
                     <span className="text-sm font-medium text-primary">{t('dashboard.open')}</span>
                   </span>

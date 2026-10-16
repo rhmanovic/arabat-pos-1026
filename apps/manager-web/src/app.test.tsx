@@ -156,6 +156,55 @@ describe('manager app', () => {
     expect(within(nav).getByRole('link', { name: 'Reports' })).toBeInTheDocument();
   });
 
+  it('walks a new company through setup from live facts, optional steps apart', async () => {
+    const kwd = (amount: string) => ({ amount, currency: 'KWD' });
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', [
+        'manager.access',
+        'payments.settings',
+        'registers.manage',
+        'catalog.read',
+        'catalog.manage',
+        'sales.read',
+        'branches.manage',
+      ]),
+      routes: {
+        'GET /manager/payment-methods': () => ({ status: 200, body: { methods: [] } }),
+        'GET /manager/registers': () => ({ status: 200, body: { registers: [] } }),
+        'GET /manager/categories': () => ({ status: 200, body: { categories: [] } }),
+        'GET /manager/products': () => ({
+          status: 200,
+          body: { products: [], total: 3, page: 1, pageSize: 1 },
+        }),
+        'GET /manager/sales': () => ({
+          status: 200,
+          body: {
+            sales: [],
+            total: 0,
+            page: 1,
+            pageSize: 1,
+            totals: { count: 0, amount: kwd('0'), refunded: kwd('0'), net: kwd('0') },
+          },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, fetch });
+    const products = await screen.findByRole('link', { name: /Add your products and prices/ });
+    expect(products).toHaveAttribute('href', expect.stringMatching(/\/products\/new$/));
+    expect(await within(products).findByText('Done')).toBeInTheDocument();
+    for (const name of [
+      /Turn on your payment methods/,
+      /Add a POS register/,
+      /Create your product categories/,
+      /complete your first sale/,
+    ])
+      expect(within(screen.getByRole('link', { name })).getByText('To do')).toBeInTheDocument();
+    // A single-branch shop is not held back: more branches are optional.
+    const branches = screen.getByRole('link', { name: /Add more branches/ });
+    expect(within(branches).getByText('Optional')).toBeInTheDocument();
+    expect(screen.getByTestId('onboarding-progress')).toHaveTextContent('1 of 5');
+  });
+
   it('denies a management page without its permission even when typed in the address bar', async () => {
     renderApp({
       routes,

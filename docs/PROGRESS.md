@@ -793,6 +793,13 @@ employee opens every day (`https://www.arabatapp.com/pos`). Verified: IAM integr
 Not verified end to end: no e-mail has been sent from production yet (the sandbox cannot reach
 Resend or the site); the first real invitation is the check (log `Invitation e-mail failed` on error).
 
+### 2026-10-16 — Setup checklist for a new company (owner request)
+"Get your company ready" on the dashboard grows from 4 to 11 steps, in working order, each read
+from live data: company details, payment methods (an active one), a POS register, categories,
+products, opening stock (tracked items not all at zero), invite employees, assign a treasurer
+(controls), first sale; "add more branches" and "review roles" are **optional** (a single-branch
+shop is no longer stuck at "To do"). Header shows "done of required". Verified: 218 unit/web.
+
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.
