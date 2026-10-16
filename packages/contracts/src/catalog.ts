@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { optionalId } from './optional-id.js';
 
 const text = (max: number) =>
   z
@@ -57,10 +58,7 @@ export const saveCategorySchema = z
   .object({
     nameEn: text(80),
     nameAr: text(80),
-    parentId: z
-      .uuid()
-      .nullish()
-      .transform((v) => v ?? null),
+    parentId: optionalId(),
     sortOrder: z.number().int().min(0).max(10000).default(0),
     version: z.number().int().positive().optional(),
   })
@@ -168,10 +166,7 @@ export const saveProductSchema = z
     nameAr: text(160),
     descriptionEn: text(2000),
     descriptionAr: text(2000),
-    categoryId: z
-      .uuid()
-      .nullish()
-      .transform((v) => v ?? null),
+    categoryId: optionalId(),
     type: z.enum(['standard', 'service']).default('standard'),
     hasVariants: z.boolean().default(false),
     trackInventory: z.boolean().default(true),

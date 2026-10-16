@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { moneyAmountSchema, moneySchema } from './catalog.js';
+import { optionalId } from './optional-id.js';
 
 const text = (max: number) =>
   z
@@ -90,10 +91,7 @@ export const savePaymentMethodSchema = z
     feeType: z.enum(FEE_TYPES).default('none'),
     feeFixed: moneyAmountSchema.default('0'),
     feePercent: feePercentSchema.default('0'),
-    financialAccountId: z
-      .uuid()
-      .nullish()
-      .transform((v) => v ?? null),
+    financialAccountId: optionalId(),
     gatewayProvider: z
       .enum(GATEWAY_PROVIDERS)
       .nullish()

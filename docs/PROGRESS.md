@@ -800,6 +800,12 @@ products, opening stock (tracked items not all at zero), invite employees, assig
 (controls), first sale; "add more branches" and "review roles" are **optional** (a single-branch
 shop is no longer stuck at "To do"). Header shows "done of required". Verified: 218 unit/web.
 
+### 2026-10-16 — "—" (none) in a select saves as no reference (owner report)
+A new category with parent "—" did nothing on Save: the select sends "", which `z.uuid()`
+refused, and the form shows no error on that field. `optionalId()` (contracts) reads "" as null;
+used for the category parent, product category, online-store branch, payment settlement account,
+platform plan and restaurant references. Verified: 221 unit/web, 230 integration.
+
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.

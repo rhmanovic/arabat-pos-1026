@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { moneySchema } from './catalog.js';
 import { languageSchema } from './interfaces.js';
+import { optionalId } from './optional-id.js';
 
 /** Platform administration and subscriptions (Prompt 17). See BUSINESS_RULES.md BR-150…BR-158. */
 const text = (max: number) =>
@@ -317,10 +318,7 @@ export const createMerchantSchema = z
     legalName: text(200),
     contactPhone: text(30),
     defaultLanguage: languageSchema,
-    planId: z
-      .uuid()
-      .nullish()
-      .transform((v) => v ?? null),
+    planId: optionalId(),
     owner: z.object({
       fullName: z.string().trim().min(1).max(120),
       email: z.email().trim().toLowerCase().max(254),

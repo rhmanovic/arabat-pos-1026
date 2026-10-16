@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { moneyAmountSchema, moneySchema } from './catalog.js';
 import { quantitySchema } from './inventory.js';
 import { discountInputSchema, paymentInputSchema, saleSchema } from './sales.js';
+import { optionalId } from './optional-id.js';
 
 /** Restaurant module contracts (Prompt 15). See BUSINESS_RULES.md BR-130…BR-139. */
 const text = (max: number) =>
@@ -148,10 +149,7 @@ export const saveModifierGroupSchema = z
             ...nameInput,
             price: moneyAmountSchema.default('0'),
             status: status.default('active'),
-            componentVariantId: z
-              .uuid()
-              .nullish()
-              .transform((v) => v ?? null),
+            componentVariantId: optionalId(),
             componentQuantity: quantitySchema.nullish().transform((v) => v ?? null),
           })
           .refine(nameRequired, { error: 'A name is required.', path: ['nameAr'] })
@@ -305,10 +303,7 @@ export const orderListSchema = z.object({ orders: z.array(orderSummarySchema) })
 export const createRestaurantOrderSchema = z
   .object({
     orderType: z.enum(ORDER_TYPES),
-    tableId: z
-      .uuid()
-      .nullish()
-      .transform((v) => v ?? null),
+    tableId: optionalId(),
     guests: z
       .number()
       .int()
@@ -365,10 +360,7 @@ export const payOrderSchema = z.object({
   idempotencyKey: z.uuid(),
   itemIds: z.array(z.uuid()).min(1).max(200),
   orderDiscount: discountInputSchema.nullish().transform((v) => v ?? null),
-  customerId: z
-    .uuid()
-    .nullish()
-    .transform((v) => v ?? null),
+  customerId: optionalId(),
   payments: z.array(paymentInputSchema).max(10),
   expectedTotal: moneyAmountSchema,
 });

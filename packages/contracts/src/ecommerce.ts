@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { moneyAmountSchema, moneySchema } from './catalog.js';
 import { quantitySchema } from './inventory.js';
+import { optionalId } from './optional-id.js';
 
 /** Online store contracts (Prompt 16). See BUSINESS_RULES.md BR-140…BR-149. */
 const text = (max: number) =>
@@ -96,10 +97,7 @@ export const saveOnlineStoreSchema = z
       .nullish()
       .or(z.literal(''))
       .transform((v) => v || null),
-    fulfillmentBranchId: z
-      .uuid()
-      .nullish()
-      .transform((v) => v ?? null),
+    fulfillmentBranchId: optionalId(),
     pickupEnabled: z.boolean(),
     deliveryEnabled: z.boolean(),
     deliveryFee: moneyAmountSchema,
