@@ -1323,3 +1323,94 @@ ADR; supersede it.
   Open: the `TRUST_PROXY` hop count
   behind the load balancer (checked after the first deploy), whether Backup and DR is offered in
   Doha, and Railway's data.
+
+## ADR-0105 — POS assistant: a read-only chat helper on the cashier screen
+- **Status:** Accepted (2026-10-14). Owner request: a chat button on the register so the
+  cashier can ask an AI for help.
+- **Context:** New cashiers ask the same questions (how to hold a sale, give a discount, process
+  a return, what a shortcut does) and look up prices and stock by hand. The owner wants a chat
+  helper on the register itself.
+- **Decision:**
+  - A new `assistant` module (`apps/api/src/modules/assistant`) exposes `GET /pos/assistant`
+    (enabled or not) and `POST /pos/assistant/chat` under `pos.access`. The browser keeps the
+    conversation (at most 20 turns of 2 000 characters) and sends it whole on every request,
+    with the cart as display text; the server stores nothing and logs only token counts.
+  - The model provider sits behind the `AssistantModel` boundary (like `Mailer`): the real
+    `AnthropicAssistantModel` uses the official `@anthropic-ai/sdk` with `ASSISTANT_MODEL`
+    (default `claude-opus-5-5`, low effort for short answers, server-side fallback on a policy
+    decline, one retry, 60 s timeout). Without `ANTHROPIC_API_KEY` the assistant is **off**:
+    the button shows a notice, no request leaves the server and nothing is billed. Setting the
+    key is a paid decision of the owner (CLAUDE.md §3.13).
+  - The assistant is **read-only** (BR-194). It answers from a fixed guide of the register
+    (`POS_GUIDE`, the cacheable prefix) plus four lookups that run as the cashier, at the
+    session branch, inside the merchant's RLS context: `search_products` (name / SKU /
+    barcode, price, stock when the cashier may see it), `payment_methods` (the Pay screen's
+    buttons, exactly the list the POS fetches; added 2026-10-14 after the owner's trial, where
+    "how many payment methods do I have" was answered generically), `recent_sales` (own
+    shift) and `shift_summary` (figures withheld under the blind count exactly as on the
+    shift page). Rights are checked with `can()` before each lookup; the cashier's rights at
+    the branch are part of the prompt so the answer says who must authorise what. The guide
+    draws the line at the cashier's own screen: what the cashier can see is answered from the
+    lookups; management screens, settings, reports, other branches and permission keys are
+    never described (owner decision, 2026-10-14). At most four lookup rounds per answer; 60
+    requests per cashier per 10 minutes (`RateLimiterService`).
+  - POS: an **Assistant** button in the shift strip (and the phone "More" menu), F9, a dialog
+    with suggested questions, the thread kept while the dialog is closed, "New conversation".
+- **Consequences:** No tenant data is stored by the provider beyond its own processing (the
+  provider's data terms apply; product names, prices, stock figures and the cart text of one
+  branch are sent per question). Not built: streaming answers, per-merchant usage metering or
+  a plan limit, actions on the sale by the assistant (by design).
+- **Amendment (2026-10-14, owner request after the staging trial): the management app.** The
+  same module serves `GET/POST /manager/assistant[/chat]` under `manager.access`, with its own
+  cacheable guide (`MANAGER_GUIDE`: the sidebar pages and what each does, no permission keys
+  in answers) and four read-only lookups that read exactly what the app's own pages show, with
+  the user's rights and the branch selected in the top bar (`branchId`, null = all readable
+  branches): `search_products` (Products page search, stock from the Inventory page when
+  readable), `payment_methods` (the Payment methods page: status, register/online, fee,
+  settlement account), `stock_summary` (the Inventory page's cards) and `sales_today` (the
+  dashboard's today card). The chat body is one shared component (`AssistantChat` in
+  `web-core`); the manager app mounts a floating button at the bottom inline-end corner of the
+  layout so it is on every page and the thread survives navigation. Same rate limit per user,
+  same `AssistantModel`, same key.
+- **Amendment (2026-10-14, owner decision): the platform keeps every question.** "The server
+  stores nothing" above is replaced: each question is appended to `assistant_requests`
+  (migration 0048) with the thread as sent, the answer, the lookups, the token counts, the
+  estimated cost at list price (`assistant.pricing.ts`, micro-USD, integer arithmetic) and the
+  outcome, also when the provider fails. Purpose stated by the owner: monitoring, abuse
+  detection, product development and training of the company's own models. Access: the
+  platform's **super admin only**, on `/platform/assistant` (`GET /platform/assistant`, JSONL
+  export); nobody in the merchant realm, owner included, sees conversations, tokens or cost
+  (INSERT-only RLS policy for the merchant context, `SECURITY DEFINER` platform read functions,
+  route gated to `platform.super_admin`). Users are told in the chat footer that conversations
+  are kept to improve the service. No retention limit for now (the owner keeps the data); the
+  browser sends a `conversationId` so turns of one conversation can be grouped.
+- **Amendment (2026-10-15, owner decision): a user sees their own conversations.** Each user
+  may list and reopen their own past conversations of the app they are in (migration 0049:
+  SELECT policy on merchant **and** user of the session; `GET …/assistant/conversations[/:id]`
+  under the app's access permission). Nobody sees another user's conversations, and merchant
+  users still never see tokens, cost or outcomes: the history returns questions and answers
+  only. Reopening restores the thread with its id, so the next question continues it; a
+  question recorded before the browser sent an id is listed on its own (under the request
+  id) and reopens with the turns it carried.
+
+## ADR-0106 — E-mail through a provider's HTTP API (Railway blocks SMTP)
+- **Date:** 2026-10-15 · **Status:** Accepted (owner request: "enable the forgot-password button fully")
+- **Context:** The password recovery flow (forgot → e-mailed single-use link → reset, BR-043)
+  has been complete in code and tests since the authentication milestone, but staging never
+  delivered the e-mail: the web service has no mail configuration, so `SMTP_URL` falls back to
+  the local Mailpit default and the background send fails. Railway disables outbound SMTP on
+  the Free, Trial and Hobby plans (docs.railway.com/networking/outbound-networking), so an
+  SMTP relay would not work there either.
+- **Decision:** `Mailer` gets HTTP implementations selected by `MAIL_PROVIDER`: `smtp`
+  (default, nodemailer, Mailpit locally), `resend` (api.resend.com) and `brevo`
+  (api.brevo.com), each authenticated with `MAIL_API_KEY` (`loadEnv` refuses an HTTP provider
+  without a key) and sending from `MAIL_FROM`. The same `MailMessage` boundary stays, so the
+  in-memory outbox of the tests and every caller are unchanged. In a production build with the
+  local SMTP default the API logs a warning at start-up instead of failing silently per e-mail.
+  Which provider staging uses, and its key, are the owner's (external account); the first
+  choice offered is Brevo's free tier (300 e-mails/day, verified sender address, no domain
+  needed) or Resend (3,000/month, needs a verified domain to send to other people).
+- **Consequences:** Password reset, employee invitations and platform-created owner set-up
+  links work on staging once `MAIL_PROVIDER`, `MAIL_API_KEY` and `MAIL_FROM` are set on the
+  web service. Production needs a sender domain verified at the provider (SPF/DKIM) before
+  real merchants receive e-mail. Fallback to a second provider is not implemented.

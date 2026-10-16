@@ -314,6 +314,45 @@ Open (see the final report): e-mail verification at registration (OQ-025), branc
 permission hints in the UI, metrics endpoint, module boundary refactor (ADR-0083), owner
 decisions OQ-011/021/022/023/024.
 
+### 2026-10-15 — Staging: assistant key rotation and e-mail delivery over HTTP (ADR-0106)
+`ANTHROPIC_API_KEY` on the Railway web service rotated to the dedicated workspace key
+`arabat-pos-staging` (the owner's personal key is to be revoked); the service was found
+following `claude/busy-babbage-yty2bo` again and was reconnected to `claude/tender-wright-t34f5x`
+(deploy of 51e9924 green, assistant routes mapped, no key rejection). Forgot-password: the
+flow was already complete (UI, routes, API, single-use token, tests), but no e-mail left
+staging because Railway blocks outbound SMTP below Pro. New `MAIL_PROVIDER` (`smtp` |
+`resend` | `brevo`) with `MAIL_API_KEY`; HTTP mailers unit-tested against a stubbed `fetch`;
+production warns at start-up when delivery is unconfigured. Pending the owner: provider
+account and key on the web service, then a real reset on staging.
+Later the same day: the owner verified `arabatapp.com` at Resend (sending subdomain
+`send.arabatapp.com`, DKIM + CNAMEs on Cloudflare) and created the sending-only key
+`arabat-pos-staging`; `MAIL_PROVIDER=resend`, `MAIL_API_KEY` and
+`MAIL_FROM=Arabat POS <no-reply@arabatapp.com>` set on the Railway web service (deploy
+464b140f green, start-up warning gone, password routes mapped). The owner's first try
+(00:48 UTC) logged `ResendMailer: provider answered 401 API key is invalid`: the value first
+stored in `MAIL_API_KEY` was not the owner's key; corrected and the service redeployed
+(4da17c04, 04:06 UTC). Two more causes found and fixed the same night: every
+variable-triggered or "Redeploy" deployment was built from the default branch
+`claude/busy-babbage-yty2bo` (no mail-provider code → SMTP fallback, `ECONNREFUSED
+::1:1025`), so the source was reconnected to `claude/tender-wright-t34f5x`; and Resend
+refused the root-domain sender (`403 arabatapp.com domain is not verified`: only
+`send.arabatapp.com` is verified), so `MAIL_FROM` became `no-reply@send.arabatapp.com`.
+**Verified 04:23 UTC** on deployment 32f0a34b (b84e0ca): the owner's request on
+`/manager/forgot-password` logged `E-mail "إعادة تعيين كلمة المرور | Reset your password"
+sent` from `ResendMailer`. Resend's per-e-mail limit (5 per hour) answered 429 to one of the
+retries, as designed.
+
+### 2026-10-15 — Branded bilingual e-mail template
+Owner request after seeing the first plain-text reset e-mail. `apps/api/src/kernel/mail/template.ts`
+(`renderEmail`) renders every outgoing message as one layout: "Arabat POS" header in the UI
+primary colour, an Arabic RTL block then an English LTR block (heading, greeting, text, a
+button with the link repeated under it, an optional confirmation-code box, a small note) and
+an automated-message footer; the subject is "ar | en"; all caller text is HTML-escaped; the
+plain-text part keeps the previous structure (Arabic, blank line, English; link or code on its
+own line). Applied to password reset, platform-created owner set-up, employee invitation,
+sign-in lock-out and ownership transfer e-mails. Runs: `pnpm verify` (201 unit/web tests, 5
+new in `template.test.ts`), `pnpm test:integration` 227 passed, `pnpm test:e2e` 35 passed.
+
 ### 2026-10-12 — Staging on Railway (ADR-0087)
 Deployed with the owner's approval: Railway project `arabat-pos` (Postgres + web), URL
 `https://web-production-bf628.up.railway.app`. Build, migrations and seeds ran on Railway;
@@ -645,6 +684,93 @@ Checks from Cloud Build after the three certificates turned ACTIVE (12:39 UTC; t
 `arabat-cert` was then detached and deleted): health ok with database ok, the four apps 200,
 `https://arabatapp.com/…` and `https://app.arabatpos.com/…?x=1` → 301 to the same path (and query)
 on `https://www.arabatapp.com`, `http://` → 301 to `https://`, `run.app` 404.
+
+### 2026-10-14 — POS assistant (ADR-0105, BR-194)
+Implemented:
+- **API**: `assistant` module with `GET /pos/assistant` and `POST /pos/assistant/chat`
+  (`pos.access`); `AssistantModel` boundary with the Anthropic implementation (official SDK,
+  `claude-opus-5-5` by default, low effort, server-side fallback, 60 s timeout) and a scripted
+  test double; four read-only lookups as the cashier (`search_products`, `payment_methods`,
+  `recent_sales`, `shift_summary`); rights, branch, blind count and RLS respected; the guide
+  keeps the assistant on the cashier's own screen (no management screens, settings or
+  permission keys in answers); four lookup rounds and 60
+  requests per cashier per 10 minutes at most; off (503 `ASSISTANT_DISABLED`) without
+  `ANTHROPIC_API_KEY`.
+- **POS**: Assistant button in the shift strip and the phone menu, F9, chat dialog with
+  suggested questions, the cart sent as display text, thread kept while closed, "New
+  conversation", notice when the assistant is not configured; Arabic and English.
+Verified: see `TESTING.md` (results after the POS assistant). Not done: the key is not set
+anywhere (nothing is billed until the owner provides one); no streaming, no usage metering.
+
+### 2026-10-14 — Management assistant (ADR-0105 amendment)
+Implemented after the owner's staging trial:
+- **API**: `GET /manager/assistant` and `POST /manager/assistant/chat` (`manager.access`),
+  `MANAGER_GUIDE` (the sidebar pages, no permission keys in answers) and four lookups with the
+  user's rights and the selected branch: `search_products`, `payment_methods` (the Payment
+  methods page), `stock_summary`, `sales_today`; a foreign `branchId` is 404, a POS session is
+  refused at the route. Hardening from the live trial: a `max_tokens` stop without a tool call
+  gives the fallback reply, `<thinking>` notes are stripped, `max_tokens` 1 024.
+- **Web**: the chat body is one shared `AssistantChat` (`web-core`); the POS dialog uses it;
+  the manager app has a floating **Assistant** button at the bottom inline-end corner of every
+  page (in the layout, so the thread survives navigation), a panel above the content, Escape
+  to close, suggested questions; Arabic and English. `ANTHROPIC_API_KEY` is set on staging
+  with the owner's approval; staging follows branch `claude/tender-wright-t34f5x`.
+Verified: 8 assistant integration cases, 188 unit/web tests, lint and typecheck green.
+
+### 2026-10-14 — Platform record of assistant usage (ADR-0105 amendment, owner decision)
+- **DB**: migration 0048 `assistant_requests` (INSERT-only for merchants, no reads; platform
+  `SECURITY DEFINER` readers). **API**: every question recorded from `AssistantService` with
+  thread, answer, lookups, tokens, estimated cost (`assistant.pricing.ts`) and outcome, also
+  on failure; `GET /platform/assistant` (list, totals, by merchant, filters) and
+  `GET /platform/assistant/export` (JSONL) for `platform.super_admin` only; `conversationId`
+  from the browser. **Web**: platform page "Assistant usage" (cards, filters, by-merchant
+  table, questions table, conversation dialog, export link), super-admin-only navigation;
+  POS and manager chats send a conversation id and say conversations are kept.
+Verified: 9 assistant integration cases, 189 unit/web tests, lint and typecheck green.
+
+### 2026-10-15 — Assistant answers rendered (owner request)
+Answers showed raw `**bold**` and list markers. `AssistantMarkup` (`web-core`) renders the
+allowed subset (paragraphs, bullets, numbered steps, bold, inline code) as React elements, no
+HTML; used by the POS dialog, the manager panel and the platform conversation dialog. Both
+guides now state that subset as the only formatting. Verified: 3 markup unit cases, 192 web
+tests, 9 assistant integration cases. Phones (owner report): the input is focused
+automatically only with a fine pointer, sending drops the keyboard, and the manager panel
+fills the screen below `sm`.
+
+### 2026-10-15 — The user's own conversation history (ADR-0105 amendment)
+- **DB**: migration 0049 (`own_select` policy by merchant and user; index). **API**:
+  `AssistantHistoryService` reading under `withContext({ merchantId, userId })`;
+  `GET /pos|manager/assistant/conversations[/:id]` (own, same app, questions and answers
+  only). **Web**: "My past conversations" in the chat footer (list, reopen, continue with the
+  same conversation id) in the POS dialog and the manager panel; `useAssistantThread().load`.
+Verified: 10 assistant integration cases, 206 web tests, lint and typecheck green.
+Owner's phone the same hour: the register's silent reload on a new deployment (empty cart)
+closed the chat and lost the thread. The owner asked for a server-backed, chat-app layout
+rather than browser storage: `AssistantChat` now shows the user's conversations down the side
+(server list, newest first, "New conversation" on top; a switch on phones), the active one in
+the middle and a growing composer; on open with an untouched state it resumes the latest
+conversation from the server when its last turn is within 30 minutes. No session storage.
+Web test setup clears browser storage after each case. Verified: 208 web tests.
+Owner request the same morning: the register's assistant identical to the management one.
+`AssistantLauncher` (`web-core`) now holds the floating button, the panel, the hotkey and the
+conversation state for both apps; the POS mounts it in its layout with F9 and the sale text
+from `AssistantCartProvider` (set by the sale screen), the strip button and the sale-screen
+dialog are gone; the manager app is a thin binding. Verified: 208 web tests.
+
+### 2026-10-16 — Assistant brought to the Google Cloud line
+The production branch had been cut before the assistant work (Railway staging), so the chat
+button never reached `www.arabatapp.com`. Merged the assistant line (POS + manager launcher,
+history, platform usage record, e-mail through Resend / Brevo) into the Google Cloud line.
+- Migration numbers collided (both had 0048). Google Cloud keeps `0048_rls_owner_without_bypass`;
+  the assistant migrations are now `0049_assistant_requests` / `0050_assistant_own_conversations`,
+  idempotent (staging already ran them as 0048 / 0049) and without `FORCE ROW LEVEL SECURITY`
+  (Cloud SQL would lock the owner out). Both upgrade paths replayed on PostgreSQL 18: production
+  (… 0048 Cloud SQL → 0049 → 0050) and staging (… old 0048/0049 → 0048 Cloud SQL → 0049 → 0050);
+  both end with RLS enabled, not forced, and the two policies.
+- `infra/gcp/deploy.sh` passes `ANTHROPIC_API_KEY` from the secret `anthropic-api-key` when it
+  exists (OPERATIONS.md §9.2 step 7a); without it the button stays hidden.
+Verified: `pnpm verify` (217 unit/web), 230 integration, 35 E2E (local).
+Not done (needs the owner): storing the key in Secret Manager and the production release.
 
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket

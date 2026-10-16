@@ -22,6 +22,14 @@ IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$AR_REPO/arabat:$TAG"
 RUN_SA="arabat-run@$PROJECT_ID.iam.gserviceaccount.com"
 CONNECTION="$PROJECT_ID:$REGION:$SQL_INSTANCE"
 SECRETS="DATABASE_ADMIN_URL=db-admin-url:latest,APP_OWNER_PASSWORD=app-owner-password:latest,APP_RUNTIME_PASSWORD=app-runtime-password:latest,MFA_ENCRYPTION_SECRET=mfa-encryption-secret:latest,SMTP_URL=smtp-url:latest"
+# The assistant (ADR-0105 amendment) is on only when the secret `anthropic-api-key` exists;
+# without it no request leaves the server and the chat button stays hidden.
+if gc secrets describe anthropic-api-key >/dev/null 2>&1; then
+  SECRETS="$SECRETS,ANTHROPIC_API_KEY=anthropic-api-key:latest"
+  echo "== Assistant: on (secret anthropic-api-key)"
+else
+  echo "== Assistant: off (no secret anthropic-api-key)"
+fi
 ENV_VARS="APP_VERSION=$TAG,PAYMENT_MOCK_ENABLED=false,FILE_STORAGE_DRIVER=gcs,GCS_BUCKET=$UPLOADS_BUCKET,TRUST_PROXY=$TRUST_PROXY,PUBLIC_MANAGER_URL=https://$DOMAIN/manager,PUBLIC_POS_URL=https://$DOMAIN/pos,PUBLIC_STORE_URL=https://$DOMAIN/store,MAIL_FROM=Arabat POS <no-reply@${MAIL_DOMAIN:-$DOMAIN}>"
 
 echo "== Build $IMAGE"

@@ -735,6 +735,112 @@ describe('pos app', () => {
     expect(checkout.body).toMatchObject({ customerId: noura.id, expectedTotal: '0.250' });
   });
 
+  it('opens the assistant from the strip (F9), sends the question with the cart and shows the answer (ADR-0105)', async () => {
+    const item = {
+      variantId: '0190a000-0000-7000-8000-000000000a01',
+      productId: '0190a000-0000-7000-8000-000000000b01',
+      categoryId: null,
+      nameEn: 'Karak tea',
+      nameAr: 'شاي كرك',
+      variantNameEn: null,
+      variantNameAr: null,
+      sku: 'TEA',
+      barcodes: ['6281000000017'],
+      price: money('0.333'),
+      trackInventory: false,
+      imageUrl: null,
+    };
+    const fetch = fakeApiFetch({
+      session: makeSession('pos', ['pos.access', 'shifts.operate', 'sales.create']),
+      routes: {
+        'GET /pos/shifts/current': () => ({ status: 200, body: { shift: SHIFT } }),
+        'GET /pos/catalog': () => ({
+          status: 200,
+          body: { branchId: SHIFT.branchId, categories: [], items: [item], version: 'v1' },
+        }),
+        'GET /pos/inventory/availability': () => ({
+          status: 200,
+          body: { branchId: SHIFT.branchId, allowNegativeStock: false, items: [] },
+        }),
+        'GET /pos/assistant': () => ({ status: 200, body: { enabled: true } }),
+        'POST /pos/assistant/chat': () => ({
+          status: 200,
+          body: { reply: 'Press F8 to hold the sale.', toolsUsed: [] },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'pos', i18n, fetch });
+    await userEvent.click(await screen.findByTestId('product-tile'));
+    await userEvent.click(screen.getByRole('button', { name: 'Assistant' }));
+    let dialog = await screen.findByRole('dialog', { name: 'Cashier assistant' });
+    // Empty thread: the intro and the suggested questions.
+    await userEvent.click(
+      await within(dialog).findByRole('button', { name: 'How do I hold a sale?' }),
+    );
+    expect(await within(dialog).findByTestId('assistant-assistant')).toHaveTextContent(
+      'Press F8 to hold the sale.',
+    );
+    expect(within(dialog).getByTestId('assistant-user')).toHaveTextContent('How do I hold a sale?');
+    const call = fetch.calls.find((c) => c.method === 'POST' && c.path === '/pos/assistant/chat')!;
+    expect(call.body).toEqual({
+      messages: [{ role: 'user', content: 'How do I hold a sale?' }],
+      language: 'en',
+      cart: {
+        lines: [{ name: 'Karak tea', quantity: '1', unitPrice: '0.333', lineTotal: '0.333' }],
+        total: '0.333',
+        customer: null,
+      },
+      conversationId: expect.any(String),
+    });
+    // Closing keeps the thread; F9 reopens it and a typed follow-up carries the history.
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await userEvent.keyboard('{F9}');
+    dialog = await screen.findByRole('dialog', { name: 'Cashier assistant' });
+    expect(within(dialog).getByTestId('assistant-assistant')).toBeInTheDocument();
+    await userEvent.type(
+      within(dialog).getByLabelText('Type your question…'),
+      'and resume?{Enter}',
+    );
+    expect(await within(dialog).findAllByTestId('assistant-assistant')).toHaveLength(2);
+    const second = fetch.calls.filter((c) => c.path === '/pos/assistant/chat')[1]!;
+    expect((second.body as { messages: unknown[] }).messages).toHaveLength(3);
+    // The same conversation id until "New conversation".
+    expect((second.body as { conversationId: string }).conversationId).toBe(
+      (call.body as { conversationId: string }).conversationId,
+    );
+    // "New conversation" empties the thread.
+    await userEvent.click(within(dialog).getAllByRole('button', { name: /New conversation/ })[0]!);
+    expect(within(dialog).queryByTestId('assistant-user')).toBeNull();
+  });
+
+  it('tells the cashier when the assistant is not configured and takes no input', async () => {
+    const fetch = fakeApiFetch({
+      session: makeSession('pos', ['pos.access', 'shifts.operate', 'sales.create']),
+      routes: {
+        'GET /pos/shifts/current': () => ({ status: 200, body: { shift: SHIFT } }),
+        'GET /pos/catalog': () => ({
+          status: 200,
+          body: { branchId: SHIFT.branchId, categories: [], items: [], version: 'v1' },
+        }),
+        'GET /pos/inventory/availability': () => ({
+          status: 200,
+          body: { branchId: SHIFT.branchId, allowNegativeStock: false, items: [] },
+        }),
+        'GET /pos/assistant': () => ({ status: 200, body: { enabled: false } }),
+      },
+    });
+    renderApp({ routes, appInterface: 'pos', i18n, fetch });
+    await userEvent.click(await screen.findByRole('button', { name: 'Assistant' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Cashier assistant' });
+    expect(await within(dialog).findByTestId('assistant-disabled')).toHaveTextContent(
+      'The assistant is not enabled for this system yet.',
+    );
+    expect(within(dialog).getByLabelText('Type your question…')).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'How do I hold a sale?' })).toBeNull();
+    expect(fetch.calls.some((c) => c.path === '/pos/assistant/chat')).toBe(false);
+  });
+
   it('defines the same translation keys in Arabic and English', () => {
     expect(flattenKeys(resources.ar).sort()).toEqual(flattenKeys(resources.en).sort());
   });

@@ -59,6 +59,13 @@ import {
   salesSettingsSchema,
   type AuditListQuery,
   auditListSchema,
+  type AssistantChat,
+  type AssistantUsageQuery,
+  assistantConversationListSchema,
+  assistantConversationSchema,
+  assistantReplySchema,
+  assistantStatusSchema,
+  assistantUsageSchema,
   posShiftSchema,
   type DecideCashMovement,
   controlsChecklistSchema,
@@ -436,6 +443,24 @@ export function createApiClient(options: ApiClientOptions = {}) {
         }),
       audit: (query: PlatformAuditQuery = {}) =>
         request('GET', `/platform/audit?${toParams(query)}`, { schema: platformAuditListSchema }),
+      assistantUsage: (query: AssistantUsageQuery = {}) =>
+        request('GET', `/platform/assistant?${toParams(query)}`, { schema: assistantUsageSchema }),
+      /** JSONL of the matching conversations (training export); the browser saves the text. */
+      assistantExportUrl: (query: AssistantUsageQuery = {}) =>
+        `${baseUrl}/platform/assistant/export?${toParams(query)}`,
+    },
+    managerAssistant: {
+      status: () => request('GET', '/manager/assistant', { schema: assistantStatusSchema }),
+      chat: (body: AssistantChat) =>
+        request('POST', '/manager/assistant/chat', { body, schema: assistantReplySchema }),
+      conversations: () =>
+        request('GET', '/manager/assistant/conversations', {
+          schema: assistantConversationListSchema,
+        }),
+      conversation: (id: string) =>
+        request('GET', `/manager/assistant/conversations/${id}`, {
+          schema: assistantConversationSchema,
+        }),
     },
     merchant: {
       get: () => request('GET', '/manager/merchant', { schema: merchantProfileSchema }),
@@ -763,6 +788,17 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('POST', '/pos/shifts/current/cash-movements', { body, schema: posShiftSchema }),
       close: (body: CloseShift) =>
         request('POST', '/pos/shifts/current/close', { body, schema: shiftSchema }),
+    },
+    assistant: {
+      status: () => request('GET', '/pos/assistant', { schema: assistantStatusSchema }),
+      chat: (body: AssistantChat) =>
+        request('POST', '/pos/assistant/chat', { body, schema: assistantReplySchema }),
+      conversations: () =>
+        request('GET', '/pos/assistant/conversations', { schema: assistantConversationListSchema }),
+      conversation: (id: string) =>
+        request('GET', `/pos/assistant/conversations/${id}`, {
+          schema: assistantConversationSchema,
+        }),
     },
     sales: {
       settings: () => request('GET', '/pos/sales/settings', { schema: salesSettingsSchema }),

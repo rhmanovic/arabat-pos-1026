@@ -271,5 +271,89 @@ describe('platform console', () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Audit log' })).toBeNull();
     expect(screen.getByRole('link', { name: 'Plans' })).toBeInTheDocument();
+    // Assistant usage is the system owner's alone (ADR-0105 amendment).
+    expect(screen.queryByRole('link', { name: 'Assistant usage' })).toBeNull();
+  });
+
+  it('shows the super admin every assistant question with its tokens and cost', async () => {
+    const record = {
+      id: 'r1',
+      merchantId: M,
+      merchantNameEn: 'Gulf Co',
+      merchantNameAr: null,
+      userName: 'Sultan',
+      userEmail: 'sultan@gulf.test',
+      branchNameEn: 'Main',
+      branchNameAr: null,
+      surface: 'pos',
+      conversationId: 'c1',
+      language: 'ar',
+      model: 'claude-opus-5-5',
+      question: 'كم سعر بيبسي علبة؟',
+      reply: 'بيبسي علبة: 0.150 د.ك، المتوفر 46.',
+      toolsUsed: ['search_products'],
+      rounds: 2,
+      inputTokens: 1040,
+      outputTokens: 137,
+      cacheWriteTokens: 0,
+      cacheReadTokens: 3402,
+      costMicroUsd: 7580,
+      durationMs: 6919,
+      outcome: 'answered',
+      stopReason: 'end_turn',
+      error: null,
+      createdAt: '2026-10-14T21:40:00.000Z',
+    };
+    const fetch = routesFor('platform.super_admin', {
+      'GET /platform/assistant': () => ({
+        status: 200,
+        body: {
+          requests: [record],
+          total: 1,
+          page: 1,
+          pageSize: 50,
+          totals: {
+            requests: 1,
+            inputTokens: 1040,
+            outputTokens: 137,
+            cacheWriteTokens: 0,
+            cacheReadTokens: 3402,
+            costMicroUsd: 7580,
+          },
+          byMerchant: [
+            {
+              merchantId: M,
+              merchantNameEn: 'Gulf Co',
+              merchantNameAr: null,
+              requests: 1,
+              users: 1,
+              inputTokens: 1040,
+              outputTokens: 137,
+              cacheWriteTokens: 0,
+              cacheReadTokens: 3402,
+              costMicroUsd: 7580,
+              lastAt: '2026-10-14T21:40:00.000Z',
+            },
+          ],
+        },
+      }),
+    });
+    renderApp({ routes, appInterface: 'platform', i18n, path: '/', fetch });
+    await userEvent.click(await screen.findByRole('link', { name: 'Assistant usage' }));
+    expect(await screen.findByRole('heading', { name: 'Assistant usage' })).toBeInTheDocument();
+    // The total card, the row of the questions table (one merchant: no by-merchant table).
+    expect(await screen.findAllByText('$0.0076')).toHaveLength(2);
+    expect(screen.getAllByText('1,040 / 137')).toHaveLength(2);
+    expect(fetch.calls.some((c) => c.path === '/platform/assistant')).toBe(true);
+    expect(screen.getByRole('link', { name: 'Export JSONL' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('/platform/assistant/export?'),
+    );
+    // A row opens the conversation.
+    await userEvent.click(screen.getByText('كم سعر بيبسي علبة؟'));
+    const dialog = await screen.findByRole('dialog', { name: 'Conversation' });
+    expect(within(dialog).getByText('بيبسي علبة: 0.150 د.ك، المتوفر 46.')).toBeInTheDocument();
+    expect(within(dialog).getByText('search_products')).toBeInTheDocument();
+    expect(within(dialog).getByText(/1,040 \/ 137 \/ 0 \/ 3,402/)).toBeInTheDocument();
   });
 });

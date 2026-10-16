@@ -10,6 +10,7 @@ import { eq, sql } from 'drizzle-orm';
 import { DatabaseService } from '../../database/database.service.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { Mailer } from '../../kernel/mail/mailer.js';
+import { renderEmail } from '../../kernel/mail/template.js';
 import { AuditService } from '../audit/audit.service.js';
 import {
   AccessRepository,
@@ -213,14 +214,18 @@ export class LoginService {
     try {
       await this.mailer.send({
         to: email,
-        subject: 'قفل تسجيل الدخول مؤقتاً | Sign-in temporarily locked',
-        text: [
-          `مرحباً ${fullName}،`,
-          `جرى إدخال كلمة مرور خاطئة عدة مرات لحسابك، فأُوقف تسجيل الدخول ${minutes} دقيقة. إن لم تكن أنت، غيّر كلمة المرور بعد انتهاء المهلة أو اطلب من مديرك فك القفل.`,
-          '',
-          `Hello ${fullName},`,
-          `Several wrong passwords were entered for your account, so sign-in is paused for ${minutes} minutes. If this was not you, change your password once the pause ends or ask your manager to clear the lock.`,
-        ].join('\n'),
+        ...renderEmail({
+          title: { ar: 'قفل تسجيل الدخول مؤقتاً', en: 'Sign-in temporarily locked' },
+          name: fullName,
+          intro: {
+            ar: `جرى إدخال كلمة مرور خاطئة عدة مرات لحسابك، فأُوقف تسجيل الدخول ${minutes} دقيقة.`,
+            en: `Several wrong passwords were entered for your account, so sign-in is paused for ${minutes} minutes.`,
+          },
+          note: {
+            ar: 'إن لم تكن أنت، غيّر كلمة المرور بعد انتهاء المهلة أو اطلب من مديرك فك القفل.',
+            en: 'If this was not you, change your password once the pause ends or ask your manager to clear the lock.',
+          },
+        }),
       });
     } catch (error) {
       this.logger.error(`Lock-out e-mail failed: ${(error as Error).message}`);

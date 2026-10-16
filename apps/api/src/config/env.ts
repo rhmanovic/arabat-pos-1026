@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 
 const DEV_MOCK_SECRET_DEFAULT = 'dev-only-mock-gateway-secret';
+/** Mailpit from docker compose; in production this default means "no e-mail delivery". */
+export const SMTP_URL_LOCAL_DEFAULT = 'smtp://localhost:1025';
 
 const booleanString = z
   .enum(['true', 'false', '1', '0'])
@@ -43,8 +45,15 @@ export const envSchema = z.object({
     .string()
     .refine((v) => Buffer.from(v, 'base64').length === 32, 'must be 32 bytes, base64 encoded'),
 
-  /** Outgoing e-mail. Local development uses Mailpit (no paid provider). */
-  SMTP_URL: z.string().default('smtp://localhost:1025'),
+  /**
+   * Outgoing e-mail (password reset, invitations, account set-up). `smtp` sends through
+   * `SMTP_URL` (Mailpit in local development); `resend` and `brevo` send through the
+   * provider's HTTP API with `MAIL_API_KEY`, which hosting platforms that block outbound
+   * SMTP need (Railway below the Pro plan, ADR-0106).
+   */
+  MAIL_PROVIDER: z.enum(['smtp', 'resend', 'brevo']).default('smtp'),
+  MAIL_API_KEY: z.string().trim().min(1).optional(),
+  SMTP_URL: z.string().default(SMTP_URL_LOCAL_DEFAULT),
   MAIL_FROM: z.string().default('Arabat POS <no-reply@arabat.local>'),
   /** Public URLs of the apps, used in e-mail links (password reset). */
   PUBLIC_MANAGER_URL: z.url().default('http://localhost:5173/manager'),
@@ -91,6 +100,12 @@ export const envSchema = z.object({
     .default(
       'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
     ),
+  /**
+   * POS assistant (ADR-0105). Without a key the assistant is off: no request leaves the
+   * server and nothing is billed. Set only with the owner's approval (paid usage).
+   */
+  ANTHROPIC_API_KEY: z.string().trim().min(1).optional(),
+  ASSISTANT_MODEL: z.string().trim().min(1).default('claude-opus-5-5'),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -133,6 +148,10 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
     );
   }
   const env = result.data;
+  if (env.MAIL_PROVIDER !== 'smtp' && !env.MAIL_API_KEY)
+    throw new InvalidEnvironmentError([
+      `MAIL_API_KEY: required when MAIL_PROVIDER is ${env.MAIL_PROVIDER}`,
+    ]);
   // Development secrets must never protect production data (audit finding, Prompt 18).
   if (env.NODE_ENV === 'production') {
     const issues: string[] = [];

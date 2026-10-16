@@ -24,6 +24,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet } from 'react-router';
+import { ManagerAssistant } from '../app/assistant.js';
 import { BranchContextProvider, useBranchContext } from '../app/context.js';
 import { NAV, type NavItem } from '../app/navigation.js';
 
@@ -131,10 +132,12 @@ function Shell() {
 
       <div className="flex min-w-0 flex-col">
         <TopBar onOpenMenu={() => setMenuOpen(true)} menuOpen={menuOpen} />
-        <main className="mx-auto w-full max-w-7xl flex-1 p-4 sm:p-6 lg:p-8">
+        <main className="mx-auto w-full max-w-7xl flex-1 p-4 pb-20 sm:p-6 sm:pb-20 lg:p-8 lg:pb-20">
           <Outlet />
         </main>
       </div>
+      {/* Above every page, on every page: the thread survives navigation. */}
+      <ManagerAssistant />
     </div>
   );
 }

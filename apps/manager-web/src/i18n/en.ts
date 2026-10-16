@@ -1746,6 +1746,27 @@ export const managerEn = {
     perMonth: '{{price}} / month',
     perYear: '{{price}} / year',
   },
+  assistant: {
+    open: 'Assistant',
+    title: 'Management assistant',
+    intro:
+      'Ask how to do something in the management app, or about a product, price, stock, the payment methods or today’s sales.',
+    disabled: 'The assistant is not enabled for this system yet.',
+    placeholder: 'Type your question…',
+    send: 'Send',
+    thinking: 'Thinking…',
+    note: 'The assistant only reads information; it cannot change anything. Conversations are kept to improve the service.',
+    clear: 'New conversation',
+    history: 'My conversations',
+    historyEmpty: 'No past conversations yet.',
+    back: 'Back',
+    suggestions: {
+      product: 'How do I add a new product?',
+      employee: 'How do I invite an employee and give them rights?',
+      payments: 'Which payment methods do we have enabled?',
+      today: 'How much did we sell today?',
+    },
+  },
   account: {
     title: 'My account',
     password: 'Password',

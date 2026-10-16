@@ -7,6 +7,7 @@ import { configureApp, createAdapter } from '../bootstrap.js';
 import { type Env, loadEnv } from '../config/env.js';
 import { type Actor, SessionResolver } from '../kernel/access/session-resolver.js';
 import { type MailMessage, Mailer } from '../kernel/mail/mailer.js';
+import { AssistantModel } from '../modules/assistant/assistant.model.js';
 
 export const TEST_ACTOR_HEADER = 'x-test-actor';
 /** Fixed key for tests only. */
@@ -49,6 +50,7 @@ export async function createTestApp(
     controllers?: Type[];
     sessionResolver?: SessionResolver;
     mailer?: Mailer;
+    assistantModel?: AssistantModel;
   } = {},
 ): Promise<NestFastifyApplication> {
   const env = options.env ?? testEnv();
@@ -59,6 +61,8 @@ export async function createTestApp(
   if (options.sessionResolver)
     builder.overrideProvider(SessionResolver).useValue(options.sessionResolver);
   builder.overrideProvider(Mailer).useValue(options.mailer ?? new InMemoryMailer());
+  if (options.assistantModel)
+    builder.overrideProvider(AssistantModel).useValue(options.assistantModel);
   const moduleRef = await builder.compile();
   const { adapter } = createAdapter(env);
   const app = moduleRef.createNestApplication<NestFastifyApplication>(adapter, {

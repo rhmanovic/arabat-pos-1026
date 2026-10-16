@@ -22,7 +22,9 @@ Single-instance limitation: the **mock** payment gateway keeps its charges in me
 Required in production: `NODE_ENV=production`, `DATABASE_URL` (app_runtime),
 `DATABASE_OWNER_URL` (only for migrations/CLI jobs, not the API process),
 `MFA_ENCRYPTION_KEY` (32 random bytes, base64 — **back it up**: without it no operator can
-sign in), `SMTP_URL`, `MAIL_FROM`, `PUBLIC_MANAGER_URL`, `PUBLIC_POS_URL`,
+sign in), e-mail delivery (`MAIL_PROVIDER=smtp` with a reachable `SMTP_URL`, or
+`MAIL_PROVIDER=resend|brevo` with `MAIL_API_KEY`; the API warns at start-up when it is left at
+the local Mailpit default), `MAIL_FROM`, `PUBLIC_MANAGER_URL`, `PUBLIC_POS_URL`,
 `PUBLIC_STORE_URL`, `TRUST_PROXY` (hop count or proxy CIDRs of the load balancer).
 The API refuses to start in production with the development `MFA_ENCRYPTION_KEY` or the
 default mock-gateway secret, and refuses `TRUST_PROXY=true`. Never put `NODE_ENV` in a
@@ -126,7 +128,8 @@ Variables of the web service:
 | `TRUST_PROXY` | `1` (Railway's edge proxy) |
 | `PUBLIC_MANAGER_URL` / `PUBLIC_POS_URL` / `PUBLIC_STORE_URL` | `https://${{RAILWAY_PUBLIC_DOMAIN}}/manager` / `/pos` / `/store` |
 | `PAYMENT_MOCK_ENABLED`, `PAYMENT_MOCK_SECRET` | `true` and a random string **on staging only**: test payments create sales and bank entries without money (FND-709); the API logs a warning when it is on in a production build, and it must never be set for an environment used by a real merchant (owner decision D7) |
-| `SMTP_URL`, `MAIL_FROM` | optional; without them password reset and invitation e-mails are not delivered |
+| `MAIL_PROVIDER`, `MAIL_API_KEY`, `MAIL_FROM` | Railway blocks outbound SMTP below the Pro plan, so staging sends through a provider's HTTP API: `MAIL_PROVIDER=resend` or `brevo` with the provider's `MAIL_API_KEY` and a `MAIL_FROM` sender the provider has verified (ADR-0106). Without them password reset, invitation and account set-up e-mails are not delivered (the API logs a warning at start-up) |
+| `ANTHROPIC_API_KEY`, `ASSISTANT_MODEL` | optional; the POS assistant (ADR-0105) is off without the key. Paid usage per question: set only with the owner's approval; `ASSISTANT_MODEL` defaults to `claude-opus-5-5`. Every model turn is logged as `assistant turn: N in / M out, cache write W / read R, stop …` (the cost record); `scripts/ops/assistant-trial.mjs --log <api log>` runs three demo questions and sums them at list price. Every question is also recorded in `assistant_requests` with its cost at the list prices in `apps/api/src/modules/assistant/assistant.pricing.ts` (update that table, and the trial script's, when Anthropic's price list changes); the super admin reads and exports them on `/platform/assistant` |
 
 Generate a public domain under the web service's Networking settings. Railway injects
 `PORT=8080`, so the domain's target port must be **8080** (not the Dockerfile's `EXPOSE
@@ -143,8 +146,46 @@ Current staging deployment (2026-10-12): Railway project `arabat-pos`, environme
 `production`, services `Postgres` + `web`, URL `https://web-production-bf628.up.railway.app`
 (deploys on push to the connected branch). Verified after deploy: `/api/v1/health/ready` ok
 (database ok), `/manager`, `/pos` and `/platform` load and report the server connected. No
-volume and no SMTP yet. First platform operator created by the bootstrap (credentials only
-in the deploy log of 2026-10-12 14:42 UTC).
+volume yet; e-mail goes through Resend (below). First platform operator created by the bootstrap (credentials only
+in the deploy log of 2026-10-12 14:42 UTC). Since 2026-10-14 21:47 UTC the web service follows
+branch `claude/tender-wright-t34f5x` (POS assistant, ADR-0105) at the owner's request to try
+the assistant as a cashier; switch it back to the default branch in the service's Source
+settings once the branch is merged. `ANTHROPIC_API_KEY` is set on the service only with the
+owner's say-so (paid usage). Since 2026-10-14 it holds a dedicated Anthropic workspace key
+named `arabat-pos-staging` (rotated in from the owner's personal key, which is to be revoked
+in the Anthropic Console); rotate it again by setting the variable on the web service, which
+redeploys.
+
+E-mail on staging (2026-10-15, ADR-0106): the web service sends through **Resend** with
+`MAIL_PROVIDER=resend`, `MAIL_FROM=Arabat POS <no-reply@send.arabatapp.com>` and
+`MAIL_API_KEY` holding the Resend key named `arabat-pos-staging` (sending access only,
+restricted to the domain, created 2026-10-15; it lives only in the Railway variable, never in
+the repository). The domain verified at Resend is the **subdomain `send.arabatapp.com`**, not
+the root (the root's MX, SPF and DKIM belong to Google Workspace): its records on Cloudflare
+are the DKIM TXT `resend._domainkey.send.arabatapp.com` and the CNAMEs
+`send.send.arabatapp.com` and `rsend.send.arabatapp.com` (return-path and tracking hosts).
+Sending from `no-reply@arabatapp.com` is refused by Resend with
+`403 The arabatapp.com domain is not verified`; verify the root domain at Resend first if a
+root-domain sender is ever wanted. Rotate the key by creating a new one in the Resend
+dashboard, setting `MAIL_API_KEY` on the web service and revoking the old one. Verified
+2026-10-15 04:23 UTC: a password reset requested on `/manager/forgot-password` logged
+`E-mail "إعادة تعيين كلمة المرور | Reset your password" sent` from `ResendMailer`; a failure
+logs `Password reset request failed: ResendMailer: provider answered <status> <body>`.
+
+**Railway gotcha (2026-10-15):** a deployment triggered by a variable change or by
+"Redeploy" is built from the service's stored source, which keeps reverting to the
+repository's default branch (`claude/busy-babbage-yty2bo`, which has no `MAIL_PROVIDER`
+code: it falls back to SMTP and logs `connect ECONNREFUSED ::1:1025`). After any variable
+change, set it with deploys skipped and run `connect-service-source` (repo
+`rhmanovic/arabat-pos-1026`, branch `claude/tender-wright-t34f5x`) so the build comes from
+the right branch; `list-deployments` shows each deployment's `meta.branch`. Pushes to the
+branch are also not picked up reliably; reconnect the source after pushing.
+`POST /auth/password/forgot` for an address that has no
+active merchant user answers 202 and logs nothing (anti-enumeration), so the end-to-end
+check needs an existing account. `.github/workflows/staging-smoke.yml` (manual
+`workflow_dispatch`, once the file is on the default branch) runs the readiness check or
+such a reset request from a GitHub runner; the first run on 2026-10-15 00:41 UTC got 202 for
+an address without a staging account, so no e-mail was sent yet.
 
 ### Cash custody cutover (ADR-0090, migration 0033)
 
@@ -225,6 +266,11 @@ user has no SUPERUSER and no BYPASSRLS: `app_owner` is exempt from RLS only as t
    Sending (adds SPF/DKIM/DMARC on `cf-bounce`), create an API token with *Email Sending: Edit*,
    and put `smtps://api_token:<token>@smtp.mx.cloudflare.net:465` into the `smtp-url` secret
    (`printf %s 'smtps://…' | gcloud secrets versions add smtp-url --data-file=-`), redeploy.
+7a. Assistant (paid Anthropic usage, owner approval): store the key once with
+   `printf %s 'sk-ant-…' | gcloud secrets create anthropic-api-key --replication-policy=user-managed --locations=me-central1 --data-file=-`
+   (later keys: `gcloud secrets versions add anthropic-api-key --data-file=-`), then redeploy;
+   `deploy.sh` passes it as `ANTHROPIC_API_KEY` only when the secret exists. Without it the chat
+   button stays hidden on `/pos` and `/manager`.
 8. Monitoring → Alerting: an e-mail channel; alert policies on the `arabat-ready` uptime
    check, on Cloud SQL backup failures and on failed `arabat-db-export` executions.
 9. Checks in §9.4, then the first restore drill (§9.5).

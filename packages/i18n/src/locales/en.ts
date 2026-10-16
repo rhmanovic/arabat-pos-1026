@@ -19,6 +19,7 @@ export const commonEn = {
     lockNow: 'Lock',
   },
   actions: {
+    close: 'Close',
     retry: 'Try again',
     signIn: 'Sign in',
     signOut: 'Sign out',

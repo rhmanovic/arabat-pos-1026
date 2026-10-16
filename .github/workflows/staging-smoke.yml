@@ -1,0 +1,54 @@
+name: Staging smoke
+
+# Manual checks against the staging deployment that cannot be run from a
+# sandbox without access to the public URL (docs/OPERATIONS.md §8).
+on:
+  workflow_dispatch:
+    inputs:
+      check:
+        description: Which check to run
+        type: choice
+        options: [health, forgot-password]
+        default: health
+      email:
+        description: E-mail address of an existing account (forgot-password only)
+        required: false
+        default: ''
+      interface:
+        description: Interface the reset link should open (forgot-password only)
+        type: choice
+        options: [manager, pos]
+        default: manager
+      base_url:
+        description: Staging base URL
+        default: https://web-production-bf628.up.railway.app
+
+jobs:
+  smoke:
+    name: ${{ inputs.check }} on staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Health (readiness)
+        if: inputs.check == 'health'
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+        run: |
+          code=$(curl -sS -o body.json -w '%{http_code}' "$BASE_URL/api/v1/health/ready")
+          echo "HTTP $code"; cat body.json; echo
+          test "$code" = 200
+
+      - name: Request a password reset (the e-mail goes to the address given)
+        if: inputs.check == 'forgot-password'
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          EMAIL: ${{ inputs.email }}
+          INTERFACE: ${{ inputs.interface }}
+        run: |
+          test -n "$EMAIL" || { echo "email input is required"; exit 1; }
+          body=$(jq -cn --arg e "$EMAIL" --arg i "$INTERFACE" '{email: $e, interface: $i}')
+          code=$(curl -sS -o body.json -w '%{http_code}' \
+            -X POST "$BASE_URL/api/v1/auth/password/forgot" \
+            -H 'content-type: application/json' --data "$body")
+          echo "HTTP $code"; cat body.json; echo
+          test "$code" = 202

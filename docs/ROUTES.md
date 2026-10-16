@@ -80,6 +80,7 @@ No session; every call goes to the public store API. Cart kept per store in the 
 | `/platform/merchants/:id` | Profile, owner, onboarding, usage vs limits, branches, subscription (change with readiness check), history, platform actions; suspend / reactivate / close | any operator (actions per role) | M8 ✓ |
 | `/platform/plans` | Plans with limits, features, informational price; create / edit | any operator (edit: super admin, billing) | M8 ✓ |
 | `/platform/audit` | Platform audit log | super admin, support | M8 ✓ |
+| `/platform/assistant` | Assistant usage: every question with its answer, lookups, tokens and estimated cost, totals per merchant, filters (app, days, merchant, text), JSONL export | super admin only | ✓ |
 | `/platform/operators` | Operator accounts | — | CLI only (AUTH.md §8) |
 
 ---
@@ -201,6 +202,39 @@ Manager `/manager/sales` (list, filters incl. unusual sales, flags, totals, sell
 price-change bounds) and `/manager/sales/:id` (exceptions block: above limit, free-sale reason,
 supervisor override).
 
+### POS assistant API (ADR-0105)
+
+| Method & path | Permission |
+|---|---|
+| `GET /pos/assistant` (`{ enabled }`: false until `ANTHROPIC_API_KEY` is configured) | POS `pos.access` |
+| `POST /pos/assistant/chat` (`messages` ≤ 20 turns ending with the cashier's, `language`, `cart` as display text, `conversationId` from the browser → `{ reply, toolsUsed }`; 503 `ASSISTANT_DISABLED` when off; 60 per cashier per 10 min; every question is recorded in `assistant_requests` for the platform) | POS `pos.access`; the lookups inside run with the cashier's rights at the session branch (`catalog.read` for stock, `sales.create` for the Pay screen's payment methods and the shift's sales, `shifts.operate` for the shift) |
+
+| `GET /pos/assistant/conversations`, `GET /pos/assistant/conversations/:id` (the cashier's own past conversations on the register: first question, times, turns; one conversation as questions and answers; never tokens or cost) | POS `pos.access` |
+| `GET /manager/assistant` (`{ enabled }`) | manager `manager.access` |
+| `GET /manager/assistant/conversations`, `GET /manager/assistant/conversations/:id` (the same for the user's own management conversations) | manager `manager.access` |
+| `POST /manager/assistant/chat` (same body; `branchId` = the branch selected in the top bar or null for all → `{ reply, toolsUsed }`) | manager `manager.access`; lookups with the user's rights: `search_products` (`catalog.read`, stock with `inventory.read`), `payment_methods` (`payments.settings`), `stock_summary` (`inventory.read`), `sales_today` (`reports.sales`) |
+
+Screen: one shared launcher (`AssistantLauncher` in `web-core`) in both apps, mounted in the
+layout: a floating **Assistant** button at the bottom inline-end corner of every page opens a
+panel above the content (full screen on phones); Escape closes it and the active conversation
+is kept across pages. The register also opens it with F9 and sends the sale as display text
+(the sale screen publishes it through `AssistantCartProvider`); the management app sends the
+branch selected in the top bar. Each app contributes only its bindings and strings
+(`PosAssistant`, `ManagerAssistant`). Answers are rendered from a small allowed markup (paragraphs, "-" bullets,
+"1." steps, **bold**, `code`) by `AssistantMarkup` in `web-core`, as React elements, never as
+HTML; the guides tell the model to use nothing else. On phones the manager panel fills the
+screen (the launcher hides under it) and the input is not focused automatically, so the
+on-screen keyboard does not cover the answer; sending blurs the box. "My past conversations"
+in the chat footer lists the user's own conversations of that app (newest first, 50 at most)
+and reopens one with its id, so the next question continues it; a question recorded without
+an id (older browser) is listed on its own. The chat is laid out like a chat app (owner
+request): the user's conversations down the side with "New conversation" on top (phones: a
+"My conversations" switch), the active one in the middle, a growing composer below (Enter
+sends on a keyboard, breaks the line on a touch screen). Nothing is kept in the browser: when
+the chat opens on an untouched state it resumes the user's latest conversation from the server
+if its last turn is within 30 minutes, so a reload (the register's silent one included) comes
+back to the same conversation. The assistant only reads (BR-194).
+
 ### Returns API (Prompt 11)
 
 | Method & path | Permission |
@@ -247,6 +281,7 @@ only staff land on `/pos/kitchen`. Sales list and reports show the service type.
 | `GET /platform/overview`, `GET /platform/merchants?q=&status=&page=`, `GET /platform/merchants/:id`, `GET /platform/merchants/:id/plan-check?planId=`, `GET /platform/plans` | any operator |
 | `POST /platform/merchants`, `POST /platform/merchants/:id/status` (close: super admin only), `GET /platform/audit?merchantId=&action=` | super admin, support |
 | `PUT /platform/merchants/:id/subscription`, `POST /platform/plans`, `PUT /platform/plans/:id` | super admin, billing |
+| `GET /platform/assistant?merchantId=&surface=&from=&to=&q=&page=&pageSize=` (questions, totals, by merchant), `GET /platform/assistant/export?…` (JSONL, one line per question with the thread) | super admin only (ADR-0105 amendment) |
 | `GET /manager/subscription` | merchant `merchant.settings.read` (own merchant only) |
 
 ### Online store API (Prompt 16)

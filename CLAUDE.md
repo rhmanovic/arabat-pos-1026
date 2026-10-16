@@ -176,6 +176,12 @@ Before reporting work as done, run `pnpm verify`, `pnpm test:integration` and
   linux-x64 tarball there), Docker must be started with `dockerd &`, Docker Hub may answer 429
   (pull `mirror.gcr.io/library/postgres:18` and tag it `postgres:18`), and Playwright needs
   `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium`.
+- The sandbox exports `ANTHROPIC_BASE_URL` for Claude Code's own tunnel; the Anthropic SDK
+  reads it too, so start the API with `env -u ANTHROPIC_BASE_URL …` when testing the POS
+  assistant with a real key, or its requests never reach `api.anthropic.com`.
+- `pnpm db:migrate` and `pnpm db:seed` run from `apps/api/dist`: build the API first.
+- `pkill -f dist/main.js` kills the calling shell too (the pattern matches its own command
+  line); stop the API with `kill $(pgrep -f "^node --env-file")`.
 
 ## 10. Repository status
 

@@ -182,3 +182,143 @@ describe('manager app', () => {
     expect(flattenKeys(resources.ar).sort()).toEqual(flattenKeys(resources.en).sort());
   });
 });
+
+describe('management assistant (ADR-0105)', () => {
+  it('floats on every page, sends the question with the selected branch and keeps the thread across pages', async () => {
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'catalog.read']),
+      routes: {
+        'GET /manager/assistant': () => ({ status: 200, body: { enabled: true } }),
+        'POST /manager/assistant/chat': () => ({
+          status: 200,
+          body: { reply: 'Open Products and press New product.', toolsUsed: [] },
+        }),
+        'GET /manager/products': () => ({
+          status: 200,
+          body: { products: [], total: 0, page: 1, pageSize: 25 },
+        }),
+        'GET /manager/categories': () => ({ status: 200, body: { categories: [] } }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, fetch });
+    await screen.findByRole('heading', { name: 'Welcome, Test User' });
+    await userEvent.click(screen.getByRole('button', { name: 'Assistant' }));
+    const panel = await screen.findByRole('dialog', { name: 'Management assistant' });
+    await userEvent.click(
+      await within(panel).findByRole('button', { name: 'How do I add a new product?' }),
+    );
+    expect(await within(panel).findByTestId('assistant-assistant')).toHaveTextContent(
+      'Open Products and press New product.',
+    );
+    const call = fetch.calls.find(
+      (c) => c.method === 'POST' && c.path === '/manager/assistant/chat',
+    )!;
+    expect(call.body).toEqual({
+      messages: [{ role: 'user', content: 'How do I add a new product?' }],
+      language: 'en',
+      branchId: null,
+      conversationId: expect.any(String),
+    });
+    // The page behind stays usable: navigate to Products with the panel open; the thread stays.
+    const nav = screen.getByRole('navigation', { name: 'Manager navigation' });
+    await userEvent.click(within(nav).getByRole('link', { name: 'Products' }));
+    expect(await screen.findByRole('heading', { name: 'Products' })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('dialog', { name: 'Management assistant' })).getByTestId(
+        'assistant-user',
+      ),
+    ).toHaveTextContent('How do I add a new product?');
+    // Escape closes the panel; the button reopens it with the thread intact.
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Management assistant' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Assistant' }));
+    expect(
+      within(await screen.findByRole('dialog', { name: 'Management assistant' })).getByTestId(
+        'assistant-assistant',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('lists the user’s own conversations down the side and reopens one to continue it', async () => {
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access']),
+      routes: {
+        'GET /manager/assistant': () => ({ status: 200, body: { enabled: true } }),
+        'GET /manager/assistant/conversations': () => ({
+          status: 200,
+          body: {
+            conversations: [
+              {
+                id: '0190a000-0000-7000-8000-0000000000c1',
+                startedAt: '2026-10-15T03:05:00.000Z',
+                lastAt: '2026-10-15T03:06:00.000Z',
+                firstQuestion: 'How do I add a new product?',
+                turns: 2,
+              },
+            ],
+          },
+        }),
+        'GET /manager/assistant/conversations/0190a000-0000-7000-8000-0000000000c1': () => ({
+          status: 200,
+          body: {
+            id: '0190a000-0000-7000-8000-0000000000c1',
+            startedAt: '2026-10-15T03:05:00.000Z',
+            lastAt: '2026-10-15T03:06:00.000Z',
+            messages: [
+              { role: 'user', content: 'How do I add a new product?' },
+              { role: 'assistant', content: 'Open Products and press New product.' },
+            ],
+          },
+        }),
+        'POST /manager/assistant/chat': () => ({
+          status: 200,
+          body: { reply: 'Yes, from the same page.', toolsUsed: [] },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, fetch });
+    await screen.findByRole('heading', { name: 'Welcome, Test User' });
+    await userEvent.click(screen.getByRole('button', { name: 'Assistant' }));
+    const panel = await screen.findByRole('dialog', { name: 'Management assistant' });
+    // The conversations are down the side; the old one (an hour ago) is not resumed by itself.
+    const side = within(panel).getByRole('navigation', { name: 'My conversations' });
+    await userEvent.click(
+      await within(side).findByRole('button', { name: /How do I add a new product\?/ }),
+    );
+    // The old thread is back, and a follow-up continues the same conversation id.
+    expect(await within(panel).findByTestId('assistant-assistant')).toHaveTextContent(
+      'Open Products and press New product.',
+    );
+    await userEvent.type(
+      within(panel).getByLabelText('Type your question…'),
+      'and a variant?{Enter}',
+    );
+    expect(await within(panel).findAllByTestId('assistant-assistant')).toHaveLength(2);
+    const call = fetch.calls.find(
+      (c) => c.method === 'POST' && c.path === '/manager/assistant/chat',
+    )!;
+    expect(call.body).toMatchObject({
+      conversationId: '0190a000-0000-7000-8000-0000000000c1',
+      messages: [
+        { role: 'user', content: 'How do I add a new product?' },
+        { role: 'assistant', content: 'Open Products and press New product.' },
+        { role: 'user', content: 'and a variant?' },
+      ],
+    });
+  });
+
+  it('says when the assistant is not configured', async () => {
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access']),
+      routes: { 'GET /manager/assistant': () => ({ status: 200, body: { enabled: false } }) },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, fetch });
+    await screen.findByRole('heading', { name: 'Welcome, Test User' });
+    await userEvent.click(screen.getByRole('button', { name: 'Assistant' }));
+    const panel = await screen.findByRole('dialog', { name: 'Management assistant' });
+    expect(await within(panel).findByTestId('assistant-disabled')).toHaveTextContent(
+      'The assistant is not enabled for this system yet.',
+    );
+    expect(within(panel).getByLabelText('Type your question…')).toBeDisabled();
+  });
+});

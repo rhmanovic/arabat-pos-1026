@@ -203,7 +203,8 @@ merchant-wide: module switch, modifier groups, recipes), `restaurant.orders`,
 Platform roles (Prompt 17): all operators read the overview, merchants, plans and plan
 checks; `platform.support` and `platform.super_admin` create merchants, suspend and
 reactivate, and read the platform audit log; only `platform.super_admin` closes a
-merchant; `platform.billing` and `platform.super_admin` manage plans and subscriptions.
+merchant; `platform.billing` and `platform.super_admin` manage plans and subscriptions; only
+`platform.super_admin` reads the assistant usage record (conversations, tokens, cost; ADR-0105).
 Merchant owners and employees never hold platform roles (separate realm, ADR-0007), and
 the database refuses merchant-status and subscription changes without an operator context
 (ADR-0080). Sign-in of a user whose companies are all suspended answers

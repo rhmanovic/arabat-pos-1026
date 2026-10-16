@@ -2,6 +2,7 @@ import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import type pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { newId } from '../../kernel/ids.js';
+import { DEFAULT_TIMEZONE, todayIn } from '../../kernel/time/period.js';
 import { DbFixtures, PASSWORD, createCompany } from '../../testing/auth-fixtures.js';
 import { prepareIntegrationDatabase } from '../../testing/integration-db.js';
 import { InMemoryMailer, createTestApp, testEnv } from '../../testing/test-app.js';
@@ -243,7 +244,7 @@ describe('supervisor override on the cashier’s till (R3.1, BR-177)', () => {
         await s.c.client.request('GET', '/manager/sales?flag=zero_total', { cookies: s.c.cookies })
       ).json().total,
     ).toBe(0);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayIn(DEFAULT_TIMEZONE);
     const report = (
       await s.c.client.request('GET', `/manager/reports/sales?from=${today}&to=${today}`, {
         cookies: s.c.cookies,
@@ -473,7 +474,7 @@ describe('zero-total sales (R3.3, BR-179)', () => {
       ['zero_total', 'above_limit'],
       ['zero_total', 'above_limit', 'supervised'],
     ]);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayIn(DEFAULT_TIMEZONE);
     const report = (
       await s.c.client.request('GET', `/manager/reports/sales?from=${today}&to=${today}`, {
         cookies: s.c.cookies,

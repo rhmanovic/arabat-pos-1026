@@ -81,6 +81,184 @@ every merchant); `pnpm test:e2e` 35 passed. `bash scripts/verify-managed-postgre
 
 ### Results after remediation session 12 (2026-10-13, local run)
 
+### Results after e-mail delivery over HTTP (2026-10-15, cloud sandbox run)
+
+`pnpm verify` green (196 unit/web tests, including the new `mailer.test.ts`: `MAIL_FROM`
+parsing, the Resend and Brevo request shapes against a stubbed `fetch`, a provider refusal
+surfaces as an error, `createMailer` picks the provider and warns in a production build left
+at the local SMTP default; `env.test.ts` refuses an HTTP provider without `MAIL_API_KEY`);
+`pnpm test:integration` 227 passed; `pnpm test:e2e` 35 passed (1.3 min). Also fixed on the
+way: a `no-useless-assignment` lint error and Prettier drift in
+`docs/user-guide/booklets/build.mjs` (merged from the user-guide branch), and the generated
+booklet HTML files are now Prettier-ignored.
+
+### Results after the POS assistant (2026-10-14, cloud sandbox run)
+
+`pnpm typecheck`, `pnpm build` and `pnpm test` green (186 unit/web tests, including the two new
+POS cases in `app.test.tsx`: the Assistant button and F9 open the dialog, a suggested question
+is sent with the cart as display text and the answer shown, the thread survives closing the
+dialog and a typed follow-up carries the history, "New conversation" empties it; and the
+notice with a disabled input when `GET /pos/assistant` says the assistant is off);
+`pnpm test:integration` 222 passed, including the four new cases in
+`assistant.int.test.ts` (off without a provider: `{ enabled: false }` and 503
+`ASSISTANT_DISABLED` with no model call; the product lookup answers from the cashier's own
+company and branch only, with price and stock, the guide as the cacheable prefix and the
+branch, shift, rights and cart in the second system block; shift figures and the shift's sales
+as the cashier sees them, two lookups in one round, and the cut-off after four lookup rounds;
+a conversation not ending with the cashier is refused, a provider refusal gets the polite
+answer, a manager session is refused at the route). `pnpm lint` and `pnpm format:check` fail
+on three pre-existing files under `docs/user-guide/booklets/` (not touched here); every other
+file passes. `pnpm test:e2e` 35 passed (Mailpit must be up: the first run failed 7 cases on `ECONNREFUSED 127.0.0.1:8025` before it was started).
+
+**Live trial against the real model** (`scripts/ops/assistant-trial.mjs`: demo owner creates
+"Pepsi can" with stock and a cash method, the demo cashier opens a shift, sells two cans and asks
+three Arabic questions). Run on 2026-10-14 in the cloud sandbox: `ANTHROPIC_API_KEY` was not
+present in the session environment, so the API answered `{ enabled: false }` and 503
+`ASSISTANT_DISABLED` for all three questions with no provider call. With a deliberately
+invalid key the request did reach `api.anthropic.com` (401 `invalid x-api-key` in about
+140 ms), the API logged "The assistant API key was rejected by the provider." and answered 503
+`SERVICE_UNAVAILABLE`.
+
+Run with the real key (2026-10-14, 21:37 UTC = 00:37 Asia/Kuwait, cloud sandbox, API started
+with `env -u ANTHROPIC_BASE_URL ANTHROPIC_API_KEY=…`, model `claude-opus-5-5`, effort low,
+`max_tokens` 2048): the key was accepted (`GET /pos/assistant` → `{ enabled: true }`, no
+401 in the log). The script created "Pepsi can" (48 in stock), opened a shift on Register 1 and
+sold two cans (receipt `MAIN-000001`, cash). Per question (token counts from the API log,
+cost at list price: input $4, output $20, cache write $5, cache read $0.20 per million):
+
+| # | Question | HTTP / time | `toolsUsed` | Turns (in / out / cache write / cache read, stop) | Cost |
+|---|----------|-------------|-------------|------------------------------------------------------|------|
+| 1 | كيف أعلّق عملية البيع؟ | 200 / 7.4 s | `[]` | 428 / 205 / 1701 / 0, `end_turn` | $0.0143 |
+| 2 | كم سعر بيبسي علبة وكم المتوفر؟ | 200 / 15.6 s | `["search_products"]` | 435 / 54 / 0 / 1701, `tool_use`; 605 / 2048 / 0 / 1701, `max_tokens` | $0.0469 |
+| 3 | شنو بعت في هالوردية؟ | 200 / 5.2 s | `["recent_sales"]` | 426 / 28 / 0 / 1701, `tool_use`; 549 / 258 / 0 / 1701, `end_turn` | $0.0103 |
+
+Total of the three: 2 443 in, 2 593 out, 1 701 cache write, 6 804 cache read, about $0.0715.
+The 1 701-token guide was written to the cache on the first question and read from it on every
+later turn. Answers as returned:
+
+1. "للتعليق: اضغط زر **Hold** أو مفتاح **F8**. البيعة الحالية (بيبسي علبة بـ 0.150 د.ك) بتنحفظ،
+   والسلة بتفضى عشان تخدم الزبون اللي بعده.\n\nولما تبي ترجع لها: من الشريط اللي فوق اضغط
+   **Held sales**، واختار البيعة وكمّلها أو ألغها.\n\nانتبه إن البيعات المعلّقة تنتهي بعد المدة
+   اللي حاطتها الشركة، فلا تطوّل عليها." — correct against the guide, no lookup needed.
+2. **Degenerate.** After the `search_products` round the second turn produced no answer: the
+   text `<invoke name="search_products">\n</invoke>\n` repeated until `max_tokens` (2 048 output
+   tokens, 14 s), and that text was returned as `reply` with `toolsUsed: ["search_products"]`.
+   The same question re-sent three times right after (same API process, same cart) answered
+   correctly every time in 4.3–6.9 s with two turns (435 / 54 then 605 / 83–144 output tokens,
+   `end_turn`, about $0.008 each), e.g. "بيبسي علبة (PEPSI-330):\n- **السعر:** 0.150 د.ك\n-
+   **المتوفر بالفرع:** 46 علبة\n\nوعندك وحدة منه الحين بالفاتورة الحالية." (46 = 48 − 2 sold:
+   correct). One of the three re-runs leaked a literal `<thinking>Note: onHand 46 likely
+   excludes the one in cart (not yet sold).</thinking>` prefix into the visible reply. So the
+   failure is intermittent (1 of 4) and sits in the model's output, not in the lookup or the
+   API. Hardened the same day: a `max_tokens` stop with no `tool_use` block is a failed turn
+   (the cashier gets `fallbackReply`, the fragment is never shown, a warning is logged),
+   `textOf` strips `<thinking>…</thinking>`, and `max_tokens` is 1 024 (an answer is a few
+   hundred tokens; the runaway turn alone cost $0.04 of the $0.07 total). Covered by the fifth
+   case in `assistant.int.test.ts` (scripted runaway turn after a lookup → fallback with
+   `toolsUsed` kept, `max_tokens` 1024 on the request; a note-prefixed answer comes back
+   clean). Run: 5 passed; `pnpm typecheck` and `pnpm test` (186) green.
+
+Answer rendering (2026-10-15): the owner's screenshots showed `**bold**` and `-` markers as
+raw text. `packages/web-core/src/assistant-markup.test.tsx` (3 cases): parsing of paragraphs,
+bullets with an indented continuation, a bold-only line and numbered steps; rendering of
+bold as `<strong>`, inline code as `<code>`, `<ul>` then `<ol>`, with a literal `<b>` in the
+text staying text (no element created); stray asterisks, single line breaks as `<br>`, and a
+heading marker dropped. Run: 3 passed; the POS, manager and platform suites unchanged. Phone
+keyboard (owner report, 2026-10-15): `hasFinePointer()` is false in jsdom and true when
+`matchMedia('(pointer: fine)')` matches (fourth case in the same file); the chat focuses the
+box only then and blurs it on send otherwise. Own history (2026-10-15): tenth assistant
+integration case — a cashier's two conversations (two turns and one), a colleague's question
+at the same branch and the owner's management question; the cashier's list has only their
+two, newest first, with the fields `id, startedAt, lastAt, firstQuestion, turns` and nothing
+else; reopening returns the four turns in order; the colleague and the owner's management
+session get 404 on it; the owner's management list has only the owner's. Manager web case:
+"My past conversations" lists a conversation, reopening shows its answer, and a typed
+follow-up posts the restored thread with the same `conversationId`. The owner's phone showed
+an empty history because the five staging questions were recorded without an id (the browser
+held the older bundle): the same case now sends a three-turn thread without an id and expects
+it listed on its own under the request id, newest first, reopening with all four turns. Runs:
+10 integration passed; `pnpm test` 206 passed; migration 0049 applied locally. Reload
+(owner's phone, 2026-10-15): the register reloaded itself on a new deployment and the chat came
+back empty. `packages/web-core/src/assistant.test.tsx` (2 cases): the id is kept across
+turns, a new chat issues a new id and empties the thread, nothing lands in session storage,
+and `load` sets the given id and turns with the untouched flag cleared. The manager web case
+clicks a conversation in the side list (scoped to the "My conversations" navigation, since the
+suggestion chips share its text) and continues it; the POS case uses the first "New
+conversation" button (the phone row and the side list both render in jsdom). The resume rule
+is not auto-triggered in those cases (their `lastAt` is an hour old). `vitest.web-setup.ts`
+clears session and local storage after every case. Run: `pnpm test` 208 passed (37 files).
+Shared launcher (2026-10-15): the POS cases now open the assistant from the floating button
+and F9 of the layout's launcher (the strip entry is gone) and assert the same body as before,
+cart included; the first run hung in a render loop because the sale screen published a new
+cart object on every render and the provider's setter changed identity with the cart (two
+effects ping-ponged). Fixed with a stable setter that ignores an equal value. Run: `pnpm test`
+208 passed. Run: 4 passed; `pnpm test` 205 passed (36 files, including the mail cases of ADR-0106).
+
+Owner's trial on staging the same night (cashier "سلطان عبدالرحمن", company "بقاله سلطان"):
+"كم وسيلة دفع عندنا" was answered from the guide's generic tender list (cash, card, transfer,
+split) and "كم طريقة دفع مفعلة لي" with "I cannot see that, open the management app →
+payment settings (you need payments.settings)", although the Pay screen in front of the
+cashier showed five methods. Fixed: a fourth lookup `payment_methods` returns exactly the list
+the POS fetches for the Pay screen (name, kind, reference needed), and the guide now says what
+the cashier sees on their own screen is theirs to ask about while management screens,
+settings, reports, other branches and permission keys are never described. Sixth integration
+case: the tool result equals `GET /pos/payment-methods` of the same cashier (kinds mapped,
+reference `required` for every non-cash method), `toolsUsed` reports it, and the guide carries
+both rules. Run: 6 passed (Docker had stopped between sessions: `dockerd` + `pnpm db:up`
+first); API lint and `tsc --noEmit` clean.
+
+**Management assistant** (ADR-0105 amendment, owner request the same night). Two more
+integration cases in `assistant.int.test.ts`: the owner's chat at `/manager/assistant/chat`
+gets `MANAGER_GUIDE` as the cached prefix, "Owner" and the selected branch in the context, the
+four manager tools, and lookups that match the app's pages (product search with the branch's
+on-hand `12.000`, the Payment methods list in page order with status and register flag, today's
+sales 0 / 0 open shifts, stock summary 1 tracked item worth 12.000 KWD at cost; another company's
+product is not seen); a branch manager without the Payment methods page gets an `is_error`
+tool result naming the page, a POS session gets 401 at the manager route, and another
+company's `branchId` is 404 before any model call. Web: two cases in the manager
+`app.test.tsx` (floating button on the dashboard, a suggested question posted with
+`branchId: null`, the answer shown, navigation to Products with the panel open keeps the
+thread, Escape closes and the button reopens with the thread; the "not configured" notice
+with the input disabled). Runs: 8 integration passed; `pnpm test` 188 passed (33 files);
+`pnpm typecheck` green; lint green except the three pre-existing booklet files.
+
+**Platform record of every question** (ADR-0105 amendment, owner decision the same night: the
+system owner alone sees conversations, tokens and cost). Ninth integration case: a cashier's
+answered question (two turns), a refused follow-up in the same `conversationId` and a provider
+failure (nothing scripted → 500) each leave a row; a merchant-context `select` on
+`assistant_requests` returns 0 rows (no SELECT policy) and the manager session gets 401 on the
+platform route; a super admin created in the test (operator + TOTP sign-in) lists the three
+newest-first with outcomes `failed / refused / answered`, the answered row carrying the
+question, reply, `search_products`, 2 rounds, 20 / 10 tokens and `costMicroUsd` 280 (20 × $4
++ 10 × $20 per million), the failed row `error: 'ERROR'` and 0 rounds; totals 3 / 30 / 15 /
+420 and one merchant with one user; `surface=manager` filters to none, `q=joke` to one; the
+JSONL export returns `application/x-ndjson` with one line whose `messages` carry the thread,
+the question and the fallback answer. Web (platform `platform.test.tsx`): the billing
+operator's navigation has no "Assistant usage"; the super admin opens the page, sees the
+cost card and the row (`$0.0076`, `1,040 / 137`), the export link to `/platform/assistant/export`,
+and a row opens the conversation dialog with the reply, the lookup and the four token counts.
+POS and manager web cases now assert the `conversationId` in the chat body (same id across
+turns of one thread). Runs: 9 integration passed; `pnpm test` 189 passed (33 files);
+`pnpm typecheck` green; lint green except the three pre-existing booklet files. Migration
+0048 applied locally with `pnpm db:migrate`.
+3. "بهالوردية بعت **فاتورة وحدة بس** لين الحين:\n\n- **MAIN-000001**، الساعة 00:37، فيها حبتين
+   (2)، المجموع **0.300 د.ك**، انْدفعت **كاش**، عميل عابر، وما عليها أي مرتجع.\n\nالبيبسي اللي
+   بالسلة الحين (0.150 د.ك) ما ينحسب بالمبيعات لين تدفعه بـ **Pay (F12)**.\n\nتبي تفتح الفاتورة
+   أو تطبعها مرة ثانية؟ اضغط **المبيعات الأخيرة** بالشريط اللي فوق." — matches the sale
+   (receipt, time in the merchant's zone, 2 items, 0.300 KWD cash, walk-in, no refund).
+
+Spend of the whole session (three questions plus three re-runs of question 2): about $0.10.
+
+Second sandbox run the same day: the four assistant integration cases pass; the full
+`pnpm test:integration` run gave 218 passed / 4 failed, all four in report assertions
+(`sales-overrides`, `refunds-controls`, `transfers-controls`) that compute "today" as the UTC
+date while the reports are cut in the merchant's time zone (BR-184): the run started at
+00:20 Asia/Kuwait, so the day's sales were already on the next business day. Fixed the same
+session: the three files now take `todayIn(DEFAULT_TIMEZONE)` from `kernel/time/period.ts`;
+re-run at 00:31 Asia/Kuwait, 10 passed (the full suite's other 218 were unchanged).
+
+
+
 `pnpm verify` green (184 unit/web tests, including the new manager `account.test.tsx` (devices
 listed with "this device", one signed out by id, the password form disabled until the current
 password and a matching new one are typed, the request body; the dormant-roles dialog on branch

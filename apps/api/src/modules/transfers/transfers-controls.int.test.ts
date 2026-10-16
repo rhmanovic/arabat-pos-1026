@@ -1,6 +1,7 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import type pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { DEFAULT_TIMEZONE, todayIn } from '../../kernel/time/period.js';
 import { DbFixtures, createCompany } from '../../testing/auth-fixtures.js';
 import { prepareIntegrationDatabase } from '../../testing/integration-db.js';
 import { InMemoryMailer, createTestApp, testEnv } from '../../testing/test-app.js';
@@ -227,7 +228,7 @@ describe('transfer losses (BR-172)', () => {
     expect(approved.losses[1]).toMatchObject({ status: 'posted', decidedBy: expect.any(String) });
     expect((await s.call('GET', '/manager/transfers/in-transit')).json().transfers).toHaveLength(0);
     // The purchasing report shows what was written off; the inventory report lists the loss.
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayIn(DEFAULT_TIMEZONE);
     const purchasing = (
       await s.call('GET', `/manager/reports/purchasing?from=${today}&to=${today}`)
     ).json();
@@ -335,7 +336,7 @@ describe('in-transit stock and recall (BR-173)', () => {
       inTransitValue: { amount: '9.000' },
       lines: [{ inTransitQuantity: '6.000', recalledQuantity: null }],
     });
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayIn(DEFAULT_TIMEZONE);
     const report = (
       await s.call('GET', `/manager/reports/inventory?from=${today}&to=${today}`)
     ).json();

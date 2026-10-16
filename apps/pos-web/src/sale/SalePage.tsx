@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { ShiftMoreMenu, ShiftStrip, type StripAction } from '../pages/ShiftPages.js';
 import { useRestaurantEnabled } from '../restaurant/RestaurantPages.js';
 import { type CartLine, formatQty, priceLines, requiredRights, useCart } from './cart.js';
+import { describeCart, useAssistantCart } from './assistant.js';
 import { CustomerBar } from './customer.js';
 import {
   HeldSalesDialog,
@@ -168,7 +169,8 @@ export function SalePage() {
       ? [{ key: 'returns', label: t('returns.open'), to: '/returns' }]
       : []),
   ];
-  // Desktop shortcuts: F2 search, F4 customer, F8 hold, F12 pay, Esc clears the search box.
+  // Desktop shortcuts: F2 search, F4 customer, F8 hold, F12 pay, Esc clears the search box
+  // (F9, the assistant, is handled by its launcher in the layout).
   const ready = cart.state.lines.length > 0 && pricing?.ok === true;
   const busy = dialog !== null || editing !== null || receiptId !== null;
   const hasSearch = search !== '';
@@ -191,6 +193,35 @@ export function SalePage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [busy, ready, hasSearch]);
   const total = pricing?.ok ? pricing.cart.totalMinor : null;
+
+  // The assistant (in the layout) sees the sale as the cashier does (ADR-0105).
+  const { setCart: setAssistantCart } = useAssistantCart();
+  const assistantCart = useMemo(
+    () =>
+      describeCart(
+        pricing?.ok
+          ? cart.state.lines.map((l, index) => ({
+              name: items.has(l.variantId)
+                ? itemLabel(items.get(l.variantId)!, i18n.language)
+                : '…',
+              quantity: l.quantity,
+              unitPriceMinor:
+                l.priceOverride !== null
+                  ? Money.parse(l.priceOverride, 'KWD').minor
+                  : Money.fromJSON(
+                      items.get(l.variantId)!.price as { amount: string; currency: 'KWD' },
+                    ).minor,
+              netMinor: pricing.cart.lines[index]!.netMinor,
+            }))
+          : [],
+        total,
+        cart.state.customer?.fullName ?? null,
+      ),
+    [pricing, cart.state.lines, cart.state.customer, items, i18n.language, total],
+  );
+  useEffect(() => setAssistantCart(assistantCart), [assistantCart, setAssistantCart]);
+  useEffect(() => () => setAssistantCart(null), [setAssistantCart]);
+
   // Cleared carts and removed lines above the company threshold leave a trace (BR-182).
   const threshold = policy.data
     ? Money.fromJSON(policy.data.cartClearLogThreshold as { amount: string; currency: 'KWD' }).minor
