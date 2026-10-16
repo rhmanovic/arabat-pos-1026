@@ -374,10 +374,19 @@ In Chrome's print dialog (once per machine; Chrome remembers it):
 - Destination: `Printer_POS_80C`
 - Margins: None · Scale: 100 % (Default) · Headers and footers: off
 
-Silent printing (no dialog): make `Printer_POS_80C` the system default printer and start
-Chrome with `--kiosk-printing` (for example
-`open -a "Google Chrome" --args --kiosk-printing https://<host>/pos/`). Every print then goes
-straight to the default printer.
+Silent printing (no dialog, owner's requirement 2026-10-16): a web page cannot skip Chrome's
+print dialog, so the till opens the POS through `scripts/pos-kiosk/arabat-pos-till.command`. It
+makes `Printer_POS_80C` the default printer and starts Chrome in a separate profile
+(`~/Library/Application Support/ArabatPOS-Chrome`, sign in once) with `--kiosk-printing`
+and `--app=https://www.arabatapp.com/pos/`. The receipt then prints by itself when a sale
+completes, and the print button prints without a dialog. Install once in Terminal:
+
+```
+curl -fsSL https://raw.githubusercontent.com/rhmanovic/arabat-pos-1026/main/scripts/pos-kiosk/arabat-pos-till.command -o ~/Desktop/Arabat-POS.command && chmod +x ~/Desktop/Arabat-POS.command
+```
+
+then double-click `Arabat-POS` on the desktop. The POS opened in an ordinary Chrome window
+still shows the dialog.
 
 A receipt longer than 210 mm continues on a second page of the roll; if the driver feeds the
 blank rest of each page, pick its 72 × 3276 mm size or enable its "cut at end of document"
