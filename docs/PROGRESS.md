@@ -784,6 +784,15 @@ of `arabatapp.com` / `www` / `app` (to an address the owner does not control) re
 MX and SPF and a monitor-only DMARC added. Not done: Workspace and Resend sign-ups (owner),
 their verification / DKIM records, production deployment.
 
+### 2026-10-16 — Production e-mail through Resend; invitation names the everyday address
+Secret `mail-api-key` (the Resend key `arabat_pos_resend`, sending access) created; released
+`566f3e65180a` (revision `arabat-web-00005-2kv`) with `MAIL_PROVIDER=resend`,
+`MAIL_FROM=Arabat POS <no-reply@send.arabatapp.com>`. The invitation e-mail keeps its one-time
+link to set the password (`/pos/accept-invite` for cashiers) and now also gives the address the
+employee opens every day (`https://www.arabatapp.com/pos`). Verified: IAM integration (20).
+Not verified end to end: no e-mail has been sent from production yet (the sandbox cannot reach
+Resend or the site); the first real invitation is the check (log `Invitation e-mail failed` on error).
+
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.
