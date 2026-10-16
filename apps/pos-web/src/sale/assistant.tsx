@@ -34,7 +34,7 @@ export function useAssistantCart() {
   return ctx;
 }
 
-/** The cashier's assistant (ADR-0105): the shared launcher bound to the POS endpoints, F9. */
+/** The cashier's assistant (ADR-0107): the shared launcher bound to the POS endpoints, F9. */
 export function PosAssistant() {
   const { t, i18n } = useTranslation();
   const api = useApi();

@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS "assistant_requests" (
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "assistant_requests_merchant_time_idx" ON "assistant_requests" USING btree ("merchant_id","created_at");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "assistant_requests_time_idx" ON "assistant_requests" USING btree ("created_at");--> statement-breakpoint
--- Platform-owned usage record (ADR-0105 amendment): merchant code inserts its own rows and
+-- Platform-owned usage record (ADR-0107 amendment): merchant code inserts its own rows and
 -- never reads them (no SELECT policy for the runtime role); the platform reads through the
 -- SECURITY DEFINER functions below. Append-only. RLS is enabled, not forced (ADR-0105:
 -- Cloud SQL has no BYPASSRLS, so a forced table would lock out its owner app_owner).

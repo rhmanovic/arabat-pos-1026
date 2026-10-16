@@ -685,7 +685,7 @@ Checks from Cloud Build after the three certificates turned ACTIVE (12:39 UTC; t
 `https://arabatapp.com/…` and `https://app.arabatpos.com/…?x=1` → 301 to the same path (and query)
 on `https://www.arabatapp.com`, `http://` → 301 to `https://`, `run.app` 404.
 
-### 2026-10-14 — POS assistant (ADR-0105, BR-194)
+### 2026-10-14 — POS assistant (ADR-0107, BR-194)
 Implemented:
 - **API**: `assistant` module with `GET /pos/assistant` and `POST /pos/assistant/chat`
   (`pos.access`); `AssistantModel` boundary with the Anthropic implementation (official SDK,
@@ -702,7 +702,7 @@ Implemented:
 Verified: see `TESTING.md` (results after the POS assistant). Not done: the key is not set
 anywhere (nothing is billed until the owner provides one); no streaming, no usage metering.
 
-### 2026-10-14 — Management assistant (ADR-0105 amendment)
+### 2026-10-14 — Management assistant (ADR-0107 amendment)
 Implemented after the owner's staging trial:
 - **API**: `GET /manager/assistant` and `POST /manager/assistant/chat` (`manager.access`),
   `MANAGER_GUIDE` (the sidebar pages, no permission keys in answers) and four lookups with the
@@ -717,8 +717,8 @@ Implemented after the owner's staging trial:
   with the owner's approval; staging follows branch `claude/tender-wright-t34f5x`.
 Verified: 8 assistant integration cases, 188 unit/web tests, lint and typecheck green.
 
-### 2026-10-14 — Platform record of assistant usage (ADR-0105 amendment, owner decision)
-- **DB**: migration 0048 `assistant_requests` (INSERT-only for merchants, no reads; platform
+### 2026-10-14 — Platform record of assistant usage (ADR-0107 amendment, owner decision)
+- **DB**: migration 0048 `assistant_requests` (now 0049) (INSERT-only for merchants, no reads; platform
   `SECURITY DEFINER` readers). **API**: every question recorded from `AssistantService` with
   thread, answer, lookups, tokens, estimated cost (`assistant.pricing.ts`) and outcome, also
   on failure; `GET /platform/assistant` (list, totals, by merchant, filters) and
@@ -737,8 +737,8 @@ tests, 9 assistant integration cases. Phones (owner report): the input is focuse
 automatically only with a fine pointer, sending drops the keyboard, and the manager panel
 fills the screen below `sm`.
 
-### 2026-10-15 — The user's own conversation history (ADR-0105 amendment)
-- **DB**: migration 0049 (`own_select` policy by merchant and user; index). **API**:
+### 2026-10-15 — The user's own conversation history (ADR-0107 amendment)
+- **DB**: migration 0049 (now 0050; `own_select` policy by merchant and user; index). **API**:
   `AssistantHistoryService` reading under `withContext({ merchantId, userId })`;
   `GET /pos|manager/assistant/conversations[/:id]` (own, same app, questions and answers
   only). **Web**: "My past conversations" in the chat footer (list, reopen, continue with the
@@ -772,7 +772,7 @@ history, platform usage record, e-mail through Resend / Brevo) into the Google C
 Verified: `pnpm verify` (217 unit/web), 230 integration, 35 E2E (local).
 Not done (needs the owner): storing the key in Secret Manager and the production release.
 
-### 2026-10-14 — Domain and e-mail set-up (ADR-0105)
+### 2026-10-14 — Domain and e-mail set-up (ADR-0108)
 Owner decisions: production domain `arabatapp.com`; Google Workspace for people's mail;
 Resend (free plan) for system mail on `send.arabatapp.com`; staging paused; production hosting
 on Google Cloud preferred but not approved yet (OQ-011). Done in Cloudflare: dangling A records

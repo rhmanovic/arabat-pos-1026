@@ -21,7 +21,7 @@ export interface AssistantBindings {
 }
 
 /**
- * The assistant as every app shows it (ADR-0105): one floating button at the bottom inline-end
+ * The assistant as every app shows it (ADR-0107): one floating button at the bottom inline-end
  * corner of the layout, a chat panel above the content (full screen on phones), the user's
  * conversations down the side. Mounted in the layout so it is on every page and the active
  * conversation survives navigation. An app passes only its bindings and strings.

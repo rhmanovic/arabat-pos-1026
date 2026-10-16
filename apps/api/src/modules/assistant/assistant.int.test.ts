@@ -23,7 +23,7 @@ import { upsertOperator } from '../platform-admin/operators.js';
 import { MANAGER_GUIDE, POS_GUIDE } from './assistant.prompt.js';
 
 /**
- * POS assistant (ADR-0105): a read-only helper that looks things up as the cashier, at the
+ * POS assistant (ADR-0107): a read-only helper that looks things up as the cashier, at the
  * cashier's branch, and never runs without the provider being configured.
  */
 let app: NestFastifyApplication;
@@ -446,7 +446,7 @@ describe('manager assistant', () => {
   });
 });
 
-describe('platform record of every question (ADR-0105 amendment)', () => {
+describe('platform record of every question (ADR-0107 amendment)', () => {
   async function superAdmin(): Promise<Record<string, string>> {
     const { drizzle } = await import('drizzle-orm/node-postgres');
     const email = `op-${newId().slice(-8)}@platform.test`;
@@ -602,7 +602,7 @@ describe('platform record of every question (ADR-0105 amendment)', () => {
   });
 });
 
-describe('the user’s own past conversations (ADR-0105 amendment, 2026-10-15)', () => {
+describe('the user’s own past conversations (ADR-0107 amendment, 2026-10-15)', () => {
   it('lists and reopens only the signed-in user’s conversations of the same app', async () => {
     const { c } = await store('Milk', 'حليب');
     const cashier = await cashierWithShift(c);

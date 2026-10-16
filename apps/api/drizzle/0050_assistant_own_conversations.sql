@@ -1,4 +1,4 @@
--- A user may read their own assistant questions (ADR-0105 amendment, owner decision
+-- A user may read their own assistant questions (ADR-0107 amendment, owner decision
 -- 2026-10-15): the conversation history in the chat panel. The policy needs both the merchant
 -- and the user of the session (DatabaseService.withContext with userId); plain merchant
 -- transactions still read nothing. Token counts and cost stay with the platform: the API

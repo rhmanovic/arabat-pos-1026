@@ -735,7 +735,7 @@ describe('pos app', () => {
     expect(checkout.body).toMatchObject({ customerId: noura.id, expectedTotal: '0.250' });
   });
 
-  it('opens the assistant from the strip (F9), sends the question with the cart and shows the answer (ADR-0105)', async () => {
+  it('opens the assistant from the strip (F9), sends the question with the cart and shows the answer (ADR-0107)', async () => {
     const item = {
       variantId: '0190a000-0000-7000-8000-000000000a01',
       productId: '0190a000-0000-7000-8000-000000000b01',

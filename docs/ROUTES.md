@@ -202,7 +202,7 @@ Manager `/manager/sales` (list, filters incl. unusual sales, flags, totals, sell
 price-change bounds) and `/manager/sales/:id` (exceptions block: above limit, free-sale reason,
 supervisor override).
 
-### POS assistant API (ADR-0105)
+### POS assistant API (ADR-0107)
 
 | Method & path | Permission |
 |---|---|
@@ -281,7 +281,7 @@ only staff land on `/pos/kitchen`. Sales list and reports show the service type.
 | `GET /platform/overview`, `GET /platform/merchants?q=&status=&page=`, `GET /platform/merchants/:id`, `GET /platform/merchants/:id/plan-check?planId=`, `GET /platform/plans` | any operator |
 | `POST /platform/merchants`, `POST /platform/merchants/:id/status` (close: super admin only), `GET /platform/audit?merchantId=&action=` | super admin, support |
 | `PUT /platform/merchants/:id/subscription`, `POST /platform/plans`, `PUT /platform/plans/:id` | super admin, billing |
-| `GET /platform/assistant?merchantId=&surface=&from=&to=&q=&page=&pageSize=` (questions, totals, by merchant), `GET /platform/assistant/export?…` (JSONL, one line per question with the thread) | super admin only (ADR-0105 amendment) |
+| `GET /platform/assistant?merchantId=&surface=&from=&to=&q=&page=&pageSize=` (questions, totals, by merchant), `GET /platform/assistant/export?…` (JSONL, one line per question with the thread) | super admin only (ADR-0107 amendment) |
 | `GET /manager/subscription` | merchant `merchant.settings.read` (own merchant only) |
 
 ### Online store API (Prompt 16)

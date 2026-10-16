@@ -1324,7 +1324,7 @@ ADR; supersede it.
   behind the load balancer (checked after the first deploy), whether Backup and DR is offered in
   Doha, and Railway's data.
 
-## ADR-0105 — POS assistant: a read-only chat helper on the cashier screen
+## ADR-0107 — POS assistant: a read-only chat helper on the cashier screen
 - **Status:** Accepted (2026-10-14). Owner request: a chat button on the register so the
   cashier can ask an AI for help.
 - **Context:** New cashiers ask the same questions (how to hold a sale, give a discount, process
@@ -1374,7 +1374,7 @@ ADR; supersede it.
   same `AssistantModel`, same key.
 - **Amendment (2026-10-14, owner decision): the platform keeps every question.** "The server
   stores nothing" above is replaced: each question is appended to `assistant_requests`
-  (migration 0048) with the thread as sent, the answer, the lookups, the token counts, the
+  (migration 0049; 0048 on staging) with the thread as sent, the answer, the lookups, the token counts, the
   estimated cost at list price (`assistant.pricing.ts`, micro-USD, integer arithmetic) and the
   outcome, also when the provider fails. Purpose stated by the owner: monitoring, abuse
   detection, product development and training of the company's own models. Access: the
@@ -1385,7 +1385,7 @@ ADR; supersede it.
   are kept to improve the service. No retention limit for now (the owner keeps the data); the
   browser sends a `conversationId` so turns of one conversation can be grouped.
 - **Amendment (2026-10-15, owner decision): a user sees their own conversations.** Each user
-  may list and reopen their own past conversations of the app they are in (migration 0049:
+  may list and reopen their own past conversations of the app they are in (migration 0050, 0049 on staging:
   SELECT policy on merchant **and** user of the session; `GET …/assistant/conversations[/:id]`
   under the app's access permission). Nobody sees another user's conversations, and merchant
   users still never see tokens, cost or outcomes: the history returns questions and answers
@@ -1415,7 +1415,7 @@ ADR; supersede it.
   web service. Production needs a sender domain verified at the provider (SPF/DKIM) before
   real merchants receive e-mail. Fallback to a second provider is not implemented.
 
-## ADR-0105 — Domain and e-mail: arabatapp.com, Google Workspace for people, Resend for system mail
+## ADR-0108 — Domain and e-mail: arabatapp.com, Google Workspace for people, Resend for system mail
 - **Status:** Accepted (2026-10-14) by the owner. Hosting of production stays open (OQ-011);
   the owner prefers Google Cloud (Cloud Run + Cloud SQL, Doha or Dammam region), not yet approved
   or created. Staging is paused by the owner for now.
@@ -1439,3 +1439,47 @@ ADR; supersede it.
   move to Resend Pro (USD 20 / month) when volume approaches it. Workspace sign-up, Resend
   sign-up and the API key are the owner's accounts; the key goes only into the production
   secret store.
+
+## ADR-0109 — Market direction: global, fully online self-service SaaS, regional focus waves
+- **Status:** Accepted (2026-10-15). Business decision by the product owner.
+- **Context:** The product has reached a feature level the owner considers competitive. Selling
+  door to door to local shops does not scale. The owner wants the product positioned globally for
+  businesses that want a system that is 100% online, with sign-up and subscription done online,
+  marketing to one region at a time ("focus waves").
+- **Decision:**
+  - Target customer: any business that signs up, configures and pays **without talking to us**.
+    No field sales and no on-site installation are assumed by the product.
+  - Go-to-market is global, with marketing concentrated on one region per wave. The product must
+    therefore be region-neutral in its core, with region specifics (currency, tax, receipt legal
+    fields, payment methods, language, data residency) as per-merchant configuration, never code
+    forks.
+  - Kuwait stays a supported region; KWD stays the default only for merchants in Kuwait (BR-030
+    unchanged for them).
+  - Permanent requirements in `CLAUDE.md` §3 are unchanged (Arabic and English remain mandatory;
+    more languages are additive). No real billing, live payments or paid hosting is activated
+    without the owner's explicit approval (CLAUDE.md §3.13).
+- **Consequences (engineering, see ROADMAP M12):**
+  - Currency per merchant: today `'KWD'` is hard-coded in about ten services; `currencies` reference
+    data and `Money` already support any ISO 4217 exponent. Resolves OQ-004 as "one currency per
+    merchant" (multi-currency inside one merchant stays out of scope).
+  - Tax becomes configurable per merchant (OQ-002 is no longer optional for regions with VAT/GST).
+  - Self-service must be complete: verified e-mail at registration (OQ-025), guided onboarding,
+    trial, online plan purchase, invoices, dunning and lapse rules (OQ-022).
+  - Hosting region and data residency are chosen per wave (OQ-011); the first wave decides the
+    first region.
+  - Public website (pricing, sign-up, help centre) and the user guide become part of the product.
+- **Open (owner):** first focus region (OQ-027), subscription billing provider and price list in
+  which currencies (OQ-022), trial length and whether a free plan exists (OQ-028).
+
+## ADR-0110 — One integration branch; duplicate numbers resolved
+- **Date:** 2026-10-16 · **Status:** Accepted (owner: "fix it and do not lose branches or keys").
+- **Context:** Sessions started from different `claude/*` branches. The Google Cloud production
+  line was cut before the assistant work, so the assistant never reached production; the
+  migration number 0048 and ADR-0105 were each taken by several branches; BR-194 twice.
+- **Decision:** `main` holds everything (Google Cloud, assistant, HTTP e-mail, domain and
+  e-mail set-up, market direction) and is the GitHub default branch; rules in CLAUDE.md §8a.
+  Numbers: ADR-0105 stays Google Cloud; the assistant becomes **ADR-0107**, domain and e-mail
+  **ADR-0108**, market direction **ADR-0109** (their text was written as ADR-0105 before
+  2026-10-16); the market-direction rule becomes **BR-195**; the assistant migrations become
+  0049 / 0050 (idempotent; staging ran them as 0048 / 0049). No branch was deleted.
+

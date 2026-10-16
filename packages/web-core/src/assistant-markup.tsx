@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode } from 'react';
 
 /**
- * The small markup the assistant is allowed to write (ADR-0105): paragraphs, "-" bullets,
+ * The small markup the assistant is allowed to write (ADR-0107): paragraphs, "-" bullets,
  * "1." steps, **bold** and `code`. Rendered as React elements, never as HTML, so nothing the
  * model (or a lookup result it quotes) writes can reach the DOM as markup.
  */

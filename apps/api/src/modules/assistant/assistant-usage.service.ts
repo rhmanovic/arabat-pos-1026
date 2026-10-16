@@ -16,7 +16,7 @@ const num = (v: unknown) => Number(v ?? 0);
 const EXPORT_PAGE = 500;
 
 /**
- * The platform's view of every assistant question (ADR-0105 amendment): what was asked and
+ * The platform's view of every assistant question (ADR-0107 amendment): what was asked and
  * answered, what it cost, per company. Read only through the SECURITY DEFINER functions of
  * migration 0048, in an operator context; no merchant can reach these rows.
  */

@@ -16,7 +16,7 @@ import {
 import { AnthropicAssistantModel, AssistantModel } from './assistant.model.js';
 import { AssistantService } from './assistant.service.js';
 
-/** Assistant (ADR-0105): a read-only chat helper over the user's own lookups, POS and manager. */
+/** Assistant (ADR-0107): a read-only chat helper over the user's own lookups, POS and manager. */
 @Module({
   imports: [
     AuthModule,

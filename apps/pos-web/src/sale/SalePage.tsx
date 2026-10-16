@@ -194,7 +194,7 @@ export function SalePage() {
   }, [busy, ready, hasSearch]);
   const total = pricing?.ok ? pricing.cart.totalMinor : null;
 
-  // The assistant (in the layout) sees the sale as the cashier does (ADR-0105).
+  // The assistant (in the layout) sees the sale as the cashier does (ADR-0107).
   const { setCart: setAssistantCart } = useAssistantCart();
   const assistantCart = useMemo(
     () =>

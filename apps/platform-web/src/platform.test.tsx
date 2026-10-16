@@ -271,7 +271,7 @@ describe('platform console', () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Audit log' })).toBeNull();
     expect(screen.getByRole('link', { name: 'Plans' })).toBeInTheDocument();
-    // Assistant usage is the system owner's alone (ADR-0105 amendment).
+    // Assistant usage is the system owner's alone (ADR-0107 amendment).
     expect(screen.queryByRole('link', { name: 'Assistant usage' })).toBeNull();
   });
 

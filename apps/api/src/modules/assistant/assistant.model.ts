@@ -11,7 +11,7 @@ export type AssistantRequest = Omit<
 >;
 
 /**
- * Boundary to the language-model provider (ADR-0105). Tests replace it with a scripted
+ * Boundary to the language-model provider (ADR-0107). Tests replace it with a scripted
  * double; the real one is off until `ANTHROPIC_API_KEY` is configured (no cost by default).
  */
 export abstract class AssistantModel {

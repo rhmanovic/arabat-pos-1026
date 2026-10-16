@@ -107,7 +107,7 @@ e-mail provider; production secrets store; backup storage location; payment gate
 choice, merchant contracts and credentials, sandbox certification (OQ-021); subscription
 pricing and billing provider (OQ-022); legal receipt fields and tax (OQ-002, OQ-009).
 
-## 7a. Domain and e-mail (ADR-0105)
+## 7a. Domain and e-mail (ADR-0108)
 
 DNS of `arabatapp.com` is in Cloudflare. Records in place (2026-10-14):
 
@@ -150,7 +150,7 @@ Variables of the web service:
 | `PUBLIC_MANAGER_URL` / `PUBLIC_POS_URL` / `PUBLIC_STORE_URL` | `https://${{RAILWAY_PUBLIC_DOMAIN}}/manager` / `/pos` / `/store` |
 | `PAYMENT_MOCK_ENABLED`, `PAYMENT_MOCK_SECRET` | `true` and a random string **on staging only**: test payments create sales and bank entries without money (FND-709); the API logs a warning when it is on in a production build, and it must never be set for an environment used by a real merchant (owner decision D7) |
 | `MAIL_PROVIDER`, `MAIL_API_KEY`, `MAIL_FROM` | Railway blocks outbound SMTP below the Pro plan, so staging sends through a provider's HTTP API: `MAIL_PROVIDER=resend` or `brevo` with the provider's `MAIL_API_KEY` and a `MAIL_FROM` sender the provider has verified (ADR-0106). Without them password reset, invitation and account set-up e-mails are not delivered (the API logs a warning at start-up) |
-| `ANTHROPIC_API_KEY`, `ASSISTANT_MODEL` | optional; the POS assistant (ADR-0105) is off without the key. Paid usage per question: set only with the owner's approval; `ASSISTANT_MODEL` defaults to `claude-opus-5-5`. Every model turn is logged as `assistant turn: N in / M out, cache write W / read R, stop …` (the cost record); `scripts/ops/assistant-trial.mjs --log <api log>` runs three demo questions and sums them at list price. Every question is also recorded in `assistant_requests` with its cost at the list prices in `apps/api/src/modules/assistant/assistant.pricing.ts` (update that table, and the trial script's, when Anthropic's price list changes); the super admin reads and exports them on `/platform/assistant` |
+| `ANTHROPIC_API_KEY`, `ASSISTANT_MODEL` | optional; the POS assistant (ADR-0107) is off without the key. Paid usage per question: set only with the owner's approval; `ASSISTANT_MODEL` defaults to `claude-opus-5-5`. Every model turn is logged as `assistant turn: N in / M out, cache write W / read R, stop …` (the cost record); `scripts/ops/assistant-trial.mjs --log <api log>` runs three demo questions and sums them at list price. Every question is also recorded in `assistant_requests` with its cost at the list prices in `apps/api/src/modules/assistant/assistant.pricing.ts` (update that table, and the trial script's, when Anthropic's price list changes); the super admin reads and exports them on `/platform/assistant` |
 
 Generate a public domain under the web service's Networking settings. Railway injects
 `PORT=8080`, so the domain's target port must be **8080** (not the Dockerfile's `EXPOSE
@@ -169,7 +169,7 @@ Current staging deployment (2026-10-12): Railway project `arabat-pos`, environme
 (database ok), `/manager`, `/pos` and `/platform` load and report the server connected. No
 volume yet; e-mail goes through Resend (below). First platform operator created by the bootstrap (credentials only
 in the deploy log of 2026-10-12 14:42 UTC). Since 2026-10-14 21:47 UTC the web service follows
-branch `claude/tender-wright-t34f5x` (POS assistant, ADR-0105) at the owner's request to try
+branch `claude/tender-wright-t34f5x` (POS assistant, ADR-0107) at the owner's request to try
 the assistant as a cashier; switch it back to the default branch in the service's Source
 settings once the branch is merged. `ANTHROPIC_API_KEY` is set on the service only with the
 owner's say-so (paid usage). Since 2026-10-14 it holds a dedicated Anthropic workspace key

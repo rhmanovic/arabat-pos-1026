@@ -4,7 +4,7 @@ import { useBranchContext } from './context.js';
 
 const SUGGESTIONS = ['product', 'employee', 'payments', 'today'] as const;
 
-/** The management assistant (ADR-0105): the shared launcher bound to the manager endpoints. */
+/** The management assistant (ADR-0107): the shared launcher bound to the manager endpoints. */
 export function ManagerAssistant() {
   const { t, i18n } = useTranslation();
   const api = useApi();

@@ -14,7 +14,7 @@ type Row = Record<string, unknown>;
 const MAX_CONVERSATIONS = 50;
 
 /**
- * The signed-in user's own past conversations (ADR-0105 amendment, 2026-10-15): read under
+ * The signed-in user's own past conversations (ADR-0107 amendment, 2026-10-15): read under
  * the `own_select` policy of migration 0049 (merchant and user of the session), per surface.
  * Only questions and answers come back; the platform keeps the tokens and the cost. A question
  * recorded without a conversation id (older browsers) is listed on its own, under its own id.

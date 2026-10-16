@@ -3,7 +3,7 @@ import { bigint, check, index, integer, pgTable, text, uuid } from 'drizzle-orm/
 import { createdAt, id, merchantId } from '../../database/schema/columns.js';
 
 /**
- * One row per assistant question (ADR-0105 amendment, 2026-10-14): the conversation turn, the
+ * One row per assistant question (ADR-0107 amendment, 2026-10-14): the conversation turn, the
  * lookups it ran, the provider's token counts and the estimated cost. Platform-owned data:
  * merchant code inserts its own rows and can never read them; the platform's super admin
  * reads them through `platform_assistant_requests()` for monitoring, abuse detection and

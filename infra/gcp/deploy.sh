@@ -22,7 +22,7 @@ IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$AR_REPO/arabat:$TAG"
 RUN_SA="arabat-run@$PROJECT_ID.iam.gserviceaccount.com"
 CONNECTION="$PROJECT_ID:$REGION:$SQL_INSTANCE"
 SECRETS="DATABASE_ADMIN_URL=db-admin-url:latest,APP_OWNER_PASSWORD=app-owner-password:latest,APP_RUNTIME_PASSWORD=app-runtime-password:latest,MFA_ENCRYPTION_SECRET=mfa-encryption-secret:latest,SMTP_URL=smtp-url:latest"
-# The assistant (ADR-0105 amendment) is on only when the secret `anthropic-api-key` exists;
+# The assistant (ADR-0107 amendment) is on only when the secret `anthropic-api-key` exists;
 # without it no request leaves the server and the chat button stays hidden.
 if gc secrets describe anthropic-api-key >/dev/null 2>&1; then
   SECRETS="$SECRETS,ANTHROPIC_API_KEY=anthropic-api-key:latest"

@@ -31,7 +31,7 @@ import { AssistantService } from './assistant.service.js';
 type ChatBody = z.output<typeof assistantChatSchema>;
 const uuid = new ParseUUIDPipe();
 
-/** The chat helper on the cashier screen (ADR-0105): read-only, bound to the session branch. */
+/** The chat helper on the cashier screen (ADR-0107): read-only, bound to the session branch. */
 @Controller('pos/assistant')
 export class PosAssistantController {
   constructor(
@@ -114,7 +114,7 @@ export class ManagerAssistantController {
 }
 
 /**
- * The platform's record of every question (ADR-0105 amendment): the system owner alone
+ * The platform's record of every question (ADR-0107 amendment): the system owner alone
  * reads conversations, tokens and cost, for monitoring, abuse detection and training.
  */
 @Controller('platform/assistant')

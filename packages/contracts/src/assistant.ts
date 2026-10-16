@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { moneyAmountSchema } from './catalog.js';
 
 /**
- * Assistant (ADR-0105): a read-only chat helper on the cashier's screen and in the
+ * Assistant (ADR-0107): a read-only chat helper on the cashier's screen and in the
  * management app. The browser keeps the conversation and sends it whole on every turn; the
  * server stores nothing.
  */
@@ -63,7 +63,7 @@ export const assistantStatusSchema = z.object({
 export type AssistantStatus = z.infer<typeof assistantStatusSchema>;
 
 // ---------------------------------------------------------------- platform: usage records
-/** What the platform's super admin sees of every assistant question (ADR-0105 amendment). */
+/** What the platform's super admin sees of every assistant question (ADR-0107 amendment). */
 export const assistantRequestRecordSchema = z.object({
   id: z.string(),
   merchantId: z.string(),

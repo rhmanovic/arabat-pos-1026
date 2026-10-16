@@ -37,7 +37,7 @@ const OUTCOME_TONE = {
 } as const;
 
 /**
- * The system owner's record of every assistant question (ADR-0105 amendment): conversations,
+ * The system owner's record of every assistant question (ADR-0107 amendment): conversations,
  * tokens and estimated cost per company, with a JSONL export for review and training.
  */
 export function AssistantUsagePage() {

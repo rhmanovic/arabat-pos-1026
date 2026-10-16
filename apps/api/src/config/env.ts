@@ -101,7 +101,7 @@ export const envSchema = z.object({
       'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
     ),
   /**
-   * POS assistant (ADR-0105). Without a key the assistant is off: no request leaves the
+   * POS assistant (ADR-0107). Without a key the assistant is off: no request leaves the
    * server and nothing is billed. Set only with the owner's approval (paid usage).
    */
   ANTHROPIC_API_KEY: z.string().trim().min(1).optional(),

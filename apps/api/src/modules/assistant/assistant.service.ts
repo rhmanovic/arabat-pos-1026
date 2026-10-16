@@ -74,7 +74,7 @@ interface RequestRecord {
 }
 
 /**
- * Chat helper on the cashier screen and in the management app (ADR-0105). Stateless: the
+ * Chat helper on the cashier screen and in the management app (ADR-0107). Stateless: the
  * browser sends the whole conversation; every lookup runs as the user (same rights, same
  * branch scope, same RLS) and reads exactly what the app's own screens show.
  */
@@ -109,7 +109,7 @@ export class AssistantService {
     if (surface === 'pos' && !branchId) throw AppError.forbidden();
     await this.limiter.consume(`assistant:user:${actor.userId}`, ASSISTANT_LIMIT);
 
-    // The platform's record of this question (ADR-0105 amendment): written whatever happens.
+    // The platform's record of this question (ADR-0107 amendment): written whatever happens.
     const record: RequestRecord = {
       startedAt: Date.now(),
       model: this.model.modelId,

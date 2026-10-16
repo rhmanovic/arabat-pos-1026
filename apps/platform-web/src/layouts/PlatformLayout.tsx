@@ -9,7 +9,7 @@ const NAV = [
   { key: 'merchants', to: '/merchants', end: false },
   { key: 'plans', to: '/plans', end: false },
   { key: 'audit', to: '/audit', end: false, roles: ['platform.super_admin', 'platform.support'] },
-  // The record of every assistant question: the system owner alone (ADR-0105 amendment).
+  // The record of every assistant question: the system owner alone (ADR-0107 amendment).
   { key: 'assistant', to: '/assistant', end: false, roles: ['platform.super_admin'] },
   // Operators are created with the CLI only (AUTH.md §8).
   { key: 'operators', hint: 'operatorsHint' },

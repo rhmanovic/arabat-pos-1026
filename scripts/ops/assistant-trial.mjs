@@ -1,4 +1,4 @@
-// Live trial of the POS assistant (ADR-0105) against a running API on the demo seed data.
+// Live trial of the POS assistant (ADR-0107) against a running API on the demo seed data.
 // Signs in the demo owner (creates "Pepsi can" with 48 in stock at the main branch and a
 // cash method if missing), then the demo cashier (shift on Register 1, one cash sale of two
 // cans) and sends three Arabic questions to POST /pos/assistant/chat. Prints every answer

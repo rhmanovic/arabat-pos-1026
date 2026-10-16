@@ -17,7 +17,7 @@ import { useErrorMessage } from './components.js';
 export const RESUME_WITHIN_MS = 30 * 60_000;
 
 /**
- * The active conversation (ADR-0105 amendment): the turns on screen and the id the server
+ * The active conversation (ADR-0107 amendment): the turns on screen and the id the server
  * groups them under. Nothing is stored in the browser: the record lives on the server, and
  * the chat resumes the user's latest conversation from there when it opens.
  */

@@ -207,7 +207,7 @@ reference `required` for every non-cash method), `toolsUsed` reports it, and the
 both rules. Run: 6 passed (Docker had stopped between sessions: `dockerd` + `pnpm db:up`
 first); API lint and `tsc --noEmit` clean.
 
-**Management assistant** (ADR-0105 amendment, owner request the same night). Two more
+**Management assistant** (ADR-0107 amendment, owner request the same night). Two more
 integration cases in `assistant.int.test.ts`: the owner's chat at `/manager/assistant/chat`
 gets `MANAGER_GUIDE` as the cached prefix, "Owner" and the selected branch in the context, the
 four manager tools, and lookups that match the app's pages (product search with the branch's
@@ -222,7 +222,7 @@ thread, Escape closes and the button reopens with the thread; the "not configure
 with the input disabled). Runs: 8 integration passed; `pnpm test` 188 passed (33 files);
 `pnpm typecheck` green; lint green except the three pre-existing booklet files.
 
-**Platform record of every question** (ADR-0105 amendment, owner decision the same night: the
+**Platform record of every question** (ADR-0107 amendment, owner decision the same night: the
 system owner alone sees conversations, tokens and cost). Ninth integration case: a cashier's
 answered question (two turns), a refused follow-up in the same `conversationId` and a provider
 failure (nothing scripted → 500) each leave a row; a merchant-context `select` on

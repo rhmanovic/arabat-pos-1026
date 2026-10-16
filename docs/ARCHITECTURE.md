@@ -241,7 +241,7 @@ modules/sales/
 | 17 | **reporting** | read models (e.g. `daily_sales_summary`) | Read-only queries & summaries | M, P (platform metrics) |
 | 18 | **restaurant** | `dining_areas`, `dining_tables`, `modifier_groups`, `modifiers`, `kitchen_tickets` | Tables, modifiers, kitchen tickets; uses orders/sales | POS, M |
 | 19 | **ecommerce** | `online_stores`, `channel_listings` | Online storefront channel; creates orders via orders module | M (+ public API later) |
-| 20 | **assistant** | — (stateless) | Read-only chat helper on the register over the catalog, inventory, sales and shift services; provider behind `AssistantModel` (ADR-0105) | POS |
+| 20 | **assistant** | — (stateless) | Read-only chat helper on the register over the catalog, inventory, sales and shift services; provider behind `AssistantModel` (ADR-0107) | POS |
 
 M = /manager, POS = /pos, P = /platform.
 

@@ -183,7 +183,7 @@ describe('manager app', () => {
   });
 });
 
-describe('management assistant (ADR-0105)', () => {
+describe('management assistant (ADR-0107)', () => {
   it('floats on every page, sends the question with the selected branch and keeps the thread across pages', async () => {
     const fetch = fakeApiFetch({
       session: makeSession('manager', ['manager.access', 'catalog.read']),

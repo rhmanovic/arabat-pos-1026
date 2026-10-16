@@ -3,7 +3,7 @@ import type { AssistantCart } from '@arabat/contracts';
 import { PERMISSIONS, type PermissionKey } from '@arabat/permissions';
 
 /**
- * What the assistant knows and may do (ADR-0105). Pure functions: the stable guide is one
+ * What the assistant knows and may do (ADR-0107). Pure functions: the stable guide is one
  * cacheable block; the per-request facts (branch, rights, cart) follow it.
  */
 

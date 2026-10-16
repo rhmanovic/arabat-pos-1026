@@ -145,6 +145,18 @@ Commands (see README.md): `pnpm setup:local`, `pnpm dev`, `pnpm verify`,
 Before reporting work as done, run `pnpm verify`, `pnpm test:integration` and
 `pnpm test:e2e`.
 
+## 8a. Branches (one line of work, nothing lost)
+
+- **`main` is the only integration branch** and the GitHub default. Every session starts from
+  the latest `origin/main` (`git fetch origin main`), never from an older `claude/*` branch.
+- Before taking a new **migration number, ADR number or BR number**, fetch `main` and use the
+  next free number there. Parallel branches once all took migration 0048 and ADR-0105 and the
+  production branch shipped without the assistant (2026-10-16, ADR-0110).
+- Work done on a `claude/*` branch is merged into `main` in the same session, after the tests
+  pass. Staging (Railway) and production (`infra/gcp/deploy.sh`) are released from `main`.
+- Never delete a remote branch or a secret (Railway variables, Secret Manager) without the
+  owner's explicit approval; keys are moved, never retyped into the repository.
+
 ## 9. Gotchas (learned the hard way)
 
 - **Never put `NODE_ENV` in `.env`**: Vite copies it into `process.env` and would

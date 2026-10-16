@@ -478,7 +478,7 @@ Remediation session 3 (2026-10-13, owner decision D2):
   re-issued) and see and end their sessions. A manager can end every session of an employee
   they manage and clear an employee's sign-in lock, without deactivating them. Ten wrong
   passwords pause sign-in for 15 minutes and the account holder is told by e-mail at once.
-- **BR-194** Assistant (ADR-0105). The chat helper on the register and in the management app
+- **BR-194** Assistant (ADR-0107). The chat helper on the register and in the management app
   only reads: it never adds, changes or pays a sale, moves stock or cash, changes a setting,
   or sees another company. Its lookups run with the user's own rights and scope (the cashier's
   branch; the manager's selected branch or the branches they may see), reading exactly what
@@ -598,6 +598,10 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
 
 - **BR-030** Default currency is **KWD** with **3 decimal places** (1 KWD = 1000 fils).
 - **BR-031** No floating-point arithmetic for monetary calculations, anywhere.
+- **BR-195** Market direction (ADR-0109): the product is sold globally as fully online
+  self-service (sign-up, configuration and subscription without our involvement), marketed
+  to one region at a time. Each merchant has one currency, chosen at registration; KWD is the
+  default only for Kuwait.
 
 ## 5. Money — Default (engineering)
 
@@ -614,9 +618,9 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
 | Id     | Question                                                                 | Needed for          |
 |--------|--------------------------------------------------------------------------|---------------------|
 | OQ-001 | ~~Languages~~ Arabic + English confirmed (BR-016). Still open: which is the **default** for new merchants? (engineering default: Arabic) | M0 UI shells |
-| OQ-002 | Tax: Kuwait currently has no VAT. Should tax be configurable from day 1 (for future VAT / GCC tenants)? | Sales slice |
+| OQ-002 | ~~Tax configurable?~~ **Resolved (ADR-0109):** yes, per merchant (M12). Still open: per-region rules (inclusive vs. exclusive defaults, legal receipt fields). | M12 |
 | OQ-003 | Cash rounding: should cash totals be rounded (e.g. to 0.005 KWD)?        | Sales/payments      |
-| OQ-004 | Will tenants operate in currencies other than KWD (multi-currency per tenant or per branch)? | Catalog/sales |
+| OQ-004 | ~~Currencies other than KWD~~ **Resolved (ADR-0109):** one currency per merchant, chosen at registration; multi-currency within a merchant out of scope. | — |
 | OQ-005 | Does the POS need to work offline (network outage) and sync later?      | POS architecture    |
 | OQ-006 | Employee POS login: email + password (implemented default) — add quick PIN switching on shared terminals? | POS |
 | OQ-007 | Is the BR-033 rounding rule (half-up per line) acceptable?              | Sales slice         |
@@ -639,3 +643,5 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
 | OQ-021 | Online store: which gateway(s) first and the merchant contracts/credentials; delivery zones and fees per area; shopper accounts, coupons, scheduled orders; cash on delivery; automatic gateway refunds? Not implemented. | Online store |
 | OQ-018 | Supplier invoices, payments and balances (accounts payable) and returns to suppliers: needed, and with which payment terms? Not implemented yet. | Purchasing |
 | OQ-013 | Card payments: manual entry of card amount only, or integrated card terminals (e.g. KNET)? | M4 / later |
+| OQ-027 | First focus region for marketing (e.g. GCC, wider MENA, another market)? Decides first currency/tax/receipt rules and hosting region. | M12 |
+| OQ-028 | Trial length, free plan or not, and price list per region/currency? | M12 |
