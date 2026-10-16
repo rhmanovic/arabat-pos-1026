@@ -10,12 +10,12 @@ import { Alert, Badge, Button, Dialog, Field, Input, Select, Spinner, Textarea }
 import { localizedName, useApi, useAuth, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { shiftKey } from '../pages/ShiftPages.js';
 import { type CartLine, priceLines } from './cart.js';
 import { ReceiptDialog } from './dialogs.js';
+import { ReceiptPrint } from './ReceiptPrint.js';
 import { availabilityKey, catalogKey, itemLabel, useMoneyFormat } from './SalePage.js';
 
 const QTY = /^\d{1,11}(\.\d{1,3})?$/;
@@ -784,12 +784,11 @@ function RefundReceiptDialog({
             </Alert>
           ) : null}
           <RefundReceiptView receipt={receipt.data} />
-          {createPortal(
-            <div className="hidden print:block" data-print-receipt>
+          {!pending ? (
+            <ReceiptPrint>
               <RefundReceiptView receipt={receipt.data} />
-            </div>,
-            document.body,
-          )}
+            </ReceiptPrint>
+          ) : null}
         </>
       ) : (
         <Spinner />
@@ -805,12 +804,14 @@ function RefundReceiptView({ receipt }: { receipt: RefundReceipt }) {
   return (
     <article className="mx-auto max-w-xs text-sm tabular-nums" data-testid="refund-receipt">
       <header className="mb-2 text-center">
-        <p className="text-base font-bold">{localizedName(receipt.merchant, i18n.language)}</p>
-        <p>{localizedName(receipt.branch, i18n.language)}</p>
+        <p className="text-base font-bold" dir="auto">
+          {localizedName(receipt.merchant, i18n.language)}
+        </p>
+        <p dir="auto">{localizedName(receipt.branch, i18n.language)}</p>
         <p className="mt-1 font-semibold">{t(`returns.kind_${r.kind}`)}</p>
       </header>
       <dl className="mb-2 border-y border-dashed border-fg-muted py-1">
-        <div className="flex justify-between">
+        <div className="flex justify-between text-base font-bold">
           <dt>{t('returns.receiptTitle')}</dt>
           <dd dir="ltr" data-testid="refund-number">
             {r.refundNumber}
@@ -822,7 +823,7 @@ function RefundReceiptView({ receipt }: { receipt: RefundReceipt }) {
         </div>
         <div className="flex justify-between">
           <dt>{t('sale.cashier')}</dt>
-          <dd>{receipt.cashierName}</dd>
+          <dd dir="auto">{receipt.cashierName}</dd>
         </div>
         <div className="flex justify-between">
           <dt>{t('returns.reason')}</dt>
@@ -832,7 +833,7 @@ function RefundReceiptView({ receipt }: { receipt: RefundReceipt }) {
       <ul className="mb-2">
         {r.lines.map((l) => (
           <li key={l.position} className="flex justify-between py-0.5">
-            <span>
+            <span dir="auto">
               {localizedName(l, i18n.language)} ×{' '}
               <span dir="ltr">{l.quantity.replace(/\.?0+$/, '')}</span>
             </span>
@@ -855,7 +856,9 @@ function RefundReceiptView({ receipt }: { receipt: RefundReceipt }) {
         ))}
       </dl>
       {receipt.branch.receiptFooter ? (
-        <p className="mt-2 text-center whitespace-pre-wrap">{receipt.branch.receiptFooter}</p>
+        <p className="mt-2 text-center whitespace-pre-wrap" dir="auto">
+          {receipt.branch.receiptFooter}
+        </p>
       ) : null}
     </article>
   );

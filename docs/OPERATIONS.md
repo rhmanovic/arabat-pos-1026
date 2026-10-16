@@ -362,3 +362,23 @@ of the development database restored with `--roles-only` + `pg_restore --role=ap
 row counts equal, `app_runtime` sees 0 branches without a merchant and `app_owner` all 3.
 The upgrade of a pre-0048 database (BYPASSRLS owner, forced RLS) was rehearsed with a
 superuser admin: 0048 applied, BYPASSRLS removed, no table forced.
+## 10. Receipt printer at the till (browser printing)
+
+The POS prints receipts with the browser's `window.print()`; nothing is sent from the server.
+Tested setup: ImagePlus 810 thermal printer (80 mm paper, 72 mm / 576 dots printable at
+203 dpi, ESC/POS, Zywell driver), macOS CUPS queue `Printer_POS_80C` over USB. Driver page
+sizes: 72 × 210 mm (default, matches the page CSS), 72 × 297 mm, 72 × 3276 mm.
+
+In Chrome's print dialog (once per machine; Chrome remembers it):
+- Destination: `Printer_POS_80C`
+- Margins: None · Scale: 100 % (Default) · Headers and footers: off
+
+Silent printing (no dialog): make `Printer_POS_80C` the system default printer and start
+Chrome with `--kiosk-printing` (for example
+`open -a "Google Chrome" --args --kiosk-printing https://<host>/pos/`). Every print then goes
+straight to the default printer.
+
+A receipt longer than 210 mm continues on a second page of the roll; if the driver feeds the
+blank rest of each page, pick its 72 × 3276 mm size or enable its "cut at end of document"
+option.
+

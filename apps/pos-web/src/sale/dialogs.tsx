@@ -11,10 +11,10 @@ import { ApiError } from '@arabat/api-client';
 import { localizedName, useApi, useAuth, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { shiftKey } from '../pages/ShiftPages.js';
 import { type CartLine, formatQty, useCart } from './cart.js';
+import { ReceiptPrint, formatReceiptDate } from './ReceiptPrint.js';
 import { availabilityKey, itemLabel, useMoneyFormat } from './SalePage.js';
 
 const QTY = /^\d{1,11}(\.\d{1,3})?$/;
@@ -946,12 +946,9 @@ export function ReceiptDialog({
       {receipt.data ? (
         <>
           <ReceiptView receipt={receipt.data} />
-          {createPortal(
-            <div className="hidden print:block" data-print-receipt>
-              <ReceiptView receipt={receipt.data} />
-            </div>,
-            document.body,
-          )}
+          <ReceiptPrint>
+            <ReceiptView receipt={receipt.data} />
+          </ReceiptPrint>
         </>
       ) : (
         <Spinner />
@@ -960,7 +957,7 @@ export function ReceiptDialog({
   );
 }
 
-/** Receipt layout (screen and 80 mm print). */
+/** Receipt layout (screen and 72 mm thermal print). */
 export function ReceiptView({ receipt }: { receipt: Receipt }) {
   const { t, i18n } = useTranslation();
   const fmt = useMoneyFormat();
@@ -968,21 +965,25 @@ export function ReceiptView({ receipt }: { receipt: Receipt }) {
   return (
     <article className="mx-auto max-w-xs text-sm tabular-nums" data-testid="receipt">
       <header className="mb-2 text-center">
-        <p className="text-base font-bold">{localizedName(receipt.merchant, i18n.language)}</p>
-        <p>{localizedName(receipt.branch, i18n.language)}</p>
+        <p className="text-base font-bold" dir="auto">
+          {localizedName(receipt.merchant, i18n.language)}
+        </p>
+        <p dir="auto">{localizedName(receipt.branch, i18n.language)}</p>
         {s.reprintCount > 0 ? (
           <p className="font-semibold" data-testid="receipt-copy">
             {t('sale.copyNumber', { count: s.reprintCount })}
           </p>
         ) : null}
-        {receipt.branch.address ? <p>{receipt.branch.address}</p> : null}
+        {receipt.branch.address ? <p dir="auto">{receipt.branch.address}</p> : null}
         {receipt.branch.phone ? <p dir="ltr">{receipt.branch.phone}</p> : null}
         {receipt.branch.receiptHeader ? (
-          <p className="mt-1 whitespace-pre-wrap">{receipt.branch.receiptHeader}</p>
+          <p className="mt-1 whitespace-pre-wrap" dir="auto">
+            {receipt.branch.receiptHeader}
+          </p>
         ) : null}
       </header>
       <dl className="mb-2 border-y border-dashed border-fg-muted py-1">
-        <div className="flex justify-between">
+        <div className="flex justify-between text-base font-bold">
           <dt>{t('sale.receiptNo')}</dt>
           <dd dir="ltr" data-testid="receipt-number">
             {s.receiptNumber}
@@ -990,44 +991,40 @@ export function ReceiptView({ receipt }: { receipt: Receipt }) {
         </div>
         <div className="flex justify-between">
           <dt>{t('sale.cashier')}</dt>
-          <dd>{s.cashierName}</dd>
+          <dd dir="auto">{s.cashierName}</dd>
         </div>
         {s.customer ? (
           <div className="flex justify-between">
             <dt>{t('customer.label')}</dt>
-            <dd data-testid="receipt-customer">{s.customer.fullName}</dd>
+            <dd dir="auto" data-testid="receipt-customer">
+              {s.customer.fullName}
+            </dd>
           </div>
         ) : null}
         <div className="flex justify-between">
           <dt>{t('sale.register')}</dt>
-          <dd>{localizedName(receipt.register, i18n.language) || receipt.register.code}</dd>
+          <dd dir="auto">
+            {localizedName(receipt.register, i18n.language) || receipt.register.code}
+          </dd>
         </div>
         <div className="flex justify-between">
           <dt>{t('sale.date')}</dt>
           <dd>
-            <bdi>
-              {new Intl.DateTimeFormat(
-                i18n.language.startsWith('ar') ? 'ar-KW-u-nu-latn' : 'en-GB',
-                {
-                  dateStyle: 'short',
-                  timeStyle: 'short',
-                },
-              ).format(new Date(s.createdAt))}
-            </bdi>
+            <bdi>{formatReceiptDate(new Date(s.createdAt), i18n.language)}</bdi>
           </dd>
         </div>
       </dl>
       <ul className="mb-2">
         {s.lines.map((l) => (
           <li key={l.position} className="py-0.5">
-            <p>
+            <p dir="auto">
               {localizedName(l, i18n.language)}
               {l.variantNameEn || l.variantNameAr
                 ? ` — ${localizedName({ nameEn: l.variantNameEn, nameAr: l.variantNameAr }, i18n.language)}`
                 : ''}
             </p>
             {l.modifiers.length ? (
-              <p className="ps-2 text-xs" data-testid="receipt-modifiers">
+              <p className="ps-2 text-xs" dir="auto" data-testid="receipt-modifiers">
                 {l.modifiers.map((m) => localizedName(m, i18n.language)).join(', ')}
               </p>
             ) : null}
@@ -1085,7 +1082,9 @@ export function ReceiptView({ receipt }: { receipt: Receipt }) {
       </dl>
       <footer className="mt-2 text-center">
         {receipt.branch.receiptFooter ? (
-          <p className="whitespace-pre-wrap">{receipt.branch.receiptFooter}</p>
+          <p className="whitespace-pre-wrap" dir="auto">
+            {receipt.branch.receiptFooter}
+          </p>
         ) : (
           <p>{t('sale.thanks')}</p>
         )}

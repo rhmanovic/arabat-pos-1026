@@ -176,6 +176,7 @@ export const posEn = {
     cashier: 'Cashier',
     register: 'Register',
     thanks: 'Thank you',
+    printedAt: 'Printed at',
     items: '{{count}} items',
     payWith: 'Pay with',
     zeroTotal:

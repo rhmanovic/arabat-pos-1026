@@ -805,6 +805,17 @@ A new category with parent "—" did nothing on Save: the select sends "", which
 refused, and the form shows no error on that field. `optionalId()` (contracts) reads "" as null;
 used for the category parent, product category, online-store branch, payment settlement account,
 platform plan and restaurant references. Verified: 221 unit/web, 230 integration.
+### 2026-10-16 — Thermal receipt printing from the browser
+
+- Sale and refund receipts print through one `ReceiptPrint` portal (`#receipt-print` in
+  `document.body`, `apps/pos-web/src/sale/ReceiptPrint.tsx`): hidden on screen, the only thing
+  printed. Sized for an 80 mm roll with a 72 mm printable width (ImagePlus 810, CUPS queue
+  `Printer_POS_80C`): `@page 72mm × 210mm`, no margins, Arial 12 px, black only, dashed
+  section rules, wrapping label / value rows, `dir="auto"` on free-text values, a
+  "Printed at" stamp taken at print time. Chrome ignores `size: 72mm auto` (falls back to
+  Letter), hence the fixed 210 mm driver size. Printer setup: `OPERATIONS.md` §10.
+- Verified: `e2e/checkout.spec.ts` emulates print media and checks only the receipt is
+  visible, 72 mm wide, black, and the PDF page is 72 × 210 mm.
 
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket

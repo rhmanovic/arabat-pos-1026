@@ -178,6 +178,7 @@ export const posAr: PosResources = {
     cashier: 'الكاشير',
     register: 'الصندوق',
     thanks: 'شكرًا لزيارتكم',
+    printedAt: 'وقت الطباعة',
     items: '{{count}} صنف',
     payWith: 'الدفع بواسطة',
     zeroTotal: 'لا يوجد مبلغ للدفع. البيع بدون مبلغ يحتاج إلى سبب وإلى صلاحية مشرف.',

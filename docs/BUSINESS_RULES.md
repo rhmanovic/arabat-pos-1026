@@ -625,7 +625,7 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
 | OQ-006 | Employee POS login: email + password (implemented default) — add quick PIN switching on shared terminals? | POS |
 | OQ-007 | Is the BR-033 rounding rule (half-up per line) acceptable?              | Sales slice         |
 | OQ-008 | ~~Subscription plans~~ **Resolved:** plans and limits implemented (Prompt 17); billing remains open in OQ-022. | — |
-| OQ-009 | Receipt requirements (printer types, legal fields, e-receipts)?         | Sales slice         |
+| OQ-009 | Receipt requirements (legal fields, e-receipts)? Printer: 80 mm thermal via browser printing (OPERATIONS §10). | Sales slice         |
 | OQ-010 | ~~Merchant sign-up~~ **Resolved:** self-service owner registration (Prompt 4, BR-040). | — |
 | OQ-011 | Hosting provider, region and data residency — **answered 2026-10-15**: Google Cloud, Doha `me-central1` (ADR-0105); still open: where the second backup copy lives (Doha only, Dammam, or EU) and whether Railway's pilot data moves | Deployment |
 | OQ-012 | Number display: Latin digits (0-9) or Arabic-Indic (٠-٩) by default? (engineering default: Latin, configurable) | M0 UI |
