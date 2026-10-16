@@ -770,7 +770,10 @@ history, platform usage record, e-mail through Resend / Brevo) into the Google C
 - `infra/gcp/deploy.sh` passes `ANTHROPIC_API_KEY` from the secret `anthropic-api-key` when it
   exists (OPERATIONS.md §9.2 step 7a); without it the button stays hidden.
 Verified: `pnpm verify` (217 unit/web), 230 integration, 35 E2E (local).
-Not done (needs the owner): storing the key in Secret Manager and the production release.
+Released to production 2026-10-16: image `8ae3a5bb7549`, migrations 0049 / 0050 by the job,
+revision `arabat-web-00003-7hh` serving 100 %. Not done: the secret `anthropic-api-key` does not
+exist yet in Secret Manager, so the assistant is off in production (button hidden) until it is
+stored and `deploy.sh` runs again.
 
 ### 2026-10-14 — Domain and e-mail set-up (ADR-0108)
 Owner decisions: production domain `arabatapp.com`; Google Workspace for people's mail;
