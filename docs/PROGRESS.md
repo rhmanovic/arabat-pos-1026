@@ -768,11 +768,11 @@ history, platform usage record, e-mail through Resend / Brevo) into the Google C
   (… 0048 Cloud SQL → 0049 → 0050) and staging (… old 0048/0049 → 0048 Cloud SQL → 0049 → 0050);
   both end with RLS enabled, not forced, and the two policies.
 - `infra/gcp/deploy.sh` passes `ANTHROPIC_API_KEY` from the secret `anthropic-api-key` when it
-  exists (OPERATIONS.md §9.2 step 7a); without it the button stays hidden.
+  exists (OPERATIONS.md §9.2 step 7a); without it the chat only says the assistant is not enabled.
 Verified: `pnpm verify` (217 unit/web), 230 integration, 35 E2E (local).
 Released to production 2026-10-16: image `8ae3a5bb7549`, migrations 0049 / 0050 by the job,
 revision `arabat-web-00003-7hh` serving 100 %. Not done: the secret `anthropic-api-key` does not
-exist yet in Secret Manager, so the assistant is off in production (button hidden) until it is
+exist yet in Secret Manager, so the assistant is off in production (the panel says "not enabled") until it is
 stored and `deploy.sh` runs again.
 
 ### 2026-10-14 — Domain and e-mail set-up (ADR-0108)

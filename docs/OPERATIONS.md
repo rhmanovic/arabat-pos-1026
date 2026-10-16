@@ -291,7 +291,7 @@ user has no SUPERUSER and no BYPASSRLS: `app_owner` is exempt from RLS only as t
    `printf %s 'sk-ant-…' | gcloud secrets create anthropic-api-key --replication-policy=user-managed --locations=me-central1 --data-file=-`
    (later keys: `gcloud secrets versions add anthropic-api-key --data-file=-`), then redeploy;
    `deploy.sh` passes it as `ANTHROPIC_API_KEY` only when the secret exists. Without it the chat
-   button stays hidden on `/pos` and `/manager`.
+   panel on `/pos` and `/manager` only says the assistant is not enabled.
 8. Monitoring → Alerting: an e-mail channel; alert policies on the `arabat-ready` uptime
    check, on Cloud SQL backup failures and on failed `arabat-db-export` executions.
 9. Checks in §9.4, then the first restore drill (§9.5).
