@@ -392,3 +392,17 @@ A receipt longer than 210 mm continues on a second page of the roll; if the driv
 blank rest of each page, pick its 72 × 3276 mm size or enable its "cut at end of document"
 option.
 
+## 11. Server-side receipt printing (print agents, ADR-0111)
+
+Receipts of sales from any device (phone, tablet, another computer) print on the computer that
+has the receipt printer, through a separately built print agent:
+1. Manager → **Receipt printers** (`/printers`) → **Add printer**: name, branch (or all
+   branches). Copy the token shown; it is never shown again (create a new agent if lost).
+2. Configure the agent with the server address `https://www.arabatapp.com` and the token. It
+   uses `Authorization: Bearer <token>` on `/api/v1/print-agent/...` and Socket.IO
+   (`/socket.io`, namespace `/print-agent`, `auth: { token }`).
+3. The agent shows as **Online** while it is connected or called the API in the last 60 s.
+4. "Print receipts automatically" (on by default) sends every completed sale; the sale page's
+   "Print receipt" sends a copy at any time.
+Removing an agent stops its token at once. Failed jobs keep the agent's error in
+`print_jobs.error`; they are not retried by themselves.

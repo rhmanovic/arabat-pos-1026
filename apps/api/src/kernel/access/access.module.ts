@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { APP_GUARD, DiscoveryModule } from '@nestjs/core';
 import { AccessGuard } from './access.guard.js';
+import { PrintAgentResolver } from './print-agent-resolver.js';
 import { RouteAccessAuditor } from './route-access.auditor.js';
 
 /**
@@ -10,6 +11,11 @@ import { RouteAccessAuditor } from './route-access.auditor.js';
 @Global()
 @Module({
   imports: [DiscoveryModule],
-  providers: [{ provide: APP_GUARD, useClass: AccessGuard }, RouteAccessAuditor],
+  providers: [
+    { provide: APP_GUARD, useClass: AccessGuard },
+    RouteAccessAuditor,
+    PrintAgentResolver,
+  ],
+  exports: [PrintAgentResolver],
 })
 export class AccessModule {}

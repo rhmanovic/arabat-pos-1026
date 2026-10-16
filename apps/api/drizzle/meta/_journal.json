@@ -358,6 +358,13 @@
       "when": 1792057387619,
       "tag": "0050_assistant_own_conversations",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1792189672749,
+      "tag": "0051_print_agents",
+      "breakpoints": true
     }
   ]
 }

@@ -820,6 +820,23 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
 - Verified: `e2e/checkout.spec.ts` emulates print media and checks only the receipt is
   visible, 72 mm wide, black, and the PDF page is 72 × 210 mm.
 
+### 2026-10-16 — Server-side receipt printing (ADR-0111)
+
+- Print agents (program on the computer with the receipt printer) and a print-job queue:
+  migration 0051, module `apps/api/src/modules/printing`, agent bearer auth
+  (`@RequirePrintAgent`), Socket.IO namespace `/print-agent` with `print:job` pushed through
+  PostgreSQL LISTEN/NOTIFY, self-contained 72 mm Arabic receipt HTML.
+- A completed sale (POS, exchange, restaurant bill, online order) queues its receipt when
+  auto-print is on and the branch has an agent; managers reprint from the sale page.
+- Manager: `/printers` (add agent → token shown once, online state, remove, auto-print switch)
+  and "Print receipt" on `/sales/:saleId`.
+- Verified: `printing.int.test.ts` (11: token hashing and online state, auth without / wrong /
+  deleted token and a session cookie, company isolation, job on checkout with the HTML checks,
+  none without agent or with auto-print off, branch scope, two simultaneous claims → 200 + 409,
+  failure with attempts and reprint copy, Socket.IO refusal, push, no push to another company,
+  disconnect on delete); web tests for `/printers` and the sale page button.
+- Not done here: the agent program itself (built separately).
+
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.

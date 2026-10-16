@@ -34,6 +34,7 @@ the permission.
 | `/payments` | Payment methods and internal balances | `payments.settings` |
 | `/cash` | Cash custody: treasury and register balances per branch, counts, statements, transfers, expenses and supplier payments, bank deposits, transfers between branches | `cash.custody` (deposits: `cash.deposit`) |
 | `/registers` | Registers | `registers.manage` |
+| `/printers` | Receipt printers (print agents, token shown once, online state, auto-print setting); the sale page has "Print receipt" (ADR-0111) | `registers.manage` (setting: `merchant.settings.*`) |
 | `/shifts`, `/shifts/:shiftId` | Shift history, X/Z summary, cash discrepancies, follow-up of differences; pending cash-out decisions | `shifts.view_all` |
 | `/branches` | Branches | `branches.read` |
 | `/employees`, `/employees/:membershipId` | Employees, invitations, role assignments | `employees.read` |
@@ -234,6 +235,22 @@ sends on a keyboard, breaks the line on a touch screen). Nothing is kept in the 
 the chat opens on an untouched state it resumes the user's latest conversation from the server
 if its last turn is within 30 minutes, so a reload (the register's silent one included) comes
 back to the same conversation. The assistant only reads (BR-194).
+
+### Server-side receipt printing API (ADR-0111)
+
+| Method & path | Permission |
+|---|---|
+| `GET /manager/print-agents` (`{ agents: [{ id, name, branchId, lastSeenAt, online, createdAt }] }`; online = seen < 60 s ago) | manager `registers.manage` |
+| `POST /manager/print-agents` (`{ name, branchId? }` → `{ id, token }`; the token is shown only here) | manager `registers.manage` (at the branch; company-wide when `branchId` is null) |
+| `DELETE /manager/print-agents/:id` (204; token stops working, sockets disconnected) | manager `registers.manage` |
+| `GET` / `PUT /manager/print-settings` (`{ autoPrintReceipts }`, default true) | manager `merchant.settings.read` / `.update` |
+| `POST /manager/sales/:id/print` (reprint as a new job → `{ id, status, createdAt }`) | manager `sales.read` at the sale's branch |
+| `GET /print-agent/jobs/pending` (`[{ id, html, orderUuid, createdAt }]`, oldest first, max 50) | agent bearer token |
+| `POST /print-agent/jobs/:id/claim` (`{ id, html }`; 409 when already claimed) | agent bearer token |
+| `POST /print-agent/jobs/:id/result` (`{ ok, error? }` → `{ id, status }`; 409 when not claimed by this agent) | agent bearer token |
+
+Socket.IO (path `/socket.io`): namespace `/print-agent`, `auth: { token }` (refused:
+`connect_error` "unauthorized"); event `print:job` `{ id }`.
 
 ### Returns API (Prompt 11)
 

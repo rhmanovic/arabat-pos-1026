@@ -1483,3 +1483,39 @@ ADR; supersede it.
   2026-10-16); the market-direction rule becomes **BR-195**; the assistant migrations become
   0049 / 0050 (idempotent; staging ran them as 0048 / 0049). No branch was deleted.
 
+## ADR-0111 — Server-side receipt printing through print agents
+- **Date:** 2026-10-16 · **Status:** Accepted (owner request: a sale from any device, e.g. an
+  Android phone, prints on the MacBook that has the 80 mm printer).
+- **Context:** Browser printing (`window.print()`) only prints on the device that made the sale.
+  The owner wants receipts from any device to come out of one thermal printer (ImagePlus 810,
+  CUPS `Printer_POS_80C`) on a MacBook. The program on the MacBook ("print agent") is built
+  separately; the server side follows the agreed contract.
+- **Decision:**
+  - `print_agents` (company, optional branch, name, SHA-256 of a 256-bit token, last seen) and
+    `print_jobs` (company, branch, sale, claiming agent, `auto` / `reprint`, status
+    pending → printing → printed | failed, self-contained HTML, attempts, error). Contract names
+    are mapped to the repository's conventions: `company_uuid` → `merchant_id`, `branch_uuid` →
+    `branch_id`, `order_uuid` → `sale_id` (the agent API still answers `orderUuid`), and the API
+    lives under `/api/v1`. Migration 0051.
+  - Agents are a separate identity: `@RequirePrintAgent()` checks `Authorization: Bearer <token>`
+    through `print_agent_authenticate()` (SECURITY DEFINER, stamps `last_seen_at`). The plain
+    token is shown once at creation. Managing agents needs `registers.manage` (company-wide for
+    an all-branch agent); the auto-print setting needs `merchant.settings.*`; a reprint needs
+    `sales.read` at the sale's branch and is audited.
+  - Jobs are written inside the sale's transaction (`completeSaleInTx`, so POS, exchanges and
+    restaurant bills; `completeOnlineSaleInTx` for the online store) in a savepoint that never
+    fails the sale, only when `sales_settings.auto_print_receipts` (default on) and an agent for
+    the branch exists, so no backlog builds up before an agent is set up.
+  - Claiming is one conditional `UPDATE`: of two agents only one wins, the other gets 409. A job
+    left in `printing` for 2 minutes (agent crashed) can be claimed again.
+  - Push: Socket.IO on the API's HTTP server, namespace `/print-agent`, `auth: { token }`, rooms
+    `print-agent:<id>`, `print-company:<merchantId>`, `print-branch:<branchId>`, event
+    `print:job { id }`. Jobs are announced with PostgreSQL `NOTIFY` after commit and every API
+    instance `LISTEN`s, so the push reaches the agent whichever Cloud Run instance holds its
+    socket, without Redis. Agents of another branch are not told. Deleting an agent disconnects
+    its sockets. Missed pushes are recovered with `GET /print-agent/jobs/pending` on reconnect.
+  - Receipt HTML: one document with inline style only, `dir="rtl"`, Arabic labels, 72 mm body,
+    black only, dashed sections; reprints are marked «نسخة».
+- **Consequences:** a new dependency (`socket.io`). Socket connections count against Cloud Run's
+  request timeout (300 s), so agents reconnect regularly; this is covered by the pending call.
+  Failed jobs are not retried automatically; a manager reprints.

@@ -74,6 +74,8 @@ export const salesSettings = pgTable('sales_settings', {
     .default(sql`50000`),
   /** Count sheets hide the expected quantity (BR-170). */
   blindStockCount: boolean().notNull().default(true),
+  /** A completed sale queues a receipt for the company's print agents (ADR-0111). */
+  autoPrintReceipts: boolean().notNull().default(true),
   /**
    * Price-change bounds (BR-178, remediation R3.2): a changed price must stay between the
    * floor and the ceiling, as a % of the list price (null = no bound), and may go below the

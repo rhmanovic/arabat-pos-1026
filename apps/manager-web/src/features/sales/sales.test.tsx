@@ -148,3 +148,29 @@ describe('sales history (session 8: unusual sales)', () => {
     expect(screen.getByText('Price changed: scratched box')).toBeInTheDocument();
   });
 });
+
+describe('server-side receipt printing', () => {
+  it('sends the sale to the receipt printer from the sale page', async () => {
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'sales.read']),
+      routes: {
+        'GET /manager/branches': () => ({ status: 200, body: branches }),
+        [`GET /manager/sales/${SALE}`]: () => ({ status: 200, body: sale }),
+        [`POST /manager/sales/${SALE}/print`]: () => ({
+          status: 201,
+          body: {
+            id: '0190a000-0000-7000-8000-000000000f01',
+            status: 'pending',
+            createdAt: '2026-10-16T08:00:00.000Z',
+          },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: `/sales/${SALE}`, fetch });
+    await userEvent.click(await screen.findByRole('button', { name: 'Print receipt' }));
+    expect(await screen.findByText('Sent to the receipt printer')).toBeInTheDocument();
+    expect(
+      fetch.calls.filter((c) => c.method === 'POST' && c.path === `/manager/sales/${SALE}/print`),
+    ).toHaveLength(1);
+  });
+});

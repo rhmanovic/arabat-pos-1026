@@ -9,7 +9,7 @@ export class MissingAccessDeclarationError extends Error {
   constructor(routes: string[]) {
     super(
       `Routes without an access declaration (@Public, @Authenticated, @RequirePermission, ` +
-        `@RequirePlatformRole):\n  ${routes.join('\n  ')}`,
+        `@RequirePlatformRole, @RequirePrintAgent):\n  ${routes.join('\n  ')}`,
     );
     this.name = 'MissingAccessDeclarationError';
   }

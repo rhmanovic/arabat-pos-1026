@@ -588,9 +588,12 @@ export function SaleDetailPage() {
             : undefined
         }
         actions={
-          <Link className="text-sm text-primary" to="/sales">
-            {t('common.back')}
-          </Link>
+          <>
+            {s ? <PrintReceiptButton saleId={s.id} /> : null}
+            <Link className="text-sm text-primary" to="/sales">
+              {t('common.back')}
+            </Link>
+          </>
         }
       />
       {s ? (
@@ -770,5 +773,32 @@ export function SaleDetailPage() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** Sends the sale's receipt to the company's receipt printer (server-side, ADR-0111). */
+function PrintReceiptButton({ saleId }: { saleId: string }) {
+  const { t } = useTranslation();
+  const api = useApi();
+  const notify = useNotify();
+  const print = useMutation({
+    mutationFn: () => api.printing.printSale(saleId),
+    onSuccess: () => notify.ok(t('printers.sent')),
+    onError: notify.fail,
+  });
+  return (
+    <Button variant="secondary" size="sm" loading={print.isPending} onClick={() => print.mutate()}>
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        className="size-4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <path d="M6 9V3h12v6M6 18H4a1 1 0 0 1-1-1v-6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6a1 1 0 0 1-1 1h-2M6 14h12v7H6z" />
+      </svg>
+      {t('printers.printReceipt')}
+    </Button>
   );
 }

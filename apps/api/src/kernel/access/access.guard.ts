@@ -4,11 +4,13 @@ import { Reflector } from '@nestjs/core';
 import type { FastifyRequest } from 'fastify';
 import { AppError } from '../errors/app-error.js';
 import { ACCESS_METADATA, type AccessRule } from './access.decorators.js';
+import { type PrintAgent, PrintAgentResolver } from './print-agent-resolver.js';
 import { type Actor, SessionResolver } from './session-resolver.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
     actor?: Actor;
+    printAgent?: PrintAgent;
   }
 }
 
@@ -23,6 +25,7 @@ export class AccessGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly sessions: SessionResolver,
+    private readonly printAgents: PrintAgentResolver,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -41,6 +44,13 @@ export class AccessGuard implements CanActivate {
     if (rule.kind === 'public') return true;
 
     const request = context.switchToHttp().getRequest<FastifyRequest>();
+    if (rule.kind === 'print-agent') {
+      // A separate identity: a device token, never a user session (ADR-0111).
+      const agent = await this.printAgents.fromRequest(request);
+      if (!agent) throw AppError.unauthenticated('A valid print agent token is required.');
+      request.printAgent = agent;
+      return true;
+    }
     const appInterface = rule.kind === 'platform-role' ? 'platform' : rule.interface;
     const actor = await this.sessions.resolve(request, appInterface);
     if (!actor) throw AppError.unauthenticated();

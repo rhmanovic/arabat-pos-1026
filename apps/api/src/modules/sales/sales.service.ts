@@ -46,6 +46,7 @@ import { postEntries, registerAccount } from '../payments/cash-ledger.js';
 import { financialAccountEntries } from '../payments/payments.schema.js';
 import { parseAmount } from '../payments/payments.service.js';
 import { ShiftsService } from '../registers/shifts.service.js';
+import { PrintJobsService } from '../printing/print-jobs.service.js';
 import { OverridesService } from './overrides.service.js';
 import {
   orderLines,
@@ -158,6 +159,7 @@ export class SalesService {
     private readonly ledger: StockLedgerService,
     private readonly shifts: ShiftsService,
     private readonly overrides: OverridesService,
+    private readonly printJobs: PrintJobsService,
   ) {}
 
   // ------------------------------------------------------------ settings
@@ -921,6 +923,12 @@ export class SalesService {
           : {}),
       },
     });
+    // Server-side receipt for the company's print agents (ADR-0111); never fails the sale.
+    await this.printJobs.queueAutoInTx(tx, {
+      merchantId: actor.merchantId,
+      branchId,
+      saleId,
+    });
     return { totalMinor: priced.totalMinor, receiptNumber };
   }
 
@@ -1136,6 +1144,12 @@ export class SalesService {
         total: Money.ofMinor(priced.totalMinor, CURRENCY).toDecimalString(),
         providerReference: args.payment.providerReference,
       },
+    });
+    await this.printJobs.queueAutoInTx(tx, {
+      merchantId,
+      branchId,
+      saleId,
+      onlineOrderId: args.onlineOrderId,
     });
     return { receiptNumber, totalMinor: priced.totalMinor };
   }

@@ -126,6 +126,11 @@ import {
   posPaymentMethodListSchema,
   posRegisterListSchema,
   registerListSchema,
+  createdPrintAgentSchema,
+  printAgentSchema,
+  printJobSchema,
+  printSettingsSchema,
+  type PrintSettings,
   registerSchema,
   shiftListSchema,
   shiftSchema,
@@ -745,6 +750,21 @@ export function createApiClient(options: ApiClientOptions = {}) {
     audit: {
       list: (query: AuditListQuery = {}) =>
         request('GET', `/manager/audit?${toParams(query)}`, { schema: auditListSchema }),
+    },
+    /** Server-side receipt printing (ADR-0111). */
+    printing: {
+      agents: () =>
+        request('GET', '/manager/print-agents', {
+          schema: z.object({ agents: z.array(printAgentSchema) }),
+        }),
+      createAgent: (body: { name: string; branchId: string | null }) =>
+        request('POST', '/manager/print-agents', { body, schema: createdPrintAgentSchema }),
+      deleteAgent: (id: string) => request('DELETE', `/manager/print-agents/${id}`),
+      settings: () => request('GET', '/manager/print-settings', { schema: printSettingsSchema }),
+      updateSettings: (body: PrintSettings) =>
+        request('PUT', '/manager/print-settings', { body, schema: printSettingsSchema }),
+      printSale: (saleId: string) =>
+        request('POST', `/manager/sales/${saleId}/print`, { schema: printJobSchema }),
     },
     registers: {
       list: (branchId?: string | null) =>
