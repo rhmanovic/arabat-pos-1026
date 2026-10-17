@@ -4,6 +4,7 @@ import { Reflector } from '@nestjs/core';
 import type { FastifyRequest } from 'fastify';
 import { AppError } from '../errors/app-error.js';
 import { ACCESS_METADATA, type AccessRule } from './access.decorators.js';
+import { type Device, DeviceResolver } from './device-resolver.js';
 import { type PrintAgent, PrintAgentResolver } from './print-agent-resolver.js';
 import { type Actor, SessionResolver } from './session-resolver.js';
 
@@ -11,6 +12,7 @@ declare module 'fastify' {
   interface FastifyRequest {
     actor?: Actor;
     printAgent?: PrintAgent;
+    device?: Device;
   }
 }
 
@@ -26,6 +28,7 @@ export class AccessGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly sessions: SessionResolver,
     private readonly printAgents: PrintAgentResolver,
+    private readonly devices: DeviceResolver,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -49,6 +52,15 @@ export class AccessGuard implements CanActivate {
       const agent = await this.printAgents.fromRequest(request);
       if (!agent) throw AppError.unauthenticated('A valid print agent token is required.');
       request.printAgent = agent;
+      return true;
+    }
+    if (rule.kind === 'device') {
+      // A registered till (ADR-0112): its own identity, never a user session.
+      const device = await this.devices.fromRequest(request);
+      if (!device) throw AppError.unauthenticated('A valid device token is required.');
+      if (device.revoked)
+        throw new AppError(401, 'DEVICE_REVOKED', 'This device was removed. Register it again.');
+      request.device = device;
       return true;
     }
     const appInterface = rule.kind === 'platform-role' ? 'platform' : rule.interface;

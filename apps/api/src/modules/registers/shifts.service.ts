@@ -322,6 +322,11 @@ export class ShiftsService {
   ): Promise<boolean> {
     if (register.branchId !== actor.boundBranchId) return false;
     if (!can(actor.access, 'shifts.operate', register.branchId)) return false;
+    // A device's own register is operated only by that device (ADR-0112), never in a browser.
+    const { rows: device } = await tx.execute(
+      sql`select 1 from pos_devices where register_id = ${register.id}`,
+    );
+    if (device.length > 0) return false;
     if (register.accessMode === 'branch' || actor.access.isOwner) return true;
     const [member] = await tx
       .select({ id: registerMembers.membershipId })

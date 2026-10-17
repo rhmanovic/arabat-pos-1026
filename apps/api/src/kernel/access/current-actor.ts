@@ -1,6 +1,7 @@
 import { type ExecutionContext, createParamDecorator } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { AppError } from '../errors/app-error.js';
+import type { Device } from './device-resolver.js';
 import type { PrintAgent } from './print-agent-resolver.js';
 import type { MerchantActor, PlatformActor } from './session-resolver.js';
 
@@ -29,3 +30,10 @@ export const CurrentPrintAgent = createParamDecorator(
     return agent;
   },
 );
+
+/** The live device set by the AccessGuard on `@RequireDevice()` routes. */
+export const CurrentDevice = createParamDecorator((_: unknown, ctx: ExecutionContext): Device => {
+  const device = ctx.switchToHttp().getRequest<FastifyRequest>().device;
+  if (!device || device.revoked) throw AppError.unauthenticated();
+  return device;
+});

@@ -15,6 +15,7 @@ import { ProductEditorPage } from './features/catalog/ProductEditorPage.js';
 import { ProductsPage } from './features/catalog/ProductsPage.js';
 import { CashCustodyPage } from './features/cash/CashCustodyPage.js';
 import { PaymentsPage } from './features/cash/PaymentsPage.js';
+import { DevicesPage } from './features/cash/DevicesPage.js';
 import { PrintersPage } from './features/cash/PrintersPage.js';
 import { RegistersPage } from './features/cash/RegistersPage.js';
 import { ShiftDetailPage, ShiftsPage } from './features/cash/ShiftsPage.js';
@@ -134,6 +135,7 @@ export const routes: RouteObject[] = [
       },
       { path: 'registers', element: guard('registers.manage', <RegistersPage />) },
       { path: 'printers', element: guard('registers.manage', <PrintersPage />) },
+      { path: 'devices', element: guard('registers.manage', <DevicesPage />) },
       { path: 'shifts', element: guard('shifts.view_all', <ShiftsPage />) },
       { path: 'shifts/:shiftId', element: guard('shifts.view_all', <ShiftDetailPage />) },
       { path: 'branches', element: guard('branches.read', <BranchesPage />) },

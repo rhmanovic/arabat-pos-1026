@@ -8,6 +8,7 @@ export const managerEn = {
     shifts: 'Shifts',
     registers: 'Registers',
     printers: 'Receipt printers',
+    devices: 'Devices',
     dashboard: 'Dashboard',
     products: 'Products',
     categories: 'Categories',
@@ -901,6 +902,24 @@ export const managerEn = {
     reason_supplier_payment: 'Supplier payment',
     shiftTitle: 'Shift',
     breakdown: 'Counted notes and coins',
+  },
+  devices: {
+    title: 'Devices',
+    subtitle:
+      'Arabat app tills that keep selling without internet. A manager registers a device once in the app; each device is its own register.',
+    empty:
+      'No device yet. Open the Arabat app on the till and sign in with a manager account to register it.',
+    register: 'Register',
+    online: 'Online',
+    offline: 'Offline',
+    revoked: 'Removed',
+    lastSeen: 'Last seen',
+    lastSync: 'Last sync',
+    revoke: 'Remove',
+    revokeTitle: 'Remove “{{name}}”?',
+    revokeHint:
+      'The device stops selling at its next connection and must be registered again. Sales it already made are kept.',
+    revokedDone: 'Device removed',
   },
   printers: {
     title: 'Receipt printers',

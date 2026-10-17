@@ -34,6 +34,7 @@ the permission.
 | `/payments` | Payment methods and internal balances | `payments.settings` |
 | `/cash` | Cash custody: treasury and register balances per branch, counts, statements, transfers, expenses and supplier payments, bank deposits, transfers between branches | `cash.custody` (deposits: `cash.deposit`) |
 | `/registers` | Registers | `registers.manage` |
+| `/devices` | Local-first devices (ADR-0112): name, branch, register code, online / last sync, remove | `registers.manage` |
 | `/printers` | Receipt printers (print agents, token shown once, online state, auto-print setting); the sale page has "Print receipt" (ADR-0111) | `registers.manage` (setting: `merchant.settings.*`) |
 | `/shifts`, `/shifts/:shiftId` | Shift history, X/Z summary, cash discrepancies, follow-up of differences; pending cash-out decisions | `shifts.view_all` |
 | `/branches` | Branches | `branches.read` |
@@ -235,6 +236,14 @@ sends on a keyboard, breaks the line on a touch screen). Nothing is kept in the 
 the chat opens on an untouched state it resumes the user's latest conversation from the server
 if its last turn is within 30 minutes, so a reload (the register's silent one included) comes
 back to the same conversation. The assistant only reads (BR-194).
+
+### Device API (ADR-0112, contract `docs/DEVICE_API.md`)
+
+| Method & path | Permission |
+|---|---|
+| `POST /device/register` (`{ email, password, deviceName, merchantId?, branchId? }` → `select_branch` choices or `registered` with the device and its token, shown once) | public, the credentials of a holder of `registers.manage` at the branch; rate-limited like a login |
+| `GET /device/me` | device bearer token (401 `UNAUTHENTICATED`, 401 `DEVICE_REVOKED`) |
+| `GET /manager/devices`, `POST /manager/devices/:id/revoke` | manager `registers.manage` |
 
 ### Server-side receipt printing API (ADR-0111)
 

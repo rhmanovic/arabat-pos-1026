@@ -10,6 +10,7 @@ export const managerAr: ManagerResources = {
     shifts: 'الورديات',
     registers: 'الصناديق',
     printers: 'طابعات الإيصالات',
+    devices: 'الأجهزة',
     dashboard: 'لوحة التحكم',
     products: 'المنتجات',
     categories: 'التصنيفات',
@@ -884,6 +885,23 @@ export const managerAr: ManagerResources = {
     reason_supplier_payment: 'دفعة لمورد',
     shiftTitle: 'الوردية',
     breakdown: 'العملات المعدودة',
+  },
+  devices: {
+    title: 'الأجهزة',
+    subtitle:
+      'أجهزة الكاشير بتطبيق عربات، تكمل البيع بدون إنترنت. المدير يسجّل الجهاز مرة وحدة من التطبيق، وكل جهاز له صندوقه.',
+    empty: 'لا توجد أجهزة بعد. افتح تطبيق عربات على جهاز الكاشير وادخل بحساب مدير لتسجيله.',
+    register: 'الصندوق',
+    online: 'متصل',
+    offline: 'غير متصل',
+    revoked: 'محذوف',
+    lastSeen: 'آخر ظهور',
+    lastSync: 'آخر مزامنة',
+    revoke: 'حذف',
+    revokeTitle: 'حذف «{{name}}»؟',
+    revokeHint:
+      'الجهاز يوقف البيع عند اتصاله الجاي ولازم يتسجّل من جديد. المبيعات اللي سواها قبل تبقى محفوظة.',
+    revokedDone: 'تم حذف الجهاز',
   },
   printers: {
     title: 'طابعات الإيصالات',

@@ -21,3 +21,4 @@ export * from './controls.js';
 export * from './periods.js';
 export * from './assistant.js';
 export * from './printing.js';
+export * from './devices.js';

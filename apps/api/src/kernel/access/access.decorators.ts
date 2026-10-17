@@ -13,7 +13,8 @@ export type AccessRule =
   | { kind: 'authenticated'; interface: AppInterface }
   | { kind: 'permission'; interface: 'manager' | 'pos'; permission: PermissionKey }
   | { kind: 'platform-role'; roles: readonly PlatformRole[] }
-  | { kind: 'print-agent' };
+  | { kind: 'print-agent' }
+  | { kind: 'device' };
 
 /** Explicitly public route (health checks, login). */
 export const Public = () => SetMetadata(ACCESS_METADATA, { kind: 'public' } satisfies AccessRule);
@@ -40,3 +41,7 @@ export const RequirePlatformRole = (...roles: PlatformRole[]) =>
 /** Requires a print agent's bearer token (`Authorization: Bearer <token>`, ADR-0111). */
 export const RequirePrintAgent = () =>
   SetMetadata(ACCESS_METADATA, { kind: 'print-agent' } satisfies AccessRule);
+
+/** Requires a registered device's bearer token (`Authorization: Bearer <token>`, ADR-0112). */
+export const RequireDevice = () =>
+  SetMetadata(ACCESS_METADATA, { kind: 'device' } satisfies AccessRule);

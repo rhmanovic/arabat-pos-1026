@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { APP_GUARD, DiscoveryModule } from '@nestjs/core';
 import { AccessGuard } from './access.guard.js';
+import { DeviceResolver } from './device-resolver.js';
 import { PrintAgentResolver } from './print-agent-resolver.js';
 import { RouteAccessAuditor } from './route-access.auditor.js';
 
@@ -15,7 +16,8 @@ import { RouteAccessAuditor } from './route-access.auditor.js';
     { provide: APP_GUARD, useClass: AccessGuard },
     RouteAccessAuditor,
     PrintAgentResolver,
+    DeviceResolver,
   ],
-  exports: [PrintAgentResolver],
+  exports: [PrintAgentResolver, DeviceResolver],
 })
 export class AccessModule {}

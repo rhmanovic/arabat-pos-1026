@@ -127,6 +127,7 @@ import {
   posRegisterListSchema,
   registerListSchema,
   createdPrintAgentSchema,
+  posDeviceSchema,
   printAgentSchema,
   printJobSchema,
   printSettingsSchema,
@@ -750,6 +751,14 @@ export function createApiClient(options: ApiClientOptions = {}) {
     audit: {
       list: (query: AuditListQuery = {}) =>
         request('GET', `/manager/audit?${toParams(query)}`, { schema: auditListSchema }),
+    },
+    /** Local-first devices (ADR-0112). */
+    devices: {
+      list: () =>
+        request('GET', '/manager/devices', {
+          schema: z.object({ devices: z.array(posDeviceSchema) }),
+        }),
+      revoke: (id: string) => request('POST', `/manager/devices/${id}/revoke`, { body: {} }),
     },
     /** Server-side receipt printing (ADR-0111). */
     printing: {
