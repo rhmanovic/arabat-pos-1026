@@ -1,7 +1,8 @@
 # ADR-0112 — Local-first POS on registered devices
 
-- **Date:** 2026-10-17 · **Status:** Proposed (the owner approves it; nothing below is built
-  except the shared rules package `packages/pos-core`, see "Implementation so far").
+- **Date:** 2026-10-17 · **Status:** Accepted (owner, 2026-10-17, with the decisions in
+  "Owner decisions" and the gaps A–D). Server side built in the same session, see
+  "Implementation"; the device contract is `docs/DEVICE_API.md`.
 - **Related:** ADR-0004 (RLS), ADR-0090/0091 (cash ledger), ADR-0100/0101 (selling controls,
   copies), ADR-0105 (Google Cloud), ADR-0111 (print agents and server print jobs).
 
@@ -27,8 +28,8 @@ contract between the two.
 
 ### 1. Local-first always
 
-Every sale, shift, cash movement, refund and print is completed on the device first, against
-its local database, whether or not the device is online. Sync uploads completed records and
+On the native device app, every sale, shift, cash movement, refund and print is completed on
+the device first, against its local database, whether or not the device is online. Sync uploads completed records and
 downloads reference data. There is no separate online / offline mode and no "try the server
 first" path: the same code runs in both cases, so the offline path is exercised every day.
 
@@ -83,8 +84,12 @@ first" path: the same code runs in both cases, so the offline path is exercised 
 - Device sales always use a **per-device series**: `{branch code}-{register code}-{6 digits}`,
   for example `MAIN-R1-000123`, gap-free per device (the device keeps its own counter in the same
   local transaction as the sale).
-- The server does not renumber device sales; `(merchant_id, receipt_number)` stays unique because
-  the register code is unique per branch.
+- **Register codes are never reused (gap C):** every device registration takes the next code of
+  the branch (`R1`, `R2`, …) from a per-branch counter that only grows, skipping codes manual
+  registers already use. A wiped or re-registered device gets a new register and a new code, so
+  it can never repeat a receipt number.
+- The server does not renumber device sales; it checks the number's prefix is the device's
+  `{branch}-{register}-`, and `(merchant_id, receipt_number)` stays unique.
 - The current branch-wide counter (`MAIN-000028`, `receipt_sequences`) stays for the online store
   and for browser sales until question 2 below is decided.
 - Refund numbers stay `{receipt number}-R{n}`.
@@ -139,19 +144,48 @@ Shift reports (X during the shift, Z at close) are produced on the device from l
 `packages/pos-core`. The server's shift report is rebuilt from the uploaded records and is the one
 used for cash custody. Cross-branch and company reports stay on the server.
 
+### 8a. Printing (gap A)
+
+The device prints its own receipts. Ingesting a device sale does **not** queue an automatic
+server print job (no double printing), unless the uploaded sale says `requestRemotePrint: true`
+(a device without a printer); then the job is queued for the branch's print agents as for a
+browser sale.
+
+### 8b. Clock (gap B)
+
+Every record carries the device's `occurredAt`; the server stores it and its own `receivedAt`.
+Business dates (shift, sale and refund times, report days) use `occurredAt`. A record whose
+`occurredAt` is more than 10 minutes after the upload time, or whose `occurredAt` lies outside its
+shift, is accepted and **flagged** (`clock_skew`) in the managers' exceptions list.
+
+### 8c. Shared rules guard (gap D)
+
+`pnpm verify` and CI bundle `packages/pos-core` with esbuild for the browser platform
+(`scripts/ci/check-pos-core-browser.mjs`); a Node built-in, NestJS, Drizzle, `pg`, Fastify or
+Socket.IO import fails the build.
+
 ### 9. What stays server-only
 
 Product, price, staff, role and branch management; PIN setting; device registration and
 revocation; cash custody between registers, treasuries and banks; transfers and purchasing;
 cross-branch and financial reports; month close; the online store.
 
-## Open questions for the owner
+## Owner decisions (2026-10-17)
 
-1. **Offline limit.** No limit, or a maximum time without a successful sync (for example 7 days)
-   after which the device stops selling until it syncs? A limit bounds how stale prices and staff
-   lists can be and how long a revoked device keeps working.
-2. **Browser POS.** Should `/pos` in a browser use the same local-first path (local database in
-   the browser, PIN login, per-device numbering) or stay online-only for browser devices?
+1. **Offline limit:** a company setting (`sales_settings.offline_limit_hours`), default **72 hours**
+   without a successful sync. The device shows a yellow warning after 24 h, a red warning after
+   48 h and stops selling at the limit until it syncs. The snapshot carries `offlineLimitHours`.
+2. **Browser POS** (`/pos` in a normal browser) stays **online-only**, exactly as today
+   (server-decided sale, branch-wide receipt series). Local-first is for the native app only.
+3. **Restaurant module** (open orders, tables, kitchen) stays **online-only**; it is out of scope
+   for device sync and a future phase. Device snapshots carry modifiers and recipes only so retail
+   items priced with them stay correct.
+4. **Device refunds:** a device refunds only sales **it made itself** (it has them locally); a
+   refund of another register's sale uses the online flow. The server refuses an uploaded refund of
+   another device's sale (`refused`, `NOT_OWN_SALE`).
+5. **One supervisor rule:** the till's "does this cart need a supervisor" check
+   (`apps/pos-web/src/sale/cart.tsx`) now uses `requiredSaleRights` from `packages/pos-core`, the
+   server's rule.
 
 ## Consequences
 
@@ -167,7 +201,9 @@ cross-branch and financial reports; month close; the online store.
 - Offline PIN verification puts PIN hashes on the device; device encryption, 6-digit PINs and
   revocation are the mitigations.
 
-## Implementation so far
+## Implementation
 
 - `packages/pos-core` (2026-10-17): the selling rules extracted from `apps/api` without behavior
-  change; the server calls it. Public API in `packages/pos-core/README.md`.
+  change; the server and the browser till call it. Public API in `packages/pos-core/README.md`.
+- Server side (2026-10-17): devices and registration, PINs, sync download and upload, exceptions,
+  per-device receipt series. Contract: `docs/DEVICE_API.md`; progress: `docs/PROGRESS.md`.

@@ -1531,7 +1531,8 @@ ADR; supersede it.
 
 
 ## ADR-0112 — Local-first POS on registered devices
-- **Date:** 2026-10-17 · **Status:** Proposed (owner approval pending).
+- **Date:** 2026-10-17 · **Status:** Accepted (owner, 2026-10-17: 72 h offline limit, browser
+  POS and restaurant online-only, device refunds of own sales only, one supervisor rule).
 - Full text: [`docs/adr/ADR-0112-local-first-pos.md`](adr/ADR-0112-local-first-pos.md): device
   registration as registers, offline PIN login with downloaded salted hashes, per-device receipt
   series, server acceptance of completed device sales (no refusal for stock or price), device

@@ -126,9 +126,7 @@ export function SalePage() {
   });
   const required = useMemo(
     () =>
-      pricing?.ok
-        ? requiredRights(cart.state, items, pricing.cart, policy.data?.maxDiscountPercent ?? null)
-        : [],
+      pricing?.ok ? requiredRights(cart.state, items, policy.data?.maxDiscountPercent ?? null) : [],
     [cart.state, items, pricing, policy.data],
   );
 

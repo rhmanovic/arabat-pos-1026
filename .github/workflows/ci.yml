@@ -25,6 +25,7 @@ jobs:
       - run: pnpm format:check
       - run: pnpm typecheck
       - run: pnpm build
+      - run: pnpm check:pos-core-browser
       - run: pnpm test
 
   integration:

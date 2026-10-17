@@ -129,6 +129,8 @@ The device keeps its counter gap-free in the same local transaction as the sale.
 
 Stock (consumption of recipes and modifiers, negative-stock policy), the cash ledger, receipt
 counters, idempotency, loading and saving: they need data access and stay in `apps/api` (and their
-device counterparts in the device app). The till's own "does this cart need a supervisor" helper in
-`apps/pos-web/src/sale/cart.tsx` still runs its earlier client rule; the device should use
-`requiredSaleRights`.
+device counterparts in the device app). The browser till (`apps/pos-web/src/sale/cart.tsx`) asks
+for a supervisor with `requiredSaleRights`, like the device must.
+
+`pnpm check:pos-core-browser` (part of `pnpm verify` and CI) bundles this package for the browser
+and fails on any Node built-in or server-only import.

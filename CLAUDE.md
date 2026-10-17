@@ -238,5 +238,5 @@ ADR-0105) and live since 2026-10-15 at `https://www.arabatapp.com` (started empt
 Receipts also print server-side through print agents (ADR-0111): jobs are queued in the sale's transaction
 (`PrintJobsService.queueAutoInTx`), announced over PostgreSQL NOTIFY to the Socket.IO namespace `/print-agent`.
 Selling decisions (prices, limits, rights, tenders, shift notes, refunds) live in `packages/pos-core` (pure, no DB);
-the services load data and call it through `rules()` (`kernel/errors/pos-rule.ts`). Local-first plan: ADR-0112 (Proposed).
+the services load data and call it through `rules()` (`kernel/errors/pos-rule.ts`). Local-first devices: ADR-0112 (Accepted), contract `docs/DEVICE_API.md`.
 See `docs/PROGRESS.md` for the current state and `docs/ROADMAP.md` for next steps.
