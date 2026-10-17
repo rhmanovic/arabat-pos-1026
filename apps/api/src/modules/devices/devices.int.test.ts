@@ -250,3 +250,156 @@ describe('cashier PINs', () => {
     );
   });
 });
+
+describe('sync download', () => {
+  const sync = (c: Co, token: string | null, since?: string) =>
+    c.client.request('GET', `/device/sync${since ? `?since=${encodeURIComponent(since)}` : ''}`, {
+      ...(token ? { headers: { authorization: `Bearer ${token}` } } : {}),
+    });
+  const product = (c: Co, nameEn: string, price: string, extra: Record<string, unknown> = {}) =>
+    c.client.request('POST', '/manager/products', {
+      cookies: c.cookies,
+      body: {
+        nameEn,
+        nameAr: nameEn,
+        variants: [
+          {
+            sku: `SKU-${Math.random().toString(36).slice(2, 8)}`,
+            price,
+            cost: '0.080',
+            barcodes: [`62${Math.floor(Math.random() * 1e11)}`],
+          },
+        ],
+        ...extra,
+      },
+    });
+
+  it('sends the full branch snapshot, then only changed products', async () => {
+    const c = await createCompany(app, db, mailer);
+    const tea = (await product(c, 'Tea', '0.250')).json();
+    const elsewhere = (
+      await product(c, 'Second only', '1.000', {
+        availableInAllBranches: false,
+        branchIds: [c.second],
+      })
+    ).json();
+    const cashier = await c.hire([{ roleId: c.roles.cashier, branchId: c.main }], 'pos');
+    await c.client.request('PUT', '/manager/device-settings', {
+      cookies: c.cookies,
+      body: { offlineLimitHours: 48 },
+    });
+    const { token, device } = await registerDevice(c, c.main);
+
+    const res = await sync(c, token);
+    expect(res.statusCode).toBe(200);
+    const snap = res.json();
+    expect(snap).toMatchObject({
+      full: true,
+      offlineLimitHours: 48,
+      device: { id: device.id, registerCode: device.registerCode },
+      branch: { id: c.main, code: 'MAIN' },
+      register: { id: device.registerId, code: device.registerCode },
+      merchant: { id: c.merchantId, currency: 'KWD' },
+      settings: { maxDiscountPercent: '10', allowNegativeStock: false, heldSaleExpiryHours: 24 },
+      counters: { lastReceiptNumber: null },
+    });
+    expect(snap.catalogVersion).toEqual(expect.any(String));
+    const byId = new Map(snap.products.map((p: { id: string }) => [p.id, p]));
+    expect(byId.get(tea.id)).toMatchObject({
+      sellable: true,
+      variants: [{ priceMinor: '250', costMinor: '80', barcodes: [expect.any(String)] }],
+    });
+    expect(byId.get(elsewhere.id)).toMatchObject({ sellable: false });
+    expect(snap.paymentMethods.some((m: { kind: string }) => m.kind === 'cash')).toBe(true);
+    // Staff who may use the POS here, with PIN hashes and the permissions held at the branch.
+    const cashierUser = await owner.query(`select id from users where email = $1`, [cashier.email]);
+    const staffCashier = snap.staff.find(
+      (s: { userId: string }) => s.userId === cashierUser.rows[0].id,
+    );
+    expect(staffCashier).toMatchObject({ isOwner: false, pinHash: null });
+    expect(staffCashier.permissions).toContain('pos.access');
+    expect(staffCashier.permissions).not.toContain('manager.access');
+    expect(snap.staff.find((s: { isOwner: boolean }) => s.isOwner)).toBeTruthy();
+    const last = await owner.query(`select last_sync_at from pos_devices where id = $1`, [
+      device.id,
+    ]);
+    expect(last.rows[0].last_sync_at).not.toBeNull();
+
+    // Nothing changed since (rows backdated past the overlap window): an empty delta.
+    await owner.query(
+      `update products set updated_at = now() - interval '1 hour' where merchant_id = $1`,
+      [c.merchantId],
+    );
+    await owner.query(
+      `update product_variants set updated_at = now() - interval '1 hour' where merchant_id = $1`,
+      [c.merchantId],
+    );
+    const empty = (await sync(c, token, snap.version)).json();
+    expect(empty).toMatchObject({ full: false, products: [] });
+    expect(empty.staff.length).toBe(snap.staff.length);
+    // Archiving a product sends it again, no longer sellable.
+    await c.client.request('POST', `/manager/products/${tea.id}/status`, {
+      cookies: c.cookies,
+      body: { status: 'archived' },
+    });
+    const delta = (await sync(c, token, empty.version)).json();
+    expect(delta.products).toEqual([expect.objectContaining({ id: tea.id, sellable: false })]);
+    // A cursor the server does not understand means a full snapshot.
+    expect((await sync(c, token, 'garbage')).json().full).toBe(true);
+  });
+
+  it('leaves out people without POS access at the branch and inactive people', async () => {
+    const c = await createCompany(app, db, mailer);
+    const elsewhere = await c.hire([{ roleId: c.roles.cashier, branchId: c.second }], 'pos');
+    const { token } = await registerDevice(c, c.main);
+    const snap = (await sync(c, token)).json();
+    const userIds = snap.staff.map((s: { userId: string }) => s.userId);
+    const other = await owner.query(`select id from users where email = $1`, [elsewhere.email]);
+    expect(userIds).not.toContain(other.rows[0].id);
+  });
+
+  it('refuses without a valid token and after revocation', async () => {
+    const c = await createCompany(app, db, mailer);
+    const { token, device } = await registerDevice(c, c.main);
+    expect((await sync(c, null)).statusCode).toBe(401);
+    expect((await sync(c, 'B'.repeat(43))).statusCode).toBe(401);
+    await c.client.request('POST', `/manager/devices/${device.id}/revoke`, { cookies: c.cookies });
+    const gone = await sync(c, token);
+    expect(gone.statusCode).toBe(401);
+    expect(gone.json().code).toBe('DEVICE_REVOKED');
+  });
+
+  it('lets managers read and set the offline limit within 1–720 hours, audited', async () => {
+    const c = await createCompany(app, db, mailer);
+    const get = await c.client.request('GET', '/manager/device-settings', { cookies: c.cookies });
+    expect(get.json()).toEqual({ offlineLimitHours: 72 });
+    for (const offlineLimitHours of [0, 721])
+      expect(
+        (
+          await c.client.request('PUT', '/manager/device-settings', {
+            cookies: c.cookies,
+            body: { offlineLimitHours },
+          })
+        ).statusCode,
+      ).toBe(400);
+    const put = await c.client.request('PUT', '/manager/device-settings', {
+      cookies: c.cookies,
+      body: { offlineLimitHours: 24 },
+    });
+    expect(put.json()).toEqual({ offlineLimitHours: 24 });
+    const audit = await owner.query(
+      `select details from audit_log where action = 'device_settings.updated' and merchant_id = $1`,
+      [c.merchantId],
+    );
+    expect(audit.rows[0].details).toEqual({ offlineLimitHours: { from: 72, to: 24 } });
+    const cashier = await c.hire([{ roleId: c.roles.cashier, branchId: c.main }], 'pos');
+    expect(
+      (
+        await c.client.request('PUT', '/manager/device-settings', {
+          cookies: cashier.cookies,
+          body: { offlineLimitHours: 24 },
+        })
+      ).statusCode,
+    ).toBe(401);
+  });
+});

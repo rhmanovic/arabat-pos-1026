@@ -57,4 +57,33 @@ describe('devices', () => {
     );
     expect(await screen.findByText('Removed')).toBeInTheDocument();
   });
+
+  it('shows and saves the offline selling limit', async () => {
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', [
+        'manager.access',
+        'registers.manage',
+        'merchant.settings.read',
+        'merchant.settings.update',
+      ]),
+      routes: {
+        'GET /manager/devices': () => ({ status: 200, body: { devices: [] } }),
+        'GET /manager/device-settings': () => ({ status: 200, body: { offlineLimitHours: 72 } }),
+        'PUT /manager/device-settings': (body) => ({ status: 200, body }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/devices', fetch });
+    const input = await screen.findByLabelText('Limit (hours)');
+    expect(input).toHaveValue('72');
+    await userEvent.clear(input);
+    await userEvent.type(input, '900');
+    expect(screen.getByText('Enter 1 to 720 hours.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    await userEvent.clear(input);
+    await userEvent.type(input, '48');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await vi.waitFor(() =>
+      expect(fetch.calls.find((c) => c.method === 'PUT')?.body).toEqual({ offlineLimitHours: 48 }),
+    );
+  });
 });

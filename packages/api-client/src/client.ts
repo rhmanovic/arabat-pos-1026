@@ -127,6 +127,7 @@ import {
   posRegisterListSchema,
   registerListSchema,
   createdPrintAgentSchema,
+  deviceSettingsSchema,
   posDeviceSchema,
   printAgentSchema,
   printJobSchema,
@@ -759,6 +760,9 @@ export function createApiClient(options: ApiClientOptions = {}) {
           schema: z.object({ devices: z.array(posDeviceSchema) }),
         }),
       revoke: (id: string) => request('POST', `/manager/devices/${id}/revoke`, { body: {} }),
+      settings: () => request('GET', '/manager/device-settings', { schema: deviceSettingsSchema }),
+      updateSettings: (body: { offlineLimitHours: number }) =>
+        request('PUT', '/manager/device-settings', { body, schema: deviceSettingsSchema }),
     },
     /** Server-side receipt printing (ADR-0111). */
     printing: {

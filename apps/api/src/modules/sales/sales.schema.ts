@@ -77,6 +77,11 @@ export const salesSettings = pgTable('sales_settings', {
   /** A completed sale queues a receipt for the company's print agents (ADR-0111). */
   autoPrintReceipts: boolean().notNull().default(true),
   /**
+   * Local-first devices stop selling after this many hours without a successful sync
+   * (ADR-0112, owner decision 1); warnings at 24 h and 48 h.
+   */
+  offlineLimitHours: integer().notNull().default(72),
+  /**
    * Price-change bounds (BR-178, remediation R3.2): a changed price must stay between the
    * floor and the ceiling, as a % of the list price (null = no bound), and may go below the
    * item's cost only when allowed. Hard limits for everyone, supervisors included.

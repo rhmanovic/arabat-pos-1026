@@ -123,10 +123,14 @@ first" path: the same code runs in both cases, so the offline path is exercised 
 
 - **(a) Download** `GET /api/v1/device/sync?since=<version>` (device token): a versioned snapshot
   of the branch, then deltas since the device's last version. Content: categories, products,
-  variants with prices, barcodes, branch availability, modifiers and recipes, payment methods,
+  variants with prices and costs, barcodes, branch availability (`sellable`), payment methods,
   sales settings (discount and price limits, tender rules, held-sale expiry), inventory policy,
-  staff with PIN hashes and permissions, registers, receipt header / footer, the device's own
-  counters as last seen by the server. Every response carries `catalogVersion`.
+  staff with PIN hashes and permissions, the device's register, receipt header / footer, the
+  device's own counters as last seen by the server, `offlineLimitHours`. Every response carries
+  `catalogVersion`. Products come as deltas (changed since `since`, with a 5-minute overlap);
+  everything else is complete in every response. Modifiers and recipes are **not** sent: retail
+  sales carry no modifiers (they are restaurant-only, decision 3) and recipes only drive stock
+  consumption, which the server computes at ingest.
 - **(b) Upload** `POST /api/v1/device/sync` (device token): batches of completed records in
   causal order (shift open → sales / cash movements / refunds → shift close). The server runs the
   **same ledger code** as today's checkout (`StockLedgerService.apply`, `cash-ledger.ts`
@@ -178,8 +182,8 @@ cross-branch and financial reports; month close; the online store.
 2. **Browser POS** (`/pos` in a normal browser) stays **online-only**, exactly as today
    (server-decided sale, branch-wide receipt series). Local-first is for the native app only.
 3. **Restaurant module** (open orders, tables, kitchen) stays **online-only**; it is out of scope
-   for device sync and a future phase. Device snapshots carry modifiers and recipes only so retail
-   items priced with them stay correct.
+   for device sync and a future phase. Device snapshots therefore carry no modifiers; recipes stay on
+   the server, which expands stock consumption when it ingests a device sale.
 4. **Device refunds:** a device refunds only sales **it made itself** (it has them locally); a
    refund of another register's sale uses the online flow. The server refuses an uploaded refund of
    another device's sale (`refused`, `NOT_OWN_SALE`).

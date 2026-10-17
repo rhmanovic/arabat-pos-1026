@@ -379,6 +379,13 @@
       "when": 1792274410577,
       "tag": "0053_cashier_pins",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1792274791282,
+      "tag": "0054_offline_limit",
+      "breakpoints": true
     }
   ]
 }

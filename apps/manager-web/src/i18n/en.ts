@@ -929,6 +929,12 @@ export const managerEn = {
     revokeHint:
       'The device stops selling at its next connection and must be registered again. Sales it already made are kept.',
     revokedDone: 'Device removed',
+    offlineLimit: 'Selling without internet',
+    offlineLimitHint:
+      'A device stops selling when it has not synced for this long (warnings after 24 and 48 hours). It syncs by itself whenever it is online.',
+    offlineLimitHours: 'Limit (hours)',
+    offlineLimitInvalid: 'Enter 1 to 720 hours.',
+    offlineLimitSaved: 'Limit saved',
   },
   printers: {
     title: 'Receipt printers',

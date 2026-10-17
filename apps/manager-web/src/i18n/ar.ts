@@ -910,6 +910,12 @@ export const managerAr: ManagerResources = {
     revokeHint:
       'الجهاز يوقف البيع عند اتصاله الجاي ولازم يتسجّل من جديد. المبيعات اللي سواها قبل تبقى محفوظة.',
     revokedDone: 'تم حذف الجهاز',
+    offlineLimit: 'البيع بدون إنترنت',
+    offlineLimitHint:
+      'يتوقف الجهاز عن البيع إذا لم يُزامن طوال هذه المدة (تنبيه بعد 24 ثم 48 ساعة). يُزامن تلقائيًا كلما توفر الاتصال.',
+    offlineLimitHours: 'الحد (بالساعات)',
+    offlineLimitInvalid: 'أدخل من 1 إلى 720 ساعة.',
+    offlineLimitSaved: 'تم حفظ الحد',
   },
   printers: {
     title: 'طابعات الإيصالات',
