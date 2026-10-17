@@ -181,3 +181,72 @@ describe('device registration', () => {
     expect(open.statusCode).toBeGreaterThanOrEqual(400);
   });
 });
+
+describe('cashier PINs', () => {
+  const setPin = (c: Co, membershipId: string, pin: string, cookies = c.cookies) =>
+    c.client.request('PUT', `/manager/employees/${membershipId}/pin`, { cookies, body: { pin } });
+
+  async function membershipOf(c: Co, email: string) {
+    const r = await owner.query(
+      `select m.id from memberships m join users u on u.id = m.user_id where u.email = $1 and m.merchant_id = $2`,
+      [email, c.merchantId],
+    );
+    return r.rows[0].id as string;
+  }
+
+  it('stores only an argon2id hash (64 MiB, 3 passes) and shows when it was set', async () => {
+    const c = await createCompany(app, db, mailer);
+    const cashier = await c.hire([{ roleId: c.roles.cashier, branchId: c.main }], 'pos');
+    const id = await membershipOf(c, cashier.email);
+    const res = await setPin(c, id, '482913');
+    expect(res.statusCode).toBe(204);
+    const row = await owner.query(`select pin_hash, pin_set_at from memberships where id = $1`, [
+      id,
+    ]);
+    expect(row.rows[0].pin_hash).toMatch(/^\$argon2id\$v=19\$m=65536,t=3,p=1\$/);
+    expect(row.rows[0].pin_hash).not.toContain('482913');
+    const employee = (
+      await c.client.request('GET', `/manager/employees/${id}`, { cookies: c.cookies })
+    ).json();
+    expect(employee.pinSetAt).toEqual(expect.any(String));
+    expect(JSON.stringify(employee)).not.toContain('argon2');
+    const audit = await owner.query(
+      `select details from audit_log where action = 'employee.pin_set' and target_id = $1`,
+      [id],
+    );
+    expect(JSON.stringify(audit.rows)).not.toContain('482913');
+  });
+
+  it('refuses short, repeated and straight-run PINs', async () => {
+    const c = await createCompany(app, db, mailer);
+    const cashier = await c.hire([{ roleId: c.roles.cashier, branchId: c.main }], 'pos');
+    const id = await membershipOf(c, cashier.email);
+    for (const pin of ['12345', '111111', '123456', '987654', '12a456'])
+      expect((await setPin(c, id, pin)).statusCode).toBe(400);
+  });
+
+  it('lets only managers within their authority set other people’s PINs, anyone their own', async () => {
+    const c = await createCompany(app, db, mailer);
+    const cashier = await c.hire([{ roleId: c.roles.cashier, branchId: c.main }], 'pos');
+    const cashierId = await membershipOf(c, cashier.email);
+    const manager = await c.hire([{ roleId: c.roles.company_manager, branchId: null }], 'manager');
+    const managerId = await membershipOf(c, manager.email);
+    // A manager sets the cashier's PIN (within their authority, as for any employee change)
+    // and their own; a cashier cannot set anyone else's.
+    // Same anti-escalation rule as any employee change: the cashier template holds rights a
+    // company manager lacks, so the owner sets it.
+    expect((await setPin(c, cashierId, '582014', manager.cookies)).statusCode).toBe(403);
+    expect((await setPin(c, cashierId, '582014')).statusCode).toBe(204);
+    expect((await setPin(c, managerId, '730291', manager.cookies)).statusCode).toBe(204);
+    const cashierManager = await c.client.request('PUT', `/manager/employees/${managerId}/pin`, {
+      cookies: cashier.cookies,
+      body: { pin: '730291' },
+    });
+    expect(cashierManager.statusCode).toBe(401);
+    // Nobody below the owner sets the owner's PIN.
+    const ownerId = await membershipOf(c, c.email);
+    expect((await setPin(c, ownerId, '730291', manager.cookies)).statusCode).toBeGreaterThanOrEqual(
+      403,
+    );
+  });
+});

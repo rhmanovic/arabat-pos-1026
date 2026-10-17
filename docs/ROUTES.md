@@ -244,6 +244,7 @@ back to the same conversation. The assistant only reads (BR-194).
 | `POST /device/register` (`{ email, password, deviceName, merchantId?, branchId? }` → `select_branch` choices or `registered` with the device and its token, shown once) | public, the credentials of a holder of `registers.manage` at the branch; rate-limited like a login |
 | `GET /device/me` | device bearer token (401 `UNAUTHENTICATED`, 401 `DEVICE_REVOKED`) |
 | `GET /manager/devices`, `POST /manager/devices/:id/revoke` | manager `registers.manage` |
+| `PUT /manager/employees/:membershipId/pin` (`{ pin }`: 6–12 digits, not one repeated digit, not a straight run → 204) | own PIN: `manager.access`; others: `employees.manage` within the usual anti-escalation rule |
 
 ### Server-side receipt printing API (ADR-0111)
 

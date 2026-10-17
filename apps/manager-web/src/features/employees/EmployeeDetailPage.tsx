@@ -18,6 +18,7 @@ import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 import type { z } from 'zod';
+import { formatDateTime } from '../inventory/AdjustmentsPage.js';
 import { AssignmentsEditor, useAssignmentLabel } from './AssignmentsEditor.js';
 import { employeesKey, rolesKey } from './EmployeesPage.js';
 
@@ -184,6 +185,8 @@ function EmployeeDetail({ employee, roles }: { employee: Employee; roles: Role[]
         </form>
       </Section>
 
+      {editable ? <PinSection employee={employee} onSaved={refresh} /> : null}
+
       <Section
         title={t('employees.assignments')}
         description={employee.isOwner ? t('employees.owner') : label(employee.assignments)}
@@ -219,5 +222,72 @@ function EmployeeDetail({ employee, roles }: { employee: Employee; roles: Role[]
         onConfirm={() => setStatus.mutate('inactive')}
       />
     </div>
+  );
+}
+
+/**
+ * The device PIN (ADR-0112): the cashier signs in to the Arabat app with it, also offline.
+ * Only its hash is stored; devices get the change at their next sync.
+ */
+function PinSection({
+  employee,
+  onSaved,
+}: {
+  employee: Employee;
+  onSaved: (e: Employee) => Promise<void>;
+}) {
+  const { t, i18n } = useTranslation();
+  const api = useApi();
+  const notify = useNotify();
+  const [pin, setPin] = useState('');
+  const valid = /^\d{6,12}$/.test(pin);
+  const save = useMutation({
+    mutationFn: () => api.employees.setPin(employee.membershipId, pin),
+    onSuccess: async () => {
+      setPin('');
+      await onSaved(await api.employees.get(employee.membershipId));
+      notify.ok(t('employees.pinSaved'));
+    },
+    onError: notify.fail,
+  });
+  return (
+    <Section
+      title={t('employees.pin')}
+      description={
+        employee.pinSetAt
+          ? t('employees.pinSetOn', { date: formatDateTime(employee.pinSetAt, i18n.language) })
+          : t('employees.pinNone')
+      }
+    >
+      <form
+        noValidate
+        className="flex flex-wrap items-end gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (valid) save.mutate();
+        }}
+      >
+        <Field
+          label={employee.pinSetAt ? t('employees.pinNew') : t('employees.pin')}
+          hint={t('employees.pinHint')}
+        >
+          {(p) => (
+            <Input
+              {...p}
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              dir="ltr"
+              maxLength={12}
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+            />
+          )}
+        </Field>
+        <Button type="submit" disabled={!valid} loading={save.isPending}>
+          {employee.pinSetAt ? t('employees.pinReset') : t('employees.pinSet')}
+        </Button>
+      </form>
+    </Section>
   );
 }

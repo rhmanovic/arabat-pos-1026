@@ -1221,6 +1221,9 @@ export function createApiClient(options: ApiClientOptions = {}) {
     employees: {
       list: () => request('GET', '/manager/employees', { schema: employeeListSchema }),
       get: (id: string) => request('GET', `/manager/employees/${id}`, { schema: employeeSchema }),
+      /** Device PIN (ADR-0112): 6–12 digits; 204. */
+      setPin: (id: string, pin: string) =>
+        request('PUT', `/manager/employees/${id}/pin`, { body: { pin } }),
       invite: (body: InviteEmployee) =>
         request('POST', '/manager/employees/invitations', { body, schema: invitationSchema }),
       resendInvitation: (id: string) =>

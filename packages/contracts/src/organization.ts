@@ -133,9 +133,14 @@ export const employeeSchema = z.object({
   assignments: z.array(assignmentSchema),
   /** Whether the current user may manage this employee (anti-escalation). */
   manageable: z.boolean(),
+  /** A device PIN is set (ADR-0112); the PIN itself is never returned. */
+  pinSetAt: z.string().nullable(),
   createdAt: z.string(),
 });
 export type Employee = z.infer<typeof employeeSchema>;
+
+/** A cashier PIN for local-first devices (ADR-0112): 6–12 digits, checked again by the API. */
+export const setEmployeePinSchema = z.object({ pin: z.string().regex(/^\d{6,12}$/) });
 
 export const invitationSchema = z.object({
   id: z.string(),

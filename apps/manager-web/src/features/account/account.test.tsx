@@ -41,6 +41,7 @@ const employee = (membershipId: string, fullName: string, email: string, isOwner
   lastLoginAt: null,
   assignments: [],
   manageable: !isOwner,
+  pinSetAt: null,
   createdAt: '2026-10-01T08:00:00.000Z',
 });
 

@@ -64,6 +64,12 @@ export const memberships = pgTable(
     jobTitle: text(),
     phone: text(),
     employeeCode: text(),
+    /**
+     * The cashier's PIN for local-first devices (ADR-0112): an argon2id hash only, set by a
+     * manager online and verified on the device without a server call. Never returned to the web.
+     */
+    pinHash: text(),
+    pinSetAt: timestamp({ withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

@@ -208,6 +208,15 @@ export const managerEn = {
     empty: 'No branches yet.',
   },
   employees: {
+    pin: 'Device PIN',
+    pinNew: 'New PIN',
+    pinHint:
+      '6 to 12 digits. The cashier signs in to the Arabat app with it, also without internet.',
+    pinSet: 'Set PIN',
+    pinReset: 'Reset PIN',
+    pinSaved: 'PIN saved. Devices use it after their next sync.',
+    pinNone: 'No PIN yet: this person cannot sign in on Arabat app devices.',
+    pinSetOn: 'PIN set on {{date}}.',
     title: 'Employees',
     subtitle: 'People who work in your company and what they may do.',
     invite: 'Invite employee',

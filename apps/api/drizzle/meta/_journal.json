@@ -372,6 +372,13 @@
       "when": 1792273661214,
       "tag": "0052_pos_devices",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1792274410577,
+      "tag": "0053_cashier_pins",
+      "breakpoints": true
     }
   ]
 }

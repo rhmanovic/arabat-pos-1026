@@ -19,6 +19,7 @@ import type { Env } from '../../config/env.js';
 import { DatabaseService, type Transaction } from '../../database/database.service.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { generateToken, hashToken } from '../../kernel/crypto/tokens.js';
+import { assertAcceptablePin, hashPin } from '../../kernel/crypto/pin.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
 import { Mailer } from '../../kernel/mail/mailer.js';
@@ -57,6 +58,7 @@ interface Member {
   status: string;
   userStatus: string;
   lastLoginAt: Date | null;
+  pinSetAt: Date | null;
   createdAt: Date;
   assignments: Assignment[];
 }
@@ -269,6 +271,29 @@ export class EmployeesService {
     });
   }
 
+  /**
+   * Sets or resets a member's device PIN (ADR-0112), online only. Managers within their
+   * authority, or anyone for themselves (an owner who also sells). Devices pick the new hash up at
+   * their next sync; the PIN is never stored or logged in plain text.
+   */
+  async setPin(actor: MerchantActor, membershipId: string, pin: string, ip: string): Promise<void> {
+    assertAcceptablePin(pin);
+    const pinHash = await hashPin(pin);
+    await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const member =
+        membershipId === actor.membershipId
+          ? await this.findMember(tx, membershipId)
+          : await this.manageableMember(tx, actor, membershipId, { allowSelf: false });
+      await tx
+        .update(memberships)
+        .set({ pinHash, pinSetAt: sql`now()`, updatedAt: sql`now()` })
+        .where(eq(memberships.id, member.membershipId));
+      await this.record(tx, actor, 'employee.pin_set', 'membership', membershipId, ip, {
+        replaced: member.pinSetAt !== null,
+      });
+    });
+  }
+
   /** Deactivation takes effect immediately: the member's sessions are revoked. */
   async setStatus(
     actor: MerchantActor,
@@ -462,6 +487,7 @@ export class EmployeesService {
       status: m.status as Employee['status'],
       userStatus: m.userStatus as Employee['userStatus'],
       lastLoginAt: m.lastLoginAt?.toISOString() ?? null,
+      pinSetAt: m.pinSetAt?.toISOString() ?? null,
       assignments: m.assignments,
       manageable: canManageMember(
         actor.access,
@@ -486,6 +512,7 @@ export class EmployeesService {
         status: memberships.status,
         userStatus: users.status,
         lastLoginAt: users.lastLoginAt,
+        pinSetAt: memberships.pinSetAt,
         createdAt: memberships.createdAt,
       })
       .from(memberships)
