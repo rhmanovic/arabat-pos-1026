@@ -548,7 +548,8 @@ export class RefundsService {
       lines: { position: number; quantity: string; restock?: boolean }[];
       reason: CreateInput['reason'];
       note: string | null;
-      allocation: { paymentId: string; amount: string; reference: string | null }[];
+      /** null: the suggested pay-back. */
+      allocation: { paymentId: string; amount: string; reference: string | null }[] | null;
       approval: { approverUserId: string; reasons: string[] } | null;
       occurredAt: Date;
       requestHash: string;
@@ -559,7 +560,7 @@ export class RefundsService {
     await this.lockSale(tx, input.saleId);
     const state = await this.saleState(tx, input.saleId);
     const computed = this.compute(state, input.lines, input.reason);
-    const allocation = this.allocation(state, computed.totalMinor, input.allocation);
+    const allocation = this.allocation(state, computed.totalMinor, input.allocation ?? undefined);
     await this.assertReferences(tx, actor.merchantId, allocation);
     await this.insertRefund(tx, actor, shift, state, {
       refundId: input.refundId,

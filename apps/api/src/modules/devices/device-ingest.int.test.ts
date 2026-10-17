@@ -397,6 +397,26 @@ describe('sync upload', () => {
       s.c.merchantId,
     ]);
     expect(jobs.rows.map((j) => j.sale_id)).toEqual([future['id']]);
+    // A refund without a pay-back split takes the suggested one (all cash here).
+    const back = (
+      await sync(s.token, 'POST', [
+        {
+          kind: 'refund',
+          id: newId(),
+          occurredAt: at(-1),
+          membershipId: s.cashierId,
+          shiftId,
+          saleId: noStock['id'],
+          lines: [{ position: 0, quantity: '1' }],
+          reason: 'changed_mind',
+          note: null,
+          payback: [],
+          approval: { approverMembershipId: await ownerMembership(s), reasons: ['own_sale'] },
+        },
+      ])
+    ).json();
+    expect(back.results[0]).toMatchObject({ status: 'accepted', result: { totalMinor: '1000' } });
+    expect(await drawerBalance(s.device.registerId)).toBe('1000');
   });
 
   it('refunds only the device’s own sales and refuses people without POS access', async () => {

@@ -211,3 +211,14 @@ cross-branch and financial reports; month close; the online store.
   change; the server and the browser till call it. Public API in `packages/pos-core/README.md`.
 - Server side (2026-10-17): devices and registration, PINs, sync download and upload, exceptions,
   per-device receipt series. Contract: `docs/DEVICE_API.md`; progress: `docs/PROGRESS.md`.
+  Code: `apps/api/src/modules/devices/` (`devices.service.ts` registration, `device-sync.service.ts`
+  download, `device-ingest.service.ts` upload, `device-exceptions.service.ts`), migrations
+  0052–0055. Choices made while building it:
+  - The record's own UUIDv7 id is its idempotency key (no separate key); `device_records` keeps
+    every upload, accepted or refused, with its payload.
+  - Devices record only pay-ins / pay-outs ("other"); custody moves stay online (§9). Refunds go
+    through the refunds engine with the device's approval reasons and approver recorded.
+  - The server re-prices a device sale only from the device's own unit prices and discounts
+    (`priceCart`) to check that the figures add up; it never compares with its own catalog.
+  - A suspended company's devices get 403 `MERCHANT_SUSPENDED` on download; uploads of records made
+    before are still accepted.

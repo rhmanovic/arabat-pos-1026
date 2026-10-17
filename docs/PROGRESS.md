@@ -863,6 +863,28 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
   the same `AppError`. Public API: `packages/pos-core/README.md`.
 - Verified: pos-core unit tests (25); all existing unit, integration and E2E tests unchanged.
 
+### 2026-10-17 — Server side of the local-first Arabat app (ADR-0112 Accepted)
+
+- Owner decisions 1–5 and gaps A–D recorded in ADR-0112; the browser till asks for a supervisor
+  with `requiredSaleRights` (pos-core); `pnpm check:pos-core-browser` in verify and CI.
+- Devices: `pos_devices` (0052), registration on the device with a manager's e-mail and password
+  (`POST /device/register`), bearer token (SHA-256 stored), its own register with a never-reused
+  code (`R1`, `R2`, …), removal (`DEVICE_REVOKED`), Devices page in `/manager`.
+- Cashier PINs (0053): argon2id 64 MiB / 3 passes, 6–12 digits, set on the employee page, audited.
+- Sync download `GET /device/sync?since=` (0054 `offline_limit_hours`, default 72, set on the
+  Devices page): settings, payment methods, staff with PIN hashes and branch permissions,
+  categories, products (deltas after the first sync), counters, `catalogVersion`.
+- Sync upload `POST /device/sync` (0055 `device_records`, `device_exceptions`): shift open /
+  close, sales (device receipt series `{branch}-{register}-NNNNNN`), pay-ins / pay-outs, refunds of
+  the device's own sales; exactly once per device id; same stock ledger, cash ledger, refunds engine
+  and audit as the browser; negative stock allowed and flagged; device time stored with the
+  server's receive time and flagged when ahead or outside the shift; no server print unless
+  `requestRemotePrint`.
+- Exceptions for managers (Devices page, dashboard checklist count), mark handled with a note.
+- Contract for the device developer: `docs/DEVICE_API.md`.
+- Not on devices (online only): restaurant, customers, exchanges, voids, custody cash moves,
+  gateway payments, product images.
+
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.

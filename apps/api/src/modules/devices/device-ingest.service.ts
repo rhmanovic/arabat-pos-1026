@@ -987,11 +987,14 @@ export class DeviceIngestService {
         lines: r.lines,
         reason: r.reason,
         note: r.note,
-        allocation: r.payback.map((p) => ({
-          paymentId: p.paymentId,
-          amount: kwd(BigInt(p.amountMinor)),
-          reference: p.reference,
-        })),
+        allocation:
+          r.payback.length === 0
+            ? null
+            : r.payback.map((p) => ({
+                paymentId: p.paymentId,
+                amount: kwd(BigInt(p.amountMinor)),
+                reference: p.reference,
+              })),
         approval,
         occurredAt,
         requestHash: hash,

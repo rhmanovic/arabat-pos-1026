@@ -4,6 +4,7 @@ import { Injectable } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { DatabaseService, type Transaction } from '../../database/database.service.js';
 import { assertCan } from '../../kernel/access/assert.js';
+import { AppError } from '../../kernel/errors/app-error.js';
 import type { Device } from '../../kernel/access/device-resolver.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AuditService } from '../audit/audit.service.js';
@@ -51,9 +52,12 @@ export class DeviceSyncService {
       const version = iso(clock!['now']);
       const [merchant] = (
         await tx.execute(sql`
-          select id, display_name_en, display_name_ar, timezone, owner_frozen_at
+          select id, display_name_en, display_name_ar, timezone, owner_frozen_at, status
           from merchants where id = ${device.merchantId}`)
       ).rows as Row[];
+      // A suspended company sells nowhere; the device keeps its unsent records for later.
+      if (merchant!['status'] !== 'active')
+        throw new AppError(403, 'MERCHANT_SUSPENDED', 'This company is suspended.');
       const [branch] = (
         await tx.execute(sql`
           select id, code, name_en, name_ar, phone, address, receipt_header, receipt_footer
