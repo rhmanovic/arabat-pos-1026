@@ -114,6 +114,14 @@ export const ERROR_CODES = [
   'MERCHANT_SUSPENDED',
   'SESSION_LOCKED',
   'DEVICE_REVOKED',
+  // Device upload refusals (ADR-0112 §5, docs/DEVICE_API.md).
+  'NOT_OWN_SALE',
+  'RECEIPT_NUMBER_INVALID',
+  'RECEIPT_NUMBER_TAKEN',
+  'TOTALS_MISMATCH',
+  'UNKNOWN_VARIANT',
+  'MEMBER_NOT_ALLOWED',
+  'WRONG_DEVICE',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

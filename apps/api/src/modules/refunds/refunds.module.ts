@@ -9,5 +9,6 @@ import { RefundsService } from './refunds.service.js';
   imports: [InventoryModule, RegistersModule, SalesModule],
   controllers: [PosRefundsController, RefundsController],
   providers: [RefundsService],
+  exports: [RefundsService],
 })
 export class RefundsModule {}

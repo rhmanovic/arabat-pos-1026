@@ -532,6 +532,68 @@ export class RefundsService {
     return this.get(actor, refundId, 'pos');
   }
 
+  /**
+   * A refund completed on a local-first device (ADR-0112, owner decision 4), recorded in the
+   * caller's transaction with the same computation, pay-back, restock and ledger code as
+   * `create`. Approval was decided at the till (pos-core `refundApprovalReasons`); the reasons
+   * and the approver are recorded, not decided again. The caller checks the sale is the device's.
+   */
+  async recordDeviceRefundInTx(
+    tx: Transaction,
+    actor: MerchantActor,
+    shift: { id: string; registerId: string },
+    input: {
+      refundId: string;
+      saleId: string;
+      lines: { position: number; quantity: string; restock?: boolean }[];
+      reason: CreateInput['reason'];
+      note: string | null;
+      allocation: { paymentId: string; amount: string; reference: string | null }[];
+      approval: { approverUserId: string; reasons: string[] } | null;
+      occurredAt: Date;
+      requestHash: string;
+      deviceId: string;
+    },
+    ip: string,
+  ): Promise<{ refundNumber: string; totalMinor: bigint }> {
+    await this.lockSale(tx, input.saleId);
+    const state = await this.saleState(tx, input.saleId);
+    const computed = this.compute(state, input.lines, input.reason);
+    const allocation = this.allocation(state, computed.totalMinor, input.allocation);
+    await this.assertReferences(tx, actor.merchantId, allocation);
+    await this.insertRefund(tx, actor, shift, state, {
+      refundId: input.refundId,
+      kind: 'refund',
+      status: 'processing',
+      reason: input.reason,
+      note: input.note,
+      computed,
+      approvalReasons: input.approval?.reasons ?? [],
+      ownerOverride: false,
+      customerContact: null,
+      idempotency: { key: input.refundId, hash: input.requestHash },
+      exchange: null,
+    });
+    await this.insertPayments(tx, actor, input.refundId, shift.id, allocation, 'planned');
+    // Business time is the device's (gap B); the approval happened at the till.
+    const [row] = (
+      await tx.execute(sql`
+        update refunds set created_at = ${input.occurredAt.toISOString()}::timestamptz,
+          decided_by_user_id = ${input.approval?.approverUserId ?? null},
+          decided_at = ${input.approval ? input.occurredAt.toISOString() : null}::timestamptz
+        where id = ${input.refundId} returning refund_number`)
+    ).rows as { refund_number: string }[];
+    await this.execute(tx, actor, input.refundId, ip, input.occurredAt);
+    await this.record(tx, actor, 'refund.completed', input.refundId, ip, {
+      saleId: state.id,
+      total: Money.ofMinor(computed.totalMinor, CURRENCY).toDecimalString(),
+      approvalReasons: input.approval?.reasons ?? [],
+      approverUserId: input.approval?.approverUserId ?? null,
+      deviceId: input.deviceId,
+    });
+    return { refundNumber: row!.refund_number, totalMinor: computed.totalMinor };
+  }
+
   /** Cancels a completed sale of the cashier's own open shift (full refund, restock all). */
   async voidSale(
     actor: MerchantActor,
@@ -955,7 +1017,14 @@ export class RefundsService {
    * and the refund stays `processing` until the gateway confirms it (never "completed"
    * on assumption).
    */
-  private async execute(tx: Transaction, actor: MerchantActor, refundId: string, _ip: string) {
+  private async execute(
+    tx: Transaction,
+    actor: MerchantActor,
+    refundId: string,
+    _ip: string,
+    /** A device refund completed at this (device) time; otherwise now. */
+    completedAt?: Date,
+  ) {
     const [refund] = await tx.select().from(refunds).where(eq(refunds.id, refundId));
     const pays = await tx
       .select()
@@ -1085,7 +1154,7 @@ export class RefundsService {
       .update(refunds)
       .set({
         status: waiting ? 'processing' : 'completed',
-        completedAt: waiting ? null : sql`now()`,
+        completedAt: waiting ? null : (completedAt ?? sql`now()`),
         version: sql`${refunds.version} + 1`,
       })
       .where(eq(refunds.id, refundId));

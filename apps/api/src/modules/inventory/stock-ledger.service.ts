@@ -40,9 +40,10 @@ export interface MovementContext {
   userId: string | null;
   /**
    * Negative-stock policy for decreases: 'policy' follows the merchant setting (default
-   * deny), 'deny' always refuses. Increases are never limited.
+   * deny), 'deny' always refuses, 'allow' always accepts (completed device sales, ADR-0112 §5:
+   * the caller raises a stock exception instead). Increases are never limited.
    */
-  negative?: 'policy' | 'deny';
+  negative?: 'policy' | 'deny' | 'allow';
   /** Opening stock: refused when the item already has movements at the branch. */
   requireNoHistory?: boolean;
   /**
@@ -179,10 +180,13 @@ export class StockLedgerService {
       }
     }
 
+    const negative = ctx.negative ?? 'policy';
     const allowNegative =
-      (ctx.negative ?? 'policy') === 'policy'
-        ? await this.allowNegativeStock(tx, ctx.merchantId)
-        : false;
+      negative === 'allow'
+        ? true
+        : negative === 'policy'
+          ? await this.allowNegativeStock(tx, ctx.merchantId)
+          : false;
     const reserved =
       RESPECTS_RESERVATIONS.includes(ctx.movementType) && !allowNegative
         ? await this.reservedQuantities(tx, ctx.branchId, tracked, ctx.reservationOrderId ?? null)

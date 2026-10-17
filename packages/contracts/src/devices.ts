@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { REFUND_REASONS, returnLineInputSchema } from './refunds.js';
+import { discountInputSchema } from './sales.js';
 
 /**
  * Local-first devices (ADR-0112). The device contract is `docs/DEVICE_API.md`; these schemas are
@@ -215,3 +217,189 @@ export const deviceSettingsSchema = z.object({
   offlineLimitHours: z.number().int().min(1).max(720),
 });
 export type DeviceSettings = z.infer<typeof deviceSettingsSchema>;
+
+/* Sync upload: POST /device/sync (ADR-0112 §5, §6, §7b, docs/DEVICE_API.md). */
+
+/** Money on the device wire, never negative. */
+const amountMinor = z.string().regex(/^\d{1,13}$/);
+const note = z
+  .string()
+  .trim()
+  .max(500)
+  .nullish()
+  .transform((v) => (v ? v : null));
+const recordBase = {
+  /** UUIDv7 made by the device: the same id on the device and the server, and the idempotency key. */
+  id: z.uuid(),
+  /** The device's clock when it happened (ISO 8601 with offset). */
+  occurredAt: z.iso.datetime({ offset: true }),
+  /** Who did it at the till (signed in with their PIN). */
+  membershipId: z.uuid(),
+};
+
+export const deviceShiftOpenSchema = z.object({
+  kind: z.literal('shift_open'),
+  ...recordBase,
+  countedCashMinor: amountMinor,
+  note,
+});
+
+export const deviceCashMovementSchema = z.object({
+  kind: z.literal('cash_movement'),
+  ...recordBase,
+  shiftId: z.uuid(),
+  /** Pay-in / pay-out of the drawer ("other"); custody moves (safe drops, deposits) stay online. */
+  direction: z.enum(['cash_in', 'cash_out']),
+  amountMinor,
+  note,
+});
+
+export const deviceSaleSchema = z.object({
+  kind: z.literal('sale'),
+  ...recordBase,
+  shiftId: z.uuid(),
+  /** `{branch code}-{register code}-{6 digits}`, gap-free per device. */
+  receiptNumber: z.string().regex(/^[A-Za-z0-9_-]{1,40}-\d{6}$/),
+  /** `catalogVersion` of the snapshot the sale was priced with. */
+  catalogVersion: z.string().max(64),
+  lines: z
+    .array(
+      z.object({
+        variantId: z.uuid(),
+        quantity: z.string().regex(/^\d{1,9}(\.\d{1,3})?$/),
+        /** The catalog price on the device. */
+        listUnitPriceMinor: amountMinor,
+        /** The price charged (differs from the list price only for a price change). */
+        unitPriceMinor: amountMinor,
+        priceOverrideReason: note,
+        discount: discountInputSchema.nullable(),
+        grossMinor: amountMinor,
+        lineDiscountMinor: amountMinor,
+        orderDiscountMinor: amountMinor,
+        netMinor: amountMinor,
+      }),
+    )
+    .min(1)
+    .max(200),
+  orderDiscount: discountInputSchema.nullable(),
+  subtotalMinor: amountMinor,
+  lineDiscountsMinor: amountMinor,
+  orderDiscountMinor: amountMinor,
+  totalMinor: amountMinor,
+  payments: z
+    .array(
+      z.object({
+        id: z.uuid(),
+        methodId: z.uuid(),
+        amountMinor,
+        tenderedMinor: amountMinor.nullable(),
+        changeMinor: amountMinor,
+        feeMinor: amountMinor,
+        reference: z
+          .string()
+          .trim()
+          .max(80)
+          .nullish()
+          .transform((v) => (v ? v : null)),
+      }),
+    )
+    .max(10),
+  /** The device decided a discount or price beyond the limit was allowed (pos-core). */
+  aboveLimit: z.boolean(),
+  zeroTotalReason: note,
+  /** A supervisor who typed their PIN at the till to lend rights (BR-177). */
+  override: z
+    .object({
+      approverMembershipId: z.uuid(),
+      rights: z.array(z.string().max(64)).min(1).max(10),
+      note,
+    })
+    .nullable(),
+  /** The device has no printer: print on the branch's print agents (gap A). Default false. */
+  requestRemotePrint: z.boolean().default(false),
+});
+
+export const deviceRefundSchema = z.object({
+  kind: z.literal('refund'),
+  ...recordBase,
+  shiftId: z.uuid(),
+  /** A sale this device made (owner decision 4). */
+  saleId: z.uuid(),
+  lines: z.array(returnLineInputSchema).min(1).max(200),
+  reason: z.enum(REFUND_REASONS),
+  note,
+  /** Pay-back per original payment (pos-core `paybackAllocation`). */
+  payback: z
+    .array(
+      z.object({
+        paymentId: z.uuid(),
+        amountMinor,
+        reference: z
+          .string()
+          .trim()
+          .max(80)
+          .nullish()
+          .transform((v) => (v ? v : null)),
+      }),
+    )
+    .max(10),
+  /** Second person who approved at the till (pos-core `refundApprovalReasons`), if any. */
+  approval: z
+    .object({
+      approverMembershipId: z.uuid(),
+      reasons: z.array(z.enum(['over_limit', 'outside_window', 'own_sale'])).min(1),
+    })
+    .nullable(),
+});
+
+export const deviceShiftCloseSchema = z.object({
+  kind: z.literal('shift_close'),
+  ...recordBase,
+  shiftId: z.uuid(),
+  countedCashMinor: amountMinor,
+  note,
+});
+
+export const deviceRecordSchema = z.discriminatedUnion('kind', [
+  deviceShiftOpenSchema,
+  deviceCashMovementSchema,
+  deviceSaleSchema,
+  deviceRefundSchema,
+  deviceShiftCloseSchema,
+]);
+export type DeviceRecord = z.infer<typeof deviceRecordSchema>;
+
+/**
+ * Records in causal order (shift open → sales / cash movements / refunds → shift close). Each
+ * record is checked on its own, so one bad record does not block the others.
+ */
+export const deviceUploadSchema = z.object({
+  records: z
+    .array(
+      z
+        .object({ kind: z.string().max(32), id: z.uuid(), occurredAt: z.string().max(64) })
+        .passthrough(),
+    )
+    .min(1)
+    .max(200),
+});
+
+export const deviceRecordResultSchema = z.object({
+  id: z.uuid(),
+  kind: z.string(),
+  status: z.enum(['accepted', 'duplicate', 'refused']),
+  /** Accepted: what the server created (e.g. the refund number). */
+  result: z.record(z.string(), z.unknown()).nullable(),
+  /** Refused: an `ErrorCode` and a message. */
+  code: z.string().nullable(),
+  message: z.string().nullable(),
+  /** The record's device time looked wrong; accepted anyway and shown to managers (gap B). */
+  clockSkew: z.boolean(),
+});
+export type DeviceRecordResult = z.infer<typeof deviceRecordResultSchema>;
+
+export const deviceUploadResultSchema = z.object({
+  serverTime: z.string(),
+  results: z.array(deviceRecordResultSchema),
+});
+export type DeviceUploadResult = z.infer<typeof deviceUploadResultSchema>;

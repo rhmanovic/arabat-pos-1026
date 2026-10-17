@@ -2,8 +2,11 @@ import { sql } from 'drizzle-orm';
 import {
   check,
   customType,
+  boolean,
   foreignKey,
+  index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -77,5 +80,93 @@ export const registerCodeSequences = pgTable(
       foreignColumns: [branches.merchantId, branches.id],
     }),
     check('register_code_sequences_positive', sql`${t.lastNumber} > 0`),
+  ],
+);
+
+/**
+ * Every record a device uploaded (ADR-0112 §6, §7b): the device's own id (UUIDv7) is the key, so
+ * a record is ingested exactly once. Accepted records point at what they created (`result`);
+ * refused records keep their payload and reason for the managers instead of being lost, and are
+ * tried again when the device sends them again unchanged.
+ */
+export const deviceRecords = pgTable(
+  'device_records',
+  {
+    id: uuid().primaryKey(),
+    merchantId: merchantId(),
+    deviceId: uuid().notNull(),
+    branchId: uuid().notNull(),
+    /** shift_open | sale | cash_movement | refund | shift_close */
+    kind: text().notNull(),
+    /** accepted | refused */
+    status: text().notNull(),
+    requestHash: text().notNull(),
+    payload: jsonb().notNull(),
+    result: jsonb(),
+    errorCode: text(),
+    errorMessage: text(),
+    /** The device's clock when the record happened; business dates use it (gap B). */
+    occurredAt: timestamp({ withTimezone: true }).notNull(),
+    /** The server's clock at the (latest) upload. */
+    receivedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    clockSkew: boolean().notNull().default(false),
+    attempts: integer().notNull().default(1),
+  },
+  (t) => [
+    unique('device_records_merchant_id_id_key').on(t.merchantId, t.id),
+    foreignKey({
+      columns: [t.merchantId, t.deviceId],
+      foreignColumns: [posDevices.merchantId, posDevices.id],
+    }),
+    check(
+      'device_records_kind_valid',
+      sql`${t.kind} in ('shift_open', 'sale', 'cash_movement', 'refund', 'shift_close')`,
+    ),
+    check('device_records_status_valid', sql`${t.status} in ('accepted', 'refused')`),
+    index('device_records_refused_idx')
+      .on(t.merchantId, t.receivedAt)
+      .where(sql`${t.status} = 'refused'`),
+  ],
+);
+
+/**
+ * What managers must look at after device uploads (ADR-0112 §5, gap B): a device sale that drove
+ * stock below zero, a record whose device clock looks wrong, a record the server refused.
+ */
+export const deviceExceptions = pgTable(
+  'device_exceptions',
+  {
+    id: id(),
+    merchantId: merchantId(),
+    branchId: uuid().notNull(),
+    deviceId: uuid().notNull(),
+    recordId: uuid().notNull(),
+    /** negative_stock | clock_skew | refused */
+    kind: text().notNull(),
+    details: jsonb().notNull().default({}),
+    createdAt: createdAt(),
+    resolvedAt: timestamp({ withTimezone: true }),
+    resolvedByUserId: uuid().references(() => users.id),
+    resolutionNote: text(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.merchantId, t.deviceId],
+      foreignColumns: [posDevices.merchantId, posDevices.id],
+    }),
+    check(
+      'device_exceptions_kind_valid',
+      sql`${t.kind} in ('negative_stock', 'clock_skew', 'refused')`,
+    ),
+    check(
+      'device_exceptions_resolved_consistent',
+      sql`(${t.resolvedAt} is null) = (${t.resolvedByUserId} is null) or ${t.kind} = 'refused'`,
+    ),
+    index('device_exceptions_open_idx')
+      .on(t.merchantId, t.createdAt)
+      .where(sql`${t.resolvedAt} is null`),
+    uniqueIndex('device_exceptions_refused_key')
+      .on(t.merchantId, t.recordId)
+      .where(sql`${t.kind} = 'refused'`),
   ],
 );

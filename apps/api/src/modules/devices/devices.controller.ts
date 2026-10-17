@@ -1,11 +1,13 @@
 import {
   type DeviceSettings,
   type DeviceSnapshot,
+  type DeviceUploadResult,
   type PosDevice,
   type RegisterDeviceResult,
   type RegisteredDevice,
   deviceSettingsSchema,
   deviceSyncQuerySchema,
+  deviceUploadSchema,
   registerDeviceSchema,
 } from '@arabat/contracts';
 import {
@@ -27,6 +29,7 @@ import { CurrentDevice, CurrentMerchantActor } from '../../kernel/access/current
 import type { Device } from '../../kernel/access/device-resolver.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { ZodPipe } from '../../kernel/validation/zod.pipe.js';
+import { DeviceIngestService } from './device-ingest.service.js';
 import { DeviceSyncService } from './device-sync.service.js';
 import { DevicesService } from './devices.service.js';
 
@@ -36,6 +39,7 @@ export class DeviceRegistrationController {
   constructor(
     private readonly devices: DevicesService,
     private readonly sync: DeviceSyncService,
+    private readonly ingest: DeviceIngestService,
   ) {}
 
   /** Public: the manager's e-mail and password are the credential; rate-limited like a login. */
@@ -64,6 +68,21 @@ export class DeviceRegistrationController {
     @Query(new ZodPipe(deviceSyncQuerySchema)) query: z.output<typeof deviceSyncQuerySchema>,
   ): Promise<DeviceSnapshot> {
     return this.sync.download(device, query.since);
+  }
+
+  /**
+   * Sync upload (ADR-0112 §7b): completed records in causal order, answered per record
+   * (`accepted`, `duplicate` or `refused`). 200 even when some records are refused.
+   */
+  @RequireDevice()
+  @Post('sync')
+  @HttpCode(200)
+  upload(
+    @CurrentDevice() device: Device,
+    @Body(new ZodPipe(deviceUploadSchema)) body: z.output<typeof deviceUploadSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<DeviceUploadResult> {
+    return this.ingest.upload(device, body.records, req.ip);
   }
 }
 
