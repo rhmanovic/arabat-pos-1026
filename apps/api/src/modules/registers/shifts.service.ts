@@ -14,6 +14,14 @@ import type {
   saveRegisterSchema,
   shiftListQuerySchema,
 } from '@arabat/contracts';
+import {
+  cashDifferenceNeedsNote,
+  checkCashBreakdown,
+  closingNoteRequired,
+  openingNoteRequired,
+  otherCashOutExceedsLimit,
+  shiftOutcome,
+} from '@arabat/pos-core';
 import { Money } from '@arabat/money';
 import { can, permissionBranchScope } from '@arabat/permissions';
 import { Injectable } from '@nestjs/common';
@@ -23,6 +31,7 @@ import { DatabaseService, type Transaction } from '../../database/database.servi
 import { assertCan } from '../../kernel/access/assert.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
+import { rules } from '../../kernel/errors/pos-rule.js';
 import { newId } from '../../kernel/ids.js';
 import { merchantTimezone, withinLocalDays } from '../../kernel/time/period.js';
 import { AuditService } from '../audit/audit.service.js';
@@ -79,15 +88,8 @@ export interface ShiftTotals {
   expectedCashMinor: bigint;
 }
 
-export function outcomeOf(
-  discrepancy: bigint | null,
-  tolerance: bigint | null,
-): 'balanced' | 'over' | 'short' | null {
-  if (discrepancy === null) return null;
-  const abs = discrepancy < 0n ? -discrepancy : discrepancy;
-  if (abs <= (tolerance ?? 0n)) return 'balanced';
-  return discrepancy > 0n ? 'over' : 'short';
-}
+/** Balanced within the register's tolerance, otherwise over or short (shared rule, ADR-0112). */
+export const outcomeOf = shiftOutcome;
 
 /**
  * Registers, cashier shifts and drawer cash (Prompt 9).
@@ -501,10 +503,13 @@ export class ShiftsService {
         // A blind cashier cannot know there is a difference: it is booked between shifts and
         // explained in the manager's follow-up, not refused here (BR-162).
         if (
-          !blind &&
-          !initial &&
-          !input.note &&
-          abs(differenceMinor) > register.discrepancyToleranceMinor
+          openingNoteRequired({
+            blind,
+            initial,
+            note: input.note,
+            differenceMinor,
+            toleranceMinor: register.discrepancyToleranceMinor,
+          })
         )
           throw AppError.validation([
             {
@@ -765,7 +770,12 @@ export class ShiftsService {
         where shift_id = ${shift.id} and kind = 'cash_out' and reason = 'other'
           and status in ('posted', 'pending')`)
     ).rows as { total: string }[];
-    return BigInt(row!.total) + amountMinor > policy.otherShiftLimitMinor;
+    return otherCashOutExceedsLimit({
+      amountMinor,
+      shiftOtherTotalMinor: BigInt(row!.total),
+      perMovementLimitMinor: policy.otherLimitMinor,
+      perShiftLimitMinor: policy.otherShiftLimitMinor,
+    });
   }
 
   /** A manager approves or rejects a pending cash-out (BR-164); nobody decides their own. */
@@ -1106,10 +1116,16 @@ export class ShiftsService {
     const discrepancy = countedMinor - expectedMinor;
     // A shortage or overage beyond the tolerance needs an explanation from whoever can see
     // the expected figure (BR-164); a blind cashier cannot, and the manager follows up.
+    // The blind lookup only runs when a note would otherwise be required, as before.
     if (
-      !input.note &&
-      abs(discrepancy) > register.discrepancyToleranceMinor &&
-      !(closeType === 'normal' && (await this.blindFor(tx, actor, shift.branchId)))
+      cashDifferenceNeedsNote(discrepancy, register.discrepancyToleranceMinor, input.note) &&
+      closingNoteRequired({
+        closeType,
+        blind: closeType === 'normal' && (await this.blindFor(tx, actor, shift.branchId)),
+        note: input.note,
+        discrepancyMinor: discrepancy,
+        toleranceMinor: register.discrepancyToleranceMinor,
+      })
     )
       throw AppError.validation([
         {
@@ -1493,19 +1509,7 @@ export class ShiftsService {
   }
 }
 
-function abs(v: bigint): bigint {
-  return v < 0n ? -v : v;
-}
-
 /** A denomination count must add up exactly to the counted cash. */
 function checkBreakdown(breakdown: Breakdown | null | undefined, countedMinor: bigint) {
-  if (!breakdown) return;
-  let sum = 0n;
-  for (const d of breakdown) sum += parseAmount(d.value, 'breakdown') * BigInt(d.count);
-  if (sum !== countedMinor)
-    throw new AppError(
-      400,
-      'INVALID_BREAKDOWN',
-      'The denomination count does not match the counted cash.',
-    );
+  rules(() => checkCashBreakdown(breakdown, countedMinor));
 }

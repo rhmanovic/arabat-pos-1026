@@ -12,6 +12,14 @@ import type {
   refundPreviewRequestSchema,
   voidSaleSchema,
 } from '@arabat/contracts';
+import {
+  assertVoidable,
+  computeRefund,
+  formatRefundNumber,
+  paybackAllocation,
+  refundApprovalReasons,
+  suggestPayback,
+} from '@arabat/pos-core';
 import { Money, divideHalfUp, formatQuantity, parseQuantity } from '@arabat/money';
 import { can, permissionBranchScope } from '@arabat/permissions';
 import { Injectable } from '@nestjs/common';
@@ -22,6 +30,7 @@ import { DatabaseService, type Transaction } from '../../database/database.servi
 import { assertCan } from '../../kernel/access/assert.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
+import { rules } from '../../kernel/errors/pos-rule.js';
 import { newId } from '../../kernel/ids.js';
 import { addDays, merchantTimezone, todayIn, withinLocalDays } from '../../kernel/time/period.js';
 import { AuditService } from '../audit/audit.service.js';
@@ -270,101 +279,22 @@ export class RefundsService {
     return result;
   }
 
+  /** Refund lines and total (shared rule, `@arabat/pos-core`). */
   private compute(
     state: SaleState,
     input: { position: number; quantity: string; restock?: boolean }[],
     reason?: string,
   ): Computed {
-    // Damaged and defective goods stay out of sellable stock unless the cashier says otherwise (BR-175).
-    const restockDefault = !(reason === 'damaged' || reason === 'defective');
-    const lines = input.map((l, i) => {
-      const line = state.lines.find((x) => x.position === l.position);
-      if (!line)
-        throw AppError.validation([
-          { path: `lines.${i}.position`, code: 'not_found', message: 'Item not on the sale.' },
-        ]);
-      const quantityMilli = parseQuantity(l.quantity);
-      if (quantityMilli <= 0n)
-        throw new AppError(400, 'INVALID_QUANTITY', 'Quantity must be positive.', [
-          { path: `lines.${i}.quantity`, code: 'too_small', message: 'Quantity must be positive.' },
-        ]);
-      const refundable = line.soldMilli - line.refundedMilli;
-      if (quantityMilli > refundable)
-        throw new AppError(
-          409,
-          'REFUND_EXCEEDS_SALE',
-          'More than was sold (or already refunded).',
-          [
-            {
-              path: `lines.${i}.quantity`,
-              code: 'too_big',
-              message: `refundable=${formatQuantity(refundable)}`,
-            },
-          ],
-        );
-      // Cumulative rounding: all partial refunds of a line add up to its net amount exactly.
-      const cumulative = divideHalfUp(
-        line.netMinor * (line.refundedMilli + quantityMilli),
-        line.soldMilli,
-      );
-      return {
-        position: line.position,
-        variantId: line.variantId,
-        quantityMilli,
-        amountMinor: cumulative - line.refundedMinor,
-        restock: l.restock ?? restockDefault,
-        unitCostMinor: line.unitCostMinor,
-        trackInventory: line.trackInventory,
-      };
-    });
-    return { lines, totalMinor: lines.reduce((s, l) => s + l.amountMinor, 0n) };
+    return rules(() => computeRefund(state.lines, input, reason));
   }
 
   /** Suggested pay-back: proportional to what each original payment can still refund. */
   private suggest(state: SaleState, totalMinor: bigint) {
-    const open = state.payments.filter((p) => p.amountMinor - p.refundedMinor > 0n);
-    if (totalMinor === 0n || open.length === 0) return [];
-    const shares = Money.ofMinor(totalMinor, CURRENCY)
-      .allocate(open.map((p) => p.amountMinor - p.refundedMinor))
-      .map((m) => m.minor);
-    return open
-      .map((p, i) => ({ payment: p, amountMinor: shares[i]!, reference: null as string | null }))
-      .filter((a) => a.amountMinor > 0n);
+    return suggestPayback(state.payments, totalMinor);
   }
 
   private allocation(state: SaleState, totalMinor: bigint, custom: CreateInput['allocation']) {
-    if (!custom) return this.suggest(state, totalMinor);
-    let sum = 0n;
-    const result = custom.map((a, i) => {
-      const payment = state.payments.find((p) => p.id === a.paymentId);
-      if (!payment)
-        throw new AppError(400, 'REFUND_ALLOCATION_INVALID', 'Unknown payment.', [
-          { path: `allocation.${i}`, code: 'not_found', message: 'Not a payment of this sale.' },
-        ]);
-      const amountMinor = parseAmount(a.amount, `allocation.${i}.amount`);
-      if (amountMinor <= 0n || amountMinor > payment.amountMinor - payment.refundedMinor)
-        throw new AppError(400, 'REFUND_ALLOCATION_INVALID', 'More than this payment can refund.', [
-          {
-            path: `allocation.${i}.amount`,
-            code: 'too_big',
-            message: Money.ofMinor(
-              payment.amountMinor - payment.refundedMinor,
-              CURRENCY,
-            ).toDecimalString(),
-          },
-        ]);
-      sum += amountMinor;
-      return { payment, amountMinor, reference: a.reference };
-    });
-    if (new Set(custom.map((a) => a.paymentId)).size !== custom.length)
-      throw new AppError(400, 'REFUND_ALLOCATION_INVALID', 'Each payment may appear only once.');
-    if (sum !== totalMinor)
-      throw new AppError(
-        400,
-        'REFUND_ALLOCATION_INVALID',
-        'The allocation must equal the refund total.',
-      );
-    return result;
+    return rules(() => paybackAllocation(state.payments, totalMinor, custom));
   }
 
   /**
@@ -380,13 +310,14 @@ export class RefundsService {
     totalMinor: bigint,
   ): Promise<string[]> {
     const settings = await this.sales.getSettingsInTx(tx, actor.merchantId);
-    const reasons: string[] = [];
-    if (totalMinor > settings.refundApprovalLimitMinor) reasons.push('over_limit');
-    const ageDays = (Date.now() - state.createdAt.getTime()) / 86_400_000;
-    if (ageDays > settings.refundWindowDays) reasons.push('outside_window');
-    if (settings.refundOwnSalesNeedApproval && state.userId === actor.userId)
-      reasons.push('own_sale');
-    return reasons;
+    return refundApprovalReasons({
+      totalMinor,
+      saleCreatedAt: state.createdAt,
+      saleUserId: state.userId,
+      requesterUserId: actor.userId,
+      now: new Date(),
+      settings,
+    });
   }
 
   /** Non-cash pay-backs need their terminal / transfer reference when the company says so (BR-181). */
@@ -620,12 +551,13 @@ export class RefundsService {
         await this.lockSale(tx, saleId);
         const state = await this.saleState(tx, saleId);
         if (state.branchId !== branchId) throw AppError.notFound('Sale not found.');
-        if (state.shiftId !== shift.id || state.activeRefunds > 0)
-          throw new AppError(
-            409,
-            'NOT_VOIDABLE',
-            'Only sales of your open shift without refunds can be cancelled.',
-          );
+        rules(() =>
+          assertVoidable({
+            saleShiftId: state.shiftId,
+            openShiftId: shift.id,
+            activeRefunds: state.activeRefunds,
+          }),
+        );
         const computed = this.compute(
           state,
           state.lines.map((l) => ({
@@ -946,7 +878,7 @@ export class RefundsService {
       shiftId: shift.id,
       membershipId: actor.membershipId,
       userId: actor.userId,
-      refundNumber: `${state.receiptNumber}-R${(n?.n ?? 0) + 1}`,
+      refundNumber: formatRefundNumber(state.receiptNumber, (n?.n ?? 0) + 1),
       kind: r.kind,
       status: r.status,
       reason: r.reason,

@@ -1,6 +1,5 @@
 import type {
   DiscountInput,
-  OverridablePermission,
   PrintJob,
   Receipt,
   Sale,
@@ -17,11 +16,6 @@ import type {
 import {
   type Discount,
   Money,
-  PricingError,
-  abovePercentOf,
-  belowPercentOf,
-  divideHalfUp,
-  exceedsDiscountLimit,
   formatQuantity,
   parseQuantity,
   priceCart,
@@ -29,6 +23,16 @@ import {
   type FeeType,
 } from '@arabat/money';
 import { can, permissionBranchScope } from '@arabat/permissions';
+import {
+  type PosPaymentMethod,
+  type SaleLine,
+  assertSellingRights,
+  checkPayments,
+  createRightCheck,
+  evaluateSale,
+  exchangeCreditUsed,
+  formatReceiptNumber,
+} from '@arabat/pos-core';
 import { Injectable } from '@nestjs/common';
 import { type SQL, asc, eq, sql } from 'drizzle-orm';
 import { createHash } from 'node:crypto';
@@ -37,6 +41,7 @@ import { DatabaseService, type Transaction } from '../../database/database.servi
 import { assertCan } from '../../kernel/access/assert.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
+import { rules } from '../../kernel/errors/pos-rule.js';
 import { newId } from '../../kernel/ids.js';
 import { merchantTimezone, withinLocalDays } from '../../kernel/time/period.js';
 import { AuditService } from '../audit/audit.service.js';
@@ -112,6 +117,16 @@ export interface ParsedLine {
 }
 
 const extraOf = (l: ParsedLine) => l.modifiers.reduce((s, m) => s + m.priceMinor, 0n);
+
+/** A parsed cart line in the shared rules' form (`@arabat/pos-core`). */
+const toRuleLine = (l: ParsedLine): SaleLine => ({
+  variantId: l.variantId,
+  quantityMilli: l.quantityMilli,
+  priceOverrideMinor: l.priceOverrideMinor,
+  priceOverrideReason: l.input.priceOverrideReason,
+  discount: l.discount,
+  extraMinor: extraOf(l),
+});
 
 function toDiscount(d: DiscountInput | null, path: string): Discount | null {
   if (!d) return null;
@@ -538,147 +553,43 @@ export class SalesService {
       args.customer.inherited,
     );
     // Rights come from the cashier, or from a supervisor's single-use grant (BR-177); the
-    // grant records which rights it actually supplied.
+    // grant records which rights it actually supplied. The rules are shared with the device
+    // app (`@arabat/pos-core`, ADR-0112).
     const override = args.overrideId
       ? await this.overrides.authority(tx, actor, args.overrideId, branchId)
       : null;
-    const supplied = new Set<OverridablePermission>();
-    const allowed = (permission: OverridablePermission) => {
-      if (can(actor.access, permission, branchId)) return true;
-      if (override?.permissions.includes(permission)) {
-        supplied.add(permission);
-        return true;
-      }
-      return false;
-    };
-    if ((orderDiscount || lines.some((l) => l.discount)) && !allowed('sales.discount'))
-      throw new AppError(403, 'DISCOUNT_LIMIT_EXCEEDED', 'You are not allowed to give discounts.');
-    if (lines.some((l) => l.priceOverrideMinor !== null) && !allowed('sales.price_override'))
-      throw new AppError(403, 'PRICE_OVERRIDE_DENIED', 'You are not allowed to change prices.');
+    const { allowed, supplied } = createRightCheck(
+      (permission) => can(actor.access, permission, branchId),
+      override?.permissions ?? null,
+    );
+    const ruleLines = lines.map(toRuleLine);
+    rules(() => assertSellingRights(ruleLines, orderDiscount, allowed));
     // 2. Authoritative prices and availability from the catalog.
     const items = await this.loadItems(
       tx,
       branchId,
       lines.map((l) => l.variantId),
     );
-    const unavailable = lines.flatMap((l, i) =>
-      items.has(l.variantId)
-        ? []
-        : [
-            {
-              path: `lines.${i}.variantId`,
-              code: 'unavailable',
-              message: 'This item cannot be sold here.',
-            },
-          ],
-    );
-    if (unavailable.length)
-      throw new AppError(
-        409,
-        'ITEM_UNAVAILABLE',
-        'Some items are not available at this branch.',
-        unavailable,
-      );
-
-    let priced;
-    try {
-      priced = priceCart(
-        lines.map((l) => ({
-          unitPriceMinor: (l.priceOverrideMinor ?? items.get(l.variantId)!.priceMinor) + extraOf(l),
-          quantityMilli: l.quantityMilli,
-          discount: l.discount,
-        })),
-        orderDiscount,
-      );
-    } catch (error) {
-      if (error instanceof PricingError)
-        throw new AppError(400, error.code, error.message, [
-          {
-            path: error.line === null ? 'orderDiscount' : `lines.${error.line}`,
-            code: 'invalid',
-            message: error.message,
-          },
-        ]);
-      throw error;
-    }
-
-    // 3a. Price changes (BR-178): a reason, and the company's floor, ceiling and cost bounds.
+    // 3–4. Price changes, the discount limit, nothing to pay and the total the cashier saw.
     const policy = await this.settings(tx, actor.merchantId);
     const { maxDiscountPercent } = policy;
+    const { priced, aboveLimit } = rules(() =>
+      evaluateSale({
+        lines: ruleLines,
+        orderDiscount,
+        catalog: items,
+        policy,
+        allowed,
+        zeroTotalReason: args.zeroTotalReason,
+        expectedTotalMinor: args.expectedTotalMinor,
+      }),
+    );
     const changed = (l: ParsedLine) =>
       l.priceOverrideMinor !== null && l.priceOverrideMinor !== items.get(l.variantId)!.priceMinor;
-    lines.forEach((l, i) => {
-      if (!changed(l)) return;
-      const item = items.get(l.variantId)!;
-      const price = l.priceOverrideMinor!;
-      if (!l.input.priceOverrideReason)
-        throw new AppError(400, 'REASON_REQUIRED', 'Give a reason for the price change.', [
-          { path: `lines.${i}.priceOverrideReason`, code: 'required', message: 'Required.' },
-        ]);
-      const outOfBounds =
-        (policy.priceOverrideFloorPercent !== null &&
-          belowPercentOf(price, item.priceMinor, policy.priceOverrideFloorPercent)) ||
-        (policy.priceOverrideCeilingPercent !== null &&
-          abovePercentOf(price, item.priceMinor, policy.priceOverrideCeilingPercent)) ||
-        (!policy.priceOverrideBelowCost && item.costMinor !== null && price < item.costMinor);
-      if (outOfBounds)
-        throw new AppError(
-          400,
-          'PRICE_OUT_OF_BOUNDS',
-          'This price is outside the limits set for price changes.',
-          [{ path: `lines.${i}.priceOverride`, code: 'out_of_bounds', message: 'Out of bounds.' }],
-        );
-    });
-
-    // 3b. Discount limit (exact comparison), combined per line (D4, BR-183): the line
-    // discount, the share of the sale discount allocated to the line and the gap between the
-    // list price and a lowered price are added up and compared with the list gross; a zero
-    // price always counts as above the limit (BR-178).
-    const aboveLimit = priced.lines.some((p, i) => {
-      const l = lines[i]!;
-      const list = items.get(l.variantId)!.priceMinor + extraOf(l);
-      const listGross = divideHalfUp(list * l.quantityMilli, 1000n);
-      const gap = listGross > p.grossMinor ? listGross - p.grossMinor : 0n;
-      if (changed(l) && l.priceOverrideMinor === 0n) return true;
-      return exceedsDiscountLimit(
-        p.lineDiscountMinor + p.orderDiscountMinor + gap,
-        listGross,
-        maxDiscountPercent,
-      );
-    });
-    if (aboveLimit && !allowed('sales.discount.override_limit'))
-      throw new AppError(
-        403,
-        'DISCOUNT_LIMIT_EXCEEDED',
-        `Discounts above ${maxDiscountPercent}% need a manager.`,
-      );
-
-    // 3c. Nothing to pay (BR-179): a dedicated right and a reason.
-    if (priced.totalMinor === 0n) {
-      if (!allowed('sales.zero_total'))
-        throw new AppError(
-          403,
-          'ZERO_TOTAL_DENIED',
-          'A sale with nothing to pay needs a supervisor.',
-        );
-      if (!args.zeroTotalReason)
-        throw new AppError(
-          400,
-          'REASON_REQUIRED',
-          'Give a reason for a sale with nothing to pay.',
-          [{ path: 'zeroTotalReason', code: 'required', message: 'Required.' }],
-        );
-    }
-
-    // 4. The total the cashier saw must still be right.
-    if (priced.totalMinor !== args.expectedTotalMinor)
-      throw new AppError(409, 'TOTAL_CHANGED', 'Prices changed. Review the cart and try again.');
 
     // 5. Payments must cover the total exactly.
     const creditMinor = args.exchange
-      ? args.exchange.creditMinor < priced.totalMinor
-        ? args.exchange.creditMinor
-        : priced.totalMinor
+      ? exchangeCreditUsed(args.exchange.creditMinor, priced.totalMinor)
       : 0n;
     const paid = await this.preparePayments(
       tx,
@@ -1206,117 +1117,46 @@ export class SalesService {
     );
   }
 
+  /** Loads the tendered methods and applies the shared tender rules (BR-181, pos-core). */
   private async preparePayments(
     tx: Transaction,
     input: CheckoutInput['payments'],
     totalMinor: bigint,
     requireReference = true,
   ) {
-    if (input.length === 0) {
-      if (totalMinor === 0n) return [];
-      throw new AppError(400, 'PAYMENT_TOTAL_MISMATCH', 'Add a payment.');
-    }
     const ids = [...new Set(input.map((p) => p.methodId))];
-    const methods = (
-      await tx.execute(
-        sql`select * from payment_methods where id in (${sql.join(
-          ids.map((id) => sql`${id}`),
-          sql`, `,
-        )})`,
-      )
-    ).rows as Record<string, unknown>[];
-    const byId = new Map(methods.map((m) => [m['id'] as string, m]));
-    let sum = 0n;
-    const prepared = input.map((p, i) => {
-      const m = byId.get(p.methodId);
-      if (!m || m['status'] !== 'active' || !m['available_in_pos'])
-        throw new AppError(
-          409,
-          'PAYMENT_METHOD_UNAVAILABLE',
-          'This payment method is not available.',
-          [{ path: `payments.${i}.methodId`, code: 'unavailable', message: 'Unavailable.' }],
-        );
-      // No gateway is integrated yet: a gateway payment can never be confirmed here.
-      if (m['gateway_provider'])
-        throw new AppError(
-          409,
-          'PAYMENT_NOT_VERIFIED',
-          'This payment needs gateway verification, which is not available.',
-        );
-      // Tender hygiene (BR-181): non-cash money must have somewhere to settle, and a card
-      // or transfer tender needs its terminal / transfer reference when the company says so.
-      if (m['kind'] !== 'cash' && !m['financial_account_id'])
-        throw new AppError(
-          409,
-          'SETTLEMENT_ACCOUNT_REQUIRED',
-          'This payment method has no settlement account.',
-          [{ path: `payments.${i}.methodId`, code: 'no_account', message: 'No account.' }],
-        );
-      if (m['kind'] !== 'cash' && requireReference && !p.reference)
-        throw new AppError(400, 'REFERENCE_REQUIRED', 'Enter the payment reference.', [
-          { path: `payments.${i}.reference`, code: 'required', message: 'Required.' },
-        ]);
-      const amountMinor = parseAmount(p.amount, `payments.${i}.amount`);
-      if (amountMinor <= 0n)
-        throw new AppError(400, 'PAYMENT_TOTAL_MISMATCH', 'Payment amounts must be positive.');
-      let tenderedMinor: bigint | null = null;
-      let changeMinor = 0n;
-      if (p.tendered !== null) {
-        if (m['kind'] !== 'cash')
-          throw new AppError(
-            400,
-            'PAYMENT_TOTAL_MISMATCH',
-            'Only cash can be tendered with change.',
-          );
-        tenderedMinor = parseAmount(p.tendered, `payments.${i}.tendered`);
-        if (tenderedMinor < amountMinor)
-          throw new AppError(
-            400,
-            'PAYMENT_TOTAL_MISMATCH',
-            'Cash tendered is less than the amount.',
-          );
-        changeMinor = tenderedMinor - amountMinor;
-      }
-      sum += amountMinor;
-      // Fees are a card-network charge: cash never carries one (BR-181, FND-412).
-      const feeMinor =
-        m['kind'] === 'cash'
-          ? 0n
-          : processingFee(amountMinor, {
-              type: m['fee_type'] as FeeType,
-              fixedMinor: BigInt(m['fee_fixed_minor'] as string),
-              percent: m['fee_percent'] as string,
-            });
-      return {
-        id: newId(),
-        method: {
+    const methods = ids.length
+      ? ((
+          await tx.execute(
+            sql`select * from payment_methods where id in (${sql.join(
+              ids.map((id) => sql`${id}`),
+              sql`, `,
+            )})`,
+          )
+        ).rows as Record<string, unknown>[])
+      : [];
+    const byId = new Map<string, PosPaymentMethod>(
+      methods.map((m) => [
+        m['id'] as string,
+        {
           id: m['id'] as string,
           kind: m['kind'] as string,
+          status: m['status'] as string,
+          availableInPos: Boolean(m['available_in_pos']),
+          gatewayProvider: (m['gateway_provider'] as string | null) ?? null,
+          financialAccountId: (m['financial_account_id'] as string | null) ?? null,
           nameEn: (m['name_en'] as string | null) ?? null,
           nameAr: (m['name_ar'] as string | null) ?? null,
-          financialAccountId: (m['financial_account_id'] as string | null) ?? null,
+          feeType: m['fee_type'] as FeeType,
+          feeFixedMinor: BigInt(m['fee_fixed_minor'] as string),
+          feePercent: m['fee_percent'] as string,
         },
-        amountMinor,
-        tenderedMinor,
-        changeMinor,
-        feeMinor,
-        reference: p.reference,
-      };
-    });
-    if (sum !== totalMinor)
-      throw new AppError(
-        400,
-        'PAYMENT_TOTAL_MISMATCH',
-        'The payments do not add up to the total.',
-        [
-          {
-            path: 'payments',
-            code: 'mismatch',
-            message: `total=${Money.ofMinor(totalMinor, CURRENCY).toDecimalString()} paid=${Money.ofMinor(sum, CURRENCY).toDecimalString()}`,
-          },
-        ],
-      );
-    return prepared;
+      ]),
+    );
+    return rules(() => checkPayments(input, byId, totalMinor, requireReference)).map((p) => ({
+      id: newId(),
+      ...p,
+    }));
   }
 
   private async completeOrder(
@@ -1410,7 +1250,7 @@ export class SalesService {
         on conflict (merchant_id, branch_id) do update set last_number = receipt_sequences.last_number + 1
         returning last_number, (select code from branches where id = ${branchId}) as code`)
     ).rows as { last_number: string; code: string }[];
-    return `${row!.code}-${String(row!.last_number).padStart(6, '0')}`;
+    return formatReceiptNumber(row!.code, row!.last_number);
   }
 
   // ------------------------------------------------------------ suspended carts

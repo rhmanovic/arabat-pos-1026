@@ -430,6 +430,9 @@ Merchant ─< Role
   `packages/pricing` and covered by exhaustive tests.
 - No `number` arithmetic on money anywhere; lint rule bans `parseFloat` /
   `Number()` on money fields in API and web code.
+- Selling rules on top of the pricing (rights, price-change bounds, discount
+  limit, zero totals, tenders, shift notes, refunds) live in `packages/pos-core`
+  (pure TypeScript, ADR-0112), shared by the API and the local-first device app.
 
 ---
 

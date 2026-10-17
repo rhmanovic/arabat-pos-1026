@@ -849,6 +849,20 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
 - Verified: web tests (sale completes with no `window.print`, button posts the print route,
   both toasts), integration (numbered copies, `agentOnline`), E2E checkout (no print call).
 
+### 2026-10-17 — Local-first plan (ADR-0112, Proposed) and `packages/pos-core`
+
+- ADR-0112 (`docs/adr/ADR-0112-local-first-pos.md`): registered devices as registers, offline
+  PIN login, per-device receipt series, server acceptance of device sales, UUIDv7 device ids,
+  download / upload sync without replication. Proposed; open questions: offline limit, browser POS.
+- `packages/pos-core`: pure selling rules moved out of `apps/api` without behavior change —
+  sale rights, pricing bounds, discount limit, zero totals, total check
+  (`sales.service.ts completeSaleInTx`), tenders (`preparePayments`), receipt / refund numbers,
+  supervisor grant rules (`overrides.service.ts`), shift note rules, "other" cash-out cap and
+  denomination check (`shifts.service.ts`), refund amounts, pay-back, approval reasons and void
+  rule (`refunds.service.ts`). The API calls them through `rules()`, which maps `PosRuleError` to
+  the same `AppError`. Public API: `packages/pos-core/README.md`.
+- Verified: pos-core unit tests (25); all existing unit, integration and E2E tests unchanged.
+
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.

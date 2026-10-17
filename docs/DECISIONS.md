@@ -1529,3 +1529,11 @@ ADR; supersede it.
   `POST /pos/sales/:id/reprints` is replaced by the print route. Refund receipts are shown on
   screen only until refunds get server print jobs.
 
+
+## ADR-0112 — Local-first POS on registered devices
+- **Date:** 2026-10-17 · **Status:** Proposed (owner approval pending).
+- Full text: [`docs/adr/ADR-0112-local-first-pos.md`](adr/ADR-0112-local-first-pos.md): device
+  registration as registers, offline PIN login with downloaded salted hashes, per-device receipt
+  series, server acceptance of completed device sales (no refusal for stock or price), device
+  UUIDv7 ids, versioned download and ledger-running upload sync without database replication,
+  and the shared rules package `packages/pos-core`.

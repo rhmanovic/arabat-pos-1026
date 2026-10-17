@@ -1,16 +1,22 @@
 import {
-  OVERRIDABLE_PERMISSIONS,
   type OverridablePermission,
   type SaleOverrideGrant,
   type requestOverrideSchema,
 } from '@arabat/contracts';
 import { can } from '@arabat/permissions';
+import {
+  assertDifferentSupervisor,
+  assertOverrideUsable,
+  assertSomethingToLend,
+  lendableRights,
+} from '@arabat/pos-core';
 import { Injectable } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
 import type { z } from 'zod';
 import { DatabaseService, type Transaction } from '../../database/database.service.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
+import { rules } from '../../kernel/errors/pos-rule.js';
 import { newId } from '../../kernel/ids.js';
 import { AuditService } from '../audit/audit.service.js';
 import { PasswordService } from '../auth/password.service.js';
@@ -80,12 +86,7 @@ export class OverridesService {
       throw AppError.invalidCredentials();
     }
     await this.limiter.reset(failures);
-    if (user.id === actor.userId)
-      throw new AppError(
-        403,
-        'OVERRIDE_SELF',
-        'A supervisor override must come from another person.',
-      );
+    rules(() => assertDifferentSupervisor(user.id, actor.userId));
 
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const shift = await this.shifts.lockOwnShift(tx, actor);
@@ -104,8 +105,9 @@ export class OverridesService {
         : null;
       // Only rights the approver holds here and the cashier lacks are worth lending.
       const permissions = approver
-        ? OVERRIDABLE_PERMISSIONS.filter(
-            (p) => can(approver.access, p, branchId) && !can(actor.access, p, branchId),
+        ? lendableRights(
+            (p) => can(approver.access, p, branchId),
+            (p) => can(actor.access, p, branchId),
           )
         : [];
       if (!approver || permissions.length === 0) {
@@ -120,11 +122,8 @@ export class OverridesService {
           ip,
           details: { approverUserId: user.id, reason: 'nothing_to_lend' },
         });
-        throw new AppError(
-          403,
-          'OVERRIDE_NOT_ALLOWED',
-          'This person cannot authorise anything beyond your own rights here.',
-        );
+        // Always refuses here (no right to lend): OVERRIDE_NOT_ALLOWED.
+        rules(() => assertSomethingToLend([]));
       }
       const [name] = await tx
         .select({ fullName: users.fullName })
@@ -140,7 +139,7 @@ export class OverridesService {
           shiftId: shift.id,
           cashierMembershipId: actor.membershipId,
           cashierUserId: actor.userId,
-          approverMembershipId: approver.membershipId,
+          approverMembershipId: approver!.membershipId,
           approverUserId: user.id,
           permissions,
           note: input.note,
@@ -185,23 +184,36 @@ export class OverridesService {
   ): Promise<OverrideAuthority> {
     const [row] = (
       await tx.execute(sql`
-        select o.id, o.approver_user_id, o.approver_membership_id, o.permissions, u.full_name
+        select o.id, o.approver_user_id, o.approver_membership_id, o.permissions, u.full_name,
+               o.status, o.expires_at, o.cashier_membership_id, o.branch_id, now() as db_now
         from sale_overrides o join users u on u.id = o.approver_user_id
-        where o.id = ${overrideId} and o.status = 'granted' and o.expires_at > now()
-          and o.cashier_membership_id = ${actor.membershipId} and o.branch_id = ${branchId}`)
+        where o.id = ${overrideId}`)
     ).rows as Record<string, unknown>[];
-    if (!row)
-      throw new AppError(
-        409,
-        'OVERRIDE_INVALID',
-        'The supervisor approval has expired or was already used. Ask again.',
-      );
+    // Single use, unexpired, this cashier, this branch (shared rule, ADR-0112), judged by the
+    // database clock as before.
+    rules(() =>
+      assertOverrideUsable(
+        row
+          ? {
+              status: row['status'] as string,
+              expiresAt: new Date(row['expires_at'] as string | Date),
+              cashierMembershipId: row['cashier_membership_id'] as string,
+              branchId: row['branch_id'] as string,
+            }
+          : null,
+        {
+          cashierMembershipId: actor.membershipId,
+          branchId,
+          now: row ? new Date(row['db_now'] as string | Date) : new Date(),
+        },
+      ),
+    );
     return {
-      id: row['id'] as string,
-      approverUserId: row['approver_user_id'] as string,
-      approverMembershipId: row['approver_membership_id'] as string,
-      approverName: (row['full_name'] as string | null) ?? '',
-      permissions: row['permissions'] as OverridablePermission[],
+      id: row!['id'] as string,
+      approverUserId: row!['approver_user_id'] as string,
+      approverMembershipId: row!['approver_membership_id'] as string,
+      approverName: (row!['full_name'] as string | null) ?? '',
+      permissions: row!['permissions'] as OverridablePermission[],
     };
   }
 

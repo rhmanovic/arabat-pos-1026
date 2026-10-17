@@ -247,6 +247,9 @@ importers:
       '@arabat/permissions':
         specifier: workspace:*
         version: link:../../packages/permissions
+      '@arabat/pos-core':
+        specifier: workspace:*
+        version: link:../../packages/pos-core
       '@fastify/cookie':
         specifier: ^11.1.3
         version: 11.1.3
@@ -604,6 +607,15 @@ importers:
   packages/money: {}
 
   packages/permissions: {}
+
+  packages/pos-core:
+    dependencies:
+      '@arabat/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@arabat/money':
+        specifier: workspace:*
+        version: link:../money
 
   packages/ui:
     dependencies:
