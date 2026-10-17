@@ -1,14 +1,17 @@
 import {
+  type DeviceException,
   type DeviceSettings,
   type DeviceSnapshot,
   type DeviceUploadResult,
   type PosDevice,
   type RegisterDeviceResult,
   type RegisteredDevice,
+  deviceExceptionQuerySchema,
   deviceSettingsSchema,
   deviceSyncQuerySchema,
   deviceUploadSchema,
   registerDeviceSchema,
+  resolveDeviceExceptionSchema,
 } from '@arabat/contracts';
 import {
   Body,
@@ -29,6 +32,7 @@ import { CurrentDevice, CurrentMerchantActor } from '../../kernel/access/current
 import type { Device } from '../../kernel/access/device-resolver.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { ZodPipe } from '../../kernel/validation/zod.pipe.js';
+import { DeviceExceptionsService } from './device-exceptions.service.js';
 import { DeviceIngestService } from './device-ingest.service.js';
 import { DeviceSyncService } from './device-sync.service.js';
 import { DevicesService } from './devices.service.js';
@@ -92,7 +96,32 @@ export class ManagerDevicesController {
   constructor(
     private readonly devices: DevicesService,
     private readonly sync: DeviceSyncService,
+    private readonly exceptions: DeviceExceptionsService,
   ) {}
+
+  /** Negative stock, wrong clocks and refused records from device uploads (ADR-0112). */
+  @RequirePermission('manager', 'registers.manage')
+  @Get('device-exceptions')
+  async listExceptions(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Query(new ZodPipe(deviceExceptionQuerySchema))
+    query: z.output<typeof deviceExceptionQuerySchema>,
+  ): Promise<{ exceptions: DeviceException[] }> {
+    return { exceptions: await this.exceptions.list(actor, query.status) };
+  }
+
+  @RequirePermission('manager', 'registers.manage')
+  @Post('device-exceptions/:id/resolve')
+  @HttpCode(204)
+  async resolveException(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body(new ZodPipe(resolveDeviceExceptionSchema))
+    body: z.output<typeof resolveDeviceExceptionSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<void> {
+    await this.exceptions.resolve(actor, id, body.note, req.ip);
+  }
 
   @RequirePermission('manager', 'merchant.settings.read')
   @Get('device-settings')

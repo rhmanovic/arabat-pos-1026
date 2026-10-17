@@ -122,6 +122,8 @@ export const managerEn = {
       '{{count}} bank entries older than a week appeared on no statement yet. Reconcile the bank accounts.',
     controlPendingAdjustments: '{{count}} stock adjustments are waiting for approval.',
     controlPendingTransferLosses: '{{count}} transfer losses are waiting for the source approver.',
+    controlDeviceExceptions:
+      '{{count}} device uploads to check (negative stock, device clock or not accepted).',
     controlUnresolvedShortages:
       '{{count}} transfers were received short and the shortage is not written off.',
     controlsAllGood: 'No control warnings.',
@@ -935,6 +937,33 @@ export const managerEn = {
     offlineLimitHours: 'Limit (hours)',
     offlineLimitInvalid: 'Enter 1 to 720 hours.',
     offlineLimitSaved: 'Limit saved',
+    kindHeader: 'Type',
+    exceptions: 'To check after device uploads',
+    exceptionsOpen: 'Open',
+    exceptionsResolved: 'Handled',
+    exceptionsEmpty: 'Nothing to check.',
+    whatHappened: 'What happened',
+    device: 'Device',
+    when: 'When (device time)',
+    markHandled: 'Mark handled',
+    resolutionNote: 'What was done',
+    exceptionResolved: 'Marked handled',
+    negativeStockText:
+      '{{product}} went to {{balance}} in stock with sale {{receipt}}. Count it or receive the missing stock.',
+    clockAhead:
+      'The device dated this {{at}}, later than it reached the server ({{received}}). Check the device clock.',
+    clockOutsideShift:
+      'The device dated this {{at}}, before its shift opened. Check the device clock.',
+    refusedText:
+      '{{record}} not accepted: {{message}} ({{code}}). Enter it online if it really happened.',
+    kind: { negative_stock: 'Negative stock', clock_skew: 'Device clock', refused: 'Not accepted' },
+    record: {
+      sale: 'Sale',
+      refund: 'Refund',
+      cash_movement: 'Cash movement',
+      shift_open: 'Shift opening',
+      shift_close: 'Shift closing',
+    },
   },
   printers: {
     title: 'Receipt printers',

@@ -403,3 +403,38 @@ export const deviceUploadResultSchema = z.object({
   results: z.array(deviceRecordResultSchema),
 });
 export type DeviceUploadResult = z.infer<typeof deviceUploadResultSchema>;
+
+/* Device exceptions for managers (ADR-0112 §5, gap B). */
+
+export const DEVICE_EXCEPTION_KINDS = ['negative_stock', 'clock_skew', 'refused'] as const;
+
+export const deviceExceptionQuerySchema = z.object({
+  status: z.enum(['open', 'resolved']).default('open'),
+});
+
+export const deviceExceptionSchema = z.object({
+  id: z.uuid(),
+  kind: z.enum(DEVICE_EXCEPTION_KINDS),
+  branchId: z.uuid(),
+  deviceId: z.uuid(),
+  deviceName: z.string(),
+  registerCode: z.string(),
+  recordId: z.uuid(),
+  recordKind: z.string(),
+  /** negative_stock: variantId, productName, balance, receiptNumber; clock_skew: occurredAt,
+   *  receivedAt, outsideShift; refused: code, message. */
+  details: z.record(z.string(), z.unknown()),
+  occurredAt: z.string(),
+  receivedAt: z.string(),
+  createdAt: z.string(),
+  resolvedAt: z.string().nullable(),
+  resolvedByName: z.string().nullable(),
+  resolutionNote: z.string().nullable(),
+  /** Refused records only: what the device sent, kept so nothing is lost. */
+  payload: z.record(z.string(), z.unknown()).nullable(),
+});
+export type DeviceException = z.infer<typeof deviceExceptionSchema>;
+
+export const resolveDeviceExceptionSchema = z.object({
+  note: z.string().trim().min(1).max(500),
+});

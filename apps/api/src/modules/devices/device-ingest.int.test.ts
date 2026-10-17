@@ -468,3 +468,63 @@ async function ownerMembership(s: Setup) {
   ]);
   return r.rows[0].id as string;
 }
+
+describe('device exceptions for managers', () => {
+  it('lists open exceptions with what happened, counts them on the dashboard, and resolves them', async () => {
+    const s = await setup();
+    const shiftId = newId();
+    const bad = sale(s, shiftId, 9, { totalMinor: '1' });
+    await sync(s.token, 'POST', [
+      openShift(s, shiftId),
+      bad,
+      sale(s, shiftId, 1, { occurredAt: at(30) }),
+    ]);
+    const list = await s.c.client.request('GET', '/manager/device-exceptions', {
+      cookies: s.c.cookies,
+    });
+    expect(list.statusCode).toBe(200);
+    const items = list.json().exceptions as Rec[];
+    expect(items.map((e) => e['kind']).sort()).toEqual(['clock_skew', 'refused']);
+    const refused = items.find((e) => e['kind'] === 'refused')!;
+    expect(refused).toMatchObject({
+      recordId: bad['id'],
+      recordKind: 'sale',
+      registerCode: s.device.registerCode,
+      details: { code: 'TOTALS_MISMATCH' },
+      payload: expect.objectContaining({ receiptNumber: bad['receiptNumber'] }),
+    });
+    const controls = await s.c.client.request('GET', '/manager/merchant/controls', {
+      cookies: s.c.cookies,
+    });
+    expect(controls.json().openDeviceExceptions).toBe(2);
+
+    const resolve = await s.c.client.request(
+      'POST',
+      `/manager/device-exceptions/${refused['id']}/resolve`,
+      { cookies: s.c.cookies, body: { note: 'Re-entered online' } },
+    );
+    expect(resolve.statusCode).toBe(204);
+    const done = (
+      await s.c.client.request('GET', '/manager/device-exceptions?status=resolved', {
+        cookies: s.c.cookies,
+      })
+    ).json().exceptions;
+    expect(done).toEqual([
+      expect.objectContaining({ id: refused['id'], resolutionNote: 'Re-entered online' }),
+    ]);
+    expect(
+      (
+        await s.c.client.request('POST', `/manager/device-exceptions/${refused['id']}/resolve`, {
+          cookies: s.c.cookies,
+          body: { note: 'again' },
+        })
+      ).statusCode,
+    ).toBe(409);
+    // Cashiers do not see them.
+    const cashier = await s.c.hire([{ roleId: s.c.roles.cashier, branchId: s.c.main }], 'pos');
+    expect(
+      (await s.c.client.request('GET', '/manager/device-exceptions', { cookies: cashier.cookies }))
+        .statusCode,
+    ).toBe(401);
+  });
+});

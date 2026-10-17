@@ -151,6 +151,17 @@ export function DashboardPage() {
               },
             ]
           : []),
+        ...(controls.data.openDeviceExceptions > 0
+          ? [
+              {
+                key: 'devices',
+                to: '/devices',
+                text: t('dashboard.controlDeviceExceptions', {
+                  count: controls.data.openDeviceExceptions,
+                }),
+              },
+            ]
+          : []),
         ...(controls.data.unresolvedTransferShortages > 0
           ? [
               {

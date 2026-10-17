@@ -19,6 +19,7 @@ import { type FormEvent, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useBranchName } from '../../app/context.js';
 import { formatDateTime } from '../inventory/AdjustmentsPage.js';
+import { DeviceExceptions } from './DeviceExceptions.js';
 
 export const devicesKey = ['manager', 'devices'] as const;
 const settingsKey = ['manager', 'device-settings'] as const;
@@ -183,6 +184,7 @@ export function DevicesPage() {
         loading={revoke.isPending}
         onConfirm={() => removing && revoke.mutate(removing.id)}
       />
+      <DeviceExceptions />
     </div>
   );
 }

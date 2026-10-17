@@ -36,5 +36,7 @@ export const controlsChecklistSchema = z.object({
   pendingTransferLosses: z.number().int(),
   /** Transfers received short whose shortage is not written off (rejected or unclaimed). */
   unresolvedTransferShortages: z.number().int(),
+  /** Device uploads to look at: negative stock, wrong clocks, refused records (ADR-0112). */
+  openDeviceExceptions: z.number().int().default(0),
 });
 export type ControlsChecklist = z.infer<typeof controlsChecklistSchema>;

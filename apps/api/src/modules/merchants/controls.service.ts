@@ -96,6 +96,11 @@ export class ControlsService {
                                where x.transfer_id = t.id and x.status = 'posted' and ll.position = l.position), 0), 0)), 0)
                  from stock_transfer_lines l where l.transfer_id = t.id) > 0`)
       ).rows as { n: number }[];
+      const [deviceExceptions] = (
+        await tx.execute(sql`
+          select count(*)::int as n from device_exceptions
+          where merchant_id = ${actor.merchantId} and resolved_at is null`)
+      ).rows as { n: number }[];
       return {
         pendingPayoutRequests: Number(payouts?.n ?? 0),
         openVariances,
@@ -104,6 +109,7 @@ export class ControlsService {
         pendingAdjustments: Number(adjustments?.n ?? 0),
         pendingTransferLosses: Number(losses?.n ?? 0),
         unresolvedTransferShortages: Number(shortages?.n ?? 0),
+        openDeviceExceptions: Number(deviceExceptions?.n ?? 0),
         treasurerAssigned: Boolean(treasurer?.assigned),
         membersWithoutRoles: withoutRoles.map((r) => ({
           membershipId: r['id'] as string,

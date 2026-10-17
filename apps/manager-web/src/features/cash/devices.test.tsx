@@ -86,4 +86,60 @@ describe('devices', () => {
       expect(fetch.calls.find((c) => c.method === 'PUT')?.body).toEqual({ offlineLimitHours: 48 }),
     );
   });
+
+  it('lists device exceptions and marks one handled with a note', async () => {
+    const exception = {
+      id: '0190a000-0000-7000-8000-000000000e01',
+      kind: 'negative_stock',
+      branchId: device.branchId,
+      deviceId: DEVICE,
+      deviceName: 'Till Mac',
+      registerCode: 'R2',
+      recordId: '0190a000-0000-7000-8000-000000000e02',
+      recordKind: 'sale',
+      details: {
+        variantId: '0190a000-0000-7000-8000-000000000e03',
+        balance: '-1',
+        receiptNumber: 'MAIN-R2-000004',
+        productNameEn: 'Cup',
+        productNameAr: 'كوب',
+      },
+      occurredAt: '2026-10-17T08:00:00.000Z',
+      receivedAt: '2026-10-17T09:00:00.000Z',
+      createdAt: '2026-10-17T09:00:00.000Z',
+      resolvedAt: null,
+      resolvedByName: null,
+      resolutionNote: null,
+      payload: null,
+    };
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'registers.manage']),
+      routes: {
+        'GET /manager/devices': () => ({ status: 200, body: { devices: [device] } }),
+        'GET /manager/device-exceptions': () => ({
+          status: 200,
+          body: { exceptions: [exception] },
+        }),
+        [`POST /manager/device-exceptions/${exception.id}/resolve`]: () => ({
+          status: 204,
+          body: null,
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/devices', fetch });
+    const row = await screen.findByRole('row', { name: /Negative stock/ });
+    expect(
+      within(row).getByText(/Cup went to -1 in stock with sale MAIN-R2-000004/),
+    ).toBeInTheDocument();
+    await userEvent.click(within(row).getByRole('button', { name: 'Mark handled' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText('What was done'), 'Counted the shelf');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Mark handled' }));
+    await vi.waitFor(() =>
+      expect(
+        fetch.calls.find((c) => c.path === `/manager/device-exceptions/${exception.id}/resolve`)
+          ?.body,
+      ).toEqual({ note: 'Counted the shelf' }),
+    );
+  });
 });

@@ -3,6 +3,7 @@ import { InventoryModule } from '../inventory/inventory.module.js';
 import { PrintingModule } from '../printing/printing.module.js';
 import { RefundsModule } from '../refunds/refunds.module.js';
 import { DeviceRegistrationController, ManagerDevicesController } from './devices.controller.js';
+import { DeviceExceptionsService } from './device-exceptions.service.js';
 import { DeviceIngestService } from './device-ingest.service.js';
 import { DeviceSyncService } from './device-sync.service.js';
 import { DevicesService } from './devices.service.js';
@@ -11,7 +12,7 @@ import { DevicesService } from './devices.service.js';
 @Module({
   imports: [InventoryModule, PrintingModule, RefundsModule],
   controllers: [DeviceRegistrationController, ManagerDevicesController],
-  providers: [DevicesService, DeviceSyncService, DeviceIngestService],
+  providers: [DevicesService, DeviceSyncService, DeviceIngestService, DeviceExceptionsService],
   exports: [DevicesService],
 })
 export class DevicesModule {}

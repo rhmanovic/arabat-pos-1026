@@ -34,7 +34,7 @@ the permission.
 | `/payments` | Payment methods and internal balances | `payments.settings` |
 | `/cash` | Cash custody: treasury and register balances per branch, counts, statements, transfers, expenses and supplier payments, bank deposits, transfers between branches | `cash.custody` (deposits: `cash.deposit`) |
 | `/registers` | Registers | `registers.manage` |
-| `/devices` | Local-first devices (ADR-0112): offline selling limit, name, branch, register code, online / last sync, remove | `registers.manage` (limit: `merchant.settings.read` / `.update`) |
+| `/devices` | Local-first devices (ADR-0112): offline selling limit, name, branch, register code, online / last sync, remove; exceptions after uploads (negative stock, device clock, not accepted) to mark handled | `registers.manage` (limit: `merchant.settings.read` / `.update`) |
 | `/printers` | Receipt printers (print agents, token shown once, online state, auto-print setting); the sale page has "Print receipt" (ADR-0111) | `registers.manage` (setting: `merchant.settings.*`) |
 | `/shifts`, `/shifts/:shiftId` | Shift history, X/Z summary, cash discrepancies, follow-up of differences; pending cash-out decisions | `shifts.view_all` |
 | `/branches` | Branches | `branches.read` |
@@ -247,6 +247,7 @@ back to the same conversation. The assistant only reads (BR-194).
 | `POST /device/sync` (`{ records: [...] }`, up to 200, causal order; per record `accepted` / `duplicate` / `refused`; `docs/DEVICE_API.md`) | device bearer token |
 | `GET /manager/devices`, `POST /manager/devices/:id/revoke` | manager `registers.manage` |
 | `GET /manager/device-settings`, `PUT /manager/device-settings` (`{ offlineLimitHours }`, 1–720) | manager `merchant.settings.read` / `merchant.settings.update` |
+| `GET /manager/device-exceptions?status=open\|resolved`, `POST /manager/device-exceptions/:id/resolve` (`{ note }`) | manager `registers.manage` (per branch) |
 | `PUT /manager/employees/:membershipId/pin` (`{ pin }`: 6–12 digits, not one repeated digit, not a straight run → 204) | own PIN: `manager.access`; others: `employees.manage` within the usual anti-escalation rule |
 
 ### Server-side receipt printing API (ADR-0111)

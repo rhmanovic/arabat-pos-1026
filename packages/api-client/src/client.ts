@@ -127,6 +127,7 @@ import {
   posRegisterListSchema,
   registerListSchema,
   createdPrintAgentSchema,
+  deviceExceptionSchema,
   deviceSettingsSchema,
   posDeviceSchema,
   printAgentSchema,
@@ -763,6 +764,12 @@ export function createApiClient(options: ApiClientOptions = {}) {
       settings: () => request('GET', '/manager/device-settings', { schema: deviceSettingsSchema }),
       updateSettings: (body: { offlineLimitHours: number }) =>
         request('PUT', '/manager/device-settings', { body, schema: deviceSettingsSchema }),
+      exceptions: (status: 'open' | 'resolved') =>
+        request('GET', `/manager/device-exceptions?${toParams({ status })}`, {
+          schema: z.object({ exceptions: z.array(deviceExceptionSchema) }),
+        }),
+      resolveException: (id: string, note: string) =>
+        request('POST', `/manager/device-exceptions/${id}/resolve`, { body: { note } }),
     },
     /** Server-side receipt printing (ADR-0111). */
     printing: {
