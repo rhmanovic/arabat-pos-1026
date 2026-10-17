@@ -94,8 +94,6 @@ export function SalePage() {
     null,
   );
   const [receiptId, setReceiptId] = useState<string | null>(null);
-  /** Receipts opened from the list are copies; the one right after a sale is the original. */
-  const [receiptIsCopy, setReceiptIsCopy] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const items = useMemo(
@@ -546,7 +544,6 @@ export function SalePage() {
           onClose={() => setDialog(null)}
           onOpen={(id) => {
             setDialog(null);
-            setReceiptIsCopy(true);
             setReceiptId(id);
           }}
         />
@@ -559,19 +556,11 @@ export function SalePage() {
           onCompleted={(saleId) => {
             setDialog(null);
             setCartOpen(false);
-            setReceiptIsCopy(false);
             setReceiptId(saleId);
           }}
         />
       ) : null}
-      {receiptId ? (
-        <ReceiptDialog
-          saleId={receiptId}
-          copy={receiptIsCopy}
-          autoPrint={!receiptIsCopy}
-          onClose={() => setReceiptId(null)}
-        />
-      ) : null}
+      {receiptId ? <ReceiptDialog saleId={receiptId} onClose={() => setReceiptId(null)} /> : null}
     </div>
   );
 }

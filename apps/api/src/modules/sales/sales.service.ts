@@ -1,6 +1,7 @@
 import type {
   DiscountInput,
   OverridablePermission,
+  PrintJob,
   Receipt,
   Sale,
   SaleFlag,
@@ -53,7 +54,6 @@ import {
   orders,
   payments,
   posCartEvents,
-  receiptReprints,
   saleLineModifiers,
   saleLines,
   sales,
@@ -1590,10 +1590,10 @@ export class SalesService {
   }
 
   /** A receipt copy: logged, audited and counted on the receipt itself (BR-182, FND-310). */
-  async reprint(actor: MerchantActor, saleId: string, ip: string): Promise<Receipt> {
+  async reprint(actor: MerchantActor, saleId: string, ip: string): Promise<PrintJob> {
     const branchId = actor.boundBranchId;
     if (!branchId) throw AppError.forbidden();
-    await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+    return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const [sale] = (
         await tx.execute(
           sql`select id, receipt_number from sales where id = ${saleId} and branch_id = ${branchId}`,
@@ -1605,9 +1605,9 @@ export class SalesService {
           sql`select id from shifts where membership_id = ${actor.membershipId} and status = 'open'`,
         )
       ).rows as { id: string }[];
-      await tx.insert(receiptReprints).values({
-        id: newId(),
+      const job = await this.printJobs.queueCopyInTx(tx, {
         merchantId: actor.merchantId,
+        branchId,
         saleId,
         userId: actor.userId,
         shiftId: shift?.id ?? null,
@@ -1620,10 +1620,15 @@ export class SalesService {
         targetType: 'sale',
         targetId: saleId,
         ip,
-        details: { receiptNumber: sale.receipt_number, shiftId: shift?.id ?? null },
+        details: {
+          receiptNumber: sale.receipt_number,
+          shiftId: shift?.id ?? null,
+          printJobId: job.id,
+          copyNumber: job.copyNumber,
+        },
       });
+      return job;
     });
-    return this.receipt(actor, saleId, 'pos');
   }
 
   /** Receipt lookup by number at the till, read-only, limited to the session branch (BR-182). */

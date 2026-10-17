@@ -1,7 +1,7 @@
 import { fakeApiFetch, makeSession, renderApp } from '@arabat/web-core/testing';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { i18n } from '../../i18n/index.js';
 import { routes } from '../../routes.js';
 
@@ -150,27 +150,38 @@ describe('sales history (session 8: unusual sales)', () => {
 });
 
 describe('server-side receipt printing', () => {
-  it('sends the sale to the receipt printer from the sale page', async () => {
-    const fetch = fakeApiFetch({
-      session: makeSession('manager', ['manager.access', 'sales.read']),
-      routes: {
-        'GET /manager/branches': () => ({ status: 200, body: branches }),
-        [`GET /manager/sales/${SALE}`]: () => ({ status: 200, body: sale }),
-        [`POST /manager/sales/${SALE}/print`]: () => ({
-          status: 201,
-          body: {
-            id: '0190a000-0000-7000-8000-000000000f01',
-            status: 'pending',
-            createdAt: '2026-10-16T08:00:00.000Z',
-          },
-        }),
-      },
-    });
-    renderApp({ routes, appInterface: 'manager', i18n, path: `/sales/${SALE}`, fetch });
-    await userEvent.click(await screen.findByRole('button', { name: 'Print receipt' }));
-    expect(await screen.findByText('Sent to the receipt printer')).toBeInTheDocument();
-    expect(
-      fetch.calls.filter((c) => c.method === 'POST' && c.path === `/manager/sales/${SALE}/print`),
-    ).toHaveLength(1);
-  });
+  it.each([
+    [true, 'Sent to the printer'],
+    [false, 'No printer connected; the receipt prints when one connects'],
+  ])(
+    'sends the sale to the receipt printer from the sale page (agent online: %s)',
+    async (agentOnline, message) => {
+      const fetch = fakeApiFetch({
+        session: makeSession('manager', ['manager.access', 'sales.read']),
+        routes: {
+          'GET /manager/branches': () => ({ status: 200, body: branches }),
+          [`GET /manager/sales/${SALE}`]: () => ({ status: 200, body: sale }),
+          [`POST /manager/sales/${SALE}/print`]: () => ({
+            status: 201,
+            body: {
+              id: '0190a000-0000-7000-8000-000000000f01',
+              status: 'pending',
+              createdAt: '2026-10-16T08:00:00.000Z',
+              copyNumber: 1,
+              agentOnline,
+            },
+          }),
+        },
+      });
+      const print = vi.spyOn(window, 'print').mockImplementation(() => {});
+      renderApp({ routes, appInterface: 'manager', i18n, path: `/sales/${SALE}`, fetch });
+      await userEvent.click(await screen.findByRole('button', { name: 'Print receipt' }));
+      expect(await screen.findByText(message)).toBeInTheDocument();
+      expect(
+        fetch.calls.filter((c) => c.method === 'POST' && c.path === `/manager/sales/${SALE}/print`),
+      ).toHaveLength(1);
+      expect(print).not.toHaveBeenCalled();
+      print.mockRestore();
+    },
+  );
 });

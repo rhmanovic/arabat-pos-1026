@@ -83,13 +83,14 @@ export class PrintJobsService {
       onlineOrderId?: string | null;
       kind: 'auto' | 'reprint';
       userId: string | null;
+      copyNumber?: number;
     },
-  ): Promise<PrintJob> {
+  ): Promise<{ id: string; status: PrintJob['status']; createdAt: string }> {
     const id = newId();
     const html = renderReceiptHtml(
       await loadReceiptData(tx, args.saleId, args.onlineOrderId ?? null),
       new Date(),
-      args.kind === 'reprint',
+      args.copyNumber ?? 0,
     );
     const [job] = (
       await tx.execute(sql`
@@ -102,7 +103,48 @@ export class PrintJobsService {
     return { id, status: job!.status, createdAt: iso(job!.created_at) };
   }
 
-  /** Manager: a new job for a sale's receipt (marked as a copy), whatever the setting. */
+  /**
+   * A numbered receipt copy (BR-182) in the caller's transaction: logged in `receipt_reprints`
+   * and queued for the print agents of the sale's branch, whatever the auto-print setting.
+   * Used by the till (`POST /pos/sales/:id/print`) and the manager (`/manager/sales/:id/print`).
+   */
+  async queueCopyInTx(
+    tx: Transaction,
+    args: {
+      merchantId: string;
+      branchId: string;
+      saleId: string;
+      userId: string;
+      shiftId: string | null;
+    },
+  ): Promise<PrintJob> {
+    await tx.execute(sql`
+      insert into receipt_reprints (id, merchant_id, sale_id, user_id, shift_id)
+      values (${newId()}, ${args.merchantId}, ${args.saleId}, ${args.userId}, ${args.shiftId})`);
+    const [count] = (
+      await tx.execute(
+        sql`select count(*)::int as n from receipt_reprints where merchant_id = ${args.merchantId} and sale_id = ${args.saleId}`,
+      )
+    ).rows as { n: number }[];
+    const copyNumber = count!.n;
+    const job = await this.insertJob(tx, {
+      merchantId: args.merchantId,
+      branchId: args.branchId,
+      saleId: args.saleId,
+      kind: 'reprint',
+      userId: args.userId,
+      copyNumber,
+    });
+    const [online] = (
+      await tx.execute(sql`
+        select exists (select 1 from print_agents where merchant_id = ${args.merchantId}
+                       and (branch_id is null or branch_id = ${args.branchId})
+                       and last_seen_at > now() - make_interval(secs => ${PRINT_AGENT_ONLINE_SECONDS})) as online`)
+    ).rows as { online: boolean }[];
+    return { ...job, copyNumber, agentOnline: online!.online };
+  }
+
+  /** Manager: a numbered copy of a sale's receipt, sent to the print agents. */
   async reprint(actor: MerchantActor, saleId: string, ip: string): Promise<PrintJob> {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const [sale] = (
@@ -112,12 +154,12 @@ export class PrintJobsService {
       ).rows as { branch_id: string; receipt_number: string }[];
       if (!sale) throw AppError.notFound();
       assertCan(actor, 'sales.read', sale.branch_id);
-      const job = await this.insertJob(tx, {
+      const job = await this.queueCopyInTx(tx, {
         merchantId: actor.merchantId,
         branchId: sale.branch_id,
         saleId,
-        kind: 'reprint',
         userId: actor.userId,
+        shiftId: null,
       });
       await this.audit.recordIn(tx, {
         merchantId: actor.merchantId,
@@ -127,7 +169,11 @@ export class PrintJobsService {
         targetType: 'sale',
         targetId: saleId,
         ip,
-        details: { receiptNumber: sale.receipt_number, printJobId: job.id },
+        details: {
+          receiptNumber: sale.receipt_number,
+          printJobId: job.id,
+          copyNumber: job.copyNumber,
+        },
       });
       return job;
     });

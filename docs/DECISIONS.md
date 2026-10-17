@@ -1519,3 +1519,13 @@ ADR; supersede it.
 - **Consequences:** a new dependency (`socket.io`). Socket connections count against Cloud Run's
   request timeout (300 s), so agents reconnect regularly; this is covered by the pending call.
   Failed jobs are not retried automatically; a manager reprints.
+- **Amendment (2026-10-17, owner decision):** the front end never prints by itself. Browser
+  printing (`window.print()` after a sale, the `#receipt-print` portal and its print CSS, the
+  Chrome `--kiosk-printing` launcher) is removed, because the auto job already prints the sale
+  and the browser printed it a second time. "Print receipt" on the till calls the new
+  `POST /pos/sales/:id/print` (POS sessions cannot use the manager route) and on the manager's
+  sale page `POST /manager/sales/:id/print`; both log a numbered copy in `receipt_reprints`
+  (BR-182, «نسخة رقم N» on the paper), queue a reprint job and answer `agentOnline`.
+  `POST /pos/sales/:id/reprints` is replaced by the print route. Refund receipts are shown on
+  screen only until refunds get server print jobs.
+

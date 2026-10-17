@@ -783,7 +783,8 @@ function PrintReceiptButton({ saleId }: { saleId: string }) {
   const notify = useNotify();
   const print = useMutation({
     mutationFn: () => api.printing.printSale(saleId),
-    onSuccess: () => notify.ok(t('printers.sent')),
+    onSuccess: (job) =>
+      job.agentOnline ? notify.ok(t('printers.sent')) : notify.info(t('printers.noPrinterOnline')),
     onError: notify.fail,
   });
   return (

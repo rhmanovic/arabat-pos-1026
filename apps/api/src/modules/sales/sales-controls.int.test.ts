@@ -265,17 +265,31 @@ describe('held sales and reprints (R3.6, BR-182)', () => {
         })
       ).json().sale.reprintCount,
     ).toBe(0);
-    const copy = await s.c.client.request('POST', `/pos/sales/${sale.id}/reprints`, {
+    // A copy is a server print job (ADR-0111): no agent here, so it waits ("not connected").
+    const copy = await s.c.client.request('POST', `/pos/sales/${sale.id}/print`, {
       cookies: cashier.cookies,
-      body: {},
     });
     expect(copy.statusCode).toBe(201);
-    expect(copy.json().sale.reprintCount).toBe(1);
-    const copy2 = await s.c.client.request('POST', `/pos/sales/${sale.id}/reprints`, {
+    expect(copy.json()).toMatchObject({ status: 'pending', copyNumber: 1, agentOnline: false });
+    const copy2 = await s.c.client.request('POST', `/pos/sales/${sale.id}/print`, {
       cookies: cashier.cookies,
-      body: {},
     });
-    expect(copy2.json().sale.reprintCount).toBe(2);
+    expect(copy2.json()).toMatchObject({ copyNumber: 2 });
+    expect(
+      (
+        await s.c.client.request('GET', `/pos/sales/${sale.id}/receipt`, {
+          cookies: cashier.cookies,
+        })
+      ).json().sale.reprintCount,
+    ).toBe(2);
+    const jobs = await owner.query(
+      `select kind, status, html like '%نسخة رقم 2%' as numbered from print_jobs where sale_id = $1 order by created_at`,
+      [sale.id],
+    );
+    expect(jobs.rows).toEqual([
+      { kind: 'reprint', status: 'pending', numbered: false },
+      { kind: 'reprint', status: 'pending', numbered: true },
+    ]);
     const reprints = await owner.query(
       `select count(*)::int as n from audit_log where merchant_id = $1 and action = 'sale.reprinted' and target_id = $2`,
       [s.c.merchantId, sale.id],

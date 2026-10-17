@@ -1,4 +1,5 @@
 import {
+  type PrintJob,
   type Receipt,
   type Sale,
   type SaleOverrideGrant,
@@ -94,14 +95,17 @@ export class PosSalesController {
     return this.sales.receipt(actor, id, 'pos');
   }
 
-  /** A receipt copy: logged, audited and numbered on the receipt (BR-182). */
+  /**
+   * A receipt copy: logged, audited, numbered (BR-182) and sent to the branch's print agents
+   * (ADR-0111). The till never prints in the browser.
+   */
   @RequirePermission('pos', 'sales.create')
-  @Post('sales/:id/reprints')
-  reprint(
+  @Post('sales/:id/print')
+  print(
     @CurrentMerchantActor() actor: MerchantActor,
     @Param('id', uuid) id: string,
     @Req() req: FastifyRequest,
-  ): Promise<Receipt> {
+  ): Promise<PrintJob> {
     return this.sales.reprint(actor, id, req.ip);
   }
 

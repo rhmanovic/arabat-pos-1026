@@ -189,7 +189,7 @@ cash in/out, close with optional note/coin count, closing result).
 | `POST /pos/sales` (checkout, idempotency key, optional `overrideId`, `zeroTotalReason`) | POS `sales.create`, own open shift; `sales.discount`, `sales.discount.override_limit`, `sales.price_override`, `sales.zero_total` as needed, held by the cashier or lent by a supervisor override (BR-177) |
 | `POST /pos/overrides` (supervisor e-mail + password on the cashier's till → single-use grant) | POS `sales.create`, own open shift; the approver must hold overridable rights the cashier lacks |
 | `GET /pos/sales/recent`, `GET /pos/sales/:id/receipt`, `GET /pos/sales/settings`, `GET /pos/sales/lookup?receipt=` (any receipt of the branch, read-only) | POS `sales.create` (session branch only) |
-| `POST /pos/sales/:id/reprints` (logged, numbered copy), `POST /pos/cart-events` (cleared cart / removed line above the threshold) | POS `sales.create`, own open shift |
+| `POST /pos/sales/:id/print` (logged, numbered copy sent to the print agent), `POST /pos/cart-events` (cleared cart / removed line above the threshold) | POS `sales.create`, own open shift |
 | `POST /pos/orders` (hold; expires after the company limit), `GET /pos/orders/suspended`, `POST /pos/orders/:id/cancel` | POS `sales.create` |
 | `GET /manager/sales?branchId=&q=&from=&to=&flag=` (`flag`: zero_total, above_limit, price_override, supervised), `GET /manager/sales/:id`, `GET …/:id/receipt` | `sales.read` (branch-scoped) |
 | `GET/PUT /manager/sales-settings` | `merchant.settings.read` / `merchant.settings.update` |
@@ -244,7 +244,8 @@ back to the same conversation. The assistant only reads (BR-194).
 | `POST /manager/print-agents` (`{ name, branchId? }` → `{ id, token }`; the token is shown only here) | manager `registers.manage` (at the branch; company-wide when `branchId` is null) |
 | `DELETE /manager/print-agents/:id` (204; token stops working, sockets disconnected) | manager `registers.manage` |
 | `GET` / `PUT /manager/print-settings` (`{ autoPrintReceipts }`, default true) | manager `merchant.settings.read` / `.update` |
-| `POST /manager/sales/:id/print` (reprint as a new job → `{ id, status, createdAt }`) | manager `sales.read` at the sale's branch |
+| `POST /manager/sales/:id/print` (numbered copy as a new job → `{ id, status, createdAt, copyNumber, agentOnline }`) | manager `sales.read` at the sale's branch |
+| `POST /pos/sales/:id/print` (the till's "Print receipt": same answer; copy logged with the cashier's shift) | POS `sales.create` at the session branch |
 | `GET /print-agent/jobs/pending` (`[{ id, html, orderUuid, createdAt }]`, oldest first, max 50) | agent bearer token |
 | `POST /print-agent/jobs/:id/claim` (`{ id, html }`; 409 when already claimed) | agent bearer token |
 | `POST /print-agent/jobs/:id/result` (`{ ok, error? }` → `{ id, status }`; 409 when not claimed by this agent) | agent bearer token |

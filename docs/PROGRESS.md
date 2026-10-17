@@ -837,6 +837,18 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
   disconnect on delete); web tests for `/printers` and the sale page button.
 - Not done here: the agent program itself (built separately).
 
+### 2026-10-17 — The front end never prints (ADR-0111 amendment)
+
+- Removed: automatic `window.print()` after a sale (POS checkout, restaurant bills), the print
+  buttons that opened the browser dialog (sale and refund receipts), `ReceiptPrint` and the
+  `#receipt-print` print CSS, Tailwind `print:` classes, `scripts/pos-kiosk`. No print library
+  was in use.
+- "Print receipt" on the till → `POST /pos/sales/:id/print`; on the manager's sale page →
+  `POST /manager/sales/:id/print`; toast «أُرسل للطابعة» or «لا توجد طابعة متصلة».
+- Refund receipts: on screen only (no server refund print job yet).
+- Verified: web tests (sale completes with no `window.print`, button posts the print route,
+  both toasts), integration (numbered copies, `agentOnline`), E2E checkout (no print call).
+
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.

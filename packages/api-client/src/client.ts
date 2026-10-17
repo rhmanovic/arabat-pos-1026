@@ -827,8 +827,9 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('POST', '/pos/overrides', { body, schema: saleOverrideGrantSchema }),
       lookup: (receipt: string) =>
         request('GET', `/pos/sales/lookup?${toParams({ receipt })}`, { schema: saleSchema }),
-      reprint: (id: string) =>
-        request('POST', `/pos/sales/${id}/reprints`, { body: {}, schema: receiptSchema }),
+      /** A numbered receipt copy, printed by the branch's print agent (ADR-0111). */
+      print: (id: string) =>
+        request('POST', `/pos/sales/${id}/print`, { body: {}, schema: printJobSchema }),
       cartEvent: (body: CartEvent) => request('POST', '/pos/cart-events', { body }),
       recent: () =>
         request('GET', '/pos/sales/recent', {

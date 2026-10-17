@@ -15,7 +15,6 @@ import { Link } from 'react-router';
 import { shiftKey } from '../pages/ShiftPages.js';
 import { type CartLine, priceLines } from './cart.js';
 import { ReceiptDialog } from './dialogs.js';
-import { ReceiptPrint } from './ReceiptPrint.js';
 import { availabilityKey, catalogKey, itemLabel, useMoneyFormat } from './SalePage.js';
 
 const QTY = /^\d{1,11}(\.\d{1,3})?$/;
@@ -760,16 +759,6 @@ function RefundReceiptDialog({
       title={t('returns.receiptTitle')}
       footer={
         <>
-          {!pending ? (
-            <Button
-              variant="secondary"
-              size="lg"
-              disabled={!receipt.data}
-              onClick={() => window.print()}
-            >
-              {t('returns.print')}
-            </Button>
-          ) : null}
           <Button size="lg" onClick={onClose}>
             {t('returns.close')}
           </Button>
@@ -784,11 +773,6 @@ function RefundReceiptDialog({
             </Alert>
           ) : null}
           <RefundReceiptView receipt={receipt.data} />
-          {!pending ? (
-            <ReceiptPrint>
-              <RefundReceiptView receipt={receipt.data} />
-            </ReceiptPrint>
-          ) : null}
         </>
       ) : (
         <Spinner />

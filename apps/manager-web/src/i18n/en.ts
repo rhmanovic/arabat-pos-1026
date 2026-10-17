@@ -929,7 +929,8 @@ export const managerEn = {
     autoPrint: 'Print receipts automatically',
     autoPrintHint: 'Every completed sale is sent to the receipt printer of its branch.',
     printReceipt: 'Print receipt',
-    sent: 'Sent to the receipt printer',
+    sent: 'Sent to the printer',
+    noPrinterOnline: 'No printer connected; the receipt prints when one connects',
   },
   sales: {
     customer: 'Customer',

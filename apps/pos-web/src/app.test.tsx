@@ -1,6 +1,6 @@
 import { flattenKeys } from '@arabat/i18n';
 import { fakeApiFetch, makeSession, renderApp } from '@arabat/web-core/testing';
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { i18n, resources } from './i18n/index.js';
@@ -690,6 +690,16 @@ describe('pos app', () => {
         'GET /pos/customers': () => ({ status: 200, body: { customers: [] } }),
         'POST /pos/customers': () => ({ status: 201, body: noura }),
         'POST /pos/sales': () => ({ status: 201, body: sale }),
+        [`POST /pos/sales/${sale.id}/print`]: () => ({
+          status: 201,
+          body: {
+            id: '0190a000-0000-7000-8000-000000000f02',
+            status: 'pending',
+            createdAt: '2026-10-12T06:00:01.000Z',
+            copyNumber: 1,
+            agentOnline: false,
+          },
+        }),
         [`GET /pos/sales/${sale.id}/receipt`]: () => ({
           status: 200,
           body: {
@@ -730,8 +740,19 @@ describe('pos app', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Add payment' }));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Complete sale' }));
     expect((await screen.findAllByTestId('receipt-customer'))[0]).toHaveTextContent('Noura');
-    // The receipt prints by itself right after the sale, once.
-    await waitFor(() => expect(print).toHaveBeenCalledTimes(1));
+    // The till never prints in the browser (ADR-0111): the server queued the receipt already.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(print).not.toHaveBeenCalled();
+    expect(document.getElementById('receipt-print')).toBeNull();
+    // "Print receipt" queues a server copy; with no agent online the cashier is told.
+    await userEvent.click(screen.getByRole('button', { name: 'Print receipt' }));
+    expect(
+      await screen.findByText('No printer connected; the receipt prints when one connects'),
+    ).toBeInTheDocument();
+    expect(
+      fetch.calls.filter((c) => c.method === 'POST' && c.path === `/pos/sales/${sale.id}/print`),
+    ).toHaveLength(1);
+    expect(print).not.toHaveBeenCalled();
     print.mockRestore();
     const created = fetch.calls.find((c) => c.method === 'POST' && c.path === '/pos/customers')!;
     expect(created.body).toEqual({ fullName: 'Noura', phone: '99990000' });

@@ -10,11 +10,10 @@ import { Badge, Button, Dialog, Field, Input, Select, Spinner } from '@arabat/ui
 import { ApiError } from '@arabat/api-client';
 import { localizedName, useApi, useAuth, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { shiftKey } from '../pages/ShiftPages.js';
 import { type CartLine, formatQty, useCart } from './cart.js';
-import { ReceiptPrint, formatReceiptDate } from './ReceiptPrint.js';
 import { availabilityKey, itemLabel, useMoneyFormat } from './SalePage.js';
 
 const QTY = /^\d{1,11}(\.\d{1,3})?$/;
@@ -887,19 +886,12 @@ export function RecentSalesDialog({
   );
 }
 
-export function ReceiptDialog({
-  saleId,
-  onClose,
-  copy = false,
-  autoPrint = false,
-}: {
-  saleId: string;
-  onClose: () => void;
-  /** Right after the sale: print the receipt as soon as it is loaded, without a click. */
-  autoPrint?: boolean;
-  /** Opened after the sale: the first print. Otherwise every print is a logged copy (BR-182). */
-  copy?: boolean;
-}) {
+/**
+ * The receipt after a sale or from the list, on screen only. The till never prints in the
+ * browser (ADR-0111): the server queues the receipt for the branch's print agent when the sale
+ * completes, and "Print receipt" queues a numbered copy (BR-182).
+ */
+export function ReceiptDialog({ saleId, onClose }: { saleId: string; onClose: () => void }) {
   const { t } = useTranslation();
   const api = useApi();
   const notify = useNotify();
@@ -908,33 +900,16 @@ export function ReceiptDialog({
     queryKey: ['pos', 'receipt', saleId],
     queryFn: () => api.sales.posReceipt(saleId),
   });
-  const [printed, setPrinted] = useState(false);
-  const reprint = useMutation({
-    mutationFn: () => api.sales.reprint(saleId),
-    onSuccess: (r) => {
-      queryClient.setQueryData(['pos', 'receipt', saleId], r);
-      setTimeout(() => window.print(), 0);
+  const print = useMutation({
+    mutationFn: () => api.sales.print(saleId),
+    onSuccess: async (job) => {
+      if (job.agentOnline) notify.ok(t('sale.sentToPrinter'));
+      else notify.info(t('sale.noPrinterOnline'));
+      // The copy number shown on the receipt.
+      await queryClient.invalidateQueries({ queryKey: ['pos', 'receipt', saleId] });
     },
     onError: notify.fail,
   });
-  const autoPrinted = useRef(false);
-  const loaded = Boolean(receipt.data);
-  useEffect(() => {
-    if (!autoPrint || copy || !loaded || autoPrinted.current) return;
-    autoPrinted.current = true;
-    // After the commit, so the print portal holds the receipt.
-    setTimeout(() => {
-      setPrinted(true);
-      window.print();
-    }, 0);
-  }, [autoPrint, copy, loaded]);
-  const print = () => {
-    if (copy || printed) reprint.mutate();
-    else {
-      setPrinted(true);
-      window.print();
-    }
-  };
   return (
     <Dialog
       open
@@ -946,10 +921,10 @@ export function ReceiptDialog({
             variant="secondary"
             size="lg"
             disabled={!receipt.data}
-            loading={reprint.isPending}
-            onClick={print}
+            loading={print.isPending}
+            onClick={() => print.mutate()}
           >
-            {copy || printed ? t('sale.printCopy') : t('sale.print')}
+            {t('sale.print')}
           </Button>
           <Button size="lg" onClick={onClose}>
             {t('sale.newSale')}
@@ -957,21 +932,12 @@ export function ReceiptDialog({
         </>
       }
     >
-      {receipt.data ? (
-        <>
-          <ReceiptView receipt={receipt.data} />
-          <ReceiptPrint>
-            <ReceiptView receipt={receipt.data} />
-          </ReceiptPrint>
-        </>
-      ) : (
-        <Spinner />
-      )}
+      {receipt.data ? <ReceiptView receipt={receipt.data} /> : <Spinner />}
     </Dialog>
   );
 }
 
-/** Receipt layout (screen and 72 mm thermal print). */
+/** Receipt layout on screen. */
 export function ReceiptView({ receipt }: { receipt: Receipt }) {
   const { t, i18n } = useTranslation();
   const fmt = useMoneyFormat();
@@ -1102,10 +1068,17 @@ export function ReceiptView({ receipt }: { receipt: Receipt }) {
         ) : (
           <p>{t('sale.thanks')}</p>
         )}
-        <Badge className="mt-1 print:hidden" tone="success">
+        <Badge className="mt-1" tone="success">
           {t('sale.completed')}
         </Badge>
       </footer>
     </article>
   );
+}
+
+function formatReceiptDate(date: Date, language: string): string {
+  return new Intl.DateTimeFormat(language.startsWith('ar') ? 'ar-KW-u-nu-latn' : 'en-GB', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(date);
 }

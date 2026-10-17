@@ -189,14 +189,14 @@ section { border-top: 1px dashed #000; margin-top: 1.5mm; padding-top: 1.5mm; }
  * The receipt as one self-contained HTML document (ADR-0111): inline style, no external
  * resources, UTF-8, right to left, 72 mm wide, black only, for an 80 mm thermal printer.
  */
-export function renderReceiptHtml(data: ReceiptData, printedAt: Date, copy = false): string {
+export function renderReceiptHtml(data: ReceiptData, printedAt: Date, copyNumber = 0): string {
   const header = [
     `<p class="company" dir="auto">${escape(data.merchantName ?? '')}</p>`,
     block(data.branchName),
     block(data.branchAddress),
     data.branchPhone ? `<p class="center" dir="ltr">${escape(data.branchPhone)}</p>` : '',
     data.receiptHeader ? block(data.receiptHeader, 'pre') : '',
-    copy ? `<p class="center big">نسخة</p>` : '',
+    copyNumber > 0 ? `<p class="center big">نسخة رقم ${copyNumber}</p>` : '',
   ].join('');
   const order = [
     row('رقم الإيصال', data.receiptNumber, { ltr: true, cls: 'big' }),

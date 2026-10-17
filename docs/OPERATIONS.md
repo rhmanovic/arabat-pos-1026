@@ -363,34 +363,17 @@ row counts equal, `app_runtime` sees 0 branches without a merchant and `app_owne
 The upgrade of a pre-0048 database (BYPASSRLS owner, forced RLS) was rehearsed with a
 superuser admin: 0048 applied, BYPASSRLS removed, no table forced.
 
-## 10. Receipt printer at the till (browser printing)
+## 10. Receipt printer at the till
 
-The POS prints receipts with the browser's `window.print()`; nothing is sent from the server.
-Tested setup: ImagePlus 810 thermal printer (80 mm paper, 72 mm / 576 dots printable at
-203 dpi, ESC/POS, Zywell driver), macOS CUPS queue `Printer_POS_80C` over USB. Driver page
-sizes: 72 × 210 mm (default, matches the page CSS), 72 × 297 mm, 72 × 3276 mm.
+The front end never prints (owner decision 2026-10-17, ADR-0111 amendment): no
+`window.print()`, no print dialog, no print CSS. Every receipt is a server print job printed by
+the print agent on the computer with the printer (§11). The till and the sale page only show the
+receipt on screen; their "Print receipt" button queues a numbered copy. The earlier browser
+printing and its Chrome `--kiosk-printing` launcher were removed.
 
-In Chrome's print dialog (once per machine; Chrome remembers it):
-- Destination: `Printer_POS_80C`
-- Margins: None · Scale: 100 % (Default) · Headers and footers: off
-
-Silent printing (no dialog, owner's requirement 2026-10-16): a web page cannot skip Chrome's
-print dialog, so the till opens the POS through `scripts/pos-kiosk/arabat-pos-till.command`. It
-makes `Printer_POS_80C` the default printer and starts Chrome in a separate profile
-(`~/Library/Application Support/ArabatPOS-Chrome`, sign in once) with `--kiosk-printing`
-and `--app=https://www.arabatapp.com/pos/`. The receipt then prints by itself when a sale
-completes, and the print button prints without a dialog. Install once in Terminal:
-
-```
-curl -fsSL https://raw.githubusercontent.com/rhmanovic/arabat-pos-1026/main/scripts/pos-kiosk/arabat-pos-till.command -o ~/Desktop/Arabat-POS.command && chmod +x ~/Desktop/Arabat-POS.command
-```
-
-then double-click `Arabat-POS` on the desktop. The POS opened in an ordinary Chrome window
-still shows the dialog.
-
-A receipt longer than 210 mm continues on a second page of the roll; if the driver feeds the
-blank rest of each page, pick its 72 × 3276 mm size or enable its "cut at end of document"
-option.
+Printer used at the first till: ImagePlus 810 (80 mm paper, 72 mm / 576 dots printable at
+203 dpi, ESC/POS, Zywell driver), macOS CUPS queue `Printer_POS_80C` over USB; driver page
+sizes 72 × 210 mm (default, the receipt HTML's page size), 72 × 297 mm, 72 × 3276 mm.
 
 ## 11. Server-side receipt printing (print agents, ADR-0111)
 
@@ -402,7 +385,9 @@ has the receipt printer, through a separately built print agent:
    uses `Authorization: Bearer <token>` on `/api/v1/print-agent/...` and Socket.IO
    (`/socket.io`, namespace `/print-agent`, `auth: { token }`).
 3. The agent shows as **Online** while it is connected or called the API in the last 60 s.
-4. "Print receipts automatically" (on by default) sends every completed sale; the sale page's
-   "Print receipt" sends a copy at any time.
+4. "Print receipts automatically" (on by default) sends every completed sale; "Print receipt"
+   on the till's receipt and on the manager's sale page sends a numbered copy at any time. The
+   message says "أُرسل للطابعة", or "لا توجد طابعة متصلة" when no agent of the branch was seen
+   in the last minute (the copy then waits and prints when one connects).
 Removing an agent stops its token at once. Failed jobs keep the agent's error in
 `print_jobs.error`; they are not retried by themselves.

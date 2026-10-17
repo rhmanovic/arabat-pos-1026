@@ -36,11 +36,17 @@ export type PrintSettings = z.infer<typeof printSettingsSchema>;
 export const PRINT_JOB_STATUSES = ['pending', 'printing', 'printed', 'failed'] as const;
 export type PrintJobStatus = (typeof PRINT_JOB_STATUSES)[number];
 
-/** A job created by a reprint (`POST /manager/sales/:id/print`). */
+/**
+ * A receipt copy queued for the print agents (`POST /manager/sales/:id/print`,
+ * `POST /pos/sales/:id/print`). `agentOnline` is false when no agent for the sale's branch was
+ * seen in the last minute: the job then waits until one connects.
+ */
 export const printJobSchema = z.object({
   id: z.uuid(),
   status: z.enum(PRINT_JOB_STATUSES),
   createdAt: z.string(),
+  copyNumber: z.number().int().positive(),
+  agentOnline: z.boolean(),
 });
 export type PrintJob = z.infer<typeof printJobSchema>;
 

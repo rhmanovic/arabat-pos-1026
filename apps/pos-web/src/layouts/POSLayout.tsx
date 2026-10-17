@@ -73,7 +73,7 @@ export function POSLayout() {
 
   return (
     <CartProvider>
-      <div className="flex h-dvh flex-col overflow-hidden bg-surface-muted select-none print:hidden">
+      <div className="flex h-dvh flex-col overflow-hidden bg-surface-muted select-none">
         <header
           aria-label={t('toolbarLabel')}
           className="flex h-14 shrink-0 items-center gap-2 bg-console px-3 text-console-fg sm:gap-3 sm:px-4"

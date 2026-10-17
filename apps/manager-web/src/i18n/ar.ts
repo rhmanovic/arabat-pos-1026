@@ -911,7 +911,8 @@ export const managerAr: ManagerResources = {
     autoPrint: 'طباعة الإيصالات تلقائيًا',
     autoPrintHint: 'كل عملية بيع مكتملة تنرسل لطابعة الإيصالات في فرعها.',
     printReceipt: 'طباعة الإيصال',
-    sent: 'تم الإرسال لطابعة الإيصالات',
+    sent: 'أُرسل للطابعة',
+    noPrinterOnline: 'لا توجد طابعة متصلة',
   },
   sales: {
     customer: 'العميل',

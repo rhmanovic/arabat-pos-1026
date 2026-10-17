@@ -302,10 +302,11 @@ describe('print jobs', () => {
       cookies: c.cookies,
     });
     expect(reprint.statusCode).toBe(201);
-    expect(reprint.json()).toMatchObject({ status: 'pending' });
+    // The agent called the API a moment ago: it counts as online.
+    expect(reprint.json()).toMatchObject({ status: 'pending', copyNumber: 1, agentOnline: true });
     const [copy] = await pending(c, agent.token);
     expect(copy).toMatchObject({ id: reprint.json().id, orderUuid: sale.id });
-    expect(copy!.html).toContain('نسخة');
+    expect(copy!.html).toContain('نسخة رقم 1');
     expect(
       (
         await owner.query(`select kind, created_by_user_id from print_jobs where id = $1`, [

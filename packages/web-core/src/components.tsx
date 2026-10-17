@@ -132,6 +132,7 @@ export function useNotify() {
   const message = useErrorMessage();
   return {
     ok: (title: string) => toast.success(title),
+    info: (title: string) => toast.info(title),
     fail: (error: unknown) => toast.error(message(error)),
   };
 }

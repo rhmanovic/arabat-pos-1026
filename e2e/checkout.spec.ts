@@ -95,6 +95,14 @@ test('end-to-end sale from setup to manager review', async ({ page, browser }) =
   // 4–5. The cashier signs in to the POS at the assigned branch and opens a shift.
   const ctx = await browser.newContext();
   const pos = await ctx.newPage();
+  // Counts browser print calls: there must be none.
+  await pos.addInitScript(() => {
+    const w = window as unknown as { printCalls: number };
+    w.printCalls = 0;
+    window.print = () => {
+      w.printCalls += 1;
+    };
+  });
   await pos.addInitScript(() => localStorage.setItem('arabat.language', 'en'));
   await pos.goto(link);
   await pos.getByLabel('New password').fill('Cashier-Pass-2026');
@@ -136,31 +144,19 @@ test('end-to-end sale from setup to manager review', async ({ page, browser }) =
   await expect(receipt.getByTestId('receipt-total')).toHaveText('KWD 2.575');
   await expect(receipt).toContainText('Thank you for shopping at Avenues');
 
-  // Print preview: only the 72 mm receipt is printed (80 mm thermal roll, ImagePlus 810).
-  await pos.emulateMedia({ media: 'print' });
-  const printed = pos.locator('body > #receipt-print');
-  await expect(printed).toBeVisible();
-  await expect(printed.getByTestId('receipt-number')).toHaveText('AVENUES-000001');
-  await expect(printed).toContainText('Printed at');
-  await expect(pos.getByRole('dialog')).toBeHidden();
-  const layout = await printed.evaluate((el) => ({
-    widthMm: (el.getBoundingClientRect().width * 25.4) / 96,
-    color: getComputedStyle(el).color,
-    visibleSiblings: [...document.body.children].filter(
-      (c) => c !== el && getComputedStyle(c).display !== 'none',
-    ).length,
-  }));
-  expect(layout.widthMm).toBeCloseTo(72, 0);
-  expect(layout.color).toBe('rgb(0, 0, 0)');
-  expect(layout.visibleSiblings).toBe(0);
-  const pdf = await pos.pdf({ preferCSSPageSize: true });
-  const [, , w, h] = /MediaBox \[([^\]]+)\]/.exec(pdf.toString('latin1'))![1]!.trim().split(/\s+/);
-  expect(Math.round((Number(w) / 72) * 25.4)).toBe(72);
-  expect(Math.round((Number(h) / 72) * 25.4)).toBe(210);
-  if (process.env['RECEIPT_PDF'])
-    (await import('node:fs')).writeFileSync(process.env['RECEIPT_PDF'], pdf);
-  await pos.emulateMedia({ media: 'screen' });
-  await expect(printed).toBeHidden();
+  // The till never prints in the browser (ADR-0111): no print dialog after the sale, and
+  // "Print receipt" queues a server copy instead (no agent here, so it waits).
+  await pos.waitForTimeout(300);
+  expect(await pos.evaluate(() => (window as unknown as { printCalls: number }).printCalls)).toBe(
+    0,
+  );
+  await pos.getByRole('dialog').getByRole('button', { name: 'Print receipt' }).click();
+  await expect(
+    pos.getByText('No printer connected; the receipt prints when one connects', { exact: true }),
+  ).toBeVisible();
+  expect(await pos.evaluate(() => (window as unknown as { printCalls: number }).printCalls)).toBe(
+    0,
+  );
 
   await pos.getByRole('button', { name: 'New sale' }).click();
   await expect(pos.getByTestId('cart-total')).toHaveText('KWD 0.000');
