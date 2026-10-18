@@ -1640,4 +1640,11 @@ ADR; supersede it.
   counter on the link, not a financial record.
 - **Not done:** a short address (`arabatapp.com/l/name`), per-day click statistics, "made with
   Arabat" branding on the page, link scheduling. Page changes are audited (`links.*`).
-
+- **Amendment 1 (owner, 2026-10-18):** the settings do not live in the online-store section. The
+  link page has its own interface, `apps/links-web` at `/links` (own layout, header and live phone
+  preview), signed in with the **same manager account and session** (`appInterface="manager"`,
+  no new identity, no new cookie). Access still needs `online.manage`; without it the app shows
+  a message and calls nothing. The management menu has a "صفحة الروابط ↗" entry that opens it;
+  the "Link page" tab of `/manager/online` is removed. The presentational page
+  (`LinkPageView`, icons, colours) moved to `@arabat/web-core` so the public page and the preview
+  render the same thing.

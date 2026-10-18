@@ -24,12 +24,12 @@ import {
   Select,
   Textarea,
 } from '@arabat/ui';
-import { ErrorState, useApi, useNotify } from '@arabat/web-core';
+import { ErrorState, LinkPageView, useApi, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-const key = ['manager', 'online', 'link-page'] as const;
+const key = ['links', 'page'] as const;
 
 /** Address hint per kind: the merchant pastes a full address (BR-200). */
 export const URL_PLACEHOLDER: Record<LinkItemKind, string> = {
@@ -78,17 +78,53 @@ export function normalizeLinkUrl(kind: LinkItemKind, raw: string): string {
   return value;
 }
 
-/** Link page ("link in bio", ADR-0116): page design, its links and their order. */
-export function LinkPageTab() {
+/**
+ * The link-page editor (ADR-0116 amendment 1): links and design on one side, a live phone
+ * preview of the public page on the other.
+ */
+export function EditorPage() {
   const api = useApi();
   const page = useQuery({ queryKey: key, queryFn: () => api.linkPage.get() });
   if (page.isError) return <ErrorState error={page.error} onRetry={() => void page.refetch()} />;
   if (!page.data) return null;
   return (
-    <div className="flex flex-col gap-4">
-      <LinksSection page={page.data} />
-      <DesignForm key={page.data.version} page={page.data} />
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="flex min-w-0 flex-col gap-4">
+        <LinksSection page={page.data} />
+        <DesignForm key={page.data.version} page={page.data} />
+      </div>
+      <Preview page={page.data} />
     </div>
+  );
+}
+
+function Preview({ page }: { page: LinkPage }) {
+  const { t, i18n } = useTranslation();
+  return (
+    <aside className="lg:sticky lg:top-20 lg:self-start" aria-label={t('linkPage.preview')}>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h2 className="font-semibold">{t('linkPage.preview')}</h2>
+        {page.status === 'published' ? (
+          <a
+            className="text-sm text-primary hover:underline"
+            href={page.url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t('linkPage.open')}
+          </a>
+        ) : null}
+      </div>
+      <p className="mb-3 text-sm text-fg-muted">{t('linkPage.previewHint')}</p>
+      <div className="mx-auto h-[36rem] w-full max-w-[22rem] overflow-y-auto rounded-[2rem] border-8 border-fg/80 shadow-lg">
+        <LinkPageView
+          className="min-h-full"
+          page={{ ...page, items: page.items.filter((i) => i.status === 'active') }}
+          language={i18n.language}
+          emptyLabel={t('linkPage.empty')}
+        />
+      </div>
+    </aside>
   );
 }
 
@@ -123,7 +159,7 @@ function DesignForm({ page }: { page: LinkPage }) {
   };
   const save = useMutation({
     mutationFn: () => api.linkPage.save(v),
-    onSuccess: (saved) => done(saved, t('common.saved')),
+    onSuccess: (saved) => done(saved, t('linkPage.saved')),
     onError: notify.fail,
   });
   const upload = useMutation({
@@ -310,7 +346,7 @@ function DesignForm({ page }: { page: LinkPage }) {
       </Section>
       <div>
         <Button loading={save.isPending} onClick={() => save.mutate()}>
-          {t('common.save')}
+          {t('linkPage.save')}
         </Button>
       </div>
     </>
@@ -399,10 +435,10 @@ function LinksSection({ page }: { page: LinkPage }) {
                 {t('linkPage.clicks', { count: item.clicks })}
               </span>
               <Button size="sm" variant="secondary" onClick={() => setEditing(item)}>
-                {t('common.edit')}
+                {t('linkPage.edit')}
               </Button>
               <Button size="sm" variant="ghost" onClick={() => setDeleting(item)}>
-                {t('common.delete')}
+                {t('linkPage.delete')}
               </Button>
             </li>
           ))}
@@ -421,8 +457,8 @@ function LinksSection({ page }: { page: LinkPage }) {
         onOpenChange={(o) => (!o ? setDeleting(null) : undefined)}
         title={t('linkPage.deleteTitle')}
         description={deleting ? label(deleting) : undefined}
-        confirmLabel={t('common.delete')}
-        cancelLabel={t('common.cancel')}
+        confirmLabel={t('linkPage.delete')}
+        cancelLabel={t('linkPage.cancel')}
         tone="danger"
         loading={remove.isPending}
         onConfirm={() => deleting && remove.mutate(deleting.id)}
@@ -463,7 +499,7 @@ function ItemDialog({
       api.linkPage.saveItem(item?.id ?? null, { ...v, url: normalizeLinkUrl(v.kind, v.url) }),
     onSuccess: async (saved) => {
       await onSaved(saved);
-      notify.ok(t('common.saved'));
+      notify.ok(t('linkPage.saved'));
       onClose();
     },
     onError: notify.fail,
@@ -484,10 +520,10 @@ function ItemDialog({
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
-            {t('common.cancel')}
+            {t('linkPage.cancel')}
           </Button>
           <Button loading={save.isPending} onClick={() => save.mutate()}>
-            {t('common.save')}
+            {t('linkPage.save')}
           </Button>
         </>
       }

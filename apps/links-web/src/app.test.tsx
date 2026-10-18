@@ -2,9 +2,9 @@ import { fakeApiFetch, makeSession, renderApp } from '@arabat/web-core/testing';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { i18n } from '../../i18n/index.js';
-import { routes } from '../../routes.js';
-import { normalizeLinkUrl } from './LinkPageTab.js';
+import { i18n } from './i18n/index.js';
+import { routes } from './routes.js';
+import { normalizeLinkUrl } from './pages/EditorPage.js';
 
 beforeEach(async () => {
   await i18n.changeLanguage('en');
@@ -56,12 +56,11 @@ describe('link page addresses', () => {
   });
 });
 
-describe('link page tab', () => {
+describe('link page app', () => {
   function setup() {
     const fetch = fakeApiFetch({
       session: makeSession('manager', ['manager.access', 'online.manage']),
       routes: {
-        'GET /manager/branches': () => ({ status: 200, body: { branches: [] } }),
         'GET /manager/link-page': () => ({ status: 200, body: page }),
         'PUT /manager/link-page': (body) => ({
           status: 200,
@@ -71,15 +70,20 @@ describe('link page tab', () => {
         'POST /manager/link-page/items': () => ({ status: 201, body: page }),
       },
     });
-    renderApp({ routes, appInterface: 'manager', i18n, path: '/online', fetch });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/', fetch });
     return fetch;
   }
 
   it('publishes the page and reorders its links', async () => {
     const user = userEvent.setup();
     const fetch = setup();
-    await user.click(await screen.findByRole('button', { name: 'Link page' }));
     expect(await screen.findByText('https://instagram.com/demo')).toBeInTheDocument();
+    // The live preview shows the visible links as buttons.
+    const preview = screen.getByRole('complementary', { name: 'Preview' });
+    expect(within(preview).getByRole('link', { name: 'Instagram' })).toHaveAttribute(
+      'href',
+      'https://instagram.com/demo',
+    );
     expect(screen.getAllByText('3 clicks')).toHaveLength(2);
     await user.click(screen.getByRole('button', { name: 'Move WhatsApp up' }));
     await waitFor(() =>
@@ -99,7 +103,6 @@ describe('link page tab', () => {
   it('adds a link with a suggested label and a normalized address', async () => {
     const user = userEvent.setup();
     const fetch = setup();
-    await user.click(await screen.findByRole('button', { name: 'Link page' }));
     await user.click(await screen.findByRole('button', { name: 'Add link' }));
     const dialog = await screen.findByRole('dialog');
     await user.selectOptions(within(dialog).getByLabelText('Type'), 'store');
@@ -122,5 +125,34 @@ describe('link page tab', () => {
         version: 0,
       }),
     );
+  });
+});
+
+describe('link page access', () => {
+  it('asks anonymous visitors to sign in with the management account', async () => {
+    const fetch = fakeApiFetch({ session: null });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/', fetch });
+    expect(
+      await screen.findByRole('heading', { name: 'Sign in to your link page' }),
+    ).toBeInTheDocument();
+  });
+
+  it('explains when the account cannot manage the link page', async () => {
+    const fetch = fakeApiFetch({ session: makeSession('manager', ['manager.access']) });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/', fetch });
+    expect(await screen.findByText(/cannot manage the link page/)).toBeInTheDocument();
+    expect(fetch.calls.some((c) => c.path === '/manager/link-page')).toBe(false);
+  });
+});
+
+describe('link page strings', () => {
+  it('counts clicks with Arabic plural forms', async () => {
+    await i18n.changeLanguage('ar');
+    expect(i18n.t('linkPage.clicks', { count: 0 })).toBe('لا نقرات');
+    expect(i18n.t('linkPage.clicks', { count: 2 })).toBe('نقرتان');
+    expect(i18n.t('linkPage.clicks', { count: 5 })).toBe('5 نقرات');
+    expect(i18n.t('linkPage.clicks', { count: 11 })).toBe('11 نقرة');
+    await i18n.changeLanguage('en');
+    expect(i18n.t('linkPage.clicks', { count: 1 })).toBe('1 click');
   });
 });

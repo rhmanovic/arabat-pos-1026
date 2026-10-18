@@ -13,6 +13,9 @@ the code differ, the code wins and the differences are listed here:
   `transfers`, `subscriptions`, `ecommerce` creates online-channel sales directly
   (ADR-0077). Read-only cross-module SQL is used by several modules (ADR-0083).
 - A fourth app, `apps/store-web`, serves the public storefront (ADR-0076).
+- `apps/links-web` (`/links`) edits the merchant's link page; it has its own layout and signs in
+  with the manager session (same account and cookie, `appInterface="manager"`), and needs
+  `online.manage` (ADR-0116 amendment 1). The public page stays in store-web (`/store/links/:slug`).
 - `apps/landing-web` is the public landing page at `/` (static React page, no session, no API
   calls; ADR-0113). Its text lives in `src/content.ts` (ar/en).
 Related documents: `AUTH.md` (authentication & permissions), `ROUTES.md`
@@ -109,6 +112,7 @@ apps/
   pos-web/                React SPA, basename /pos
   platform-web/           React SPA, basename /platform
   store-web/              Public storefront SPA, basename /store (no session, ADR-0076)
+  links-web/              Link-page editor SPA, basename /links (manager session, ADR-0116)
 packages/
   contracts/              Zod request/response schemas, error codes, enums (API ⇄ web)      [M0]
   permissions/            Permission catalog (keys, scope) + can() evaluation              [M0]
@@ -461,7 +465,8 @@ Full design in `AUTH.md`.
   `docker/postgres/init`). Mailpit (local e-mail capture) is added in M1 when the
   first e-mail (invitations) exists.
 - `pnpm dev` runs: API (`:3000`), manager-web (`:5173`, base `/manager`),
-  pos-web (`:5174`, base `/pos`), platform-web (`:5175`, base `/platform`), store-web (`:5176`, base `/store`).
+  pos-web (`:5174`, base `/pos`), platform-web (`:5175`, base `/platform`), store-web (`:5176`, base `/store`),
+  links-web (`:5177`, base `/links`).
   Each Vite dev server proxies `/api` to the API (cookies are host-scoped, so the
   ports share sessions on `localhost`). For a single-origin run use
   `pnpm build && SERVE_WEB=true pnpm start` (ADR-0021).

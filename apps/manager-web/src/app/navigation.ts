@@ -5,6 +5,8 @@ export interface NavItem {
   anyOf: string[];
   /** False for modules not built yet: shown disabled, never as a working page. */
   available: boolean;
+  /** A separate application (full page load), not a route of this app. */
+  external?: boolean;
   section: 'main' | 'operations' | 'people' | 'organization';
 }
 
@@ -123,6 +125,15 @@ export const NAV: readonly NavItem[] = [
     to: '/online',
     anyOf: ['online.manage', 'online.orders'],
     available: true,
+    section: 'operations',
+  },
+  {
+    // The link page has its own interface at /links (ADR-0116 amendment 1).
+    key: 'links',
+    to: import.meta.env.DEV ? 'http://localhost:5177/links/' : '/links/',
+    anyOf: ['online.manage'],
+    available: true,
+    external: true,
     section: 'operations',
   },
   {

@@ -8,3 +8,4 @@ export * from './lock-screen.js';
 export * from './assistant.js';
 export * from './assistant-markup.js';
 export * from './assistant-launcher.js';
+export * from './link-page-view.js';

@@ -30,7 +30,7 @@ the permission.
 | `/reports` | Reports (tabs per report permission: sales, payments & cash incl. cash by type, expenses, shifts, inventory, purchasing) | any `reports.*` |
 | `/customers`, `/customers/:customerId` | Customers, history, notes | `customers.read` |
 | `/restaurant` | Restaurant setup (module, floor, stations, modifiers, menu) | `restaurant.manage` |
-| `/online` | Online store: orders, settings, products online, link page (ADR-0116) | `online.orders` / `online.manage` |
+| `/online` | Online store: orders, settings, products online | `online.orders` / `online.manage` |
 | `/payments` | Payment methods and internal balances | `payments.settings` |
 | `/cash` | Cash custody: treasury and register balances per branch, counts, statements, transfers, expenses and supplier payments, bank deposits, transfers between branches | `cash.custody` (deposits: `cash.deposit`) |
 | `/registers` | Registers | `registers.manage` |
@@ -97,6 +97,18 @@ No session; every call goes to the public store API. Cart kept per store in the 
 | `/store/:slug/orders/:token` | Order tracking (status, history, pay link while unpaid) |
 | `/store/pay/:reference` | Sandbox gateway page (mock adapter only) |
 | `/store/links/:slug` | Link page of a merchant ("link in bio", ADR-0116) |
+
+## 2c. `/links` — links-web (link-page editor, ADR-0116 amendment 1)
+
+Its own application and layout (no management menu). Signs in with the **manager** session: the
+same account and cookie as `/manager` (signing out here signs out of the management app too).
+The manager menu shows "صفحة الروابط" (↗) to holders of `online.manage`, which opens this app.
+
+| Route | Screen | Permission |
+|---|---|---|
+| `/links/login` | Sign in with the management account | — |
+| `/links/forgot-password` | Password reset request (the e-mailed link opens `/manager`) | — |
+| `/links/` | Links (add, edit, hide, reorder, delete, open counts), address and status, picture, design; live phone preview | `online.manage` |
 
 ## 3. `/platform` — platform-web
 

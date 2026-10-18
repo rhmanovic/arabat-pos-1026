@@ -3,7 +3,7 @@ import { uniqueEmail, useEnglish } from './helpers';
 
 test.beforeEach(async ({ page }) => useEnglish(page));
 
-test('the owner builds a link page in the manager and a visitor opens it (ADR-0116)', async ({
+test('the owner builds a link page in its own interface and a visitor opens it (ADR-0116)', async ({
   page,
   browser,
 }) => {
@@ -23,8 +23,14 @@ test('the owner builds a link page in the manager and a visitor opens it (ADR-01
   ).toBe(201);
 
   const slug = `e2e-links-${Date.now().toString(36)}`;
-  await page.goto('/manager/online');
-  await page.getByRole('button', { name: 'Link page' }).click();
+  // The manager menu opens the link page's own interface, signed in with the same account.
+  await page.goto('/manager/');
+  await page
+    .getByRole('navigation')
+    .getByRole('link', { name: /Link page/ })
+    .click();
+  await expect(page).toHaveURL(/\/links\/$/);
+  await expect(page.getByRole('heading', { name: 'Link page', level: 1 })).toBeVisible();
 
   // Two links; the address is completed from what people usually type.
   await page.getByRole('button', { name: 'Add link' }).click();
@@ -49,6 +55,10 @@ test('the owner builds a link page in the manager and a visitor opens it (ADR-01
   await page.getByLabel('Page status').selectOption('published');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('link', { name: new RegExp(`/store/links/${slug}$`) })).toBeVisible();
+  // The live preview follows the saved page.
+  await expect(
+    page.getByRole('complementary', { name: 'Preview' }).getByRole('heading', { name: 'Links Co' }),
+  ).toBeVisible();
 
   // An anonymous visitor (no session) sees the page and opens a link.
   const visitorContext = await browser.newContext();
@@ -77,4 +87,26 @@ test('the owner builds a link page in the manager and a visitor opens it (ADR-01
         ?.clicks;
     })
     .toBe(1);
+});
+
+test('the link page asks for the management account and signs in with it', async ({ page }) => {
+  const email = uniqueEmail('ln-login');
+  await page.request.post('/api/v1/auth/register', {
+    data: {
+      company: { nameEn: 'Login Links Co' },
+      owner: { fullName: 'Owner', email, password: 'Owner-Pass-2026' },
+    },
+  });
+  await page.request.post('/api/v1/auth/logout', { data: { interface: 'manager' } });
+  await page.context().clearCookies();
+  await page.goto('/links/');
+  await expect(page).toHaveURL(/\/links\/login$/);
+  await page.getByLabel('Email').fill(email);
+  await page.getByLabel('Password', { exact: true }).fill('Owner-Pass-2026');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByRole('heading', { name: 'Link page', level: 1 })).toBeVisible();
+  await expect(page.getByTestId('merchant-name')).toHaveText('Login Links Co');
+  // Same session as the management app.
+  await page.goto('/manager/');
+  await expect(page.getByTestId('merchant-name')).toHaveText('Login Links Co');
 });

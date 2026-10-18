@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { linkPageTheme, readableOn } from './LinksPage.js';
+import { linkPageTheme, readableOn } from './link-page-view.js';
 
 describe('link page colours', () => {
   it('picks readable text on the brand colour', () => {

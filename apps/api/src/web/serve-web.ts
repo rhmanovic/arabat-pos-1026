@@ -4,17 +4,21 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { AppInterface } from '@arabat/contracts';
 
-/** The storefront (`/store`) is a public app, not an authenticated interface (ADR-0076). */
-const APPS: Record<AppInterface | 'store', string> = {
+/**
+ * The storefront (`/store`) is a public app, not an authenticated interface (ADR-0076); the
+ * link-page editor (`/links`) signs in with the manager session (ADR-0116 amendment 1).
+ */
+const APPS: Record<AppInterface | 'store' | 'links', string> = {
   manager: 'manager-web',
   pos: 'pos-web',
   platform: 'platform-web',
   store: 'store-web',
+  links: 'links-web',
 };
 
 /**
  * Serves the built SPAs from one origin (production-like local run and E2E tests):
- * `/manager/*`, `/pos/*`, `/platform/*`, `/store/*`, each with its own index.html fallback,
+ * `/manager/*`, `/pos/*`, `/platform/*`, `/store/*`, `/links/*`, each with its own index.html fallback,
  * and the landing pages at `/` and `/pricing`.
  * In production a CDN/reverse proxy may serve these files instead (ARCHITECTURE.md §12).
  */

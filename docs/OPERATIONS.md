@@ -10,7 +10,7 @@ decision (OQ-021, OQ-022). Commands below were run in the development environmen
 | Component | What | Health |
 |---|---|---|
 | API | `node apps/api/dist/main.js` (NestJS + Fastify, stateless, horizontal scaling) | `GET /api/v1/health/live` (process), `GET /api/v1/health/ready` (database round trip; 503 when down) |
-| Web apps | Static builds of `apps/{manager,pos,platform,store}-web/dist` served under `/manager`, `/pos`, `/platform`, `/store` by the API (`SERVE_WEB=true`) or a CDN/reverse proxy | — |
+| Web apps | Static builds of `apps/{manager,pos,platform,store,links}-web/dist` served under `/manager`, `/pos`, `/platform`, `/store`, `/links` by the API (`SERVE_WEB=true`) or a CDN/reverse proxy | — |
 | PostgreSQL 18 | Roles `app_owner` (schema owner, migrations, seeds, operator CLI; BYPASSRLS) and `app_runtime` (API; no BYPASSRLS) | `pg_isready` |
 | SMTP | Password reset, invitations, owner set-up e-mails | provider status |
 
@@ -316,8 +316,8 @@ Production releases need the owner's approval each time; the standing approval c
 Railway staging only (ADR-0088).
 
 ### 9.4 Checks after the first deploy
-- `https://DOMAIN/api/v1/health/ready` → `ok`; `/manager`, `/pos`, `/platform`, `/store`
-  load; the `run.app` address answers 404/403 (ingress closed).
+- `https://DOMAIN/api/v1/health/ready` → `ok`; `/manager`, `/pos`, `/platform`, `/store`,
+  `/links` load; the `run.app` address answers 404/403 (ingress closed).
 - Client IP: sign in once and look at the newest `audit_log` / session row: the address must
   be the client's public IP, not a Google address (`35.191.x`, `130.211.x`). If it is
   Google's, change `TRUST_PROXY` in `config.env` and redeploy.

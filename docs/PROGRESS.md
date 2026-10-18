@@ -975,7 +975,13 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
   `navigator.sendBeacon`. Migration 0059, BR-198…BR-201.
 - Tests: API integration `links.int.test.ts` (7), manager `link-page.test.tsx` (3), storefront (4),
   E2E `links.spec.ts`.
-## Next step
+### 2026-10-18 — Link page gets its own interface (ADR-0116 amendment 1)
+- New app `apps/links-web` at `/links` (dev `:5177`): own header (business name, back to the
+  management app, language, sign out), links and design forms, live phone preview. Signs in with
+  the manager account and shares its session; needs `online.manage`.
+- `/manager/online` no longer has the link-page tab; the manager menu has "صفحة الروابط ↗".
+- Arabic click counts use every plural form (لا نقرات / نقرتان / 5 نقرات / 11 نقرة).
+- Tests: links-web 6, store-web / web-core link page view, E2E `links.spec.ts` (2).
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.
 Staging: first platform operator, SMTP; owner decisions OQ-021–025.
