@@ -41,10 +41,31 @@ export interface CreateI18nOptions {
   language?: Language;
 }
 
+const ARABIC_PLURAL_FORMS = ['zero', 'two', 'few', 'many'] as const;
+
+/**
+ * Arabic has six plural categories; i18next looks up exactly one (`key_zero` for 0, `key_two`
+ * for 2, `key_few` for 3–10, `key_many` for 11–99) and, when it is missing, falls back to the
+ * English string rather than to `key_other`. Strings written with only `_one` and `_other`
+ * therefore showed up in English for 0, 2, 3… items. Every missing category is completed
+ * from `_other` here; a string that spells a category out keeps it.
+ */
+export function completeArabicPlurals<T>(value: T): T {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) out[key] = completeArabicPlurals(child);
+  for (const key of Object.keys(out)) {
+    if (!key.endsWith('_other')) continue;
+    const base = key.slice(0, -'_other'.length);
+    for (const form of ARABIC_PLURAL_FORMS) out[`${base}_${form}`] ??= out[key];
+  }
+  return out as T;
+}
+
 /** Creates an isolated i18next instance with the shared "common" namespace plus the app's own. */
 export function createI18n(options: CreateI18nOptions): I18nInstance {
   const resources: Resource = {
-    ar: { common: commonAr, [options.namespace]: options.resources.ar },
+    ar: completeArabicPlurals({ common: commonAr, [options.namespace]: options.resources.ar }),
     en: { common: commonEn, [options.namespace]: options.resources.en },
   };
   const instance = i18next.createInstance();

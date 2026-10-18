@@ -24,6 +24,28 @@ describe('i18n', () => {
     expect(i18n.t('common:actions.retry')).toBe('Try again');
   });
 
+  it('keeps Arabic for every plural category when only _one and _other are written', () => {
+    const i18n = createI18n({
+      namespace: 'test',
+      resources: {
+        ar: {
+          sales_one: 'فاتورة واحدة',
+          sales_other: '{{count}} فاتورة',
+          seats_zero: 'لا مقاعد',
+          seats_other: '{{count}} مقعد',
+        },
+        en: { sales_one: '1 sale', sales_other: '{{count}} sales' },
+      },
+      language: 'ar',
+    });
+    expect(i18n.t('sales', { count: 0 })).toBe('0 فاتورة');
+    expect(i18n.t('sales', { count: 1 })).toBe('فاتورة واحدة');
+    expect(i18n.t('sales', { count: 2 })).toBe('2 فاتورة');
+    expect(i18n.t('sales', { count: 5 })).toBe('5 فاتورة');
+    expect(i18n.t('sales', { count: 15 })).toBe('15 فاتورة');
+    expect(i18n.t('seats', { count: 0 })).toBe('لا مقاعد');
+  });
+
   it('falls back to the common namespace', () => {
     const i18n = createI18n({ namespace: 'test', resources: { ar: {}, en: {} }, language: 'ar' });
     expect(i18n.t('actions.retry')).toBe('إعادة المحاولة');
