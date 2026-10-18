@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { type Content, content, type Language } from './content.js';
+import { CONTACT_EMAIL, type Content, content, type Language } from './content.js';
 import { Reveal, useInView } from './reveal.js';
 
 const STORAGE_KEY = 'arabat.landing.lang';
@@ -547,6 +547,16 @@ function CallToAction({ t }: { t: Content }) {
             {t.cta.secondary}
           </a>
         </div>
+        <p className="mt-8 text-muted">
+          {t.cta.contactLabel}{' '}
+          <a
+            href={`mailto:${CONTACT_EMAIL}`}
+            className="font-medium text-brand underline-offset-4 hover:underline"
+            dir="ltr"
+          >
+            {CONTACT_EMAIL}
+          </a>
+        </p>
       </Reveal>
     </section>
   );
@@ -584,6 +594,10 @@ function Footer({ t }: { t: Content }) {
           <span aria-hidden="true">•</span>
           <a href="#start" className="hover:text-brand">
             {t.nav.start}
+          </a>
+          <span aria-hidden="true">•</span>
+          <a href={`mailto:${CONTACT_EMAIL}`} className="hover:text-brand" dir="ltr">
+            {CONTACT_EMAIL}
           </a>
         </div>
       </div>

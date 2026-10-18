@@ -20,6 +20,10 @@ describe('LandingPage', () => {
       '/manager/',
     );
     expect(screen.getByRole('link', { name: 'شاشة الكاشير' })).toHaveAttribute('href', '/pos/');
+    expect(screen.getAllByRole('link', { name: 'info@arabatapp.com' })[0]).toHaveAttribute(
+      'href',
+      'mailto:info@arabatapp.com',
+    );
   });
 
   it('shows the sections the navigation points to', () => {

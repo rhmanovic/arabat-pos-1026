@@ -895,7 +895,8 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
 - Same day: redesigned in the original arabatapp.com style (ADR-0113 amendment): logo,
   Alexandria, teal, scroll animations, sticky header with active section and phone drawer, trust
   strip, till and dashboard pictures drawn in code (KWD), 16 feature cards, dark "why" band,
-  three steps, call to action, teal footer. Sign-up goes to `/manager/register`. Tests: 3 web
+  three steps, call to action, teal footer. Sign-up goes to `/manager/register`; contact e-mail
+  `info@arabatapp.com` (owner; no phone or WhatsApp yet, no customer logos yet). Tests: 3 web
   unit tests; `pnpm verify` (259 unit/web), 35 E2E passing.
 
 ## Next step

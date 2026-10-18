@@ -2,6 +2,8 @@
 // Prices in the till preview are display strings (KWD, 3 decimals), never computed.
 export type Language = 'ar' | 'en';
 
+export const CONTACT_EMAIL = 'info@arabatapp.com';
+
 export interface Feature {
   icon: string;
   title: string;
@@ -170,6 +172,7 @@ const ar = {
     text: 'أنشئ حساب شركتك أو سجّل الدخول إلى لوحة الإدارة.',
     primary: 'أنشئ حساب شركتك',
     secondary: 'تسجيل الدخول',
+    contactLabel: 'لديك سؤال؟ راسلنا على',
   },
   footer: {
     accent: 'عربات POS',
@@ -386,6 +389,7 @@ const en: typeof ar = {
     text: 'Create your company account or sign in to the management dashboard.',
     primary: 'Create your company account',
     secondary: 'Sign in',
+    contactLabel: 'Questions? Write to us at',
   },
   footer: {
     accent: 'Arabat POS',
