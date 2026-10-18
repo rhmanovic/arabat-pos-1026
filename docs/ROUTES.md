@@ -69,9 +69,13 @@ sections `#home`, `#features`, `#why`, `#start`; sign-up links to `/manager/regi
 ## 2a-bis. `/pricing` — landing-web (public pricing page, ADR-0114)
 
 A second page of the landing build: price card, then three steps like a presentation
-(system → devices with quantities → contact form) with a running cart (sticky panel on desktop,
-bottom bar on phones), confirmation with the request number, and FAQ. Reads
-`GET /api/v1/public/pricing`; sends `POST /api/v1/public/pricing/requests`. Nothing is paid online.
+(system → devices with quantities → account form) with a running cart (sticky panel on desktop,
+bottom bar on phones) that shows the platform's trial length under the first payment, and FAQ.
+Since ADR-0115 amendment 3 it is the site's call to action: the form (shop name optional, name,
+phone, e-mail, password) posts `POST /api/v1/public/trial/start`, the trial account opens at once
+and the page shows the same "مبروك" card as `/start`. Reads `GET /api/v1/public/pricing` and
+`GET /api/v1/public/trial`. `POST /public/pricing/requests` stays in the API but the page no longer
+uses it. Nothing is paid online.
 
 ## 2a-ter. `/start` — landing-web (free-trial sign-up funnel, ADR-0115)
 

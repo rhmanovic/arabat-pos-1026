@@ -177,6 +177,36 @@ describe('trial funnel', () => {
     expect(lead.trialEndsAt).toBeTruthy();
   });
 
+  it('opens a trial from the pricing page form: phone, no business type, optional shop name', async () => {
+    const email = uniqueEmail('pricing-trial');
+    const body = {
+      fullName: 'Ali',
+      email,
+      password: 'Strong-Pass-2026',
+      companyName: '',
+      phone: '+965 5555 1234',
+      language: 'ar',
+      sessionId: randomUUID(),
+      devices: [],
+    };
+    const bad = await call('POST', '/public/trial/start', undefined, {
+      ...body,
+      phone: 'not a phone',
+    });
+    expect(bad.statusCode).toBe(400);
+    expect((await call('POST', '/public/trial/start', undefined, body)).statusCode).toBe(201);
+    expect(mailer.lastTo('sales@test.arabat')!.text).toContain('+965 5555 1234');
+    const lead = (await ok('GET', '/platform/trials/leads', ops.support)).leads.find(
+      (l: { email: string }) => l.email === email,
+    );
+    expect(lead).toMatchObject({
+      stage: 'trial',
+      phone: '+965 5555 1234',
+      businessType: null,
+      companyName: null,
+    });
+  });
+
   it('lends devices from the operator’s stock: available, waiting list, delivery starts the trial', async () => {
     const tablet = await device('T', 1);
     let offer = await ok('GET', '/public/trial');

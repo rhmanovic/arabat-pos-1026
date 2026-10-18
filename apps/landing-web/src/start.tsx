@@ -7,10 +7,11 @@ import {
 } from '@arabat/contracts';
 import { Money } from '@arabat/money';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
-import { CONTACT_EMAIL, type Content, type Language } from './content.js';
+import { type Content, type Language } from './content.js';
 import { ItemIllustration } from './illustrations.js';
 import { Footer, Header, SIGN_IN_URL, primaryButton, useLanguage } from './layout.js';
 import { Reveal } from './reveal.js';
+import { TrialDone, postTrial, trialSessionId } from './trial.js';
 
 const CURRENCY = 'KWD' as const;
 type Step = 0 | 1 | 2 | 3;
@@ -27,47 +28,6 @@ const fill = (text: string, values: Record<string, string | number>) =>
 const input =
   'mt-1.5 w-full rounded-xl border border-black/10 bg-white px-4 py-3 text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/15';
 
-/** Anonymous id of this visit, so the funnel counts steps without personal data. */
-function sessionId(): string {
-  const make = () => crypto.randomUUID();
-  try {
-    const saved = sessionStorage.getItem('arabat.funnel');
-    if (saved) return saved;
-    const id = make();
-    sessionStorage.setItem('arabat.funnel', id);
-    return id;
-  } catch {
-    return make();
-  }
-}
-
-async function post<T>(
-  path: string,
-  body: unknown,
-): Promise<{ ok: true; data: T } | { ok: false; status: number; code?: string; issue?: string }> {
-  try {
-    const response = await fetch(`/api/v1/public/trial/${path}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (response.ok)
-      return { ok: true, data: (response.status === 204 ? null : await response.json()) as T };
-    const problem = (await response.json().catch(() => null)) as {
-      code?: string;
-      issues?: { code?: string }[];
-    } | null;
-    return {
-      ok: false,
-      status: response.status,
-      ...(problem?.code ? { code: problem.code } : {}),
-      ...(problem?.issues?.[0]?.code ? { issue: problem.issues[0].code } : {}),
-    };
-  } catch {
-    return { ok: false, status: 0 };
-  }
-}
-
 /**
  * The free-trial funnel (ADR-0115): business → devices (pick, or skip) → account. The account
  * opens at once; no e-mail confirmation in this phase (owner, 2026-10-18).
@@ -75,7 +35,7 @@ async function post<T>(
 export function StartPage() {
   const { lang, t, toggleLanguage } = useLanguage((c) => c.start.pageTitle);
   const s = t.start;
-  const [session] = useState(sessionId);
+  const [session] = useState(trialSessionId);
   const [offer, setOffer] = useState<PublicTrialOffer | null>(null);
   const [failed, setFailed] = useState(false);
   const [step, setStep] = useState<Step>(0);
@@ -99,7 +59,7 @@ export function StartPage() {
       .catch(() => setFailed(true));
   }, []);
 
-  const track = (name: FunnelStep) => void post('events', { sessionId: session, step: name });
+  const track = (name: FunnelStep) => void postTrial('events', { sessionId: session, step: name });
   const go = (next: Step) => {
     setStep(next);
     top.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -117,7 +77,7 @@ export function StartPage() {
               {failed ? s.loadError : s.loading}
             </p>
           ) : step === 3 && result ? (
-            <Done t={t} result={result} />
+            <TrialDone t={t} result={result} />
           ) : (
             <>
               <div className="mx-auto max-w-3xl">
@@ -445,7 +405,7 @@ function AccountStep({
     event.preventDefault();
     setSending(true);
     setError(null);
-    const r = await post<TrialStarted>('start', {
+    const r = await postTrial<TrialStarted>('start', {
       fullName: account.fullName,
       email: account.email,
       password: account.password,
@@ -645,32 +605,5 @@ function Summary({
         </div>
       </div>
     </aside>
-  );
-}
-
-function Done({ t, result }: { t: Content; result: TrialStarted }) {
-  const d = t.start.done;
-  return (
-    <div className="step-in mx-auto max-w-2xl rounded-3xl bg-white p-8 text-center shadow-sm sm:p-12">
-      <span className="pop mx-auto grid size-20 place-items-center rounded-full bg-brand text-4xl text-white shadow-lg shadow-brand/30">
-        ✓
-      </span>
-      <h1 className="mt-6 text-3xl font-bold">
-        {fill(d.title, { length: t.trialLength(result.trialDays) })}
-      </h1>
-      {result.devices !== 'none' ? (
-        <p className="mt-3 text-lg leading-relaxed text-muted">
-          {result.devices === 'waitlist' ? d.waitlist : d.devices}
-        </p>
-      ) : null}
-      <a href={result.redirectTo} className={`${primaryButton} mt-8`}>
-        {d.enter}
-      </a>
-      <p className="mt-6 text-sm text-muted">
-        <a href={`mailto:${CONTACT_EMAIL}`} className="text-brand" dir="ltr">
-          {CONTACT_EMAIL}
-        </a>
-      </p>
-    </div>
   );
 }

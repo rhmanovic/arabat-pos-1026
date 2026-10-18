@@ -10,17 +10,12 @@ export interface Feature {
   text: string;
 }
 
-/** Trial length in words: whole weeks as weeks ("3 أسابيع"), otherwise days. */
+/** Trial length as the owner writes it ("14 يوم"); the number is set in the platform. */
 function arabicLength(days: number): string {
-  const unit = (n: number, one: string, two: string, few: string, many: string) =>
-    n === 1 ? one : n === 2 ? two : n <= 10 ? `${n} ${few}` : `${n} ${many}`;
-  return days >= 7 && days % 7 === 0
-    ? unit(days / 7, 'أسبوع', 'أسبوعين', 'أسابيع', 'أسبوع')
-    : unit(days, 'يوم واحد', 'يومين', 'أيام', 'يوم');
+  return `${days} يوم`;
 }
 function englishLength(days: number): string {
-  const [n, word] = days >= 7 && days % 7 === 0 ? [days / 7, 'week'] : [days, 'day'];
-  return `${n} ${word}${n === 1 ? '' : 's'}`;
+  return `${days} day${days === 1 ? '' : 's'}`;
 }
 
 const ar = {
@@ -250,26 +245,22 @@ const ar = {
     },
     form: {
       title: 'أرسل طلبك',
-      text: 'اكتب بياناتك ويتواصل معك فريقنا لتأكيد الطلب وطريقة الدفع والتركيب.',
-      company: 'اسم الشركة أو المحل',
+      text: 'اكتب بياناتك ونفتح لك حسابك على طول، ويتواصل معك فريقنا لتأكيد الأجهزة وطريقة الدفع والتركيب.',
+      company: 'اسم المحل (اختياري)',
       contact: 'اسمك',
       phone: 'رقم الهاتف',
       email: 'البريد الإلكتروني',
-      notes: 'ملاحظات (اختياري)',
-      notesPlaceholder: 'مثلاً: عدد الفروع، نوع النشاط، وقت مناسب للتواصل',
+      password: 'الرقم السري لحسابك',
+      passwordHint: '10 أحرف على الأقل',
       submit: 'أرسل الطلب',
       sending: 'جارٍ الإرسال…',
       noPayment: 'لن يتم أي دفع الآن. ندفع فقط بعد التواصل والتأكيد.',
       back: 'رجوع للأجهزة',
       error: 'تعذّر إرسال الطلب. تأكد من البيانات وحاول مرة أخرى.',
       rateLimited: 'وصلنا طلبات كثيرة من هذا الجهاز. حاول لاحقاً أو راسلنا على البريد.',
-      unavailable: 'تغيّر أحد الأجهزة. حدّث الصفحة وحاول مرة أخرى.',
-    },
-    done: {
-      title: 'وصلنا طلبك!',
-      text: 'رقم طلبك {ref}. أرسلنا ملخص الطلب إلى بريدك، وسيتواصل معك فريقنا قريباً.',
-      again: 'طلب جديد',
-      home: 'الرئيسية',
+      unavailable: 'أحد الأجهزة غير متاح للتجربة حالياً. ارجع للأجهزة وغيّر اختيارك.',
+      emailTaken: 'هذا الإيميل مسجّل عندنا. سجّل دخولك بدل ما تنشئ حساب جديد.',
+      signIn: 'تسجيل الدخول',
     },
     loading: 'جارٍ تحميل الأسعار…',
     loadError: 'تعذّر تحميل الأسعار. حدّث الصفحة أو راسلنا على البريد.',
@@ -346,7 +337,7 @@ const ar = {
       error: 'تعذّر إنشاء الحساب. تأكد من البيانات وحاول مرة ثانية.',
     },
     done: {
-      title: 'مبروك! تجربتك المجانية ({length}) بدأت.',
+      title: 'مبروك! تجربتك المجانية {length} بدأت.',
       devices: 'وصلنا طلب الأجهزة ونتواصل معك لموعد التسليم. التجربة تبدأ من يوم الاستلام.',
       waitlist: 'أضفناك لقائمة الانتظار للأجهزة ونبلغك أول ما تتوفر. تجربتك على أجهزتك بدأت الحين.',
       enter: 'ادخل لوحة التحكم',
@@ -644,26 +635,23 @@ const en: typeof ar = {
     },
     form: {
       title: 'Send your request',
-      text: 'Leave your details and our team will contact you to confirm the order, payment and installation.',
-      company: 'Company or shop name',
+      text: 'Leave your details and we open your account right away; our team will contact you to confirm the devices, payment and installation.',
+      company: 'Shop name (optional)',
       contact: 'Your name',
       phone: 'Phone number',
       email: 'E-mail',
-      notes: 'Notes (optional)',
-      notesPlaceholder: 'e.g. number of branches, type of business, a good time to call',
+      password: 'Password for your account',
+      passwordHint: 'At least 10 characters',
       submit: 'Send request',
       sending: 'Sending…',
       noPayment: 'Nothing is charged now. You pay only after we talk and confirm.',
       back: 'Back to devices',
       error: 'The request could not be sent. Check your details and try again.',
       rateLimited: 'Too many requests from this device. Try later or e-mail us.',
-      unavailable: 'One of the devices changed. Reload the page and try again.',
-    },
-    done: {
-      title: 'We received your request!',
-      text: 'Your request number is {ref}. We e-mailed you a summary and our team will contact you shortly.',
-      again: 'New request',
-      home: 'Home',
+      unavailable:
+        'One of the devices is not available for a trial right now. Go back and change your choice.',
+      emailTaken: 'This e-mail is already registered. Sign in instead of creating a new account.',
+      signIn: 'Sign in',
     },
     loading: 'Loading prices…',
     loadError: 'Prices could not be loaded. Reload the page or e-mail us.',
@@ -741,7 +729,7 @@ const en: typeof ar = {
       error: 'The account could not be created. Check your details and try again.',
     },
     done: {
-      title: "You're in! Your free trial ({length}) has started.",
+      title: "You're in! Your free trial has started: {length}.",
       devices:
         'We received your device request and will contact you to arrange delivery. The trial starts on the day you receive them.',
       waitlist:

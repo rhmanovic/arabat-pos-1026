@@ -1,18 +1,25 @@
-import type { PublicOffer, PublicOfferItem, SalesRequestCreated } from '@arabat/contracts';
+import type {
+  PublicOffer,
+  PublicOfferItem,
+  PublicTrialOffer,
+  TrialStarted,
+} from '@arabat/contracts';
 import { Money } from '@arabat/money';
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { CONTACT_EMAIL, type Content, type Language } from './content.js';
+import { type Content, type Language } from './content.js';
 import { ItemIllustration } from './illustrations.js';
 import {
   Footer,
   Header,
-  REGISTER_URL,
+  SIGN_IN_URL,
   outlineButton,
   primaryButton,
   useLanguage,
+  useTrialOffer,
 } from './layout.js';
 import { Reveal } from './reveal.js';
 import { SystemCard } from './system-card.js';
+import { TrialDone, postTrial, trialSessionId } from './trial.js';
 
 const CURRENCY = 'KWD' as const;
 type Step = 0 | 1 | 2 | 3;
@@ -23,14 +30,14 @@ type Contact = {
   contactName: string;
   phone: string;
   email: string;
-  notes: string;
+  password: string;
 };
 const EMPTY_CONTACT: Contact = {
   companyName: '',
   contactName: '',
   phone: '',
   email: '',
-  notes: '',
+  password: '',
 };
 
 /** "99.000" → "99", "45.500" → "45.500": display only, never used for arithmetic. */
@@ -61,6 +68,7 @@ export function PricingPage() {
   const { lang, t, toggleLanguage } = useLanguage((c) => c.pricing.pageTitle);
   const [offer, setOffer] = useState<PublicOffer | null>(null);
   const [failed, setFailed] = useState(false);
+  const trial = useTrialOffer();
 
   useEffect(() => {
     let active = true;
@@ -86,7 +94,7 @@ export function PricingPage() {
         <section id="configure" className="bg-sand py-14 sm:py-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             {offer ? (
-              <Configurator t={t} offer={offer} lang={lang} />
+              <Configurator t={t} offer={offer} trial={trial} lang={lang} />
             ) : (
               <p
                 className="py-20 text-center text-lg text-muted"
@@ -195,14 +203,27 @@ function Stepper({ t, step }: { t: Content; step: Step }) {
   );
 }
 
-function Configurator({ t, offer, lang }: { t: Content; offer: PublicOffer; lang: Language }) {
+function Configurator({
+  t,
+  offer,
+  trial,
+  lang,
+}: {
+  t: Content;
+  offer: PublicOffer;
+  trial: PublicTrialOffer | null;
+  lang: Language;
+}) {
   const p = t.pricing;
   const [step, setStep] = useState<Step>(0);
   const [quantities, setQuantities] = useState<Quantities>({});
   const [contact, setContact] = useState<Contact>(EMPTY_CONTACT);
-  const [created, setCreated] = useState<SalesRequestCreated | null>(null);
+  const [started, setStarted] = useState<TrialStarted | null>(null);
+  const [session] = useState(trialSessionId);
   const top = useRef<HTMLDivElement>(null);
   const sum = useMemo(() => totals(offer, quantities), [offer, quantities]);
+  /** Trial length set in the platform: longer or shorter when devices are chosen. */
+  const trialDays = !trial ? null : sum.count ? trial.trialDaysDevices : trial.trialDaysOwn;
 
   const go = (next: Step) => {
     setStep(next);
@@ -211,19 +232,7 @@ function Configurator({ t, offer, lang }: { t: Content; offer: PublicOffer; lang
   const setQuantity = (item: PublicOfferItem, quantity: number) =>
     setQuantities((q) => ({ ...q, [item.id]: Math.max(0, Math.min(item.maxQuantity, quantity)) }));
 
-  if (step === 3 && created)
-    return (
-      <Done
-        t={t}
-        created={created}
-        onAgain={() => {
-          setQuantities({});
-          setContact(EMPTY_CONTACT);
-          setCreated(null);
-          go(0);
-        }}
-      />
-    );
+  if (step === 3 && started) return <TrialDone t={t} result={started} />;
 
   return (
     <div ref={top} className="scroll-mt-24">
@@ -250,17 +259,25 @@ function Configurator({ t, offer, lang }: { t: Content; offer: PublicOffer; lang
               offer={offer}
               lang={lang}
               quantities={quantities}
+              session={session}
               contact={contact}
               setContact={setContact}
               onBack={() => go(1)}
               onDone={(result) => {
-                setCreated(result);
+                setStarted(result);
                 go(3);
               }}
             />
           ) : null}
         </div>
-        <Cart t={t} offer={offer} lang={lang} quantities={quantities} sum={sum} />
+        <Cart
+          t={t}
+          offer={offer}
+          lang={lang}
+          quantities={quantities}
+          sum={sum}
+          trialDays={trialDays}
+        />
       </div>
       {/* Phones: the running total stays in view while choosing. */}
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-black/5 bg-white/95 px-4 py-3 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] backdrop-blur lg:hidden">
@@ -462,6 +479,7 @@ function RequestStep({
   offer,
   lang,
   quantities,
+  session,
   contact,
   setContact,
   onBack,
@@ -471,49 +489,41 @@ function RequestStep({
   offer: PublicOffer;
   lang: Language;
   quantities: Quantities;
+  session: string;
   contact: Contact;
   setContact: (update: (c: Contact) => Contact) => void;
   onBack: () => void;
-  onDone: (created: SalesRequestCreated) => void;
+  onDone: (started: TrialStarted) => void;
 }) {
   const f = t.pricing.form;
   const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<'taken' | 'unavailable' | 'rate' | 'other' | null>(null);
   const setField = (field: keyof Contact, value: string) =>
     setContact((c) => ({ ...c, [field]: value }));
 
+  /** Opens the trial account straight away, like /start (ADR-0115 amendment 3). */
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSending(true);
     setError(null);
-    try {
-      const response = await fetch('/api/v1/public/pricing/requests', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', accept: 'application/json' },
-        body: JSON.stringify({
-          ...contact,
-          language: lang,
-          devices: offer.devices
-            .filter((item) => (quantities[item.id] ?? 0) > 0)
-            .map((item) => ({ itemId: item.id, quantity: quantities[item.id] })),
-        }),
-      });
-      if (response.ok) {
-        onDone((await response.json()) as SalesRequestCreated);
-        return;
-      }
-      const problem = (await response.json().catch(() => null)) as {
-        issues?: { code?: string }[];
-      } | null;
-      if (response.status === 429) setError(f.rateLimited);
-      else if (problem?.issues?.some((i) => i.code === 'unavailable' || i.code === 'too_many'))
-        setError(f.unavailable);
-      else setError(f.error);
-    } catch {
-      setError(f.error);
-    } finally {
-      setSending(false);
-    }
+    const r = await postTrial<TrialStarted>('start', {
+      fullName: contact.contactName,
+      email: contact.email,
+      password: contact.password,
+      companyName: contact.companyName,
+      phone: contact.phone,
+      language: lang,
+      sessionId: session,
+      devices: offer.devices
+        .filter((item) => (quantities[item.id] ?? 0) > 0)
+        .map((item) => ({ itemId: item.id, quantity: quantities[item.id] })),
+    });
+    setSending(false);
+    if (r.ok) return onDone(r.data);
+    if (r.code === 'EMAIL_ALREADY_REGISTERED') setError('taken');
+    else if (r.issue === 'unavailable') setError('unavailable');
+    else if (r.status === 429) setError('rate');
+    else setError('other');
   };
 
   const input =
@@ -529,8 +539,6 @@ function RequestStep({
             name="companyName"
             value={contact.companyName}
             onChange={(e) => setField('companyName', e.target.value)}
-            required
-            minLength={2}
             maxLength={120}
             autoComplete="organization"
             className={input}
@@ -578,18 +586,27 @@ function RequestStep({
             className={`${input} text-start`}
           />
         </label>
-        <label className="block sm:col-span-2">
-          <span className="text-sm font-medium text-ink">{f.notes}</span>
-          <textarea
-            name="notes"
-            value={contact.notes}
-            onChange={(e) => setField('notes', e.target.value)}
-            rows={3}
-            maxLength={1000}
-            placeholder={f.notesPlaceholder}
-            className={input}
-          />
-        </label>
+        <div className="sm:col-span-2">
+          <label className="block">
+            <span className="text-sm font-medium text-ink">{f.password}</span>
+            <input
+              name="password"
+              type="password"
+              value={contact.password}
+              onChange={(e) => setField('password', e.target.value)}
+              required
+              minLength={10}
+              maxLength={128}
+              autoComplete="new-password"
+              dir="ltr"
+              aria-describedby="pricing-password-hint"
+              className={`${input} text-start`}
+            />
+          </label>
+          <span id="pricing-password-hint" className="mt-1 block text-xs text-muted">
+            {f.passwordHint}
+          </span>
+        </div>
       </div>
       <p className="mt-6 flex items-start gap-2 rounded-2xl bg-brand-soft px-4 py-3 text-sm text-brand">
         <span aria-hidden="true">🔒</span>
@@ -597,7 +614,20 @@ function RequestStep({
       </p>
       {error ? (
         <p role="alert" className="mt-4 rounded-2xl bg-coral/10 px-4 py-3 text-sm text-coral">
-          {error}
+          {error === 'taken' ? (
+            <>
+              {f.emailTaken}{' '}
+              <a href={SIGN_IN_URL} className="font-bold underline">
+                {f.signIn}
+              </a>
+            </>
+          ) : error === 'unavailable' ? (
+            f.unavailable
+          ) : error === 'rate' ? (
+            f.rateLimited
+          ) : (
+            f.error
+          )}
         </p>
       ) : null}
       <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
@@ -618,12 +648,14 @@ function Cart({
   lang,
   quantities,
   sum,
+  trialDays,
 }: {
   t: Content;
   offer: PublicOffer;
   lang: Language;
   quantities: Quantities;
   sum: ReturnType<typeof totals>;
+  trialDays: number | null;
 }) {
   const c = t.pricing.cart;
   const p = t.pricing;
@@ -680,47 +712,16 @@ function Cart({
           </p>
           <p className="mt-1 text-xs text-white/80">{fill(c.renewal, { amount: sum.system })}</p>
         </div>
+        {trialDays ? (
+          <p
+            key={trialDays}
+            className="bump mt-3 rounded-full bg-brand-soft px-4 py-1.5 text-center text-sm font-medium text-brand"
+          >
+            ✓ {fill(t.trialLine, { length: t.trialLength(trialDays) })}
+          </p>
+        ) : null}
       </div>
     </aside>
-  );
-}
-
-function Done({
-  t,
-  created,
-  onAgain,
-}: {
-  t: Content;
-  created: SalesRequestCreated;
-  onAgain: () => void;
-}) {
-  const d = t.pricing.done;
-  return (
-    <div className="step-in mx-auto max-w-2xl rounded-3xl bg-white p-8 text-center shadow-sm sm:p-12">
-      <span className="pop mx-auto grid size-20 place-items-center rounded-full bg-brand text-4xl text-white shadow-lg shadow-brand/30">
-        ✓
-      </span>
-      <h2 className="mt-6 text-3xl font-bold">{d.title}</h2>
-      <p className="mt-3 text-lg leading-relaxed text-muted">
-        {fill(d.text, { ref: created.reference })}
-      </p>
-      <p className="mt-6 text-2xl font-bold tabular-nums text-ink" dir="ltr">
-        {created.total.amount} <span className="text-base text-muted">{t.pricing.currency}</span>
-      </p>
-      <div className="mt-8 flex flex-wrap justify-center gap-3">
-        <a href={REGISTER_URL} className={primaryButton}>
-          {t.hero.primary}
-        </a>
-        <button type="button" onClick={onAgain} className={outlineButton}>
-          {d.again}
-        </button>
-      </div>
-      <p className="mt-6 text-sm text-muted">
-        <a href={`mailto:${CONTACT_EMAIL}`} className="text-brand" dir="ltr">
-          {CONTACT_EMAIL}
-        </a>
-      </p>
-    </div>
   );
 }
 

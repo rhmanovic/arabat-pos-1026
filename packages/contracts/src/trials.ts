@@ -56,7 +56,19 @@ export const startTrialSchema = z.object({
   email: emailSchema,
   password: newPasswordSchema,
   companyName: optionalText(120),
-  businessType: z.enum(BUSINESS_TYPES),
+  /** Asked on the /start funnel; the pricing page does not ask it. */
+  businessType: z
+    .enum(BUSINESS_TYPES)
+    .nullish()
+    .transform((v) => v ?? null),
+  /** Asked on the pricing page; optional. */
+  phone: z
+    .string()
+    .trim()
+    .regex(/^\+?[0-9 ()-]{7,20}$/, { error: 'Enter a phone number.' })
+    .nullish()
+    .or(z.literal(''))
+    .transform((v) => (v ? v : null)),
   language: z.enum(['ar', 'en']),
   sessionId,
   devices: z
@@ -112,6 +124,7 @@ export const leadSchema = z.object({
   fullName: z.string().nullable(),
   companyName: z.string().nullable(),
   businessType: z.enum(BUSINESS_TYPES).nullable(),
+  phone: z.string().nullable(),
   language: z.enum(['ar', 'en']),
   stage: z.enum(LEAD_STAGES),
   merchantId: z.string().nullable(),

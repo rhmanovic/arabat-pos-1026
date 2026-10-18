@@ -52,14 +52,14 @@ describe('StartPage (free-trial funnel)', () => {
     expect(within(order).getByText('نظام عربات POS')).toBeInTheDocument();
     expect(within(order).getByText('جهاز p')).toBeInTheDocument();
     expect(within(order).getByText('الأجهزة (مرة واحدة) · 1 جهاز')).toBeInTheDocument();
-    expect(within(order).getByText('أسبوع')).toBeInTheDocument();
+    expect(within(order).getByText('7 يوم')).toBeInTheDocument();
     expect(within(order).getByText('تبدأ من يوم استلام الأجهزة')).toBeInTheDocument();
     expect(within(order).getByText('129.000')).toBeInTheDocument();
     expect(within(order).queryByText('مجاناً')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'التالي' }));
 
     expect(screen.getByRole('heading', { name: 'خطوة أخيرة وتبدأ تجربتك' })).toBeInTheDocument();
-    expect(screen.getByText(/تجربة مجانية أسبوع، بدون بطاقة/)).toBeInTheDocument();
+    expect(screen.getByText(/تجربة مجانية 7 يوم، بدون بطاقة/)).toBeInTheDocument();
     await user.type(screen.getByLabelText('اسمك'), 'فاطمة');
     await user.type(screen.getByLabelText('إيميلك'), 'f@example.com');
     await user.type(screen.getByLabelText('الرقم السري'), 'Strong-Pass-2026');
@@ -72,7 +72,7 @@ describe('StartPage (free-trial funnel)', () => {
       devices: [{ itemId: 'p', quantity: 1 }],
     });
     expect(
-      await screen.findByRole('heading', { name: 'مبروك! تجربتك المجانية (أسبوع) بدأت.' }),
+      await screen.findByRole('heading', { name: 'مبروك! تجربتك المجانية 7 يوم بدأت.' }),
     ).toBeInTheDocument();
     expect(screen.getByText(/قائمة الانتظار للأجهزة/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'ادخل لوحة التحكم' })).toHaveAttribute(
@@ -87,7 +87,7 @@ describe('StartPage (free-trial funnel)', () => {
     render(<StartPage />);
     await user.click(await screen.findByRole('button', { name: /محل/ }));
     await user.click(screen.getByRole('button', { name: 'تخطَّ، عندي أجهزتي' }));
-    expect(screen.getByText(/تجربة مجانية أسبوعين، بدون بطاقة/)).toBeInTheDocument();
+    expect(screen.getByText(/تجربة مجانية 14 يوم، بدون بطاقة/)).toBeInTheDocument();
     await user.type(screen.getByLabelText('اسمك'), 'Ali');
     await user.click(screen.getByRole('button', { name: 'رجوع' }));
     await user.click(screen.getByRole('button', { name: 'تخطَّ، عندي أجهزتي' }));

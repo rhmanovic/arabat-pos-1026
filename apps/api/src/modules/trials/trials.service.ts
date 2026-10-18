@@ -170,6 +170,7 @@ export class TrialsService {
             fullName: input.fullName,
             companyName: input.companyName,
             businessType: input.businessType,
+            phone: input.phone,
             language: input.language,
             merchantId,
           });
@@ -197,7 +198,9 @@ export class TrialsService {
     await this.step(input.sessionId, 'account');
     await this.notifySales(
       { ar: 'تجربة جديدة', en: 'New trial' },
-      `${name} — ${input.email} — ${input.businessType}${
+      `${name} — ${input.email}${input.phone ? ` — ${input.phone}` : ''}${
+        input.businessType ? ` — ${input.businessType}` : ''
+      }${
         devices.length
           ? ` — devices (${deviceStatus}): ${devices.map((d) => `${d.item.nameEn} × ${d.quantity}`).join(', ')}`
           : ' — own devices'
@@ -337,6 +340,7 @@ export class TrialsService {
         fullName: r.fullName,
         companyName: r.companyName,
         businessType: r.businessType as Lead['businessType'],
+        phone: r.phone,
         language: r.language as Lead['language'],
         stage: r.stage as LeadStage,
         merchantId: r.merchantId,
@@ -573,7 +577,8 @@ export class TrialsService {
     fields: {
       fullName?: string | null;
       companyName?: string | null;
-      businessType?: string;
+      businessType?: string | null;
+      phone?: string | null;
       language?: string;
       merchantId?: string;
     },
@@ -583,6 +588,7 @@ export class TrialsService {
       ...(fields.fullName ? { fullName: fields.fullName } : {}),
       ...(fields.companyName ? { companyName: fields.companyName } : {}),
       ...(fields.businessType ? { businessType: fields.businessType } : {}),
+      ...(fields.phone ? { phone: fields.phone } : {}),
       ...(fields.language ? { language: fields.language } : {}),
       ...(fields.merchantId ? { merchantId: fields.merchantId } : {}),
     };

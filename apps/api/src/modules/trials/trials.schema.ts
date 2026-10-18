@@ -49,6 +49,7 @@ export const leads = pgTable(
     fullName: text(),
     companyName: text(),
     businessType: text(),
+    phone: text(),
     language: text().notNull().default('ar'),
     stage: text().notNull(),
     merchantId: uuid().references(() => merchants.id),

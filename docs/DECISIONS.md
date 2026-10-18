@@ -1607,4 +1607,12 @@ ADR; supersede it.
 - **Amendment 2 (owner, 2026-10-18):** no "free" headline as a selling word. The `/start` summary
   shows the real prices like the pricing cart (system yearly, devices once, first payment after
   the trial, renewal) plus the trial length, written in weeks when it is whole weeks.
+- **Amendment 3 (owner, 2026-10-18):** every "أنشئ حساب وجهّز محلك" button goes to `/pricing`
+  (on that page it scrolls to the steps). The pricing cart shows "✓ تجربة مجانية N يوم بدون بطاقة"
+  under the first payment (own-devices or with-devices length from the platform). The pricing
+  form drops the notes, asks a password, keeps the phone (stored as `leads.phone`, migration 0058)
+  and makes the shop name optional; it posts `/public/trial/start` (business type is now optional)
+  and shows the same "مبروك" card as `/start`. Trial lengths read as days again ("14 يوم", the
+  owner's wording). `/start` stays reachable; the sales-request endpoint stays but is unused by
+  the site.
 

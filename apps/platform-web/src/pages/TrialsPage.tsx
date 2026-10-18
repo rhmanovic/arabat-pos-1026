@@ -127,6 +127,15 @@ function LeadsTab() {
                 >
                   {l.email}
                 </a>
+                {l.phone ? (
+                  <a
+                    dir="ltr"
+                    className="text-start text-xs text-primary underline"
+                    href={`tel:${l.phone.replace(/[^+0-9]/g, '')}`}
+                  >
+                    {l.phone}
+                  </a>
+                ) : null}
               </span>
             ),
           },

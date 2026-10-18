@@ -9,8 +9,12 @@ type SectionId = (typeof SECTIONS)[number];
 const NAV = ['home', 'features', 'why', 'pricing', 'start'] as const;
 export type Page = 'home' | 'pricing' | 'start';
 
-/** The sign-up funnel (ADR-0115): the page's single call to action. */
-export const REGISTER_URL = '/start';
+/**
+ * The site's single call to action (ADR-0115 amendment 3): the pricing page, where the visitor
+ * picks devices and opens the trial account. On the pricing page itself it scrolls to the steps.
+ */
+export const REGISTER_URL = '/pricing';
+const signupHref = (page: Page) => (page === 'pricing' ? '#configure' : REGISTER_URL);
 export const SIGN_IN_URL = '/manager/';
 
 export function initialLanguage(): Language {
@@ -140,7 +144,7 @@ export function Header({
             {t.signIn}
           </a>
           <a
-            href={REGISTER_URL}
+            href={signupHref(page)}
             className="rounded-full bg-brand px-5 py-2 text-sm font-medium text-white transition hover:bg-coral"
           >
             {t.signupCta}
@@ -164,6 +168,7 @@ export function Header({
           t={t}
           links={links}
           active={active}
+          signupHref={signupHref(page)}
           onToggleLanguage={onToggleLanguage}
           onClose={() => setMenuOpen(false)}
         />
@@ -180,12 +185,14 @@ function MobileMenu({
   t,
   links,
   active,
+  signupHref,
   onToggleLanguage,
   onClose,
 }: {
   t: Content;
   links: { id: string; label: string; href: string }[];
   active: string;
+  signupHref: string;
   onToggleLanguage: () => void;
   onClose: () => void;
 }) {
@@ -279,7 +286,8 @@ function MobileMenu({
         </nav>
         <div className="flex flex-col gap-3 border-t border-[#eef0f2] p-5">
           <a
-            href={REGISTER_URL}
+            href={signupHref}
+            onClick={onClose}
             className="rounded-full bg-brand py-3.5 text-center text-lg font-medium text-white shadow-lg shadow-brand/25"
           >
             {t.signupCta}
@@ -306,7 +314,7 @@ export function Footer({ t, page }: { t: Content; page: Page }) {
         <h2 className="mt-2 text-3xl font-bold text-white sm:text-4xl">{t.footer.headline}</h2>
         <p className="mt-3 text-white/90">{t.footer.text}</p>
         <a
-          href={REGISTER_URL}
+          href={signupHref(page)}
           className="mt-8 inline-flex rounded-full bg-white px-8 py-3 text-lg font-medium text-brand shadow-lg transition hover:-translate-y-0.5"
         >
           {t.signupCta}

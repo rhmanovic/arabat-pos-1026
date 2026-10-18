@@ -599,7 +599,8 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
 - **BR-030** Default currency is **KWD** with **3 decimal places** (1 KWD = 1000 fils).
 - **BR-031** No floating-point arithmetic for monetary calculations, anywhere.
 - **BR-197** Free trial and sign-up funnel (owner, 2026-10-18, ADR-0115): the site's one call
-  to action is "أنشئ حساب وجهّز محلك" → `/start`. Registration stays open to everyone. The funnel is business type → devices (pick
+  to action is "أنشئ حساب وجهّز محلك" → `/pricing` (amendment 3; the pricing page's form opens
+  the trial account, phone asked, shop name optional; `/start` stays reachable). Registration stays open to everyone. The funnel is business type → devices (pick
   the devices to try, or "تخطَّ" for own devices) → account; the trial account opens and signs in
   at once, without e-mail confirmation (owner, 2026-10-18: confirmation is asked later, when the
   customer is more engaged). The operator sets in the platform: trial days on own devices (from account creation),

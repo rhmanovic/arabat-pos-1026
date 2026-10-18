@@ -950,6 +950,12 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
   otherwise days with Arabic number agreement (`trialLength` in `content.ts`).
 - `GET /public/trial` also returns the system's name (`systemNameAr` / `systemNameEn`).
 - Local: `pnpm verify` 267, integration 273, E2E 37, all passing.
+### 2026-10-18 — Pricing page opens the trial account (ADR-0115 amendment 3)
+- Every "أنشئ حساب وجهّز محلك" button → `/pricing`. Cart: "✓ تجربة مجانية N يوم بدون بطاقة" under
+  the first payment. Form: shop name (optional), name, phone, e-mail, password; no notes; submit
+  opens the trial (`/public/trial/start`) and shows the "مبروك" card with the dashboard link.
+- `leads.phone` (migration 0058), shown in `/platform/trials`; business type optional on start.
+- Local: `pnpm verify` 268, integration 274, E2E 37, all passing.
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.

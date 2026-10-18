@@ -14,21 +14,21 @@ describe('LandingPage', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('has one call to action, to the sign-up funnel, with the price and trial from the platform', async () => {
+  it('has one call to action, to the pricing page, with the price and trial from the platform', async () => {
     render(<LandingPage />);
     expect(document.documentElement).toHaveAttribute('dir', 'rtl');
     const hero = document.getElementById('home')!;
     expect(within(hero).getByRole('heading', { level: 1 })).toBeInTheDocument();
     expect(within(hero).getByRole('link', { name: 'أنشئ حساب وجهّز محلك' })).toHaveAttribute(
       'href',
-      '/start',
+      '/pricing',
     );
     expect(
-      await within(hero).findByText('99 د.ك سنوياً · تجربة مجانية أسبوعين بدون بطاقة'),
+      await within(hero).findByText('99 د.ك سنوياً · تجربة مجانية 14 يوم بدون بطاقة'),
     ).toBeInTheDocument();
     // Every big button goes to the same place; sign-in stays a small link in the header.
     for (const link of screen.getAllByRole('link', { name: 'أنشئ حساب وجهّز محلك' }))
-      expect(link).toHaveAttribute('href', '/start');
+      expect(link).toHaveAttribute('href', '/pricing');
     expect(within(hero).queryByRole('link', { name: 'تسجيل الدخول' })).toBeNull();
     expect(screen.getAllByRole('link', { name: 'تسجيل الدخول' })[0]).toHaveAttribute(
       'href',
