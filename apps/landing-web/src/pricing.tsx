@@ -287,6 +287,11 @@ function Configurator({
             <p className="text-xl font-bold tabular-nums text-ink" dir="ltr">
               {sum.total} <span className="text-sm text-muted">{p.currency}</span>
             </p>
+            {trialDays ? (
+              <p className="text-xs font-medium text-brand">
+                ✓ {fill(t.trialLine, { length: t.trialLength(trialDays) })}
+              </p>
+            ) : null}
           </div>
           {step < 2 ? (
             <button

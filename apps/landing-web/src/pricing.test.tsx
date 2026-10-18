@@ -58,7 +58,8 @@ describe('PricingPage', () => {
     render(<PricingPage />);
     expect(await screen.findByText('نظامك الكامل')).toBeInTheDocument();
     // Trial length from the platform under the first payment (own devices: 14 days).
-    expect(await screen.findByText('✓ تجربة مجانية 14 يوم بدون بطاقة')).toBeInTheDocument();
+    // Desktop cart and the phone bottom bar both show it.
+    expect(await screen.findAllByText('✓ تجربة مجانية 14 يوم بدون بطاقة')).toHaveLength(2);
 
     await user.click(screen.getAllByRole('button', { name: 'التالي: جهّز محلك' })[0]!);
     const printer = screen.getByRole('heading', { name: 'جهاز p' }).closest('li')!;
@@ -70,7 +71,7 @@ describe('PricingPage', () => {
     // 99.000 + 2 × 35.250 = 169.500, computed in fils.
     expect(screen.getAllByText('169.500').length).toBeGreaterThan(0);
     // With devices the platform's device trial length applies (7 days).
-    expect(screen.getByText('✓ تجربة مجانية 7 يوم بدون بطاقة')).toBeInTheDocument();
+    expect(screen.getAllByText('✓ تجربة مجانية 7 يوم بدون بطاقة')).toHaveLength(2);
 
     await user.click(screen.getAllByRole('button', { name: 'التالي: راجع طلبك' })[0]!);
     expect(screen.queryByLabelText(/ملاحظات/)).toBeNull();
