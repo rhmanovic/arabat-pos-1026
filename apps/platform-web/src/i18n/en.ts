@@ -324,11 +324,8 @@ export const platformEn = {
     days: '{{n}} days',
     steps: {
       business: 'Chose a business',
-      demo: 'Opened the demo till',
-      receipt: 'Left an e-mail',
-      devices: 'Set up the shop',
-      account: 'Filled the account form',
-      verified: 'Confirmed (trial)',
+      devices: 'Reached the devices',
+      account: 'Opened a trial',
     },
     funnelHint:
       'Visitors per step (anonymous browser sessions), and their share of the first step.',

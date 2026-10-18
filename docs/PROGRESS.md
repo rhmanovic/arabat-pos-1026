@@ -929,6 +929,12 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
 - Tests: 4 integration (receipt lead, code + trial account, device stock / waiting list /
   delivery, access), 6 web (funnel, homepage), 1 E2E (homepage → demo → account → Mailpit code →
   dashboard). Local: `pnpm verify`, integration, E2E all passing.
+### 2026-10-18 — Trial funnel simplified (ADR-0115 amendment 1)
+- `/start` is now business → devices (choose, or "تخطَّ، عندي أجهزتي") → account → trial started
+  and signed in at once. No demo till, no e-mail code. Pricing-page design: stepper, device cards,
+  sticky summary with "مجاناً" and the price after the trial.
+- Tests: 4 integration, 3 web (/start), 1 E2E (home → business → skip devices → account →
+  dashboard). Local: `pnpm verify` 266, integration 273, E2E 37, all passing.
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.

@@ -75,11 +75,10 @@ bottom bar on phones), confirmation with the request number, and FAQ. Reads
 
 ## 2a-ter. `/start` — landing-web (free-trial sign-up funnel, ADR-0115)
 
-The single call to action of the site ("أنشئ حساب وجهّز محلك"). Steps: business type → demo
-till (sample products per business, optional receipt by e-mail = lead) → set up the shop (own
-devices, or devices to try with availability and waiting list) → account (name, e-mail,
-password, optional shop name) → 6-digit e-mail code → trial started (session set, link to
-`/manager/`). Anonymous funnel steps are counted. `/manager/register` stays open.
+The single call to action of the site ("أنشئ حساب وجهّز محلك"). Steps: business type → devices (choose
+devices to try, with availability and waiting list, or "تخطَّ" for own devices) → account (name,
+e-mail, password, optional shop name) → trial started at once (session set, link to `/manager/`).
+Anonymous funnel steps are counted. `/manager/register` stays open.
 
 ## 2b. `/store` — store-web (public storefront, Prompt 16)
 
@@ -343,7 +342,7 @@ only staff land on `/pos/kitchen`. Sales list and reports show the service type.
 | `POST /platform/offer-items`, `PUT /platform/offer-items/:id`, `POST`/`DELETE /platform/offer-items/:id/image` | super admin, billing |
 | `GET /platform/trials/settings`, `GET /platform/trials/stock`, `GET /platform/trials/leads?stage=`, `GET /platform/trials/devices?status=`, `PUT /platform/trials/devices/:id`, `GET /platform/trials/funnel?days=` | any operator (ADR-0115) |
 | `PUT /platform/trials/settings`, `PUT /platform/trials/stock/:itemId` | super admin, billing |
-| `GET /public/trial`, `POST /public/trial/events`, `POST /public/trial/demo-receipt` (10/h per IP, 3/h per e-mail), `POST /public/trial/start` (registration limit), `POST /public/trial/resend`, `POST /public/trial/verify` (sets the manager session) | 🔓 public |
+| `GET /public/trial`, `POST /public/trial/events`, `POST /public/trial/start` (registration limit; creates the account and sets the manager session) | 🔓 public |
 | `GET /public/pricing` (active system + devices), `GET /public/pricing/images/:id`, `POST /public/pricing/requests` (5 per hour per IP; priced on the server) | 🔓 public |
 | `GET /manager/subscription` | merchant `merchant.settings.read` (own merchant only) |
 

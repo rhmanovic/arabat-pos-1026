@@ -242,6 +242,6 @@ Selling decisions (prices, limits, rights, tenders, shift notes, refunds) live i
 the services load data and call it through `rules()` (`kernel/errors/pos-rule.ts`). Local-first devices: ADR-0112 (Accepted), contract `docs/DEVICE_API.md`.
 Public site: landing `/` and pricing `/pricing` (`apps/landing-web`, ADR-0113/0114); pricing-page items and purchase
 requests live in the `pricing` module, priced on the server, followed up in `/platform/offer` and `/platform/requests`.
-Free-trial funnel `/start` and `/platform/trials` (`trials` module, ADR-0115): accounts are created only after the e-mailed
-code, through `RegistrationService.createAccount`; every trial number is an operator setting.
+Free-trial funnel `/start` and `/platform/trials` (`trials` module, ADR-0115): the account opens at once (no e-mail
+code in this phase, amendment 1), through `RegistrationService.createAccount`; every trial number is an operator setting.
 See `docs/PROGRESS.md` for the current state and `docs/ROADMAP.md` for next steps.

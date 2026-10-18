@@ -5,18 +5,14 @@ import {
   type TrialDeviceStock,
   type TrialSettings,
   type TrialStarted,
-  type TrialVerified,
-  demoReceiptSchema,
   deviceTrialQuerySchema,
   funnelEventSchema,
   funnelStatsQuerySchema,
   leadQuerySchema,
-  resendTrialCodeSchema,
   saveTrialSettingsSchema,
   saveTrialStockSchema,
   startTrialSchema,
   updateDeviceTrialSchema,
-  verifyTrialSchema,
 } from '@arabat/contracts';
 import type { PlatformRole } from '@arabat/permissions';
 import {
@@ -44,7 +40,7 @@ import { TrialsService } from './trials.service.js';
 const uuid = new ParseUUIDPipe();
 type O<T extends z.ZodType> = z.output<T>;
 
-/** The public sign-up funnel (`/start` on the landing site, ADR-0115). No session until verified. */
+/** The public sign-up funnel (`/start` on the landing site, ADR-0115). */
 @Controller('public/trial')
 export class PublicTrialController {
   constructor(
@@ -68,45 +64,15 @@ export class PublicTrialController {
     await this.trials.track(body.sessionId, body.step, req.ip);
   }
 
-  @Public()
-  @Post('demo-receipt')
-  @HttpCode(204)
-  async receipt(
-    @Body(new ZodPipe(demoReceiptSchema)) body: O<typeof demoReceiptSchema>,
-    @Req() req: FastifyRequest,
-  ): Promise<void> {
-    await this.trials.demoReceipt(body, req.ip);
-  }
-
+  /** Opens the trial account and signs the owner in to the management app. */
   @Public()
   @Post('start')
-  start(
+  async start(
     @Body(new ZodPipe(startTrialSchema)) body: O<typeof startTrialSchema>,
     @Req() req: FastifyRequest,
-  ): Promise<TrialStarted> {
-    return this.trials.start(body, req.ip);
-  }
-
-  @Public()
-  @Post('resend')
-  @HttpCode(204)
-  async resend(
-    @Body(new ZodPipe(resendTrialCodeSchema)) body: O<typeof resendTrialCodeSchema>,
-    @Req() req: FastifyRequest,
-  ): Promise<void> {
-    await this.trials.resend(body.signupId, req.ip);
-  }
-
-  /** Creates the account and signs the owner in to the management app. */
-  @Public()
-  @Post('verify')
-  @HttpCode(200)
-  async verify(
-    @Body(new ZodPipe(verifyTrialSchema)) body: O<typeof verifyTrialSchema>,
-    @Req() req: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<TrialVerified> {
-    const { outcome, result } = await this.trials.verify(body.signupId, body.code, clientInfo(req));
+  ): Promise<TrialStarted> {
+    const { outcome, result } = await this.trials.start(body, clientInfo(req));
     if (outcome.session)
       this.sessions.setCookie(reply, outcome.session.interface, outcome.session.token);
     return result;

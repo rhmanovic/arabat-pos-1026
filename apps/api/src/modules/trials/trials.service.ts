@@ -9,12 +9,9 @@ import {
   type TrialDeviceStock,
   type TrialSettings,
   type TrialStarted,
-  type TrialVerified,
-  DEMO_CATALOGS,
   DEVICE_TRIAL_STATUSES,
   FUNNEL_STEPS,
   LEAD_STAGES,
-  demoReceiptSchema,
   saveTrialSettingsSchema,
   saveTrialStockSchema,
   startTrialSchema,
@@ -23,13 +20,11 @@ import {
 import { Money } from '@arabat/money';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { and, asc, desc, eq, gte, inArray, sql } from 'drizzle-orm';
-import { createHash, randomInt } from 'node:crypto';
 import type { z } from 'zod';
 import { ENV } from '../../config/config.module.js';
 import type { Env } from '../../config/env.js';
 import { DatabaseService, type Transaction } from '../../database/database.service.js';
 import type { PlatformActor } from '../../kernel/access/session-resolver.js';
-import { safeEqual } from '../../kernel/crypto/tokens.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
 import { Mailer } from '../../kernel/mail/mailer.js';
@@ -49,21 +44,13 @@ import {
   funnelEvents,
   leads,
   trialSettings,
-  trialSignups,
 } from './trials.schema.js';
 
 type O<T extends z.ZodType> = z.output<T>;
 type Row = Record<string, unknown>;
 const CURRENCY = 'KWD' as const;
-const CODE_TTL_MINUTES = 15;
-const MAX_CODE_ATTEMPTS = 5;
-const MAX_CODES_SENT = 5;
 const LIMITS = {
   funnelPerIp: { limit: 300, windowSeconds: 3600 },
-  receiptPerIp: { limit: 10, windowSeconds: 3600 },
-  receiptPerEmail: { limit: 3, windowSeconds: 3600 },
-  resendPerIp: { limit: 10, windowSeconds: 3600 },
-  verifyPerIp: { limit: 30, windowSeconds: 600 },
 };
 /** Devices lent and not yet back count against the trial stock. */
 const OUT: DeviceTrialStatus[] = ['approved', 'delivered'];
@@ -78,17 +65,12 @@ const NEXT: Record<DeviceTrialStatus, DeviceTrialStatus[]> = {
   rejected: [],
 };
 const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
-const kwd = (minor: bigint) => `${Money.ofMinor(minor, CURRENCY).toDecimalString()} KWD`;
 const versionConflict = () =>
   new AppError(409, 'VERSION_CONFLICT', 'This record was changed by someone else. Reload it.');
-const codeHash = (signupId: string, code: string) =>
-  createHash('sha256').update(`${signupId}:${code}`).digest('hex');
-const newCode = () => String(randomInt(0, 1_000_000)).padStart(6, '0');
 
 /**
- * Free trials and the public sign-up funnel (ADR-0115): demo receipts become leads, trial
- * sign-ups are confirmed with an e-mailed code before the account exists, device trials wait
- * for the operator and their trial time starts on delivery.
+ * Free trials and the public sign-up funnel (ADR-0115): the trial account opens on sign-up,
+ * device trials wait for the operator and their trial time starts on delivery.
  */
 @Injectable()
 export class TrialsService {
@@ -143,203 +125,77 @@ export class TrialsService {
     await this.step(sessionId, step);
   }
 
-  async demoReceipt(input: O<typeof demoReceiptSchema>, ip: string): Promise<void> {
-    await this.limiter.consume(`demo-receipt:ip:${ip}`, LIMITS.receiptPerIp);
-    await this.limiter.consume(`demo-receipt:email:${input.email}`, LIMITS.receiptPerEmail);
-    const catalog = new Map(DEMO_CATALOGS[input.businessType].map((p) => [p.key, p]));
-    const lines = input.lines.map((line, index) => {
-      const product = catalog.get(line.key);
-      if (!product)
-        throw AppError.validation([
-          { path: `lines.${index}.key`, code: 'invalid', message: 'Unknown demo product.' },
-        ]);
-      const total = Money.parse(product.price, CURRENCY).multiply(String(line.quantity));
-      return { product, quantity: line.quantity, total };
-    });
-    const total = lines.reduce((sum, l) => sum + l.total.minor, 0n);
-    await this.database.db.transaction((tx) =>
-      this.upsertLead(tx, input.email, 'receipt', {
-        businessType: input.businessType,
-        language: input.language,
-      }),
-    );
-    await this.step(input.sessionId, 'receipt');
-    const ar = (l: (typeof lines)[number]) =>
-      `${l.product.nameAr} × ${l.quantity} = ${kwd(l.total.minor)}`;
-    const en = (l: (typeof lines)[number]) =>
-      `${l.product.nameEn} × ${l.quantity} = ${kwd(l.total.minor)}`;
-    await this.send({
-      to: input.email,
-      ...renderEmail({
-        title: { ar: 'إيصال البيع التجريبي', en: 'Your demo receipt' },
-        name: input.language === 'ar' ? 'عميلنا' : 'there',
-        intro: {
-          ar: `هذا إيصال البيع اللي جربته على كاشير عربات:\n${lines.map(ar).join('\n')}\nالإجمالي: ${kwd(total)}\n(بيع تجريبي، ما فيه أي دفع.)`,
-          en: `Here is the receipt of the sale you tried on the Arabat till:\n${lines.map(en).join('\n')}\nTotal: ${kwd(total)}\n(Demo sale, nothing was charged.)`,
-        },
-        action: {
-          label: { ar: 'أنشئ حساب وجهّز محلك', en: 'Create an account and set up your shop' },
-          url: `${this.siteUrl()}/start`,
-        },
-      }),
-    });
-    await this.notifySales(
-      { ar: 'عميل محتمل جديد (إيصال تجريبي)', en: 'New lead (demo receipt)' },
-      `${input.email} — ${input.businessType}`,
-    );
-  }
-
-  async start(input: O<typeof startTrialSchema>, ip: string): Promise<TrialStarted> {
-    await this.limiter.consume(`register:ip:${ip}`, AUTH_LIMITS.registerPerIp);
+  /**
+   * Opens the trial account straight away (owner, 2026-10-18: no e-mail confirmation in this
+   * phase) and signs the owner in. Device trials wait for the operator.
+   */
+  async start(
+    input: O<typeof startTrialSchema>,
+    client: ClientInfo,
+  ): Promise<{ outcome: LoginOutcome; result: TrialStarted }> {
+    await this.limiter.consume(`register:ip:${client.ip}`, AUTH_LIMITS.registerPerIp);
     const [existing] = await this.database.db
       .select({ id: users.id })
       .from(users)
       .where(eq(users.email, input.email));
     if (existing) throw EMAIL_TAKEN();
-    const devices = await this.checkDevices(input.devices);
-    const passwordHash = await this.passwords.hash(input.password);
-    const signupId = newId();
-    const code = newCode();
-    await this.database.db.transaction(async (tx) => {
-      await tx.insert(trialSignups).values({
-        id: signupId,
-        email: input.email,
-        fullName: input.fullName,
-        companyName: input.companyName,
-        passwordHash,
-        businessType: input.businessType,
-        language: input.language,
-        devices: devices.map((d) => ({ itemId: d.item.id, quantity: d.quantity })),
-        codeHash: codeHash(signupId, code),
-        expiresAt: sql`now() + make_interval(mins => ${CODE_TTL_MINUTES})`,
-        sessionId: input.sessionId,
-        ip,
-      });
-      await this.upsertLead(tx, input.email, 'started', {
-        fullName: input.fullName,
-        companyName: input.companyName,
-        businessType: input.businessType,
-        language: input.language,
-      });
-    });
-    await this.step(input.sessionId, 'account');
-    await this.sendCode(input.email, input.fullName, code);
-    return { signupId, email: input.email };
-  }
-
-  async resend(signupId: string, ip: string): Promise<void> {
-    await this.limiter.consume(`trial-resend:ip:${ip}`, LIMITS.resendPerIp);
-    const code = newCode();
-    const [signup] = await this.database.db
-      .update(trialSignups)
-      .set({
-        codeHash: codeHash(signupId, code),
-        attempts: 0,
-        sentCount: sql`${trialSignups.sentCount} + 1`,
-        expiresAt: sql`now() + make_interval(mins => ${CODE_TTL_MINUTES})`,
-      })
-      .where(
-        and(
-          eq(trialSignups.id, signupId),
-          sql`${trialSignups.verifiedAt} is null`,
-          sql`${trialSignups.sentCount} < ${MAX_CODES_SENT}`,
-        ),
-      )
-      .returning();
-    if (!signup) throw new AppError(409, 'CODE_LIMIT', 'No more codes can be sent. Start again.');
-    await this.sendCode(signup.email, signup.fullName, code);
-  }
-
-  async verify(
-    signupId: string,
-    code: string,
-    client: ClientInfo,
-  ): Promise<{ outcome: LoginOutcome; result: TrialVerified }> {
-    await this.limiter.consume(`trial-verify:ip:${client.ip}`, LIMITS.verifyPerIp);
-    const [signup] = await this.database.db
-      .select()
-      .from(trialSignups)
-      .where(eq(trialSignups.id, signupId));
-    const invalid = (remaining: number) =>
-      new AppError(400, 'INVALID_CODE', 'The code is incorrect or has expired.', [
-        { path: 'code', code: 'invalid', message: `${remaining} attempts left.` },
-      ]);
-    if (!signup || signup.verifiedAt) throw invalid(0);
-    if (signup.attempts >= MAX_CODE_ATTEMPTS || signup.expiresAt.getTime() < Date.now())
-      throw invalid(0);
-    if (!safeEqual(Buffer.from(codeHash(signupId, code)), Buffer.from(signup.codeHash))) {
-      await this.database.db
-        .update(trialSignups)
-        .set({ attempts: sql`${trialSignups.attempts} + 1` })
-        .where(eq(trialSignups.id, signupId));
-      throw invalid(MAX_CODE_ATTEMPTS - signup.attempts - 1);
-    }
-
     const settings = await this.settingsRow(this.database.db);
-    const wanted = signup.devices as { itemId: string; quantity: number }[];
-    // Availability is decided now; a waiting list keeps the order of sign-ups.
-    const devices = wanted.length ? await this.checkDevices(wanted) : [];
-    const deviceStatus: TrialVerified['devices'] = !devices.length
+    const devices = await this.checkDevices(input.devices);
+    const deviceStatus: TrialStarted['devices'] = !devices.length
       ? 'none'
       : devices.some((d) => !d.available)
         ? 'waitlist'
         : 'pending';
-    const name = signup.companyName ?? signup.fullName;
+    const passwordHash = await this.passwords.hash(input.password);
+    const name = input.companyName ?? input.fullName;
 
     const outcome = await this.registration.createAccount(
       {
-        email: signup.email,
-        fullName: signup.fullName,
-        passwordHash: signup.passwordHash,
-        nameAr: signup.language === 'ar' ? name : null,
-        nameEn: signup.language === 'en' ? name : null,
+        email: input.email,
+        fullName: input.fullName,
+        passwordHash,
+        nameAr: input.language === 'ar' ? name : null,
+        nameEn: input.language === 'en' ? name : null,
         legalName: null,
-        language: signup.language as 'ar' | 'en',
+        language: input.language,
       },
       client,
       {
         reason: 'Free trial (sign-up funnel)',
         trialDays: settings.trialDaysOwn,
         after: async (tx, { merchantId }) => {
-          const [done] = await tx
-            .update(trialSignups)
-            .set({ verifiedAt: sql`now()`, merchantId })
-            .where(and(eq(trialSignups.id, signupId), sql`${trialSignups.verifiedAt} is null`))
-            .returning({ id: trialSignups.id });
-          if (!done) throw invalid(0);
-          const leadId = await this.upsertLead(tx, signup.email, 'trial', {
-            fullName: signup.fullName,
-            companyName: signup.companyName,
-            businessType: signup.businessType,
-            language: signup.language,
+          const leadId = await this.upsertLead(tx, input.email, 'trial', {
+            fullName: input.fullName,
+            companyName: input.companyName,
+            businessType: input.businessType,
+            language: input.language,
             merchantId,
           });
-          if (devices.length) {
-            const requestId = newId();
-            await tx.insert(deviceTrialRequests).values({
-              id: requestId,
-              merchantId,
-              leadId,
-              status: deviceStatus,
-            });
-            await tx.insert(deviceTrialRequestLines).values(
-              devices.map((d) => ({
-                id: newId(),
-                requestId,
-                itemId: d.item.id,
-                nameAr: d.item.nameAr,
-                nameEn: d.item.nameEn,
-                quantity: d.quantity,
-              })),
-            );
-          }
+          if (!devices.length) return;
+          const requestId = newId();
+          await tx.insert(deviceTrialRequests).values({
+            id: requestId,
+            merchantId,
+            leadId,
+            status: deviceStatus,
+          });
+          await tx.insert(deviceTrialRequestLines).values(
+            devices.map((d) => ({
+              id: newId(),
+              requestId,
+              itemId: d.item.id,
+              nameAr: d.item.nameAr,
+              nameEn: d.item.nameEn,
+              quantity: d.quantity,
+            })),
+          );
         },
       },
     );
-    if (signup.sessionId) await this.step(signup.sessionId, 'verified');
+    await this.step(input.sessionId, 'account');
     await this.notifySales(
       { ar: 'تجربة جديدة', en: 'New trial' },
-      `${name} — ${signup.email} — ${signup.businessType}${
+      `${name} — ${input.email} — ${input.businessType}${
         devices.length
           ? ` — devices (${deviceStatus}): ${devices.map((d) => `${d.item.nameEn} × ${d.quantity}`).join(', ')}`
           : ' — own devices'
@@ -743,25 +599,6 @@ export class TrialsService {
 
   private async step(sessionId: string, step: FunnelStep) {
     await this.database.db.insert(funnelEvents).values({ sessionId, step }).onConflictDoNothing();
-  }
-
-  private sendCode(email: string, name: string, code: string) {
-    return this.send({
-      to: email,
-      ...renderEmail({
-        title: { ar: 'رمز تأكيد إيميلك', en: 'Your verification code' },
-        name,
-        intro: {
-          ar: 'اكتب هذا الرمز في صفحة التسجيل لتبدأ تجربتك المجانية في عربات:',
-          en: 'Enter this code on the sign-up page to start your free Arabat trial:',
-        },
-        code,
-        note: {
-          ar: `الرمز صالح ${CODE_TTL_MINUTES} دقيقة. إذا ما طلبته فتجاهل الرسالة.`,
-          en: `The code is valid for ${CODE_TTL_MINUTES} minutes. If you did not ask for it, ignore this e-mail.`,
-        },
-      }),
-    });
   }
 
   private notifySales(title: { ar: string; en: string }, line: string) {

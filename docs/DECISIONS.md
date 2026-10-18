@@ -1597,4 +1597,11 @@ ADR; supersede it.
   phone menu), the price and trial length read from the platform, the steps right under the hero,
   the old "ready?" section merged into the pricing card; sign-in is a small header link.
 - **Not done (owner):** payment, phone verification, WhatsApp, deposits, trial-end behaviour.
+- **Amendment 1 (owner, 2026-10-18):** the demo till and the e-mail code are removed. The funnel is
+  business → devices (choose devices, with "تخطَّ" under the button instead of a two-option
+  question) → account; `POST /public/trial/start` creates the account at once, sets the manager
+  session and records the lead as `trial`. The page uses the pricing page's design (stepper,
+  device cards, sticky summary). `demo-receipt`, `resend` and `verify` are gone; the
+  `trial_signups` table and the `receipt` lead stage stay in the schema unused (no destructive
+  migration). Funnel steps: `business`, `devices`, `account`.
 

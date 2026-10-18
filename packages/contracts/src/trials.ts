@@ -9,14 +9,8 @@ import { publicOfferItemSchema } from './pricing.js';
  */
 export const BUSINESS_TYPES = ['retail', 'restaurant', 'cafe', 'other'] as const;
 export type BusinessType = (typeof BUSINESS_TYPES)[number];
-export const FUNNEL_STEPS = [
-  'business',
-  'demo',
-  'receipt',
-  'devices',
-  'account',
-  'verified',
-] as const;
+/** Anonymous funnel steps; `account` = the trial account was opened. */
+export const FUNNEL_STEPS = ['business', 'devices', 'account'] as const;
 export type FunnelStep = (typeof FUNNEL_STEPS)[number];
 export const DEVICE_TRIAL_STATUSES = [
   'pending',
@@ -29,50 +23,6 @@ export const DEVICE_TRIAL_STATUSES = [
 export type DeviceTrialStatus = (typeof DEVICE_TRIAL_STATUSES)[number];
 export const LEAD_STAGES = ['receipt', 'started', 'trial'] as const;
 export type LeadStage = (typeof LEAD_STAGES)[number];
-
-export interface DemoProduct {
-  key: string;
-  nameAr: string;
-  nameEn: string;
-  /** KWD, 3 decimals: display and the e-mailed demo receipt (computed on the server in fils). */
-  price: string;
-}
-
-/** Sample products of the demo till, per business type. Nothing is stored or sold. */
-export const DEMO_CATALOGS: Record<BusinessType, readonly DemoProduct[]> = {
-  retail: [
-    { key: 'water', nameAr: 'مياه معدنية', nameEn: 'Mineral water', price: '0.150' },
-    { key: 'juice', nameAr: 'عصير برتقال', nameEn: 'Orange juice', price: '0.350' },
-    { key: 'chips', nameAr: 'شيبس', nameEn: 'Crisps', price: '0.250' },
-    { key: 'chocolate', nameAr: 'شوكولاتة', nameEn: 'Chocolate bar', price: '0.400' },
-    { key: 'milk', nameAr: 'حليب طازج', nameEn: 'Fresh milk', price: '0.600' },
-    { key: 'bread', nameAr: 'خبز', nameEn: 'Bread', price: '0.300' },
-  ],
-  restaurant: [
-    { key: 'burger', nameAr: 'برجر لحم', nameEn: 'Beef burger', price: '2.250' },
-    { key: 'shawarma', nameAr: 'شاورما دجاج', nameEn: 'Chicken shawarma', price: '1.000' },
-    { key: 'machboos', nameAr: 'مجبوس دجاج', nameEn: 'Chicken machboos', price: '2.750' },
-    { key: 'salad', nameAr: 'سلطة', nameEn: 'Salad', price: '1.250' },
-    { key: 'fries', nameAr: 'بطاطس', nameEn: 'Fries', price: '0.750' },
-    { key: 'soda', nameAr: 'مشروب غازي', nameEn: 'Soft drink', price: '0.350' },
-  ],
-  cafe: [
-    { key: 'arabic', nameAr: 'قهوة عربية', nameEn: 'Arabic coffee', price: '1.250' },
-    { key: 'latte', nameAr: 'لاتيه', nameEn: 'Latte', price: '1.500' },
-    { key: 'spanish', nameAr: 'سبانش لاتيه', nameEn: 'Spanish latte', price: '1.750' },
-    { key: 'tea', nameAr: 'شاي كرك', nameEn: 'Karak tea', price: '0.500' },
-    { key: 'croissant', nameAr: 'كرواسون زعتر', nameEn: "Za'atar croissant", price: '0.750' },
-    { key: 'cake', nameAr: 'كيكة', nameEn: 'Cake slice', price: '1.250' },
-  ],
-  other: [
-    { key: 'service', nameAr: 'خدمة', nameEn: 'Service', price: '5.000' },
-    { key: 'item-a', nameAr: 'منتج أ', nameEn: 'Item A', price: '1.500' },
-    { key: 'item-b', nameAr: 'منتج ب', nameEn: 'Item B', price: '2.000' },
-    { key: 'item-c', nameAr: 'منتج ج', nameEn: 'Item C', price: '0.750' },
-    { key: 'gift', nameAr: 'بطاقة هدية', nameEn: 'Gift card', price: '10.000' },
-    { key: 'bag', nameAr: 'كيس', nameEn: 'Bag', price: '0.100' },
-  ],
-};
 
 const sessionId = z.uuid();
 const optionalText = (max: number) =>
@@ -99,18 +49,6 @@ export type PublicTrialOffer = z.infer<typeof publicTrialOfferSchema>;
 
 export const funnelEventSchema = z.object({ sessionId, step: z.enum(FUNNEL_STEPS) });
 
-export const demoReceiptSchema = z.object({
-  email: emailSchema,
-  businessType: z.enum(BUSINESS_TYPES),
-  language: z.enum(['ar', 'en']),
-  sessionId,
-  lines: z
-    .array(z.object({ key: z.string().max(40), quantity: z.number().int().min(1).max(99) }))
-    .min(1)
-    .max(20),
-});
-export type DemoReceipt = z.input<typeof demoReceiptSchema>;
-
 export const startTrialSchema = z.object({
   fullName: z.string().trim().min(2).max(120),
   email: emailSchema,
@@ -124,23 +62,13 @@ export const startTrialSchema = z.object({
     .max(20),
 });
 export type StartTrial = z.input<typeof startTrialSchema>;
-export const trialStartedSchema = z.object({ signupId: z.string(), email: z.string() });
-export type TrialStarted = z.infer<typeof trialStartedSchema>;
-
-export const verifyTrialSchema = z.object({
-  signupId: z.uuid(),
-  code: z
-    .string()
-    .trim()
-    .regex(/^\d{6}$/, { error: 'Enter the 6-digit code.' }),
-});
-export const resendTrialCodeSchema = z.object({ signupId: z.uuid() });
-export const trialVerifiedSchema = z.object({
+/** The account is open and the owner signed in (no e-mail confirmation in this phase). */
+export const trialStartedSchema = z.object({
   trialDays: z.number().int(),
   devices: z.enum(['none', 'pending', 'waitlist']),
   redirectTo: z.string(),
 });
-export type TrialVerified = z.infer<typeof trialVerifiedSchema>;
+export type TrialStarted = z.infer<typeof trialStartedSchema>;
 
 // ---------------------------------------------------------------- platform
 export const trialSettingsSchema = z.object({

@@ -329,11 +329,8 @@ export const platformAr: PlatformResources = {
     days: '{{n}} يوم',
     steps: {
       business: 'اختار نشاطه',
-      demo: 'فتح الكاشير التجريبي',
-      receipt: 'ترك إيميله',
-      devices: 'جهّز محله',
-      account: 'عبّى بيانات الحساب',
-      verified: 'أكّد وبدأ التجربة',
+      devices: 'وصل للأجهزة',
+      account: 'فتح تجربة',
     },
     funnelHint: 'عدد الزوار في كل خطوة (جلسات متصفح بدون بيانات شخصية)، ونسبتهم من الخطوة الأولى.',
     daysOwn: 'مدة التجربة على أجهزته (أيام)',

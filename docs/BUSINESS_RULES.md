@@ -599,13 +599,14 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
 - **BR-030** Default currency is **KWD** with **3 decimal places** (1 KWD = 1000 fils).
 - **BR-031** No floating-point arithmetic for monetary calculations, anywhere.
 - **BR-197** Free trial and sign-up funnel (owner, 2026-10-18, ADR-0115): the site's one call
-  to action is "أنشئ حساب وجهّز محلك" → `/start`. Registration stays open to everyone. A trial
-  account opens only after the e-mail is confirmed with a 6-digit code (15 minutes, 5 attempts,
-  5 sends). The operator sets in the platform: trial days on own devices (from account creation),
+  to action is "أنشئ حساب وجهّز محلك" → `/start`. Registration stays open to everyone. The funnel is business type → devices (pick
+  the devices to try, or "تخطَّ" for own devices) → account; the trial account opens and signs in
+  at once, without e-mail confirmation (owner, 2026-10-18: confirmation is asked later, when the
+  customer is more engaged). The operator sets in the platform: trial days on own devices (from account creation),
   trial days with devices (from the day the operator marks them delivered), units of each device
   available for trials (available = stock − approved/delivered not yet returned) and whether a
-  waiting list is used when they run out. Device trials always wait for the operator. An e-mail
-  left for the demo receipt is a lead. No payment, phone or WhatsApp in this phase.
+  waiting list is used when they run out. Device trials always wait for the operator. No demo till.
+  No payment, phone or WhatsApp in this phase.
 - **BR-196** Public pricing (owner, 2026-10-18, ADR-0114): the system costs 99.000 KWD per year
   **per company**, whatever the number of branches and employees; devices (tablet, iPad, barcode
   scanner, receipt printer, cash drawer, others the operator adds) are sold **once**. The platform
