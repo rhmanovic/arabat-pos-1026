@@ -935,6 +935,13 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
   sticky summary with "مجاناً" and the price after the trial.
 - Tests: 4 integration, 3 web (/start), 1 E2E (home → business → skip devices → account →
   dashboard). Local: `pnpm verify` 266, integration 273, E2E 37, all passing.
+### 2026-10-18 — Homepage system card and section backgrounds
+- Homepage: the button under "ابدأ في ثلاث خطوات" is replaced by the pricing page's "نظامك الكامل"
+  card (shared `SystemCard`, price and trial days from the platform, call to action to `/start`).
+- Backgrounds never repeat between neighbours: header white → hero sand → steps white → trust
+  sand → power white → features sand (white cards) → why night → pricing white → footer sand;
+  pricing hero is brand-soft under the white header.
+- Local: `pnpm verify` 266, integration 273, E2E 37, all passing.
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.

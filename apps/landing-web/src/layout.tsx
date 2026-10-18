@@ -312,24 +312,27 @@ export function Footer({ t, page }: { t: Content; page: Page }) {
           {t.signupCta}
         </a>
       </div>
-      <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 py-6 text-sm text-muted sm:flex-row sm:px-6">
-        <p>{t.footer.copyright.replace('{year}', year)}</p>
-        <div className="flex items-center gap-2">
-          <a href={SIGN_IN_URL} className="hover:text-brand">
-            {t.signIn}
-          </a>
-          <span aria-hidden="true">•</span>
-          <a href={page === 'home' ? '#start' : '/#start'} className="hover:text-brand">
-            {t.nav.start}
-          </a>
-          <span aria-hidden="true">•</span>
-          <a href="/pricing" className="hover:text-brand">
-            {t.nav.pricing}
-          </a>
-          <span aria-hidden="true">•</span>
-          <a href={`mailto:${CONTACT_EMAIL}`} className="hover:text-brand" dir="ltr">
-            {CONTACT_EMAIL}
-          </a>
+      {/* Never the same background as the section above it (the start page's form sits on sand). */}
+      <div className={page === 'start' ? 'border-t border-[#eef0f2] bg-white' : 'bg-sand'}>
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 py-6 text-sm text-muted sm:flex-row sm:px-6">
+          <p>{t.footer.copyright.replace('{year}', year)}</p>
+          <div className="flex items-center gap-2">
+            <a href={SIGN_IN_URL} className="hover:text-brand">
+              {t.signIn}
+            </a>
+            <span aria-hidden="true">•</span>
+            <a href={page === 'home' ? '#start' : '/#start'} className="hover:text-brand">
+              {t.nav.start}
+            </a>
+            <span aria-hidden="true">•</span>
+            <a href="/pricing" className="hover:text-brand">
+              {t.nav.pricing}
+            </a>
+            <span aria-hidden="true">•</span>
+            <a href={`mailto:${CONTACT_EMAIL}`} className="hover:text-brand" dir="ltr">
+              {CONTACT_EMAIL}
+            </a>
+          </div>
         </div>
       </div>
     </footer>

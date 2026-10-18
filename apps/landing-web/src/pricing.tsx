@@ -12,6 +12,7 @@ import {
   useLanguage,
 } from './layout.js';
 import { Reveal } from './reveal.js';
+import { SystemCard } from './system-card.js';
 
 const CURRENCY = 'KWD' as const;
 type Step = 0 | 1 | 2 | 3;
@@ -114,7 +115,7 @@ function PricingHero({
 }) {
   const p = t.pricing;
   return (
-    <section className="relative overflow-hidden">
+    <section className="relative overflow-hidden bg-brand-soft">
       <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-14 sm:px-6 lg:grid-cols-2 lg:py-20">
         <div>
           <Reveal as="p" className="font-semibold text-accent-red">
@@ -299,45 +300,22 @@ function SystemStep({
   const p = t.pricing;
   const system = offer.system;
   return (
-    <div className="rounded-3xl bg-white p-6 shadow-sm sm:p-10">
-      <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
-        {system.imageUrl ? (
-          <img src={system.imageUrl} alt="" className="size-28 rounded-2xl object-cover" />
-        ) : (
-          <ItemIllustration icon={system.icon} className="size-28 shrink-0" />
-        )}
-        <div className="flex-1">
-          <h2 className="text-2xl font-bold sm:text-3xl">{p.system.title}</h2>
-          <p className="mt-2 text-muted">
-            {(lang === 'ar' ? system.descriptionAr : system.descriptionEn) ?? p.system.text}
-          </p>
-        </div>
-        <div className="text-start sm:text-end">
-          <p className="text-3xl font-bold tabular-nums text-brand" dir="ltr">
-            {short(system.price.amount)} <span className="text-base">{p.currency}</span>
-          </p>
-          <p className="text-sm text-muted">{p.perYear}</p>
-        </div>
-      </div>
-      <ul className="mt-8 grid gap-3 sm:grid-cols-2">
-        {p.system.includes.map((line, index) => (
-          <Reveal as="li" key={line} delay={index * 0.05} className="flex items-start gap-3">
-            <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-full bg-brand-soft text-sm text-brand">
-              ✓
-            </span>
-            <span className="text-ink">{line}</span>
-          </Reveal>
-        ))}
-      </ul>
-      <div className="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-black/5 pt-6">
-        <span className="rounded-full bg-brand-soft px-4 py-1.5 text-sm font-medium text-brand">
-          ✓ {p.system.included}
-        </span>
+    <SystemCard
+      title={p.system.title}
+      text={(lang === 'ar' ? system.descriptionAr : system.descriptionEn) ?? p.system.text}
+      price={short(system.price.amount)}
+      currency={p.currency}
+      perYear={p.perYear}
+      includes={p.system.includes}
+      icon={system.icon}
+      imageUrl={system.imageUrl}
+      badge={p.system.included}
+      action={
         <button type="button" onClick={onNext} className={primaryButton}>
           {p.system.next}
         </button>
-      </div>
-    </div>
+      }
+    />
   );
 }
 

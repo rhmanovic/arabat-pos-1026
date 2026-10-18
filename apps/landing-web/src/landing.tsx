@@ -10,6 +10,7 @@ import {
   useTrialOffer,
 } from './layout.js';
 import { Reveal, useInView } from './reveal.js';
+import { SystemCard } from './system-card.js';
 
 const fill = (text: string, values: Record<string, string | number>) =>
   text.replace(/\{(\w+)\}/g, (_, k: string) => String(values[k] ?? ''));
@@ -23,7 +24,7 @@ export function LandingPage() {
       <Header t={t} onToggleLanguage={toggleLanguage} page="home" />
       <main className="flex-1">
         <Hero t={t} offer={offer} />
-        <Steps t={t} />
+        <Steps t={t} offer={offer} />
         <Trust t={t} />
         <Power t={t} />
         <Features t={t} />
@@ -38,7 +39,7 @@ export function LandingPage() {
 function Hero({ t, offer }: { t: Content; offer: PublicTrialOffer | null }) {
   const { ref: markRef, visible: markVisible } = useInView<HTMLDivElement>();
   return (
-    <section id="home" className="overflow-hidden">
+    <section id="home" className="overflow-hidden bg-sand">
       <div
         ref={markRef}
         className={`hero-mark ${markVisible ? 'visible' : ''} mx-auto grid max-w-7xl items-center gap-10 px-4 pb-16 pt-72 sm:px-6 lg:grid-cols-2 lg:py-24`}
@@ -272,55 +273,57 @@ function FeatureIcon({ icon, size }: { icon: string; size: number }) {
 
 function Features({ t }: { t: Content }) {
   return (
-    <section id="features" className="mx-auto max-w-7xl px-4 py-20 sm:px-6">
-      <Reveal className="mx-auto max-w-3xl text-center">
-        <h2 className="text-3xl font-bold sm:text-4xl">{t.features.title}</h2>
-        <p className="mt-4 text-lg text-muted">{t.features.text1}</p>
-        <p className="mt-2 text-lg text-muted">{t.features.text2}</p>
-      </Reveal>
-      <ul className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {t.features.main.map((feature, index) => (
-          <Reveal
-            as="li"
-            key={feature.title}
-            delay={index * 0.12}
-            className="group rounded-2xl border border-transparent bg-[#f8f9fa] p-7 text-center transition hover:-translate-y-1 hover:border-brand/30 hover:bg-white hover:shadow-xl hover:shadow-brand/10"
-          >
-            <div className="transition group-hover:scale-110">
-              <FeatureIcon icon={feature.icon} size={75} />
-            </div>
-            <h3 className="mt-4 text-lg font-bold">{feature.title}</h3>
-            <p className="mt-2 leading-relaxed text-muted">{feature.text}</p>
-          </Reveal>
-        ))}
-      </ul>
+    <section id="features" className="bg-sand">
+      <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6">
+        <Reveal className="mx-auto max-w-3xl text-center">
+          <h2 className="text-3xl font-bold sm:text-4xl">{t.features.title}</h2>
+          <p className="mt-4 text-lg text-muted">{t.features.text1}</p>
+          <p className="mt-2 text-lg text-muted">{t.features.text2}</p>
+        </Reveal>
+        <ul className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {t.features.main.map((feature, index) => (
+            <Reveal
+              as="li"
+              key={feature.title}
+              delay={index * 0.12}
+              className="group rounded-2xl border border-transparent bg-white p-7 text-center transition hover:-translate-y-1 hover:border-brand/30 hover:shadow-xl hover:shadow-brand/10"
+            >
+              <div className="transition group-hover:scale-110">
+                <FeatureIcon icon={feature.icon} size={75} />
+              </div>
+              <h3 className="mt-4 text-lg font-bold">{feature.title}</h3>
+              <p className="mt-2 leading-relaxed text-muted">{feature.text}</p>
+            </Reveal>
+          ))}
+        </ul>
 
-      <Reveal as="h3" className="mt-20 text-center text-2xl font-bold text-ink">
-        {t.features.allTitle}
-      </Reveal>
-      <ul className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {t.features.all.map((feature, index) => (
-          <Reveal
-            as="li"
-            key={feature.title}
-            delay={(index % 3) * 0.1}
-            className="flex items-start gap-4 rounded-2xl bg-[#f8f9fa] p-5 transition hover:bg-white hover:shadow-lg hover:shadow-brand/10"
-          >
-            <img
-              src={`/img/icons/${feature.icon}.webp`}
-              alt=""
-              width={56}
-              height={56}
-              loading="lazy"
-              className="shrink-0"
-            />
-            <div>
-              <h4 className="font-bold text-ink">{feature.title}</h4>
-              <p className="mt-1 text-sm leading-relaxed text-muted">{feature.text}</p>
-            </div>
-          </Reveal>
-        ))}
-      </ul>
+        <Reveal as="h3" className="mt-20 text-center text-2xl font-bold text-ink">
+          {t.features.allTitle}
+        </Reveal>
+        <ul className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {t.features.all.map((feature, index) => (
+            <Reveal
+              as="li"
+              key={feature.title}
+              delay={(index % 3) * 0.1}
+              className="flex items-start gap-4 rounded-2xl bg-white p-5 transition hover:shadow-lg hover:shadow-brand/10"
+            >
+              <img
+                src={`/img/icons/${feature.icon}.webp`}
+                alt=""
+                width={56}
+                height={56}
+                loading="lazy"
+                className="shrink-0"
+              />
+              <div>
+                <h4 className="font-bold text-ink">{feature.title}</h4>
+                <p className="mt-1 text-sm leading-relaxed text-muted">{feature.text}</p>
+              </div>
+            </Reveal>
+          ))}
+        </ul>
+      </div>
     </section>
   );
 }
@@ -349,9 +352,9 @@ function Why({ t }: { t: Content }) {
   );
 }
 
-function Steps({ t }: { t: Content }) {
+function Steps({ t, offer }: { t: Content; offer: PublicTrialOffer | null }) {
   return (
-    <section className="mx-auto max-w-7xl px-4 pb-16 pt-4 sm:px-6">
+    <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6">
       <Reveal as="h2" className="text-center text-3xl font-bold sm:text-4xl">
         {t.steps.title}
       </Reveal>
@@ -366,10 +369,22 @@ function Steps({ t }: { t: Content }) {
           </Reveal>
         ))}
       </ol>
-      <Reveal className="mt-10 text-center">
-        <a href={REGISTER_URL} className={primaryButton}>
-          {t.signupCta}
-        </a>
+      <Reveal className="mx-auto mt-14 max-w-5xl">
+        <SystemCard
+          title={t.pricing.system.title}
+          text={t.pricing.system.text}
+          price={offer ? shortAmount(offer.systemPrice.amount) : null}
+          currency={t.pricing.currency}
+          perYear={t.pricing.perYear}
+          includes={t.pricing.system.includes}
+          className="border border-black/5 shadow-xl shadow-brand/10"
+          badge={offer ? fill(t.trialLine, { days: offer.trialDaysOwn }) : null}
+          action={
+            <a href={REGISTER_URL} className={primaryButton}>
+              {t.signupCta}
+            </a>
+          }
+        />
       </Reveal>
     </section>
   );
