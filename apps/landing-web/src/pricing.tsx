@@ -227,7 +227,6 @@ function Configurator({
   lang: Language;
   onStarted: () => void;
 }) {
-  const p = t.pricing;
   const [step, setStep] = useState<Step>(0);
   const [quantities, setQuantities] = useState<Quantities>({});
   const [contact, setContact] = useState<Contact>(EMPTY_CONTACT);
@@ -312,22 +311,6 @@ function Configurator({
           sum={sum}
           trialDays={trialDays}
         />
-      </div>
-      {/* Phones: the running total stays in view while choosing. */}
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-black/5 bg-white/95 px-4 py-3 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] backdrop-blur lg:hidden">
-        <div className="mx-auto flex max-w-xl items-center justify-between gap-3">
-          <div>
-            <p className="text-xs text-muted">{p.cart.firstPayment}</p>
-            <p className="text-xl font-bold tabular-nums text-ink" dir="ltr">
-              {sum.total} <span className="text-sm text-muted">{p.currency}</span>
-            </p>
-            {trialDays ? (
-              <p className="text-xs font-medium text-brand">
-                ✓ {fill(t.trialLine, { length: t.trialLength(trialDays) })}
-              </p>
-            ) : null}
-          </div>
-        </div>
       </div>
     </div>
   );
