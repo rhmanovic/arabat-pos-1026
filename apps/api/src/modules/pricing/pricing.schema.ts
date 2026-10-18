@@ -33,6 +33,8 @@ export const offerItems = pgTable(
     imageKey: text(),
     imageContentType: text(),
     maxQuantity: integer().notNull().default(10),
+    /** Units the operator can lend for free trials (ADR-0115); availability subtracts those out. */
+    trialStock: integer().notNull().default(0),
     status: text().notNull().default('active'),
     sortOrder: integer().notNull().default(100),
     version: integer().notNull().default(1),
@@ -48,6 +50,7 @@ export const offerItems = pgTable(
     check('offer_items_system_active', sql`${t.kind} <> 'system' or ${t.status} = 'active'`),
     check('offer_items_price_valid', sql`${t.priceMinor} >= 0`),
     check('offer_items_quantity_valid', sql`${t.maxQuantity} between 1 and 100`),
+    check('offer_items_trial_stock_valid', sql`${t.trialStock} >= 0`),
     check(
       'offer_items_icon_valid',
       sql`${t.icon} in ('system', 'tablet', 'ipad', 'scanner', 'printer', 'drawer', 'other')`,

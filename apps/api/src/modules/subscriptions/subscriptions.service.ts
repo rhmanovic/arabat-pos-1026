@@ -86,6 +86,8 @@ export class SubscriptionsService {
     merchantId: string,
     planId: string | null,
     reason: string,
+    /** Trial length set by the operator for funnel sign-ups (ADR-0115); else the plan's. */
+    trialDaysOverride?: number,
   ): Promise<void> {
     const plan = planId
       ? (await tx.select().from(plans).where(eq(plans.id, planId)))[0]
@@ -95,7 +97,8 @@ export class SubscriptionsService {
         { path: 'planId', code: 'invalid', message: 'Choose an active plan.' },
       ]);
     const id = newId();
-    const trialing = plan.trialDays > 0;
+    const trialDays = trialDaysOverride ?? plan.trialDays;
+    const trialing = trialDays > 0;
     const inserted = await tx
       .insert(subscriptions)
       .values({
@@ -103,7 +106,7 @@ export class SubscriptionsService {
         merchantId,
         planId: plan.id,
         status: trialing ? 'trialing' : 'active',
-        trialEndsAt: trialing ? sql`now() + make_interval(days => ${plan.trialDays})` : null,
+        trialEndsAt: trialing ? sql`now() + make_interval(days => ${trialDays})` : null,
       })
       .onConflictDoNothing({ target: subscriptions.merchantId })
       .returning({ id: subscriptions.id });

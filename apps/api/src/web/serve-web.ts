@@ -87,4 +87,9 @@ export async function serveWebApps(fastify: FastifyInstance): Promise<void> {
     reply.header('cache-control', 'no-cache').sendFile('pricing.html', landing),
   );
   fastify.get('/pricing/', (_req, reply) => reply.redirect('/pricing'));
+  // The free-trial sign-up funnel (ADR-0115).
+  fastify.get('/start', (_req, reply) =>
+    reply.header('cache-control', 'no-cache').sendFile('start.html', landing),
+  );
+  fastify.get('/start/', (_req, reply) => reply.redirect('/start'));
 }

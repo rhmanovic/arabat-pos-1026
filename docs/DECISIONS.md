@@ -1578,3 +1578,23 @@ ADR; supersede it.
 - **Not done:** online payment (no gateway is live), invoices, linking a won request to a merchant
   or subscription — the operator does it by hand.
 
+## ADR-0115 — Free trials and the public sign-up funnel
+- **Date:** 2026-10-18 · **Status:** Accepted (owner, 2026-10-18: e-mail sign-up with a code,
+  receipt by e-mail, no payment / WhatsApp / phone, registration stays open, one call to action
+  "أنشئ حساب وجهّز محلك", devices chosen one by one, every number set in the platform, device trial
+  time from delivery; screen texts from the owner).
+- **Decision:** a `trials` module (migration 0057). The funnel `/start` (landing build) posts
+  anonymous step events, an optional demo receipt (server-side demo catalogues in
+  `@arabat/contracts`, priced in fils) and a sign-up that is stored as `trial_signups` with an
+  argon2 password hash and a hashed code; the account is created on verification through
+  `RegistrationService.createAccount` (shared with `/manager/register`) with the operator's trial
+  length, and the lead, the device request and the signup update run in the same transaction.
+  Device availability = `offer_items.trial_stock` − units in approved / delivered requests;
+  marking a request delivered extends the subscription trial to at least N days from that moment
+  (operator context, subscription event). Leads list reads merchant activity through the
+  operator-only `platform_trial_activity` function. Sales are e-mailed on each lead / trial.
+- **Homepage:** one call to action everywhere (hero, after the steps, the pricing card, header,
+  phone menu), the price and trial length read from the platform, the steps right under the hero,
+  the old "ready?" section merged into the pricing card; sign-in is a small header link.
+- **Not done (owner):** payment, phone verification, WhatsApp, deposits, trial-end behaviour.
+

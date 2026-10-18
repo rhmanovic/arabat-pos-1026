@@ -39,6 +39,7 @@ export default defineConfig(({ command, mode }) => {
         input: {
           index: fileURLToPath(new URL('./index.html', import.meta.url)),
           pricing: fileURLToPath(new URL('./pricing.html', import.meta.url)),
+          start: fileURLToPath(new URL('./start.html', import.meta.url)),
         },
         output: {
           codeSplitting: {

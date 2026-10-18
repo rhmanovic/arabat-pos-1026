@@ -915,6 +915,20 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
 - Tests: 8 integration (offer, roles, photos, server pricing, e-mails, follow-up, refusals, rate
   limit), 3 web (steps and exact totals, skip, load error), 1 E2E (home → pricing → request).
   Local: `pnpm verify` 262, integration 267, E2E 36, all passing.
+
+### 2026-10-18 — Free trials and the sign-up funnel (ADR-0115)
+- `/start`: business type → demo till (receipt by e-mail = lead) → set up the shop (own devices
+  or devices to try with availability / waiting list) → account → e-mail code → trial started and
+  signed in; anonymous funnel steps; phone bottom bar for the demo total.
+- Homepage: single call to action "أنشئ حساب وجهّز محلك" (hero, after the steps, pricing card,
+  header), price and trial length from the platform, steps right under the hero, merged pricing
+  and "start" section, sign-in small in the header.
+- Platform `/platform/trials`: leads (stage, business, devices, sales, last seen, trial end),
+  device trials (approve / waiting list / delivered → trial from delivery / returned / reject),
+  trial stock per device, funnel numbers, settings (days own / with devices, waiting list).
+- Tests: 4 integration (receipt lead, code + trial account, device stock / waiting list /
+  delivery, access), 6 web (funnel, homepage), 1 E2E (homepage → demo → account → Mailpit code →
+  dashboard). Local: `pnpm verify`, integration, E2E all passing.
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.

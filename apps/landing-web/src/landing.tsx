@@ -1,37 +1,41 @@
 import { CONTACT_EMAIL, type Content } from './content.js';
+import type { PublicTrialOffer } from '@arabat/contracts';
 import {
   Footer,
   Header,
   REGISTER_URL,
-  SIGN_IN_URL,
-  outlineButton,
   primaryButton,
+  shortAmount,
   useLanguage,
+  useTrialOffer,
 } from './layout.js';
 import { Reveal, useInView } from './reveal.js';
 
+const fill = (text: string, values: Record<string, string | number>) =>
+  text.replace(/\{(\w+)\}/g, (_, k: string) => String(values[k] ?? ''));
+
 export function LandingPage() {
   const { t, toggleLanguage } = useLanguage((c) => c.pageTitle);
+  const offer = useTrialOffer();
 
   return (
     <div className="flex min-h-screen flex-col">
       <Header t={t} onToggleLanguage={toggleLanguage} page="home" />
       <main className="flex-1">
-        <Hero t={t} />
+        <Hero t={t} offer={offer} />
+        <Steps t={t} />
         <Trust t={t} />
         <Power t={t} />
         <Features t={t} />
         <Why t={t} />
-        <Steps t={t} />
-        <PricingTeaser t={t} />
-        <CallToAction t={t} />
+        <PricingAndStart t={t} offer={offer} />
       </main>
       <Footer t={t} page="home" />
     </div>
   );
 }
 
-function Hero({ t }: { t: Content }) {
+function Hero({ t, offer }: { t: Content; offer: PublicTrialOffer | null }) {
   const { ref: markRef, visible: markVisible } = useInView<HTMLDivElement>();
   return (
     <section id="home" className="overflow-hidden">
@@ -53,13 +57,11 @@ function Hero({ t }: { t: Content }) {
           <Reveal as="p" delay={0.2} className="mt-5 max-w-xl text-lg leading-relaxed text-muted">
             {t.hero.subtitle}
           </Reveal>
-          <Reveal delay={0.3} className="mt-8 flex flex-wrap gap-3">
+          <Reveal delay={0.3} className="mt-8">
             <a href={REGISTER_URL} className={primaryButton}>
-              {t.hero.primary}
+              {t.signupCta}
             </a>
-            <a href={SIGN_IN_URL} className={outlineButton}>
-              {t.hero.secondary}
-            </a>
+            <PriceLine t={t} offer={offer} className="mt-4 text-muted" />
           </Reveal>
         </div>
         <Reveal direction="end" delay={0.2} className="flex justify-center lg:justify-end">
@@ -172,9 +174,6 @@ function Power({ t }: { t: Content }) {
         <h2 className="text-3xl font-bold leading-snug sm:text-4xl">{t.power.title}</h2>
         <p className="mt-5 text-lg leading-relaxed text-muted">{t.power.text1}</p>
         <p className="mt-4 text-lg leading-relaxed text-muted">{t.power.text2}</p>
-        <a href="#features" className={`${primaryButton} mt-8`}>
-          {t.power.cta}
-        </a>
       </Reveal>
       <Reveal direction="end" className="flex justify-center">
         <DashboardPreview t={t} />
@@ -352,7 +351,7 @@ function Why({ t }: { t: Content }) {
 
 function Steps({ t }: { t: Content }) {
   return (
-    <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6">
+    <section className="mx-auto max-w-7xl px-4 pb-16 pt-4 sm:px-6">
       <Reveal as="h2" className="text-center text-3xl font-bold sm:text-4xl">
         {t.steps.title}
       </Reveal>
@@ -367,49 +366,74 @@ function Steps({ t }: { t: Content }) {
           </Reveal>
         ))}
       </ol>
-    </section>
-  );
-}
-
-function PricingTeaser({ t }: { t: Content }) {
-  return (
-    <section className="px-4 pb-16 sm:px-6">
-      <Reveal className="relative mx-auto max-w-5xl overflow-hidden rounded-3xl bg-night px-6 py-12 text-center sm:px-12">
-        <img
-          src="/img/logo-mark.webp"
-          alt=""
-          className="pointer-events-none absolute -start-20 -bottom-24 w-72 opacity-15"
-        />
-        <p className="font-semibold text-sun">{t.teaser.label}</p>
-        <h2 className="mt-2 text-3xl font-bold text-white sm:text-4xl">{t.teaser.title}</h2>
-        <p className="mx-auto mt-4 max-w-2xl text-lg text-white/80">{t.teaser.text}</p>
-        <a href="/pricing" className={`${primaryButton} mt-8`}>
-          {t.teaser.cta}
+      <Reveal className="mt-10 text-center">
+        <a href={REGISTER_URL} className={primaryButton}>
+          {t.signupCta}
         </a>
       </Reveal>
     </section>
   );
 }
 
-function CallToAction({ t }: { t: Content }) {
+function PriceLine({
+  t,
+  offer,
+  className = '',
+}: {
+  t: Content;
+  offer: PublicTrialOffer | null;
+  className?: string;
+}) {
+  if (!offer) return null;
   return (
-    <section id="start" className="px-4 pb-20 sm:px-6">
-      <Reveal className="mx-auto max-w-4xl rounded-3xl bg-brand-soft px-6 py-14 text-center">
-        <h2 className="text-3xl font-bold sm:text-4xl">{t.cta.title}</h2>
-        <p className="mt-4 text-lg text-muted">{t.cta.text}</p>
-        <div className="mt-8 flex flex-wrap justify-center gap-3">
-          <a href={REGISTER_URL} className={primaryButton}>
-            {t.cta.primary}
+    <p className={className}>
+      {fill(t.priceLine, {
+        price: shortAmount(offer.systemPrice.amount),
+        days: offer.trialDaysOwn,
+      })}
+    </p>
+  );
+}
+
+/** Price and the single call to action together, at the end of the page (#start). */
+function PricingAndStart({ t, offer }: { t: Content; offer: PublicTrialOffer | null }) {
+  return (
+    <section id="start" className="px-4 py-20 sm:px-6">
+      <Reveal className="relative mx-auto max-w-5xl overflow-hidden rounded-3xl bg-brand-soft px-6 py-12 text-center sm:px-12">
+        <img
+          src="/img/logo-mark.webp"
+          alt=""
+          className="pointer-events-none absolute -start-20 -bottom-24 w-72 opacity-20"
+        />
+        <p className="font-semibold text-accent-red">{t.teaser.label}</p>
+        <h2 className="mt-2 text-3xl font-bold sm:text-4xl">{t.teaser.title}</h2>
+        <p className="mx-auto mt-4 max-w-2xl text-lg text-muted">{t.teaser.text}</p>
+        {offer ? (
+          <p className="mt-6 text-ink">
+            <span className="text-5xl font-bold tabular-nums text-brand">
+              {shortAmount(offer.systemPrice.amount)}
+            </span>{' '}
+            <span className="text-lg">{t.pricing.currency}</span>{' '}
+            <span className="text-muted">/ {t.pricing.perYear}</span>
+          </p>
+        ) : null}
+        <a href={REGISTER_URL} className={`${primaryButton} mt-8`}>
+          {t.signupCta}
+        </a>
+        {offer ? (
+          <p className="mt-4 text-sm text-muted">
+            {fill(t.trialLine, { days: offer.trialDaysOwn })}
+          </p>
+        ) : null}
+        <p className="mt-6 text-sm text-muted">
+          <a href="/pricing" className="text-brand underline underline-offset-4">
+            {t.pricingLink}
           </a>
-          <a href={SIGN_IN_URL} className={outlineButton}>
-            {t.cta.secondary}
-          </a>
-        </div>
-        <p className="mt-8 text-muted">
+          {' · '}
           {t.cta.contactLabel}{' '}
           <a
             href={`mailto:${CONTACT_EMAIL}`}
-            className="font-medium text-brand underline-offset-4 hover:underline"
+            className="text-brand underline underline-offset-4"
             dir="ltr"
           >
             {CONTACT_EMAIL}

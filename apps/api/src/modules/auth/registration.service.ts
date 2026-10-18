@@ -2,7 +2,7 @@ import type { registerRequestSchema } from '@arabat/contracts';
 import { Injectable } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import type { z } from 'zod';
-import { DatabaseService } from '../../database/database.service.js';
+import { DatabaseService, type Transaction } from '../../database/database.service.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
 import { AuditService } from '../audit/audit.service.js';
@@ -17,7 +17,7 @@ import { type ClientInfo, SessionService } from './session.service.js';
 
 type RegisterInput = z.output<typeof registerRequestSchema>;
 
-const EMAIL_TAKEN = () =>
+export const EMAIL_TAKEN = () =>
   new AppError(
     409,
     'EMAIL_ALREADY_REGISTERED',
@@ -55,32 +55,77 @@ export class RegistrationService {
     if (existing) throw EMAIL_TAKEN();
 
     const passwordHash = await this.passwords.hash(input.owner.password);
+    return this.createAccount(
+      {
+        email: input.owner.email,
+        fullName: input.owner.fullName,
+        passwordHash,
+        nameAr: input.company.nameAr ?? null,
+        nameEn: input.company.nameEn ?? null,
+        legalName: input.company.legalName ?? null,
+        language: input.company.defaultLanguage,
+        ...(input.company.timezone ? { timezone: input.company.timezone } : {}),
+      },
+      client,
+      { reason: 'Self-service registration' },
+    );
+  }
+
+  /**
+   * The registration transaction itself, shared with the trial funnel (ADR-0115), which checks
+   * the e-mail and hashes the password before the code is verified. `after` runs inside the
+   * same transaction with the new merchant's ids.
+   */
+  async createAccount(
+    account: {
+      email: string;
+      fullName: string;
+      passwordHash: string;
+      nameAr: string | null;
+      nameEn: string | null;
+      legalName: string | null;
+      language: 'ar' | 'en';
+      timezone?: string;
+    },
+    client: ClientInfo,
+    options: {
+      reason: string;
+      trialDays?: number;
+      after?: (tx: Transaction, ids: { merchantId: string; userId: string }) => Promise<void>;
+    },
+  ): Promise<LoginOutcome & { merchantId: string }> {
     const userId = newId();
     const merchantId = newId();
     const membershipId = newId();
-    const language = input.company.defaultLanguage;
+    const language = account.language;
 
     try {
       const token = await this.database.withContext({ merchantId, userId }, async (tx) => {
         await tx.insert(users).values({
           id: userId,
-          email: input.owner.email,
-          passwordHash,
-          fullName: input.owner.fullName,
+          email: account.email,
+          passwordHash: account.passwordHash,
+          fullName: account.fullName,
           preferredLanguage: language,
         });
         const { branchId } = await provisionMerchant(tx, {
           merchantId,
           ownerUserId: userId,
           membershipId,
-          nameEn: input.company.nameEn ?? null,
-          nameAr: input.company.nameAr ?? null,
-          legalName: input.company.legalName ?? null,
-          contactEmail: input.owner.email,
+          nameEn: account.nameEn,
+          nameAr: account.nameAr,
+          legalName: account.legalName,
+          contactEmail: account.email,
           defaultLanguage: language,
-          ...(input.company.timezone ? { timezone: input.company.timezone } : {}),
+          ...(account.timezone ? { timezone: account.timezone } : {}),
         });
-        await this.subscriptions.createInitial(tx, merchantId, null, 'Self-service registration');
+        await this.subscriptions.createInitial(
+          tx,
+          merchantId,
+          null,
+          options.reason,
+          options.trialDays,
+        );
 
         const session = await this.sessions.create(
           {
@@ -102,8 +147,9 @@ export class RegistrationService {
           targetType: 'merchant',
           targetId: merchantId,
           ip: client.ip,
-          details: { branchId },
+          details: { branchId, via: options.reason },
         });
+        if (options.after) await options.after(tx, { merchantId, userId });
         return session.token;
       });
 

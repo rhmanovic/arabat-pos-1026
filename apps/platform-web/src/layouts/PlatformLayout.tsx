@@ -7,6 +7,7 @@ import { useRole } from '../shared.js';
 const NAV = [
   { key: 'overview', to: '/', end: true },
   { key: 'merchants', to: '/merchants', end: false },
+  { key: 'trials', to: '/trials', end: false },
   { key: 'requests', to: '/requests', end: false },
   { key: 'offer', to: '/offer', end: false },
   { key: 'plans', to: '/plans', end: false },

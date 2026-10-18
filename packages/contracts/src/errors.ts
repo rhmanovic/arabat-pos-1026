@@ -122,6 +122,9 @@ export const ERROR_CODES = [
   'UNKNOWN_VARIANT',
   'MEMBER_NOT_ALLOWED',
   'WRONG_DEVICE',
+  // Free-trial sign-up (ADR-0115)
+  'INVALID_CODE',
+  'CODE_LIMIT',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

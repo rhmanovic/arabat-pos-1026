@@ -1,4 +1,16 @@
 import {
+  type DeviceTrialStatus,
+  type LeadStage,
+  type SaveTrialSettings,
+  type UpdateDeviceTrial,
+  deviceTrialRequestListSchema,
+  deviceTrialRequestSchema,
+  funnelStatsSchema,
+  leadListSchema,
+  trialDeviceStockSchema,
+  trialSettingsSchema,
+} from '@arabat/contracts';
+import {
   type SaveOfferItem,
   type SalesRequestStatus,
   type UpdateSalesRequest,
@@ -480,6 +492,35 @@ export function createApiClient(options: ApiClientOptions = {}) {
       },
       removeOfferImage: (id: string) =>
         request('DELETE', `/platform/offer-items/${id}/image`, { schema: offerItemSchema }),
+      /** Free trials, leads and the funnel (ADR-0115). */
+      trialSettings: () =>
+        request('GET', '/platform/trials/settings', { schema: trialSettingsSchema }),
+      saveTrialSettings: (body: SaveTrialSettings) =>
+        request('PUT', '/platform/trials/settings', { body, schema: trialSettingsSchema }),
+      trialStock: () =>
+        request('GET', '/platform/trials/stock', {
+          schema: z.object({ devices: z.array(trialDeviceStockSchema) }),
+        }),
+      saveTrialStock: (itemId: string, body: { trialStock: number; version: number }) =>
+        request('PUT', `/platform/trials/stock/${itemId}`, {
+          body,
+          schema: z.object({ devices: z.array(trialDeviceStockSchema) }),
+        }),
+      leads: (stage?: LeadStage) =>
+        request('GET', `/platform/trials/leads${stage ? `?stage=${stage}` : ''}`, {
+          schema: leadListSchema,
+        }),
+      deviceTrials: (status?: DeviceTrialStatus) =>
+        request('GET', `/platform/trials/devices${status ? `?status=${status}` : ''}`, {
+          schema: deviceTrialRequestListSchema,
+        }),
+      updateDeviceTrial: (id: string, body: UpdateDeviceTrial) =>
+        request('PUT', `/platform/trials/devices/${id}`, {
+          body,
+          schema: deviceTrialRequestSchema,
+        }),
+      funnel: (days: number) =>
+        request('GET', `/platform/trials/funnel?days=${days}`, { schema: funnelStatsSchema }),
       salesRequests: (status?: SalesRequestStatus) =>
         request('GET', `/platform/sales-requests${status ? `?status=${status}` : ''}`, {
           schema: salesRequestListSchema,

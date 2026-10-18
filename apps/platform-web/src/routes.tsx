@@ -15,6 +15,7 @@ import { OverviewPage } from './pages/OverviewPage.js';
 import { OfferPage } from './pages/OfferPage.js';
 import { PlansPage } from './pages/PlansPage.js';
 import { SalesRequestsPage } from './pages/SalesRequestsPage.js';
+import { TrialsPage } from './pages/TrialsPage.js';
 
 /** Route tree of /platform (relative to the /platform basename). See docs/ROUTES.md. */
 export const routes: RouteObject[] = [
@@ -41,6 +42,7 @@ export const routes: RouteObject[] = [
       { path: 'merchants/:merchantId', element: <MerchantDetailPage /> },
       { path: 'plans', element: <PlansPage /> },
       { path: 'offer', element: <OfferPage /> },
+      { path: 'trials', element: <TrialsPage /> },
       { path: 'requests', element: <SalesRequestsPage /> },
       { path: 'audit', element: <AuditPage /> },
       { path: 'assistant', element: <AssistantUsagePage /> },

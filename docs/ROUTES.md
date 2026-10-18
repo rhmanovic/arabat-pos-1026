@@ -73,6 +73,14 @@ A second page of the landing build: price card, then three steps like a presenta
 bottom bar on phones), confirmation with the request number, and FAQ. Reads
 `GET /api/v1/public/pricing`; sends `POST /api/v1/public/pricing/requests`. Nothing is paid online.
 
+## 2a-ter. `/start` — landing-web (free-trial sign-up funnel, ADR-0115)
+
+The single call to action of the site ("أنشئ حساب وجهّز محلك"). Steps: business type → demo
+till (sample products per business, optional receipt by e-mail = lead) → set up the shop (own
+devices, or devices to try with availability and waiting list) → account (name, e-mail,
+password, optional shop name) → 6-digit e-mail code → trial started (session set, link to
+`/manager/`). Anonymous funnel steps are counted. `/manager/register` stays open.
+
 ## 2b. `/store` — store-web (public storefront, Prompt 16)
 
 No session; every call goes to the public store API. Cart kept per store in the browser.
@@ -94,6 +102,7 @@ No session; every call goes to the public store API. Cart kept per store in the 
 | `/platform` | Overview (merchant counts by status, trials ending, lapsed, usage, plans, newest) | any operator | M8 ✓ |
 | `/platform/merchants` | List, search, status filter, create merchant (dialog) | any operator (create: super admin, support) | M8 ✓ |
 | `/platform/merchants/:id` | Profile, owner, onboarding, usage vs limits, branches, subscription (change with readiness check), history, platform actions; suspend / reactivate / close | any operator (actions per role) | M8 ✓ |
+| `/platform/trials` | Trials & leads: leads by stage with trial activity, device trials (approve, waiting list, delivered → trial from delivery, returned, reject), trial stock per device (available = stock − out), funnel numbers per step, trial settings | any operator (settings and stock: super admin, billing) | ✓ |
 | `/platform/requests` | Purchase requests from the pricing page: status filter with counts, details (lines, totals, contact), follow-up status and note | any operator | ✓ |
 | `/platform/offer` | Pricing page offer: system yearly price and devices (add, price, hide, order, photo) | any operator (edit: super admin, billing) | ✓ |
 | `/platform/plans` | Plans with limits, features, informational price; create / edit | any operator (edit: super admin, billing) | M8 ✓ |
@@ -332,6 +341,9 @@ only staff land on `/pos/kitchen`. Sales list and reports show the service type.
 | `GET /platform/assistant?merchantId=&surface=&from=&to=&q=&page=&pageSize=` (questions, totals, by merchant), `GET /platform/assistant/export?…` (JSONL, one line per question with the thread) | super admin only (ADR-0107 amendment) |
 | `GET /platform/offer-items`, `GET /platform/sales-requests?status=`, `GET /platform/sales-requests/:id`, `PUT /platform/sales-requests/:id` (status, note, version) | any operator (ADR-0114) |
 | `POST /platform/offer-items`, `PUT /platform/offer-items/:id`, `POST`/`DELETE /platform/offer-items/:id/image` | super admin, billing |
+| `GET /platform/trials/settings`, `GET /platform/trials/stock`, `GET /platform/trials/leads?stage=`, `GET /platform/trials/devices?status=`, `PUT /platform/trials/devices/:id`, `GET /platform/trials/funnel?days=` | any operator (ADR-0115) |
+| `PUT /platform/trials/settings`, `PUT /platform/trials/stock/:itemId` | super admin, billing |
+| `GET /public/trial`, `POST /public/trial/events`, `POST /public/trial/demo-receipt` (10/h per IP, 3/h per e-mail), `POST /public/trial/start` (registration limit), `POST /public/trial/resend`, `POST /public/trial/verify` (sets the manager session) | 🔓 public |
 | `GET /public/pricing` (active system + devices), `GET /public/pricing/images/:id`, `POST /public/pricing/requests` (5 per hour per IP; priced on the server) | 🔓 public |
 | `GET /manager/subscription` | merchant `merchant.settings.read` (own merchant only) |
 

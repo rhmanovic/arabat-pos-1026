@@ -4,7 +4,7 @@ test('a visitor reads the yearly price, goes through the steps and sends a purch
   page,
 }) => {
   await page.goto('/');
-  await page.getByRole('link', { name: 'شاهد الأسعار وجهّز محلك' }).click();
+  await page.getByRole('link', { name: 'شاهد تفاصيل الأسعار' }).click();
   await expect(page).toHaveURL(/\/pricing$/);
   await expect(page.getByRole('heading', { name: 'نظامك الكامل' })).toBeVisible();
 

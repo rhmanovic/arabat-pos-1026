@@ -1,13 +1,13 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('three separate applications', () => {
-  test('root shows the public landing page, which leads to the manager sign-in', async ({
+  test('root shows the public landing page; the header leads to the manager sign-in', async ({
     page,
   }) => {
     await page.goto('/');
     await expect(page).toHaveTitle(/عربات POS/);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-    await page.locator('#home').getByRole('link', { name: 'تسجيل الدخول' }).click();
+    await page.getByRole('banner').getByRole('link', { name: 'تسجيل الدخول' }).click();
     await expect(page).toHaveURL(/\/manager\/login$/);
     await expect(page.getByRole('heading', { name: 'تسجيل الدخول إلى الإدارة' })).toBeVisible();
   });

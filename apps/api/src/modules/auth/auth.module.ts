@@ -40,6 +40,7 @@ import { TicketService } from './ticket.service.js';
     PasswordResetService,
     RateLimiterService,
     SessionService,
+    RegistrationService,
   ],
 })
 export class AuthModule {}

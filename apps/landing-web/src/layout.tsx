@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import type { PublicTrialOffer } from '@arabat/contracts';
 import { CONTACT_EMAIL, type Content, content, type Language } from './content.js';
 
 export const STORAGE_KEY = 'arabat.landing.lang';
 const SECTIONS = ['home', 'features', 'why', 'start'] as const;
 type SectionId = (typeof SECTIONS)[number];
 const NAV = ['home', 'features', 'why', 'pricing', 'start'] as const;
-export type Page = 'home' | 'pricing';
+export type Page = 'home' | 'pricing' | 'start';
 
-export const REGISTER_URL = '/manager/register';
+/** The sign-up funnel (ADR-0115): the page's single call to action. */
+export const REGISTER_URL = '/start';
 export const SIGN_IN_URL = '/manager/';
 
 export function initialLanguage(): Language {
@@ -44,6 +46,26 @@ export const primaryButton =
 export const outlineButton =
   'inline-flex items-center justify-center rounded-full border-2 border-brand px-8 py-3 text-lg font-medium text-brand transition hover:bg-brand hover:text-white';
 
+/** Price and trial length from the platform (ADR-0115); null while loading or if unavailable. */
+export function useTrialOffer(): PublicTrialOffer | null {
+  const [offer, setOffer] = useState<PublicTrialOffer | null>(null);
+  useEffect(() => {
+    let active = true;
+    fetch('/api/v1/public/trial', { headers: { accept: 'application/json' } })
+      .then(async (response) => {
+        if (response.ok && active) setOffer((await response.json()) as PublicTrialOffer);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+  return offer;
+}
+
+/** "99.000" → "99" for display only. */
+export const shortAmount = (amount: string) => amount.replace(/\.000$/, '');
+
 /** Language of both pages: Arabic by default, remembered in the browser, mirrored on <html>. */
 export function useLanguage(title: (t: Content) => string) {
   const [lang, setLang] = useState<Language>(initialLanguage);
@@ -72,7 +94,7 @@ export function Header({
   page: Page;
 }) {
   const section = useActiveSection();
-  const active = page === 'pricing' ? 'pricing' : section;
+  const active = page === 'pricing' ? 'pricing' : page === 'home' ? section : '';
   const [menuOpen, setMenuOpen] = useState(false);
   const home = page === 'home' ? '' : '/';
   const links = NAV.map((id) => ({
@@ -114,11 +136,14 @@ export function Header({
           >
             {t.switchLanguage}
           </button>
-          <a
-            href={SIGN_IN_URL}
-            className="rounded-full bg-brand px-6 py-2 font-medium text-white transition hover:bg-coral"
-          >
+          <a href={SIGN_IN_URL} className="px-2 text-sm text-muted hover:text-brand">
             {t.signIn}
+          </a>
+          <a
+            href={REGISTER_URL}
+            className="rounded-full bg-brand px-5 py-2 text-sm font-medium text-white transition hover:bg-coral"
+          >
+            {t.signupCta}
           </a>
         </div>
         <button
@@ -257,12 +282,9 @@ function MobileMenu({
             href={REGISTER_URL}
             className="rounded-full bg-brand py-3.5 text-center text-lg font-medium text-white shadow-lg shadow-brand/25"
           >
-            {t.hero.primary}
+            {t.signupCta}
           </a>
-          <a
-            href={SIGN_IN_URL}
-            className="rounded-full border-2 border-brand py-3 text-center text-lg font-medium text-brand"
-          >
+          <a href={SIGN_IN_URL} className="py-2 text-center text-muted">
             {t.signIn}
           </a>
           <button type="button" onClick={onToggleLanguage} className="py-2 text-muted">
@@ -279,24 +301,16 @@ export function Footer({ t, page }: { t: Content; page: Page }) {
   const year = String(new Date().getFullYear());
   return (
     <footer>
-      <div className="bg-brand px-4 py-14 text-center">
+      <div className={page === 'pricing' ? 'bg-brand px-4 py-14 text-center' : 'hidden'}>
         <p className="text-sun">{t.footer.accent}</p>
         <h2 className="mt-2 text-3xl font-bold text-white sm:text-4xl">{t.footer.headline}</h2>
         <p className="mt-3 text-white/90">{t.footer.text}</p>
-        <div className="mt-8 flex flex-wrap justify-center gap-3">
-          <a
-            href={SIGN_IN_URL}
-            className="rounded-full bg-white px-6 py-2.5 font-medium text-ink transition hover:-translate-y-0.5"
-          >
-            {t.footer.manager}
-          </a>
-          <a
-            href="/pos/"
-            className="rounded-full bg-white px-6 py-2.5 font-medium text-ink transition hover:-translate-y-0.5"
-          >
-            {t.footer.pos}
-          </a>
-        </div>
+        <a
+          href={REGISTER_URL}
+          className="mt-8 inline-flex rounded-full bg-white px-8 py-3 text-lg font-medium text-brand shadow-lg transition hover:-translate-y-0.5"
+        >
+          {t.signupCta}
+        </a>
       </div>
       <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 py-6 text-sm text-muted sm:flex-row sm:px-6">
         <p>{t.footer.copyright.replace('{year}', year)}</p>
