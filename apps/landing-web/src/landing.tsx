@@ -10,7 +10,6 @@ import {
   useTrialOffer,
 } from './layout.js';
 import { Reveal, useInView } from './reveal.js';
-import { SystemCard } from './system-card.js';
 
 const fill = (text: string, values: Record<string, string | number>) =>
   text.replace(/\{(\w+)\}/g, (_, k: string) => String(values[k] ?? ''));
@@ -24,7 +23,7 @@ export function LandingPage() {
       <Header t={t} onToggleLanguage={toggleLanguage} page="home" />
       <main className="flex-1">
         <Hero t={t} offer={offer} />
-        <Steps t={t} offer={offer} />
+        <Steps t={t} />
         <Trust t={t} />
         <Power t={t} />
         <Features t={t} />
@@ -352,7 +351,7 @@ function Why({ t }: { t: Content }) {
   );
 }
 
-function Steps({ t, offer }: { t: Content; offer: PublicTrialOffer | null }) {
+function Steps({ t }: { t: Content }) {
   return (
     <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6">
       <Reveal as="h2" className="text-center text-3xl font-bold sm:text-4xl">
@@ -369,22 +368,10 @@ function Steps({ t, offer }: { t: Content; offer: PublicTrialOffer | null }) {
           </Reveal>
         ))}
       </ol>
-      <Reveal className="mx-auto mt-14 max-w-5xl">
-        <SystemCard
-          title={t.pricing.system.title}
-          text={t.pricing.system.text}
-          price={offer ? shortAmount(offer.systemPrice.amount) : null}
-          currency={t.pricing.currency}
-          perYear={t.pricing.perYear}
-          includes={t.pricing.system.includes}
-          className="border border-black/5 shadow-xl shadow-brand/10"
-          badge={offer ? fill(t.trialLine, { length: t.trialLength(offer.trialDaysOwn) }) : null}
-          action={
-            <a href={REGISTER_URL} className={primaryButton}>
-              {t.signupCta}
-            </a>
-          }
-        />
+      <Reveal className="mt-10 text-center">
+        <a href={REGISTER_URL} className={primaryButton}>
+          {t.signupCta}
+        </a>
       </Reveal>
     </section>
   );

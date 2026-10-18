@@ -80,6 +80,10 @@ describe('PricingPage', () => {
     await user.type(screen.getByLabelText('رقم الهاتف'), '+965 5555 1234');
     await user.type(screen.getByLabelText('البريد الإلكتروني'), 'f@example.com');
     await user.type(screen.getByLabelText('الرقم السري لحسابك'), 'Strong-Pass-2026');
+    // The business type is asked with cards; sending without one says so.
+    await user.click(screen.getByRole('button', { name: 'أرسل الطلب' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('اختر نوع نشاطك');
+    await user.click(screen.getByRole('button', { name: /كافيه/ }));
     await user.click(screen.getByRole('button', { name: 'أرسل الطلب' }));
 
     expect(
@@ -97,6 +101,7 @@ describe('PricingPage', () => {
       email: 'f@example.com',
       password: 'Strong-Pass-2026',
       phone: '+965 5555 1234',
+      businessType: 'cafe',
       companyName: '',
       language: 'ar',
       devices: [{ itemId: 'p', quantity: 2 }],
@@ -110,6 +115,7 @@ describe('PricingPage', () => {
     render(<PricingPage />);
     await user.click((await screen.findAllByRole('button', { name: 'التالي: جهّز محلك' }))[0]!);
     await user.click(screen.getByRole('button', { name: 'تخطَّ — عندي أجهزتي' }));
+    await user.click(screen.getByRole('button', { name: /مطعم/ }));
     await user.type(screen.getByLabelText('اسمك'), 'Ali');
     await user.type(screen.getByLabelText('رقم الهاتف'), '+965 5555 1234');
     await user.type(screen.getByLabelText('البريد الإلكتروني'), 'a@example.com');

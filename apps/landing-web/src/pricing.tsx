@@ -1,8 +1,10 @@
-import type {
-  PublicOffer,
-  PublicOfferItem,
-  PublicTrialOffer,
-  TrialStarted,
+import {
+  type BusinessType,
+  BUSINESS_TYPES,
+  type PublicOffer,
+  type PublicOfferItem,
+  type PublicTrialOffer,
+  type TrialStarted,
 } from '@arabat/contracts';
 import { Money } from '@arabat/money';
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
@@ -25,7 +27,14 @@ const CURRENCY = 'KWD' as const;
 type Step = 0 | 1 | 2 | 3;
 type Quantities = Record<string, number>;
 /** The request form; kept by the configurator so going back to the devices keeps what was typed. */
+const BUSINESS_ICON: Record<BusinessType, string> = {
+  retail: '🛍️',
+  restaurant: '🍽️',
+  cafe: '☕',
+  other: '✨',
+};
 type Contact = {
+  businessType: BusinessType | null;
   companyName: string;
   contactName: string;
   phone: string;
@@ -33,6 +42,7 @@ type Contact = {
   password: string;
 };
 const EMPTY_CONTACT: Contact = {
+  businessType: null,
   companyName: '',
   contactName: '',
   phone: '',
@@ -506,16 +516,20 @@ function RequestStep({
 }) {
   const f = t.pricing.form;
   const [sending, setSending] = useState(false);
-  const [error, setError] = useState<'taken' | 'unavailable' | 'rate' | 'other' | null>(null);
-  const setField = (field: keyof Contact, value: string) =>
+  const [error, setError] = useState<
+    'business' | 'taken' | 'unavailable' | 'rate' | 'other' | null
+  >(null);
+  const setField = (field: Exclude<keyof Contact, 'businessType'>, value: string) =>
     setContact((c) => ({ ...c, [field]: value }));
 
   /** Opens the trial account straight away, like /start (ADR-0115 amendment 3). */
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!contact.businessType) return setError('business');
     setSending(true);
     setError(null);
     const r = await postTrial<TrialStarted>('start', {
+      businessType: contact.businessType,
       fullName: contact.contactName,
       email: contact.email,
       password: contact.password,
@@ -541,7 +555,36 @@ function RequestStep({
     <form onSubmit={(e) => void submit(e)} className="rounded-3xl bg-white p-6 shadow-sm sm:p-10">
       <h2 className="text-2xl font-bold sm:text-3xl">{f.title}</h2>
       <p className="mt-2 text-muted">{f.text}</p>
-      <div className="mt-8 grid gap-5 sm:grid-cols-2">
+      <fieldset className="mt-8">
+        <legend className="text-sm font-medium text-ink">{f.business}</legend>
+        <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {BUSINESS_TYPES.map((type) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() => {
+                setContact((c) => ({ ...c, businessType: type }));
+                setError((e) => (e === 'business' ? null : e));
+              }}
+              aria-pressed={contact.businessType === type}
+              className={`flex flex-col items-center gap-2 rounded-2xl p-4 font-bold text-ink ring-2 transition hover:-translate-y-0.5 ${
+                contact.businessType === type
+                  ? 'bg-brand-soft ring-brand'
+                  : 'bg-sand ring-transparent hover:ring-brand/40'
+              }`}
+            >
+              <span
+                className="grid size-12 place-items-center rounded-full bg-white text-2xl shadow-sm"
+                aria-hidden="true"
+              >
+                {BUSINESS_ICON[type]}
+              </span>
+              {f.businessTypes[type]}
+            </button>
+          ))}
+        </div>
+      </fieldset>
+      <div className="mt-6 grid gap-5 sm:grid-cols-2">
         <label className="block">
           <span className="text-sm font-medium text-ink">{f.company}</span>
           <input
@@ -623,7 +666,9 @@ function RequestStep({
       </p>
       {error ? (
         <p role="alert" className="mt-4 rounded-2xl bg-coral/10 px-4 py-3 text-sm text-coral">
-          {error === 'taken' ? (
+          {error === 'business' ? (
+            f.pickBusiness
+          ) : error === 'taken' ? (
             <>
               {f.emailTaken}{' '}
               <a href={SIGN_IN_URL} className="font-bold underline">

@@ -246,6 +246,9 @@ const ar = {
     form: {
       title: 'أرسل طلبك',
       text: 'اكتب بياناتك ونفتح لك حسابك على طول، ويتواصل معك فريقنا لتأكيد الأجهزة وطريقة الدفع والتركيب.',
+      business: 'نوع نشاطك',
+      businessTypes: { retail: 'محل', restaurant: 'مطعم', cafe: 'كافيه', other: 'أخرى' },
+      pickBusiness: 'اختر نوع نشاطك.',
       company: 'اسم المحل (اختياري)',
       contact: 'اسمك',
       phone: 'رقم الهاتف',
@@ -636,6 +639,9 @@ const en: typeof ar = {
     form: {
       title: 'Send your request',
       text: 'Leave your details and we open your account right away; our team will contact you to confirm the devices, payment and installation.',
+      business: 'Your business',
+      businessTypes: { retail: 'Shop', restaurant: 'Restaurant', cafe: 'Café', other: 'Other' },
+      pickBusiness: 'Choose your type of business.',
       company: 'Shop name (optional)',
       contact: 'Your name',
       phone: 'Phone number',

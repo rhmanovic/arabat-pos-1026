@@ -16,6 +16,7 @@ test('the call to action leads to the pricing page, where the visitor opens a tr
   const next = page.getByRole('button', { name: 'التالي: راجع طلبك' }).first();
   await ((await skip.isVisible()) ? skip : next).click();
 
+  await page.getByRole('button', { name: /كافيه/ }).click();
   await page.getByLabel('اسمك').fill('Tester');
   await page.getByLabel('رقم الهاتف').fill('+965 5555 0000');
   await page.getByLabel('البريد الإلكتروني').fill(uniqueEmail('pricing'));

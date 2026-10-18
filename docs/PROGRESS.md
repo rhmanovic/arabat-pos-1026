@@ -961,6 +961,10 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
   "التالي: جهّز محلك" button from the hero price card; after the account opens only the
   "مبروك" card stays (no hero / steps). Footer bar is white under the sand sections.
 - Tests run (owner asked for a quick turn): landing web tests 12, pricing E2E.
+### 2026-10-18 — Home button, business type on the pricing form
+- Homepage: the system card under the steps is back to a single "أنشئ حساب وجهّز محلك" button.
+- Pricing form: business type picked with cards (محل / مطعم / كافيه / أخرى), required, sent to
+  `/public/trial/start`. Tests run: landing web 12, pricing E2E.
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.
