@@ -242,6 +242,13 @@ function Configurator({
     setStep(next);
     top.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
+  /** The business type is chosen first, on the system step (owner, 2026-10-18). */
+  const [needBusiness, setNeedBusiness] = useState(false);
+  const fromSystem = () => {
+    if (contact.businessType) return go(1);
+    setNeedBusiness(true);
+    top.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
   const setQuantity = (item: PublicOfferItem, quantity: number) =>
     setQuantities((q) => ({ ...q, [item.id]: Math.max(0, Math.min(item.maxQuantity, quantity)) }));
 
@@ -254,7 +261,20 @@ function Configurator({
       </div>
       <div className="mt-10 grid gap-8 lg:grid-cols-3">
         <div key={step} className="step-in lg:col-span-2">
-          {step === 0 ? <SystemStep t={t} offer={offer} lang={lang} onNext={() => go(1)} /> : null}
+          {step === 0 ? (
+            <div className="space-y-6">
+              <BusinessPicker
+                t={t}
+                value={contact.businessType}
+                missing={needBusiness}
+                onPick={(type) => {
+                  setContact((c) => ({ ...c, businessType: type }));
+                  setNeedBusiness(false);
+                }}
+              />
+              <SystemStep t={t} offer={offer} lang={lang} onNext={fromSystem} />
+            </div>
+          ) : null}
           {step === 1 ? (
             <DevicesStep
               t={t}
@@ -310,7 +330,7 @@ function Configurator({
           {step < 2 ? (
             <button
               type="button"
-              onClick={() => go((step + 1) as Step)}
+              onClick={() => (step === 0 ? fromSystem() : go((step + 1) as Step))}
               className="rounded-full bg-brand px-5 py-2.5 font-medium text-white"
             >
               {step === 0 ? p.system.next : p.devices.next}
@@ -319,6 +339,58 @@ function Configurator({
         </div>
       </div>
     </div>
+  );
+}
+
+function BusinessPicker({
+  t,
+  value,
+  missing,
+  onPick,
+}: {
+  t: Content;
+  value: BusinessType | null;
+  missing: boolean;
+  onPick: (type: BusinessType) => void;
+}) {
+  const f = t.pricing.form;
+  return (
+    <fieldset
+      className={`rounded-3xl bg-white p-6 shadow-sm ring-2 transition sm:p-8 ${
+        missing ? 'ring-coral' : 'ring-transparent'
+      }`}
+    >
+      <legend className="sr-only">{f.business}</legend>
+      <h2 className="text-xl font-bold sm:text-2xl">{f.business}</h2>
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {BUSINESS_TYPES.map((type) => (
+          <button
+            key={type}
+            type="button"
+            onClick={() => onPick(type)}
+            aria-pressed={value === type}
+            className={`flex flex-col items-center gap-2 rounded-2xl p-4 font-bold text-ink ring-2 transition hover:-translate-y-0.5 ${
+              value === type
+                ? 'bg-brand-soft ring-brand'
+                : 'bg-sand ring-transparent hover:ring-brand/40'
+            }`}
+          >
+            <span
+              className="grid size-12 place-items-center rounded-full bg-white text-2xl shadow-sm"
+              aria-hidden="true"
+            >
+              {BUSINESS_ICON[type]}
+            </span>
+            {f.businessTypes[type]}
+          </button>
+        ))}
+      </div>
+      {missing ? (
+        <p role="alert" className="mt-4 text-sm font-medium text-coral">
+          {f.pickBusiness}
+        </p>
+      ) : null}
+    </fieldset>
   );
 }
 
@@ -555,36 +627,7 @@ function RequestStep({
     <form onSubmit={(e) => void submit(e)} className="rounded-3xl bg-white p-6 shadow-sm sm:p-10">
       <h2 className="text-2xl font-bold sm:text-3xl">{f.title}</h2>
       <p className="mt-2 text-muted">{f.text}</p>
-      <fieldset className="mt-8">
-        <legend className="text-sm font-medium text-ink">{f.business}</legend>
-        <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {BUSINESS_TYPES.map((type) => (
-            <button
-              key={type}
-              type="button"
-              onClick={() => {
-                setContact((c) => ({ ...c, businessType: type }));
-                setError((e) => (e === 'business' ? null : e));
-              }}
-              aria-pressed={contact.businessType === type}
-              className={`flex flex-col items-center gap-2 rounded-2xl p-4 font-bold text-ink ring-2 transition hover:-translate-y-0.5 ${
-                contact.businessType === type
-                  ? 'bg-brand-soft ring-brand'
-                  : 'bg-sand ring-transparent hover:ring-brand/40'
-              }`}
-            >
-              <span
-                className="grid size-12 place-items-center rounded-full bg-white text-2xl shadow-sm"
-                aria-hidden="true"
-              >
-                {BUSINESS_ICON[type]}
-              </span>
-              {f.businessTypes[type]}
-            </button>
-          ))}
-        </div>
-      </fieldset>
-      <div className="mt-6 grid gap-5 sm:grid-cols-2">
+      <div className="mt-8 grid gap-5 sm:grid-cols-2">
         <label className="block">
           <span className="text-sm font-medium text-ink">{f.company}</span>
           <input
