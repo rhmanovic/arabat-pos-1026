@@ -13,6 +13,8 @@ the code differ, the code wins and the differences are listed here:
   `transfers`, `subscriptions`, `ecommerce` creates online-channel sales directly
   (ADR-0077). Read-only cross-module SQL is used by several modules (ADR-0083).
 - A fourth app, `apps/store-web`, serves the public storefront (ADR-0076).
+- `apps/landing-web` is the public landing page at `/` (static React page, no session, no API
+  calls; ADR-0113). Its text lives in `src/content.ts` (ar/en).
 Related documents: `AUTH.md` (authentication & permissions), `ROUTES.md`
 (routing), `DATABASE.md`
 (entities & ERD), `DECISIONS.md` (ADRs), `ROADMAP.md` (milestones).

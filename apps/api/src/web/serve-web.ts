@@ -14,7 +14,8 @@ const APPS: Record<AppInterface | 'store', string> = {
 
 /**
  * Serves the built SPAs from one origin (production-like local run and E2E tests):
- * `/manager/*`, `/pos/*`, `/platform/*`, `/store/*`, each with its own index.html fallback.
+ * `/manager/*`, `/pos/*`, `/platform/*`, `/store/*`, each with its own index.html fallback,
+ * and the landing page at `/`.
  * In production a CDN/reverse proxy may serve these files instead (ARCHITECTURE.md §12).
  */
 export async function serveWebApps(fastify: FastifyInstance): Promise<void> {
@@ -59,5 +60,26 @@ export async function serveWebApps(fastify: FastifyInstance): Promise<void> {
     );
     fastify.get(`/${appInterface}/*`, sendIndex);
   }
-  fastify.get('/', (_req, reply) => reply.redirect('/manager/'));
+
+  // The public landing page (ADR-0113) owns `/`: its built files are registered one by one
+  // (wildcard: false), so no catch-all route shadows `/api` or the apps above.
+  const landing = fileURLToPath(new URL('../../../landing-web/dist', import.meta.url));
+  if (!existsSync(landing))
+    throw new Error(`SERVE_WEB is enabled but ${landing} does not exist. Run pnpm build first.`);
+  await fastify.register(fastifyStatic, {
+    root: landing,
+    prefix: '/',
+    wildcard: false,
+    decorateReply: false,
+    index: false,
+    setHeaders(res, filePath) {
+      res.header(
+        'cache-control',
+        filePath.includes('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache',
+      );
+    },
+  });
+  fastify.get('/', (_req, reply) =>
+    reply.header('cache-control', 'no-cache').sendFile('index.html', landing),
+  );
 }

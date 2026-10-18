@@ -56,7 +56,7 @@ export default defineConfig({
           environment: 'jsdom',
           setupFiles: ['./vitest.web-setup.ts'],
           include: [
-            'apps/{manager,pos,platform,store}-web/src/**/*.test.{ts,tsx}',
+            'apps/{manager,pos,platform,store,landing}-web/src/**/*.test.{ts,tsx}',
             'packages/{ui,web-core,i18n,api-client}/src/**/*.test.{ts,tsx}',
           ],
         },

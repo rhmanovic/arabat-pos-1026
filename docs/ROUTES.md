@@ -59,6 +59,12 @@ cashier, clock, language, Lock and Sign out.
 | `/kitchen` | Kitchen display | `kitchen.access` |
 | (any route) | Lock screen when the session is locked (idle 5 min or Lock button) | session |
 
+## 2a. `/` — landing-web (public landing page, ADR-0113)
+
+One static page: product introduction (ar/en, language remembered in the browser) with links
+to `/manager/` and `/pos/`. No session and no API call. Until 2026-10-18 `/` redirected to
+`/manager/`.
+
 ## 2b. `/store` — store-web (public storefront, Prompt 16)
 
 No session; every call goes to the public store API. Cart kept per store in the browser.

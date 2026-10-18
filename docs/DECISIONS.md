@@ -1538,3 +1538,14 @@ ADR; supersede it.
   series, server acceptance of completed device sales (no refusal for stock or price), device
   UUIDv7 ids, versioned download and ledger-running upload sync without database replication,
   and the shared rules package `packages/pos-core`.
+
+## ADR-0113 — Public landing page at `/`
+- **Date:** 2026-10-18 · **Status:** Accepted (owner, 2026-10-18: "a simple React landing page
+  we can develop later", deployed to Google Cloud production).
+- **Decision:** a fifth web app, `apps/landing-web` (React + Vite + Tailwind with the shared
+  `@arabat/ui` theme and fonts), built with `base: '/'` and served by `serveWebApps` at `/`. Its
+  files are registered one by one (`wildcard: false`), so no catch-all route can shadow `/api`
+  or the other apps; unknown paths stay 404. It has no session, no router and calls no API.
+  The text lives in `src/content.ts` (ar/en keys side by side) so it can be changed without
+  touching the layout.
+- **Replaces:** `/` used to redirect to `/manager/`.

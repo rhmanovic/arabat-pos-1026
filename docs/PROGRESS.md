@@ -885,6 +885,14 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
 - Not on devices (online only): restaurant, customers, exchanges, voids, custody cash moves,
   gateway payments, product images.
 
+### 2026-10-18 — Public landing page (ADR-0113)
+- `apps/landing-web`: one static React page at `/` (ar/en, RTL/LTR, language remembered),
+  hero with links to `/manager/` and `/pos/`, six feature cards, footer; text in `src/content.ts`.
+- `serveWebApps` serves it at `/` instead of redirecting to `/manager/`.
+- Tests: 2 web unit tests (language switch, links); E2E `apps.spec.ts` checks the landing page
+  and its link to the manager sign-in. Local run: `pnpm verify` (258 unit/web), 259 integration,
+  35 E2E, all passing.
+
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.
