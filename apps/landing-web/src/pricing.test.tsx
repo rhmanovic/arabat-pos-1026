@@ -58,9 +58,12 @@ describe('PricingPage', () => {
     render(<PricingPage />);
     expect(await screen.findByText('نظامك الكامل')).toBeInTheDocument();
     // Trial length from the platform under the first payment (own devices: 14 days).
-    // Desktop cart and the phone bottom bar both show it.
-    expect(await screen.findAllByText('✓ تجربة مجانية 14 يوم بدون بطاقة')).toHaveLength(2);
+    expect(await screen.findAllByText('✓ تجربة مجانية 14 يوم بدون بطاقة')).toHaveLength(1);
 
+    // The business type comes first: going on without it says so.
+    await user.click(screen.getAllByRole('button', { name: 'التالي: جهّز محلك' })[0]!);
+    expect(screen.getByRole('alert')).toHaveTextContent('اختر نوع نشاطك');
+    await user.click(screen.getByRole('button', { name: /كافيه/ }));
     await user.click(screen.getAllByRole('button', { name: 'التالي: جهّز محلك' })[0]!);
     const printer = screen.getByRole('heading', { name: 'جهاز p' }).closest('li')!;
     await user.click(within(printer).getByRole('button', { name: '+ أضف' }));
@@ -71,7 +74,7 @@ describe('PricingPage', () => {
     // 99.000 + 2 × 35.250 = 169.500, computed in fils.
     expect(screen.getAllByText('169.500').length).toBeGreaterThan(0);
     // With devices the platform's device trial length applies (7 days).
-    expect(screen.getAllByText('✓ تجربة مجانية 7 يوم بدون بطاقة')).toHaveLength(2);
+    expect(screen.getAllByText('✓ تجربة مجانية 7 يوم بدون بطاقة')).toHaveLength(1);
 
     await user.click(screen.getAllByRole('button', { name: 'التالي: راجع طلبك' })[0]!);
     expect(screen.queryByLabelText(/ملاحظات/)).toBeNull();
@@ -80,10 +83,6 @@ describe('PricingPage', () => {
     await user.type(screen.getByLabelText('رقم الهاتف'), '+965 5555 1234');
     await user.type(screen.getByLabelText('البريد الإلكتروني'), 'f@example.com');
     await user.type(screen.getByLabelText('الرقم السري لحسابك'), 'Strong-Pass-2026');
-    // The business type is asked with cards; sending without one says so.
-    await user.click(screen.getByRole('button', { name: 'أرسل الطلب' }));
-    expect(screen.getByRole('alert')).toHaveTextContent('اختر نوع نشاطك');
-    await user.click(screen.getByRole('button', { name: /كافيه/ }));
     await user.click(screen.getByRole('button', { name: 'أرسل الطلب' }));
 
     expect(
@@ -113,9 +112,9 @@ describe('PricingPage', () => {
       new Response(JSON.stringify({ code: 'EMAIL_ALREADY_REGISTERED' }), { status: 409 });
     const user = userEvent.setup();
     render(<PricingPage />);
-    await user.click((await screen.findAllByRole('button', { name: 'التالي: جهّز محلك' }))[0]!);
+    await user.click(await screen.findByRole('button', { name: /مطعم/ }));
+    await user.click(screen.getAllByRole('button', { name: 'التالي: جهّز محلك' })[0]!);
     await user.click(screen.getByRole('button', { name: 'تخطَّ — عندي أجهزتي' }));
-    await user.click(screen.getByRole('button', { name: /مطعم/ }));
     await user.type(screen.getByLabelText('اسمك'), 'Ali');
     await user.type(screen.getByLabelText('رقم الهاتف'), '+965 5555 1234');
     await user.type(screen.getByLabelText('البريد الإلكتروني'), 'a@example.com');
@@ -132,7 +131,8 @@ describe('PricingPage', () => {
   it('keeps what was typed in the form when going back to the devices', async () => {
     const user = userEvent.setup();
     render(<PricingPage />);
-    await user.click((await screen.findAllByRole('button', { name: 'التالي: جهّز محلك' }))[0]!);
+    await user.click(await screen.findByRole('button', { name: /كافيه/ }));
+    await user.click(screen.getAllByRole('button', { name: 'التالي: جهّز محلك' })[0]!);
     await user.click(screen.getByRole('button', { name: 'تخطَّ — عندي أجهزتي' }));
     await user.type(screen.getByLabelText('اسم المحل (اختياري)'), 'مقهى السالمية');
     await user.type(screen.getByLabelText('البريد الإلكتروني'), 'f@example.com');
@@ -147,7 +147,8 @@ describe('PricingPage', () => {
   it('lets a shop skip the devices', async () => {
     const user = userEvent.setup();
     render(<PricingPage />);
-    await user.click((await screen.findAllByRole('button', { name: 'التالي: جهّز محلك' }))[0]!);
+    await user.click(await screen.findByRole('button', { name: /كافيه/ }));
+    await user.click(screen.getAllByRole('button', { name: 'التالي: جهّز محلك' })[0]!);
     await user.click(screen.getByRole('button', { name: 'تخطَّ — عندي أجهزتي' }));
     expect(screen.getByRole('heading', { name: 'أرسل طلبك' })).toBeInTheDocument();
   });

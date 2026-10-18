@@ -10,13 +10,14 @@ test('the call to action leads to the pricing page, where the visitor opens a tr
   await expect(page.getByRole('heading', { name: 'نظامك الكامل' })).toBeVisible();
   await expect(page.getByText(/✓ تجربة مجانية \d+ يوم بدون بطاقة/).first()).toBeVisible();
 
+  // The business type is chosen first (owner, 2026-10-18).
+  await page.getByRole('button', { name: /كافيه/ }).click();
   await page.getByRole('button', { name: 'التالي: جهّز محلك' }).first().click();
   await expect(page.getByRole('heading', { name: 'جهّز محلك' })).toBeVisible();
   const skip = page.getByRole('button', { name: 'تخطَّ — عندي أجهزتي' });
   const next = page.getByRole('button', { name: 'التالي: راجع طلبك' }).first();
   await ((await skip.isVisible()) ? skip : next).click();
 
-  await page.getByRole('button', { name: /كافيه/ }).click();
   await page.getByLabel('اسمك').fill('Tester');
   await page.getByLabel('رقم الهاتف').fill('+965 5555 0000');
   await page.getByLabel('البريد الإلكتروني').fill(uniqueEmail('pricing'));
