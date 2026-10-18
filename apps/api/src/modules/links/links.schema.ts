@@ -30,7 +30,17 @@ export const linkPages = pgTable(
     /** Button colour as #rrggbb. */
     themeColor: text().notNull().default('#1e3a8a'),
     buttonStyle: text().notNull().default('rounded'),
+    /** light / dark / brand (button colour) / custom (backgroundColor) / gradient (two colours). */
     background: text().notNull().default('light'),
+    backgroundColor: text(),
+    backgroundColor2: text(),
+    /** Null = chosen automatically for contrast. */
+    textColor: text(),
+    buttonTextColor: text(),
+    buttonVariant: text().notNull().default('fill'),
+    font: text().notNull().default('default'),
+    /** Entrance motion of the page (none for visitors who ask for reduced motion). */
+    animation: text().notNull().default('fade-up'),
     avatarKey: text(),
     avatarContentType: text(),
     version: integer().notNull().default(1),
@@ -42,7 +52,27 @@ export const linkPages = pgTable(
     check('link_pages_slug_valid', sql`${t.slug} ~ '^[a-z0-9][a-z0-9-]{1,40}$'`),
     check('link_pages_color_valid', sql`${t.themeColor} ~ '^#[0-9a-fA-F]{6}$'`),
     check('link_pages_button_valid', sql`${t.buttonStyle} in ('rounded', 'pill', 'square')`),
-    check('link_pages_background_valid', sql`${t.background} in ('light', 'dark', 'brand')`),
+    check(
+      'link_pages_background_valid',
+      sql`${t.background} in ('light', 'dark', 'brand', 'custom', 'gradient')`,
+    ),
+    check(
+      'link_pages_colors_valid',
+      sql`coalesce(${t.backgroundColor}, '#000000') ~ '^#[0-9a-fA-F]{6}$' and coalesce(${t.backgroundColor2}, '#000000') ~ '^#[0-9a-fA-F]{6}$' and coalesce(${t.textColor}, '#000000') ~ '^#[0-9a-fA-F]{6}$' and coalesce(${t.buttonTextColor}, '#000000') ~ '^#[0-9a-fA-F]{6}$'`,
+    ),
+    check(
+      'link_pages_background_colors',
+      sql`(${t.background} <> 'custom' or ${t.backgroundColor} is not null) and (${t.background} <> 'gradient' or (${t.backgroundColor} is not null and ${t.backgroundColor2} is not null))`,
+    ),
+    check(
+      'link_pages_variant_valid',
+      sql`${t.buttonVariant} in ('fill', 'outline', 'soft', 'shadow')`,
+    ),
+    check(
+      'link_pages_font_valid',
+      sql`${t.font} in ('default', 'cairo', 'tajawal', 'almarai', 'changa', 'el-messiri', 'amiri', 'reem-kufi')`,
+    ),
+    check('link_pages_animation_valid', sql`${t.animation} in ('none', 'fade-up', 'pop', 'slide')`),
     check(
       'link_pages_avatar_pair',
       sql`(${t.avatarKey} is null) = (${t.avatarContentType} is null)`,
@@ -59,6 +89,10 @@ export const linkPageItems = pgTable(
     kind: text().notNull(),
     labelAr: text(),
     labelEn: text(),
+    /** Shown instead of the type's icon when set. */
+    emoji: text(),
+    /** Attention effect of the button: none / pulse / shake / glow. */
+    effect: text().notNull().default('none'),
     url: text().notNull(),
     status: text().notNull().default('active'),
     sortOrder: integer().notNull().default(0),
@@ -85,5 +119,10 @@ export const linkPageItems = pgTable(
       sql`coalesce(length(trim(${t.labelAr})), 0) + coalesce(length(trim(${t.labelEn})), 0) > 0`,
     ),
     check('link_page_items_clicks_valid', sql`${t.clicks} >= 0`),
+    check(
+      'link_page_items_emoji_valid',
+      sql`${t.emoji} is null or length(${t.emoji}) between 1 and 16`,
+    ),
+    check('link_page_items_effect_valid', sql`${t.effect} in ('none', 'pulse', 'shake', 'glow')`),
   ],
 );

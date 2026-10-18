@@ -60,3 +60,85 @@
     outline-offset: 2px;
   }
 }
+
+/*
+ * Motion of the merchant link page (ADR-0116 amendment 2): entrance of the page and attention
+ * effects of single buttons. Nothing moves for visitors who ask for reduced motion.
+ */
+@keyframes lp-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+@keyframes lp-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  70% {
+    transform: scale(1.04);
+  }
+}
+@keyframes lp-slide {
+  from {
+    opacity: 0;
+    transform: translateX(var(--lp-slide-from, 32px));
+  }
+}
+@keyframes lp-pulse {
+  50% {
+    transform: scale(1.04);
+  }
+}
+@keyframes lp-shake {
+  0%,
+  80%,
+  100% {
+    transform: rotate(0);
+  }
+  84%,
+  92% {
+    transform: rotate(-2deg);
+  }
+  88%,
+  96% {
+    transform: rotate(2deg);
+  }
+}
+@keyframes lp-glow {
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, currentColor 25%, transparent);
+  }
+}
+.lp-enter-fade-up {
+  animation: lp-fade-up 0.5s ease-out both;
+}
+.lp-enter-pop {
+  animation: lp-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.lp-enter-slide {
+  animation: lp-slide 0.5s ease-out both;
+}
+[dir='rtl'] .lp-enter-slide {
+  --lp-slide-from: -32px;
+}
+.lp-fx-pulse {
+  animation: lp-pulse 1.6s ease-in-out infinite;
+}
+.lp-fx-shake {
+  animation: lp-shake 2.5s ease-in-out infinite;
+}
+.lp-fx-glow {
+  animation: lp-glow 1.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-enter-fade-up,
+  .lp-enter-pop,
+  .lp-enter-slide,
+  .lp-fx-pulse,
+  .lp-fx-shake,
+  .lp-fx-glow {
+    animation: none;
+  }
+}

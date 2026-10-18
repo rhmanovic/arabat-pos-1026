@@ -37,6 +37,8 @@ test('the owner builds a link page in its own interface and a visitor opens it (
   let dialog = page.getByRole('dialog');
   await dialog.getByLabel('Type').selectOption('instagram');
   await dialog.getByLabel('Address').fill('@linksco');
+  await dialog.getByRole('button', { name: '📸' }).click();
+  await dialog.getByLabel('Effect').selectOption('pulse');
   await dialog.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByText('https://instagram.com/linksco')).toBeVisible();
   await page.getByRole('button', { name: 'Add link' }).click();
@@ -52,6 +54,9 @@ test('the owner builds a link page in its own interface and a visitor opens it (
   await page.getByLabel('Address (letters, digits and dashes)').fill(slug);
   await page.getByLabel('Title (English)').fill('Links Co');
   await page.getByLabel('Description (English)').fill('Coffee & sweets');
+  // A ready-made theme (gradient, Cairo font) and a motion.
+  await page.getByRole('button', { name: 'Sunset' }).click();
+  await page.getByRole('button', { name: 'Pop' }).click();
   await page.getByLabel('Page status').selectOption('published');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('link', { name: new RegExp(`/store/links/${slug}$`) })).toBeVisible();
@@ -71,12 +76,16 @@ test('the owner builds a link page in its own interface and a visitor opens it (
   await expect(links).toHaveCount(2);
   await expect(links.first()).toHaveAttribute('href', 'https://wa.me/96550000001');
   await expect(links.nth(1)).toHaveAttribute('href', 'https://instagram.com/linksco');
+  await expect(links.nth(1)).toContainText('📸');
+  await expect(links.nth(1)).toHaveClass(/lp-fx-pulse/);
+  await expect(visitor.locator('[data-font="cairo"]')).toBeVisible();
   // Count an open without leaving to the external site.
   const counted = visitor.waitForRequest(
     (r) => r.url().includes('/click') && r.method() === 'POST',
   );
   await links.nth(1).evaluate((a) => a.addEventListener('click', (e) => e.preventDefault()));
-  await links.nth(1).click();
+  // The pulse effect never stops moving, so Playwright must not wait for it to settle.
+  await links.nth(1).click({ force: true });
   await counted;
   await visitorContext.close();
 

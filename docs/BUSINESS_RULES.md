@@ -604,6 +604,11 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
   page is never public; a suspended or closed merchant has no public page.
 - **BR-199** A link page holds at most 50 links; hidden links stay saved but are not shown.
 - **BR-200** A link is a web (`http`/`https`), e-mail (`mailto:`) or phone (`tel:`) address only.
+- **BR-202** A link page's look is the merchant's choice (ADR-0116 amendment 2): ready-made
+  themes, background (light, dark, button colour, any colour, two-colour gradient), button and
+  text colours (automatic for contrast unless chosen), button shape and style, one of eight
+  Arabic/English fonts and the page motion; each link may show an emoji instead of its icon and an
+  attention effect. Motion is never shown to visitors who ask their device to reduce it.
 - **BR-201** Opens of a link are counted from the public page (best effort, rate-limited per
   visitor); the count is shown to the merchant next to each link.
 - **BR-197** Free trial and sign-up funnel (owner, 2026-10-18, ADR-0115): the site's one call

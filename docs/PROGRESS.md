@@ -982,6 +982,22 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
 - `/manager/online` no longer has the link-page tab; the manager menu has "صفحة الروابط ↗".
 - Arabic click counts use every plural form (لا نقرات / نقرتان / 5 نقرات / 11 نقرة).
 - Tests: links-web 6, store-web / web-core link page view, E2E `links.spec.ts` (2).
+### 2026-10-18 — Pricing tests follow the current page; production release
+- `pricing.test.tsx` and `e2e/pricing.spec.ts` pick the business type before "التالي: جهّز محلك"
+  and expect one trial line (the phone bottom bar is gone). No product change.
+- Released `b26e8c6` to production with the owner's explicit approval (`infra/gcp/deploy.sh`,
+  deploy account; the account cannot stream Cloud Build logs, so the first run stopped after
+  submitting the build and the second run continued once the image existed).
+### 2026-10-18 — Link page styling (ADR-0116 amendment 2)
+- Editor "Style" section: eight ready-made themes, background (light / dark / button colour / any
+  colour / gradient), button colour, button text and page text colours (or automatic), button
+  style (filled / outline / soft / shadow) and shape, eight Arabic + English fonts, page motion
+  (fade up / pop / slide). The phone preview follows unsaved changes ("Unsaved changes" badge).
+- Links: emoji instead of the icon (quick choices or any emoji) and an effect (pulse / shake /
+  glow). No motion for visitors with reduced motion. Migration 0060, BR-202.
+- Tests: API integration 8 (links), links-web 9, store-web / web-core link view, E2E links 2.
+- Local: `pnpm verify`, integration 282, E2E 39, all passing.
+## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.
 Staging: first platform operator, SMTP; owner decisions OQ-021–025.

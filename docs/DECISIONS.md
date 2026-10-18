@@ -1648,3 +1648,15 @@ ADR; supersede it.
   the "Link page" tab of `/manager/online` is removed. The presentational page
   (`LinkPageView`, icons, colours) moved to `@arabat/web-core` so the public page and the preview
   render the same thing.
+- **Amendment 2 (owner, 2026-10-18): more styling.** Migration 0060 adds to `link_pages` the
+  background `custom` (one colour) and `gradient` (two colours, 160°), page text colour and button
+  text colour (null = automatic contrast), button variant `fill` / `outline` / `soft` / `shadow`,
+  font and page motion (`none` / `fade-up` / `pop` / `slide`); and to `link_page_items` an emoji
+  shown instead of the icon (pictographs only, ≤ 16 code units) and an attention effect
+  (`none` / `pulse` / `shake` / `glow`). Fonts are self-hosted Fontsource packages (Cairo,
+  Tajawal, Almarai, Changa, El Messiri, Amiri, Reem Kufi, plus the default IBM Plex Sans Arabic),
+  loaded by dynamic import only when a page uses them (CSP `font-src 'self'` unchanged). The
+  keyframes live in `@arabat/ui/theme.css` and are switched off under `prefers-reduced-motion`.
+  The editor offers eight ready-made themes (one click, every value editable afterwards) and its
+  preview now shows unsaved changes. Colours a background no longer uses are dropped on save.
+

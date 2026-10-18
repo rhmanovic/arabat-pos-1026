@@ -6,8 +6,12 @@ import type {
   SaveLinkPage,
 } from '@arabat/contracts';
 import {
+  LINK_ANIMATIONS,
   LINK_BACKGROUNDS,
   LINK_BUTTON_STYLES,
+  LINK_BUTTON_VARIANTS,
+  LINK_FONTS,
+  LINK_ITEM_EFFECTS,
   LINK_ITEM_KINDS,
   isAllowedLinkUrl,
 } from '@arabat/contracts';
@@ -24,9 +28,25 @@ import {
   Select,
   Textarea,
 } from '@arabat/ui';
-import { ErrorState, LinkPageView, useApi, useNotify } from '@arabat/web-core';
+import {
+  ErrorState,
+  LINK_FONT_FAMILY,
+  LinkPageView,
+  type LinkPageViewData,
+  linkPageTheme,
+  loadLinkFont,
+  useApi,
+  useNotify,
+} from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import {
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 
 const key = ['links', 'page'] as const;
@@ -78,27 +98,79 @@ export function normalizeLinkUrl(kind: LinkItemKind, raw: string): string {
   return value;
 }
 
+/** Quick emoji choices for a button (any emoji can also be typed). */
+export const EMOJI_CHOICES = [
+  '📸',
+  '💬',
+  '🛍️',
+  '🛒',
+  '📍',
+  '📞',
+  '✉️',
+  '🌐',
+  '☕',
+  '🍔',
+  '🍰',
+  '🎁',
+  '🚚',
+  '💳',
+  '⭐',
+  '🔥',
+  '❤️',
+  '🎉',
+  '🕒',
+  '📅',
+] as const;
+
 /**
- * The link-page editor (ADR-0116 amendment 1): links and design on one side, a live phone
- * preview of the public page on the other.
+ * The link-page editor (ADR-0116 amendments 1 and 2): links, content and style on one side, a
+ * live phone preview on the other that follows unsaved changes.
  */
 export function EditorPage() {
   const api = useApi();
   const page = useQuery({ queryKey: key, queryFn: () => api.linkPage.get() });
   if (page.isError) return <ErrorState error={page.error} onRetry={() => void page.refetch()} />;
   if (!page.data) return null;
+  return <Editor key={page.data.version} page={page.data} />;
+}
+
+function Editor({ page }: { page: LinkPage }) {
+  const [draft, setDraft] = useState<SaveLinkPage>(() => toForm(page));
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <div className="flex min-w-0 flex-col gap-4">
-        <LinksSection page={page.data} />
-        <DesignForm key={page.data.version} page={page.data} />
+        <LinksSection page={page} />
+        <DesignForm page={page} v={draft} setV={setDraft} />
       </div>
-      <Preview page={page.data} />
+      <Preview page={page} draft={draft} />
     </div>
   );
 }
 
-function Preview({ page }: { page: LinkPage }) {
+/** The page as visitors would see it with the unsaved design applied. */
+export function previewData(page: LinkPage, d: SaveLinkPage): LinkPageViewData {
+  const color = (c: string | null | undefined) => (c ? c : null);
+  return {
+    ...page,
+    titleAr: d.titleAr || null,
+    titleEn: d.titleEn || null,
+    bioAr: d.bioAr || null,
+    bioEn: d.bioEn || null,
+    themeColor: d.themeColor,
+    buttonStyle: d.buttonStyle,
+    buttonVariant: d.buttonVariant ?? 'fill',
+    buttonTextColor: color(d.buttonTextColor),
+    background: d.background,
+    backgroundColor: color(d.backgroundColor),
+    backgroundColor2: color(d.backgroundColor2),
+    textColor: color(d.textColor),
+    font: d.font ?? 'default',
+    animation: d.animation ?? 'fade-up',
+    items: page.items.filter((i) => i.status === 'active'),
+  };
+}
+
+function Preview({ page, draft }: { page: LinkPage; draft: SaveLinkPage }) {
   const { t, i18n } = useTranslation();
   return (
     <aside className="lg:sticky lg:top-20 lg:self-start" aria-label={t('linkPage.preview')}>
@@ -119,7 +191,7 @@ function Preview({ page }: { page: LinkPage }) {
       <div className="mx-auto h-[36rem] w-full max-w-[22rem] overflow-y-auto rounded-[2rem] border-8 border-fg/80 shadow-lg">
         <LinkPageView
           className="min-h-full"
-          page={{ ...page, items: page.items.filter((i) => i.status === 'active') }}
+          page={previewData(page, draft)}
           language={i18n.language}
           emptyLabel={t('linkPage.empty')}
         />
@@ -139,19 +211,243 @@ function toForm(p: LinkPage): SaveLinkPage {
     bioEn: p.bioEn,
     themeColor: p.themeColor,
     buttonStyle: p.buttonStyle,
+    buttonVariant: p.buttonVariant,
+    buttonTextColor: p.buttonTextColor,
     background: p.background,
+    backgroundColor: p.backgroundColor,
+    backgroundColor2: p.backgroundColor2,
+    textColor: p.textColor,
+    font: p.font,
+    animation: p.animation,
     version: p.version,
   };
 }
 
-function DesignForm({ page }: { page: LinkPage }) {
+type Style = Pick<
+  SaveLinkPage,
+  | 'themeColor'
+  | 'buttonStyle'
+  | 'buttonVariant'
+  | 'buttonTextColor'
+  | 'background'
+  | 'backgroundColor'
+  | 'backgroundColor2'
+  | 'textColor'
+  | 'font'
+>;
+
+/** Ready-made looks applied in one click; every value stays editable afterwards. */
+export const THEME_PRESETS: { key: string; style: Style }[] = [
+  {
+    key: 'classic',
+    style: {
+      themeColor: '#1e3a8a',
+      buttonStyle: 'rounded',
+      buttonVariant: 'fill',
+      buttonTextColor: null,
+      background: 'light',
+      backgroundColor: null,
+      backgroundColor2: null,
+      textColor: null,
+      font: 'default',
+    },
+  },
+  {
+    key: 'night',
+    style: {
+      themeColor: '#fbbf24',
+      buttonStyle: 'pill',
+      buttonVariant: 'outline',
+      buttonTextColor: '#fbbf24',
+      background: 'dark',
+      backgroundColor: null,
+      backgroundColor2: null,
+      textColor: null,
+      font: 'el-messiri',
+    },
+  },
+  {
+    key: 'sunset',
+    style: {
+      themeColor: '#ffffff',
+      buttonStyle: 'pill',
+      buttonVariant: 'soft',
+      buttonTextColor: '#ffffff',
+      background: 'gradient',
+      backgroundColor: '#f97316',
+      backgroundColor2: '#db2777',
+      textColor: '#ffffff',
+      font: 'cairo',
+    },
+  },
+  {
+    key: 'ocean',
+    style: {
+      themeColor: '#ffffff',
+      buttonStyle: 'rounded',
+      buttonVariant: 'fill',
+      buttonTextColor: '#0e7490',
+      background: 'gradient',
+      backgroundColor: '#06b6d4',
+      backgroundColor2: '#1e40af',
+      textColor: '#ffffff',
+      font: 'tajawal',
+    },
+  },
+  {
+    key: 'sand',
+    style: {
+      themeColor: '#7c2d12',
+      buttonStyle: 'square',
+      buttonVariant: 'shadow',
+      buttonTextColor: null,
+      background: 'custom',
+      backgroundColor: '#f5e6c8',
+      backgroundColor2: null,
+      textColor: '#3f2a14',
+      font: 'amiri',
+    },
+  },
+  {
+    key: 'mint',
+    style: {
+      themeColor: '#047857',
+      buttonStyle: 'pill',
+      buttonVariant: 'fill',
+      buttonTextColor: null,
+      background: 'custom',
+      backgroundColor: '#ecfdf5',
+      backgroundColor2: null,
+      textColor: '#064e3b',
+      font: 'almarai',
+    },
+  },
+  {
+    key: 'bold',
+    style: {
+      themeColor: '#111827',
+      buttonStyle: 'square',
+      buttonVariant: 'shadow',
+      buttonTextColor: '#fde047',
+      background: 'custom',
+      backgroundColor: '#fde047',
+      backgroundColor2: null,
+      textColor: '#111827',
+      font: 'changa',
+    },
+  },
+  {
+    key: 'royal',
+    style: {
+      themeColor: '#d4af37',
+      buttonStyle: 'rounded',
+      buttonVariant: 'outline',
+      buttonTextColor: '#f5e6c8',
+      background: 'gradient',
+      backgroundColor: '#3b0764',
+      backgroundColor2: '#1e1b4b',
+      textColor: '#f5e6c8',
+      font: 'reem-kufi',
+    },
+  },
+];
+
+/** One choice among a few, shown as buttons (aria-pressed). */
+function Chips<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+  render,
+}: {
+  label: string;
+  options: readonly T[];
+  value: T;
+  onChange: (value: T) => void;
+  render: (option: T) => ReactNode;
+}) {
+  return (
+    <div role="group" aria-label={label} className="flex flex-col gap-1.5">
+      <span className="text-sm font-medium">{label}</span>
+      <div className="flex flex-wrap gap-2">
+        {options.map((o) => (
+          <button
+            key={o}
+            type="button"
+            aria-pressed={value === o}
+            onClick={() => onChange(o)}
+            className={`rounded-md border px-3 py-1.5 text-sm transition ${
+              value === o
+                ? 'border-primary bg-primary-soft text-primary'
+                : 'border-border hover:bg-surface-muted'
+            }`}
+          >
+            {render(o)}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** A colour, optionally "automatic" (null: picked for contrast). */
+function ColorField({
+  label,
+  value,
+  fallback,
+  onChange,
+  optional,
+}: {
+  label: string;
+  value: string | null | undefined;
+  fallback: string;
+  onChange: (value: string | null) => void;
+  optional?: boolean;
+}) {
   const { t } = useTranslation();
+  const auto = optional && !value;
+  return (
+    <Field label={label}>
+      {(p) => (
+        <div className="flex items-center gap-3">
+          <Input
+            {...p}
+            type="color"
+            className="h-10 w-16 p-1"
+            disabled={auto}
+            value={value || fallback}
+            onChange={(e) => onChange(e.target.value)}
+          />
+          {optional ? (
+            <Checkbox
+              label={t('linkPage.auto')}
+              checked={auto}
+              onChange={(e) => onChange(e.target.checked ? null : fallback)}
+            />
+          ) : null}
+        </div>
+      )}
+    </Field>
+  );
+}
+
+function DesignForm({
+  page,
+  v,
+  setV,
+}: {
+  page: LinkPage;
+  v: SaveLinkPage;
+  setV: Dispatch<SetStateAction<SaveLinkPage>>;
+}) {
+  const { t, i18n } = useTranslation();
   const api = useApi();
   const notify = useNotify();
   const queryClient = useQueryClient();
   const fileInput = useRef<HTMLInputElement>(null);
-  const [v, setV] = useState<SaveLinkPage>(() => toForm(page));
   const set = (patch: Partial<SaveLinkPage>) => setV((x) => ({ ...x, ...patch }));
+  // The font buttons are drawn in their own typeface.
+  useEffect(() => LINK_FONTS.forEach(loadLinkFont), []);
   const done = async (saved: LinkPage, message: string) => {
     queryClient.setQueryData(key, saved);
     await queryClient.invalidateQueries({ queryKey: key });
@@ -185,6 +481,8 @@ function DesignForm({ page }: { page: LinkPage }) {
     </Field>
   );
   const published = page.status === 'published';
+  const changed = JSON.stringify(v) !== JSON.stringify(toForm(page));
+  const sample = i18n.language.startsWith('ar') ? 'أبجد' : 'Aa';
   return (
     <>
       <Section title={t('linkPage.addressSection')} description={t('linkPage.addressHint')}>
@@ -299,55 +597,141 @@ function DesignForm({ page }: { page: LinkPage }) {
               />
             )}
           </Field>
-          <Field label={t('linkPage.color')}>
-            {(p) => (
-              <Input
-                {...p}
-                type="color"
-                className="h-10 w-20 p-1"
-                value={v.themeColor}
-                onChange={(e) => set({ themeColor: e.target.value })}
-              />
-            )}
-          </Field>
-          <Field label={t('linkPage.buttonStyle')}>
-            {(p) => (
-              <Select
-                {...p}
-                value={v.buttonStyle}
-                onChange={(e) =>
-                  set({ buttonStyle: e.target.value as SaveLinkPage['buttonStyle'] })
-                }
-              >
-                {LINK_BUTTON_STYLES.map((s) => (
-                  <option key={s} value={s}>
-                    {t(`linkPage.button_${s}`)}
-                  </option>
-                ))}
-              </Select>
-            )}
-          </Field>
-          <Field label={t('linkPage.background')}>
-            {(p) => (
-              <Select
-                {...p}
-                value={v.background}
-                onChange={(e) => set({ background: e.target.value as SaveLinkPage['background'] })}
-              >
-                {LINK_BACKGROUNDS.map((s) => (
-                  <option key={s} value={s}>
-                    {t(`linkPage.background_${s}`)}
-                  </option>
-                ))}
-              </Select>
-            )}
-          </Field>
         </div>
       </Section>
-      <div>
+      <Section title={t('linkPage.styleSection')} description={t('linkPage.styleHint')}>
+        <div className="flex flex-col gap-6">
+          <div role="group" aria-label={t('linkPage.presets')} className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium">{t('linkPage.presets')}</span>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {THEME_PRESETS.map(({ key: name, style }) => {
+                const theme = linkPageTheme({
+                  ...style,
+                  buttonVariant: style.buttonVariant ?? 'fill',
+                  buttonTextColor: style.buttonTextColor ?? null,
+                  backgroundColor: style.backgroundColor ?? null,
+                  backgroundColor2: style.backgroundColor2 ?? null,
+                  textColor: style.textColor ?? null,
+                });
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => set(style)}
+                    className="flex flex-col items-center gap-2 rounded-lg border border-border p-3 text-sm transition hover:-translate-y-0.5 hover:shadow"
+                    style={{ ...theme.page, fontFamily: LINK_FONT_FAMILY[style.font ?? 'default'] }}
+                  >
+                    <span aria-hidden className="h-4 w-full rounded-full" style={theme.button} />
+                    {t(`linkPage.preset_${name}`)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <Chips
+            label={t('linkPage.background')}
+            options={LINK_BACKGROUNDS}
+            value={v.background}
+            onChange={(background) =>
+              set({
+                background,
+                backgroundColor:
+                  background === 'custom' || background === 'gradient'
+                    ? v.backgroundColor || '#fef3c7'
+                    : v.backgroundColor,
+                backgroundColor2:
+                  background === 'gradient' ? v.backgroundColor2 || '#f472b6' : v.backgroundColor2,
+              })
+            }
+            render={(o) => t(`linkPage.background_${o}`)}
+          />
+          {v.background === 'custom' || v.background === 'gradient' ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <ColorField
+                label={
+                  v.background === 'gradient'
+                    ? t('linkPage.gradientFrom')
+                    : t('linkPage.backgroundColor')
+                }
+                value={v.backgroundColor}
+                fallback="#fef3c7"
+                onChange={(c) => set({ backgroundColor: c })}
+              />
+              {v.background === 'gradient' ? (
+                <ColorField
+                  label={t('linkPage.gradientTo')}
+                  value={v.backgroundColor2}
+                  fallback="#f472b6"
+                  onChange={(c) => set({ backgroundColor2: c })}
+                />
+              ) : null}
+            </div>
+          ) : null}
+          <div className="grid gap-4 sm:grid-cols-3">
+            <ColorField
+              label={t('linkPage.color')}
+              value={v.themeColor}
+              fallback="#1e3a8a"
+              onChange={(c) => set({ themeColor: c ?? '#1e3a8a' })}
+            />
+            <ColorField
+              label={t('linkPage.buttonTextColor')}
+              value={v.buttonTextColor}
+              fallback="#ffffff"
+              optional
+              onChange={(c) => set({ buttonTextColor: c })}
+            />
+            <ColorField
+              label={t('linkPage.textColor')}
+              value={v.textColor}
+              fallback="#0f172a"
+              optional
+              onChange={(c) => set({ textColor: c })}
+            />
+          </div>
+          <Chips
+            label={t('linkPage.buttonVariant')}
+            options={LINK_BUTTON_VARIANTS}
+            value={v.buttonVariant ?? 'fill'}
+            onChange={(buttonVariant) => set({ buttonVariant })}
+            render={(o) => t(`linkPage.variant_${o}`)}
+          />
+          <Chips
+            label={t('linkPage.buttonStyle')}
+            options={LINK_BUTTON_STYLES}
+            value={v.buttonStyle}
+            onChange={(buttonStyle) => set({ buttonStyle })}
+            render={(o) => t(`linkPage.button_${o}`)}
+          />
+          <Chips
+            label={t('linkPage.font')}
+            options={LINK_FONTS}
+            value={v.font ?? 'default'}
+            onChange={(font) => set({ font })}
+            render={(o) => (
+              <span
+                className="flex flex-col items-center"
+                style={{ fontFamily: LINK_FONT_FAMILY[o] }}
+              >
+                <span className="text-lg leading-tight">{sample}</span>
+                <span className="text-xs">{t(`linkPage.font_${o}`)}</span>
+              </span>
+            )}
+          />
+          <Chips
+            label={t('linkPage.animation')}
+            options={LINK_ANIMATIONS}
+            value={v.animation ?? 'fade-up'}
+            onChange={(animation) => set({ animation })}
+            render={(o) => t(`linkPage.animation_${o}`)}
+          />
+        </div>
+      </Section>
+      <div className="sticky bottom-0 z-10 -mx-1 flex items-center gap-3 rounded-lg border border-border bg-surface/95 p-3 shadow-sm backdrop-blur">
         <Button loading={save.isPending} onClick={() => save.mutate()}>
           {t('linkPage.save')}
         </Button>
+        {changed ? <Badge tone="warning">{t('linkPage.unsaved')}</Badge> : null}
       </div>
     </>
   );
@@ -421,10 +805,14 @@ function LinksSection({ page }: { page: LinkPage }) {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="flex flex-wrap items-center gap-2 font-medium">
+                  {item.emoji ? <span aria-hidden>{item.emoji}</span> : null}
                   {label(item)}
                   <Badge tone="neutral">{t(`linkPage.kind_${item.kind}`)}</Badge>
                   {item.status === 'hidden' ? (
                     <Badge tone="warning">{t('linkPage.hidden')}</Badge>
+                  ) : null}
+                  {item.effect !== 'none' ? (
+                    <Badge tone="primary">{t(`linkPage.effect_${item.effect}`)}</Badge>
                   ) : null}
                 </p>
                 <p className="truncate text-sm text-fg-muted" dir="ltr">
@@ -487,11 +875,22 @@ function ItemDialog({
           kind: item.kind,
           labelAr: item.labelAr,
           labelEn: item.labelEn,
+          emoji: item.emoji,
+          effect: item.effect,
           url: item.url,
           status: item.status,
           version: item.version,
         }
-      : { kind: 'instagram', labelAr: '', labelEn: '', url: '', status: 'active', version: 0 },
+      : {
+          kind: 'instagram',
+          labelAr: '',
+          labelEn: '',
+          emoji: null,
+          effect: 'none',
+          url: '',
+          status: 'active',
+          version: 0,
+        },
   );
   const set = (patch: Partial<SaveLinkItem>) => setV((x) => ({ ...x, ...patch }));
   const save = useMutation({
@@ -572,6 +971,55 @@ function ItemDialog({
               value={v.labelEn ?? ''}
               onChange={(e) => set({ labelEn: e.target.value })}
             />
+          )}
+        </Field>
+        <div role="group" aria-label={t('linkPage.emoji')} className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium">{t('linkPage.emoji')}</span>
+          <div className="flex flex-wrap items-center gap-1">
+            {EMOJI_CHOICES.map((e) => (
+              <button
+                key={e}
+                type="button"
+                aria-pressed={v.emoji === e}
+                onClick={() => set({ emoji: v.emoji === e ? null : e })}
+                className={`grid size-9 place-items-center rounded-md text-xl transition ${
+                  v.emoji === e ? 'bg-primary-soft ring-2 ring-primary' : 'hover:bg-surface-muted'
+                }`}
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <Input
+              className="w-28 text-center text-xl"
+              aria-label={t('linkPage.emojiOwn')}
+              placeholder="🙂"
+              maxLength={16}
+              value={v.emoji ?? ''}
+              onChange={(e) => set({ emoji: e.target.value || null })}
+            />
+            {v.emoji ? (
+              <Button size="sm" variant="ghost" onClick={() => set({ emoji: null })}>
+                {t('linkPage.emojiNone')}
+              </Button>
+            ) : null}
+            <span className="text-xs text-fg-muted">{t('linkPage.emojiHint')}</span>
+          </div>
+        </div>
+        <Field label={t('linkPage.effect')} hint={t('linkPage.effectHint')}>
+          {(p) => (
+            <Select
+              {...p}
+              value={v.effect ?? 'none'}
+              onChange={(e) => set({ effect: e.target.value as SaveLinkItem['effect'] })}
+            >
+              {LINK_ITEM_EFFECTS.map((x) => (
+                <option key={x} value={x}>
+                  {t(`linkPage.effect_${x}`)}
+                </option>
+              ))}
+            </Select>
           )}
         </Field>
         <Checkbox

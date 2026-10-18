@@ -103,6 +103,8 @@ describe('link page (ADR-0116)', () => {
         kind: 'instagram',
         labelAr: 'إنستقرام',
         labelEn: 'Instagram',
+        emoji: null,
+        effect: 'none',
         url: 'https://instagram.com/saffron',
       },
     ]);
@@ -307,6 +309,88 @@ describe('link page (ADR-0116)', () => {
     const anon = new ApiClient(app);
     await anon.request('POST', `/public/links/${slugB}/items/${id}/click`);
     expect((await a.ok('GET', '/manager/link-page')).items[0].clicks).toBe(0);
+  });
+
+  it('keeps the style and emoji choices and shows them on the public page (amendment 2)', async () => {
+    const s = await setup();
+    const slug = uniqueSlug('style');
+    // Defaults for a page saved without the new fields.
+    let p = await s.ok('PUT', '/manager/link-page', page(slug));
+    expect(p).toMatchObject({
+      buttonVariant: 'fill',
+      font: 'default',
+      animation: 'fade-up',
+      textColor: null,
+      buttonTextColor: null,
+    });
+    // A gradient needs both colours.
+    const bad = await s.req(
+      'PUT',
+      '/manager/link-page',
+      page(slug, { background: 'gradient', backgroundColor: '#f97316', version: 1 }),
+    );
+    expect(bad.statusCode).toBe(400);
+    expect(bad.body).toContain('backgroundColor2');
+    expect(
+      (await s.req('PUT', '/manager/link-page', page(slug, { font: 'comic-sans', version: 1 })))
+        .statusCode,
+    ).toBe(400);
+    p = await s.ok(
+      'PUT',
+      '/manager/link-page',
+      page(slug, {
+        background: 'gradient',
+        backgroundColor: '#f97316',
+        backgroundColor2: '#db2777',
+        textColor: '#ffffff',
+        buttonTextColor: '',
+        buttonVariant: 'shadow',
+        font: 'reem-kufi',
+        animation: 'pop',
+        version: 1,
+      }),
+    );
+    expect(p).toMatchObject({
+      background: 'gradient',
+      backgroundColor: '#f97316',
+      backgroundColor2: '#db2777',
+      textColor: '#ffffff',
+      buttonTextColor: null,
+      buttonVariant: 'shadow',
+      font: 'reem-kufi',
+      animation: 'pop',
+    });
+    // Colours the background no longer uses are dropped.
+    p = await s.ok(
+      'PUT',
+      '/manager/link-page',
+      page(slug, {
+        background: 'dark',
+        buttonVariant: 'shadow',
+        font: 'reem-kufi',
+        version: 2,
+      }),
+    );
+    expect(p).toMatchObject({ background: 'dark', backgroundColor: null, backgroundColor2: null });
+
+    // Emoji: pictographs only.
+    for (const emoji of ['abc', '1', '☕ coffee'])
+      expect(
+        (await s.req('POST', '/manager/link-page/items', link({ emoji }))).statusCode,
+        emoji,
+      ).toBe(400);
+    expect(
+      (await s.req('POST', '/manager/link-page/items', link({ effect: 'spin' }))).statusCode,
+    ).toBe(400);
+    await s.ok('POST', '/manager/link-page/items', link({ emoji: '🇰🇼', effect: 'glow' }));
+    p = await s.ok('POST', '/manager/link-page/items', link({ emoji: '☕', effect: 'pulse' }));
+    expect(p.items.map((i: { emoji: string; effect: string }) => [i.emoji, i.effect])).toEqual([
+      ['🇰🇼', 'glow'],
+      ['☕', 'pulse'],
+    ]);
+    const pub = (await new ApiClient(app).request('GET', `/public/links/${slug}`)).json();
+    expect(pub).toMatchObject({ background: 'dark', buttonVariant: 'shadow', font: 'reem-kufi' });
+    expect(pub.items[1]).toMatchObject({ emoji: '☕', effect: 'pulse' });
   });
 
   it('caps a page at 50 links', async () => {

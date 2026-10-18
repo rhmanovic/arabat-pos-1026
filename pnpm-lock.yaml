@@ -750,6 +750,27 @@ importers:
       '@arabat/ui':
         specifier: workspace:*
         version: link:../ui
+      '@fontsource/almarai':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/amiri':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/cairo':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/changa':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/el-messiri':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/reem-kufi':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/tajawal':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@hookform/resolvers':
         specifier: ^5.9.1
         version: 5.9.1(@standard-schema/spec@1.1.0)(ajv@8.20.0)(react-hook-form@7.90.0(@types/react@19.3.0)(react@19.3.0))(zod@4.6.6)
@@ -1489,8 +1510,29 @@ packages:
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
 
+  '@fontsource/almarai@5.3.0':
+    resolution: {integrity: sha512-btLbQO3LSL6F6KLQeZqTFwmS3wArSDJxHdXAYJMaKLyxhp8C7ZQqTYjPFqENx+SwROzDyAyFRK5fKFWh5+uZtQ==}
+
+  '@fontsource/amiri@5.3.0':
+    resolution: {integrity: sha512-i4SWJnVIphj8556EdVzNrEG/Qu82k6JXjXTtSUIohx3tHmo2GHw1Kv60TWo+xjk7Yf1Etb2Gskh0lUFclTKyUw==}
+
+  '@fontsource/cairo@5.3.0':
+    resolution: {integrity: sha512-MdY6+gee1DVz4eUvx1Dd8Y1f50WcRELRKwKBarYZA3zT8dMhkuTWbcoE1LzezAy97h/9rob87s02NI6L8MaDgA==}
+
+  '@fontsource/changa@5.3.0':
+    resolution: {integrity: sha512-zKPYCAB4338o8g7SejgbXPlNbENNr9Y7aJMzrU+umlVBiPdU8tvJYiREHFbLFxge5mI89ktaR2gt7Q1Pq15Zsg==}
+
+  '@fontsource/el-messiri@5.3.0':
+    resolution: {integrity: sha512-Fqhf6DEuRInnLso60tk2i8mQlFfDjYNeF6Ybrto7jBnAwNClQqn4g9lMae/M+ub1zWYteM98uPOA1DwU5J8hbw==}
+
   '@fontsource/ibm-plex-sans-arabic@5.3.0':
     resolution: {integrity: sha512-ZZ4g+JDgQY0NqSh4o0MNWU1sHQmtcee1g++aKAwyJvZxnT5y51JXsN1cIXnaQaMd40dcbK6QFYa+Z1LbaiNuqA==}
+
+  '@fontsource/reem-kufi@5.3.0':
+    resolution: {integrity: sha512-LO5YIWIQeZWb4oSpm9eAoGqLHMLvBknVamRBFQHuz+suz3TjXiO5bhE/ITlCswENbNpYKMkMPcpf6yzWDWVJoQ==}
+
+  '@fontsource/tajawal@5.3.0':
+    resolution: {integrity: sha512-R2GUdHHAebeZ+CyYvulaSECfZe3BWbNjEWX3TXG0Csnx4RADO/zyqk6Y//NYdSx5n74zRJh9HTvd61mpX/UzZQ==}
 
   '@hookform/resolvers@5.9.1':
     resolution: {integrity: sha512-7b7vsbraJxKgjVSA1Nur9tLwj539WGJUBLA7QNvXnFoT2pM5Z7G+6rlukk4B2/QrTZy6huRtH6wKeESPKuIr6w==}
@@ -5201,7 +5243,21 @@ snapshots:
 
   '@floating-ui/utils@0.2.12': {}
 
+  '@fontsource/almarai@5.3.0': {}
+
+  '@fontsource/amiri@5.3.0': {}
+
+  '@fontsource/cairo@5.3.0': {}
+
+  '@fontsource/changa@5.3.0': {}
+
+  '@fontsource/el-messiri@5.3.0': {}
+
   '@fontsource/ibm-plex-sans-arabic@5.3.0': {}
+
+  '@fontsource/reem-kufi@5.3.0': {}
+
+  '@fontsource/tajawal@5.3.0': {}
 
   '@hookform/resolvers@5.9.1(@standard-schema/spec@1.1.0)(ajv@8.20.0)(react-hook-form@7.90.0(@types/react@19.3.0)(react@19.3.0))(zod@4.6.6)':
     dependencies:

@@ -285,6 +285,13 @@ describe('link page', () => {
     themeColor: '#0f766e',
     buttonStyle: 'pill',
     background: 'dark',
+    buttonVariant: 'fill',
+    buttonTextColor: null,
+    backgroundColor: null,
+    backgroundColor2: null,
+    textColor: null,
+    font: 'default',
+    animation: 'fade-up',
     avatarUrl: null,
     items: [
       {
@@ -292,6 +299,8 @@ describe('link page', () => {
         kind: 'instagram',
         labelAr: 'إنستقرام',
         labelEn: 'Follow us',
+        emoji: '📸',
+        effect: 'pulse',
         url: 'https://instagram.com/demo',
       },
     ],
@@ -307,6 +316,9 @@ describe('link page', () => {
     const link = screen.getByRole('link', { name: 'Follow us' });
     expect(link).toHaveAttribute('href', 'https://instagram.com/demo');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer nofollow');
+    // The emoji replaces the icon; the effect is applied to the button.
+    expect(within(link).getByText('📸')).toBeInTheDocument();
+    expect(link).toHaveClass('lp-fx-pulse');
     link.addEventListener('click', (e) => e.preventDefault());
     await user.click(link);
     expect(beacon).toHaveBeenCalledWith(`/api/v1/public/links/demo/items/${LINK}/click`);

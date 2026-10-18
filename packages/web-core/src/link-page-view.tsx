@@ -1,6 +1,6 @@
-import type { LinkItemKind, PublicLinkPage } from '@arabat/contracts';
+import type { LinkFont, LinkItemKind, LinkPageStyle, PublicLinkPage } from '@arabat/contracts';
 import { cn } from '@arabat/ui';
-import type { CSSProperties, ReactNode } from 'react';
+import { type CSSProperties, type ReactNode, useEffect } from 'react';
 
 /** What the page view needs: the public page, or the editor's page with hidden links removed. */
 export type LinkPageViewData = Omit<PublicLinkPage, 'slug'>;
@@ -10,6 +10,43 @@ const RADIUS: Record<PublicLinkPage['buttonStyle'], string> = {
   pill: 'rounded-full',
   square: 'rounded-none',
 };
+
+/** CSS font family of each typeface (ADR-0116 amendment 2). */
+export const LINK_FONT_FAMILY: Record<LinkFont, string> = {
+  default: "'IBM Plex Sans Arabic', ui-sans-serif, system-ui, sans-serif",
+  cairo: "'Cairo', ui-sans-serif, system-ui, sans-serif",
+  tajawal: "'Tajawal', ui-sans-serif, system-ui, sans-serif",
+  almarai: "'Almarai', ui-sans-serif, system-ui, sans-serif",
+  changa: "'Changa', ui-sans-serif, system-ui, sans-serif",
+  'el-messiri': "'El Messiri', ui-sans-serif, system-ui, sans-serif",
+  amiri: "'Amiri', ui-serif, Georgia, serif",
+  'reem-kufi': "'Reem Kufi', ui-sans-serif, system-ui, sans-serif",
+};
+
+/** Self-hosted font files, loaded only when a page uses them (CSP: fonts from self only). */
+const FONT_LOADERS: Record<Exclude<LinkFont, 'default'>, () => Promise<unknown>> = {
+  cairo: () =>
+    Promise.all([import('@fontsource/cairo/400.css'), import('@fontsource/cairo/700.css')]),
+  tajawal: () =>
+    Promise.all([import('@fontsource/tajawal/400.css'), import('@fontsource/tajawal/700.css')]),
+  almarai: () =>
+    Promise.all([import('@fontsource/almarai/400.css'), import('@fontsource/almarai/700.css')]),
+  changa: () =>
+    Promise.all([import('@fontsource/changa/400.css'), import('@fontsource/changa/700.css')]),
+  'el-messiri': () =>
+    Promise.all([
+      import('@fontsource/el-messiri/400.css'),
+      import('@fontsource/el-messiri/700.css'),
+    ]),
+  amiri: () =>
+    Promise.all([import('@fontsource/amiri/400.css'), import('@fontsource/amiri/700.css')]),
+  'reem-kufi': () =>
+    Promise.all([import('@fontsource/reem-kufi/400.css'), import('@fontsource/reem-kufi/700.css')]),
+};
+
+export function loadLinkFont(font: LinkFont): void {
+  if (font !== 'default') void FONT_LOADERS[font]().catch(() => undefined);
+}
 
 /** Black or white text, whichever reads better on `hex` (WCAG relative luminance). */
 export function readableOn(hex: string): '#000000' | '#ffffff' {
@@ -21,25 +58,66 @@ export function readableOn(hex: string): '#000000' | '#ffffff' {
   return l > 0.179 ? '#000000' : '#ffffff';
 }
 
-/** Colours of the page for its background choice (BR-198). */
-export function linkPageTheme(page: Pick<PublicLinkPage, 'themeColor' | 'background'>) {
+type ThemeInput = Pick<
+  LinkPageStyle,
+  | 'themeColor'
+  | 'background'
+  | 'backgroundColor'
+  | 'backgroundColor2'
+  | 'textColor'
+  | 'buttonTextColor'
+  | 'buttonVariant'
+>;
+
+/**
+ * Colours of the page (BR-198, ADR-0116 amendment 2). Text colours left empty are chosen for
+ * contrast against the background or the button.
+ */
+export function linkPageTheme(page: ThemeInput) {
   const brand = page.themeColor;
-  if (page.background === 'brand')
-    return {
-      page: { backgroundColor: brand, color: readableOn(brand) } as CSSProperties,
-      button: { backgroundColor: '#ffffff', color: '#000000' } as CSSProperties,
-      muted: 'opacity-80',
-    };
-  if (page.background === 'dark')
-    return {
-      page: { backgroundColor: '#0f172a', color: '#f8fafc' } as CSSProperties,
-      button: { backgroundColor: brand, color: readableOn(brand) } as CSSProperties,
-      muted: 'opacity-75',
-    };
+  const base =
+    page.background === 'dark'
+      ? '#0f172a'
+      : page.background === 'brand'
+        ? brand
+        : page.background === 'custom' || page.background === 'gradient'
+          ? (page.backgroundColor ?? '#f8fafc')
+          : '#f8fafc';
+  const text = page.textColor ?? (page.background === 'dark' ? '#f8fafc' : readableOn(base));
+  const pageStyle: CSSProperties =
+    page.background === 'gradient'
+      ? {
+          backgroundImage: `linear-gradient(160deg, ${base}, ${page.backgroundColor2 ?? base})`,
+          backgroundColor: base,
+          color: text,
+        }
+      : { backgroundColor: base, color: text };
+  // On a brand-coloured page the buttons are white so they stand out.
+  const fill = page.background === 'brand' ? '#ffffff' : brand;
+  const onFill = page.buttonTextColor ?? readableOn(fill);
+  const button: CSSProperties =
+    page.buttonVariant === 'outline'
+      ? {
+          backgroundColor: 'transparent',
+          border: `2px solid ${fill}`,
+          color: page.buttonTextColor ?? text,
+        }
+      : page.buttonVariant === 'soft'
+        ? { backgroundColor: `${fill}2e`, color: page.buttonTextColor ?? text }
+        : page.buttonVariant === 'shadow'
+          ? {
+              backgroundColor: fill,
+              color: onFill,
+              border: `2px solid ${text}`,
+              boxShadow: `4px 4px 0 ${text}`,
+            }
+          : { backgroundColor: fill, color: onFill };
   return {
-    page: { backgroundColor: '#f8fafc', color: '#0f172a' } as CSSProperties,
-    button: { backgroundColor: brand, color: readableOn(brand) } as CSSProperties,
-    muted: 'opacity-70',
+    page: pageStyle,
+    button,
+    /** The round placeholder of a page without a picture. */
+    avatar: { backgroundColor: fill, color: readableOn(fill) } as CSSProperties,
+    muted: 'opacity-80',
   };
 }
 
@@ -66,26 +144,43 @@ export function LinkPageView({
   const theme = linkPageTheme(page);
   const title = pick(page.titleAr, page.titleEn);
   const bio = pick(page.bioAr, page.bioEn);
+  useEffect(() => loadLinkFont(page.font), [page.font]);
+  const enter = page.animation === 'none' ? '' : `lp-enter-${page.animation}`;
+  const delay = (i: number): CSSProperties => ({ animationDelay: `${i * 70}ms` });
   return (
-    <div className={cn('min-h-full', className)} style={theme.page}>
-      <div className="mx-auto flex max-w-md flex-col items-center gap-4 px-4 pb-12 pt-6">
+    <div
+      className={cn('min-h-full', className)}
+      style={{ ...theme.page, fontFamily: LINK_FONT_FAMILY[page.font] }}
+      data-font={page.font}
+    >
+      {/* Re-keyed on the motion so the editor's preview replays it when it changes. */}
+      <div
+        key={page.animation}
+        className="mx-auto flex max-w-md flex-col items-center gap-4 px-4 pb-12 pt-6"
+      >
         {toolbar ? <div className="self-end">{toolbar}</div> : null}
         {page.avatarUrl ? (
           <img
             src={page.avatarUrl}
             alt=""
-            className="size-24 rounded-full border-4 border-white/70 object-cover shadow"
+            className={cn(
+              'size-24 rounded-full border-4 border-white/70 object-cover shadow',
+              enter,
+            )}
           />
         ) : (
           <div
             aria-hidden
-            className="flex size-24 items-center justify-center rounded-full text-3xl font-bold shadow"
-            style={theme.button}
+            className={cn(
+              'flex size-24 items-center justify-center rounded-full text-3xl font-bold shadow',
+              enter,
+            )}
+            style={theme.avatar}
           >
             {title.slice(0, 1)}
           </div>
         )}
-        <div className="text-center">
+        <div className={cn('text-center', enter)} style={delay(1)}>
           <h1 className="text-2xl font-bold">{title}</h1>
           {bio ? <p className={`mt-1 whitespace-pre-line ${theme.muted}`}>{bio}</p> : null}
         </div>
@@ -93,18 +188,29 @@ export function LinkPageView({
           <p className={theme.muted}>{emptyLabel}</p>
         ) : (
           <ul className="flex w-full flex-col gap-3">
-            {page.items.map((item) => (
-              <li key={item.id}>
+            {page.items.map((item, index) => (
+              <li key={item.id} className={enter} style={delay(index + 2)}>
                 <a
                   href={item.url}
                   target="_blank"
                   rel="noopener noreferrer nofollow"
                   onClick={() => onOpen?.(item.id)}
-                  className={`flex min-h-14 w-full items-center gap-3 px-4 py-3 font-medium shadow-sm transition hover:scale-[1.02] hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${RADIUS[page.buttonStyle]}`}
+                  data-effect={item.effect}
+                  className={cn(
+                    'flex min-h-14 w-full items-center gap-3 px-4 py-3 font-medium shadow-sm transition hover:scale-[1.02] hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2',
+                    RADIUS[page.buttonStyle],
+                    item.effect !== 'none' && `lp-fx-${item.effect}`,
+                  )}
                   style={theme.button}
                 >
                   <span className="flex size-6 shrink-0 items-center justify-center">
-                    <LinkIcon kind={item.kind} />
+                    {item.emoji ? (
+                      <span className="text-xl leading-none" aria-hidden>
+                        {item.emoji}
+                      </span>
+                    ) : (
+                      <LinkIcon kind={item.kind} />
+                    )}
                   </span>
                   <span className="flex-1 text-center">{pick(item.labelAr, item.labelEn)}</span>
                   <span className="size-6 shrink-0" aria-hidden />

@@ -1,6 +1,7 @@
 import {
   type LinkItem,
   type LinkPage,
+  type LinkPageStyle,
   MAX_LINK_AVATAR_BYTES,
   MAX_LINK_ITEMS,
   type PublicLinkPage,
@@ -26,6 +27,22 @@ import { linkPageItems, linkPages } from './links.schema.js';
 
 type PageRow = typeof linkPages.$inferSelect;
 type ItemRow = typeof linkPageItems.$inferSelect;
+
+/** The page's look as the contracts carry it (ADR-0116 amendment 2). */
+function styleOf(row: PageRow | undefined): LinkPageStyle {
+  return {
+    themeColor: row?.themeColor ?? '#1e3a8a',
+    buttonStyle: (row?.buttonStyle as LinkPageStyle['buttonStyle']) ?? 'rounded',
+    buttonVariant: (row?.buttonVariant as LinkPageStyle['buttonVariant']) ?? 'fill',
+    buttonTextColor: row?.buttonTextColor ?? null,
+    background: (row?.background as LinkPageStyle['background']) ?? 'light',
+    backgroundColor: row?.backgroundColor ?? null,
+    backgroundColor2: row?.backgroundColor2 ?? null,
+    textColor: row?.textColor ?? null,
+    font: (row?.font as LinkPageStyle['font']) ?? 'default',
+    animation: (row?.animation as LinkPageStyle['animation']) ?? 'fade-up',
+  };
+}
 
 const SLUG_TAKEN = () =>
   new AppError(409, 'DUPLICATE_CODE', 'Another business already uses this address.', [
@@ -96,6 +113,8 @@ export class LinksService {
       kind: r.kind as LinkItem['kind'],
       labelAr: r.labelAr,
       labelEn: r.labelEn,
+      emoji: r.emoji,
+      effect: r.effect as LinkItem['effect'],
       url: r.url,
       status: r.status as LinkItem['status'],
       sortOrder: r.sortOrder,
@@ -126,9 +145,7 @@ export class LinksService {
         titleEn: row ? row.titleEn : (m?.display_name_en ?? null),
         bioAr: row?.bioAr ?? null,
         bioEn: row?.bioEn ?? null,
-        themeColor: row?.themeColor ?? '#1e3a8a',
-        buttonStyle: (row?.buttonStyle as LinkPage['buttonStyle']) ?? 'rounded',
-        background: (row?.background as LinkPage['background']) ?? 'light',
+        ...styleOf(row),
         avatarUrl: row?.avatarKey ? `/api/v1/manager/link-page/avatar?v=${row.version}` : null,
         url: `${this.publicBase()}/links/${slug}`,
         storeUrl: store && store.status !== 'draft' ? `${this.publicBase()}/${store.slug}` : null,
@@ -154,7 +171,17 @@ export class LinksService {
           bioEn: input.bioEn,
           themeColor: input.themeColor,
           buttonStyle: input.buttonStyle,
+          buttonVariant: input.buttonVariant,
+          buttonTextColor: input.buttonTextColor,
           background: input.background,
+          // Colours that the chosen background does not use are not kept.
+          backgroundColor: ['custom', 'gradient'].includes(input.background)
+            ? input.backgroundColor
+            : null,
+          backgroundColor2: input.background === 'gradient' ? input.backgroundColor2 : null,
+          textColor: input.textColor,
+          font: input.font,
+          animation: input.animation,
         };
         if (row)
           await tx
@@ -195,6 +222,8 @@ export class LinksService {
         kind: input.kind,
         labelAr: input.labelAr,
         labelEn: input.labelEn,
+        emoji: input.emoji,
+        effect: input.effect,
         url: input.url,
         status: input.status,
         sortOrder: (stats?.last ?? -1) + 1,
@@ -220,6 +249,8 @@ export class LinksService {
           kind: input.kind,
           labelAr: input.labelAr,
           labelEn: input.labelEn,
+          emoji: input.emoji,
+          effect: input.effect,
           url: input.url,
           status: input.status,
           version: sql`${linkPageItems.version} + 1`,
@@ -349,9 +380,7 @@ export class LinksService {
         titleEn: page.titleEn,
         bioAr: page.bioAr,
         bioEn: page.bioEn,
-        themeColor: page.themeColor,
-        buttonStyle: page.buttonStyle as PublicLinkPage['buttonStyle'],
-        background: page.background as PublicLinkPage['background'],
+        ...styleOf(page),
         avatarUrl: page.avatarKey
           ? `/api/v1/public/links/${encodeURIComponent(page.slug)}/avatar?v=${page.version}`
           : null,
@@ -360,6 +389,8 @@ export class LinksService {
           kind: i.kind as LinkItem['kind'],
           labelAr: i.labelAr,
           labelEn: i.labelEn,
+          emoji: i.emoji,
+          effect: i.effect as LinkItem['effect'],
           url: i.url,
         })),
       };
