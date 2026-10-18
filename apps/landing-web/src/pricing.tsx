@@ -411,7 +411,7 @@ function SystemStep({
     <SystemCard
       title={p.system.title}
       text={(lang === 'ar' ? system.descriptionAr : system.descriptionEn) ?? p.system.text}
-      price={short(system.price.amount)}
+      price={null}
       currency={p.currency}
       perYear={p.perYear}
       includes={p.system.includes}
@@ -761,53 +761,42 @@ function Cart({
     <aside className="hidden lg:block">
       <div className="sticky top-24 rounded-3xl bg-white p-6 shadow-sm">
         <h3 className="text-lg font-bold">{c.title}</h3>
-        <ul className="mt-4 space-y-3 text-sm">
-          <li className="flex items-start justify-between gap-3">
-            <span className="text-ink">
-              {lang === 'ar' ? offer.system.nameAr : offer.system.nameEn}
-            </span>
-            <span className="tabular-nums" dir="ltr">
-              {offer.system.price.amount}
-            </span>
-          </li>
-          {chosen.map((item) => (
-            <li key={item.id} className="cart-line flex items-start justify-between gap-3">
+        {/* The price shows once here; the itemised lines appear only when devices are chosen. */}
+        {chosen.length ? (
+          <ul className="mt-4 space-y-3 text-sm">
+            <li className="flex items-start justify-between gap-3">
               <span className="text-ink">
-                {lang === 'ar' ? item.nameAr : item.nameEn}{' '}
-                <span className="text-muted">× {quantities[item.id]}</span>
+                {lang === 'ar' ? offer.system.nameAr : offer.system.nameEn}
               </span>
               <span className="tabular-nums" dir="ltr">
-                {Money.parse(item.price.amount, CURRENCY)
-                  .multiply(String(quantities[item.id]))
-                  .toDecimalString()}
+                {offer.system.price.amount}
               </span>
             </li>
-          ))}
-          {chosen.length === 0 ? <li className="text-muted">{c.noDevices}</li> : null}
-        </ul>
-        <dl className="mt-5 space-y-2 border-t border-black/5 pt-4 text-sm">
-          <div className="flex justify-between gap-3">
-            <dt className="text-muted">{c.system}</dt>
-            <dd className="tabular-nums" dir="ltr">
-              {sum.system}
-            </dd>
-          </div>
-          <div className="flex justify-between gap-3">
-            <dt className="text-muted">
-              {c.devices}
-              {sum.count ? ` · ${fill(c.items, { n: sum.count })}` : ''}
-            </dt>
-            <dd className="tabular-nums" dir="ltr">
-              {sum.devices}
-            </dd>
-          </div>
-        </dl>
+            {chosen.map((item) => (
+              <li key={item.id} className="cart-line flex items-start justify-between gap-3">
+                <span className="text-ink">
+                  {lang === 'ar' ? item.nameAr : item.nameEn}{' '}
+                  <span className="text-muted">× {quantities[item.id]}</span>
+                </span>
+                <span className="tabular-nums" dir="ltr">
+                  {Money.parse(item.price.amount, CURRENCY)
+                    .multiply(String(quantities[item.id]))
+                    .toDecimalString()}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-sm text-muted">{c.noDevices}</p>
+        )}
         <div className="mt-4 rounded-2xl bg-brand p-4 text-white">
           <p className="text-sm text-white/85">{c.firstPayment}</p>
           <p key={sum.total} className="bump text-3xl font-bold tabular-nums" dir="ltr">
             {sum.total} <span className="text-base">{p.currency}</span>
           </p>
-          <p className="mt-1 text-xs text-white/80">{fill(c.renewal, { amount: sum.system })}</p>
+          {chosen.length ? (
+            <p className="mt-1 text-xs text-white/80">{fill(c.renewal, { amount: sum.system })}</p>
+          ) : null}
         </div>
         {trialDays ? (
           <p
