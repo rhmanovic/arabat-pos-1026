@@ -69,6 +69,8 @@ export function PricingPage() {
   const [offer, setOffer] = useState<PublicOffer | null>(null);
   const [failed, setFailed] = useState(false);
   const trial = useTrialOffer();
+  /** Once the account is open only the congratulations card stays on the page. */
+  const [started, setStarted] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -90,11 +92,17 @@ export function PricingPage() {
     <div className="flex min-h-screen flex-col">
       <Header t={t} onToggleLanguage={toggleLanguage} page="pricing" />
       <main className="flex-1">
-        <PricingHero t={t} offer={offer} lang={lang} />
+        {started ? null : <PricingHero t={t} offer={offer} lang={lang} />}
         <section id="configure" className="bg-sand py-14 sm:py-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             {offer ? (
-              <Configurator t={t} offer={offer} trial={trial} lang={lang} />
+              <Configurator
+                t={t}
+                offer={offer}
+                trial={trial}
+                lang={lang}
+                onStarted={() => setStarted(true)}
+              />
             ) : (
               <p
                 className="py-20 text-center text-lg text-muted"
@@ -105,7 +113,6 @@ export function PricingPage() {
             )}
           </div>
         </section>
-        <Faq t={t} />
       </main>
       <Footer t={t} page="pricing" />
     </div>
@@ -154,12 +161,6 @@ function PricingHero({
             </p>
             <p className="mt-1 text-lg">{p.perYear}</p>
             <p className="mt-4 text-sm text-white/85">{p.perCompany}</p>
-            <a
-              href="#configure"
-              className="mt-6 inline-flex w-full items-center justify-center rounded-full bg-white px-6 py-3 font-medium text-brand transition hover:-translate-y-0.5"
-            >
-              {p.system.next}
-            </a>
           </div>
         </Reveal>
       </div>
@@ -208,11 +209,13 @@ function Configurator({
   offer,
   trial,
   lang,
+  onStarted,
 }: {
   t: Content;
   offer: PublicOffer;
   trial: PublicTrialOffer | null;
   lang: Language;
+  onStarted: () => void;
 }) {
   const p = t.pricing;
   const [step, setStep] = useState<Step>(0);
@@ -265,6 +268,7 @@ function Configurator({
               onBack={() => go(1)}
               onDone={(result) => {
                 setStarted(result);
+                onStarted();
                 go(3);
               }}
             />
@@ -727,29 +731,5 @@ function Cart({
         ) : null}
       </div>
     </aside>
-  );
-}
-
-function Faq({ t }: { t: Content }) {
-  const faq = t.pricing.faq;
-  return (
-    <section className="mx-auto max-w-3xl px-4 py-20 pb-28 sm:px-6 lg:pb-20">
-      <Reveal as="h2" className="text-center text-3xl font-bold sm:text-4xl">
-        {faq.title}
-      </Reveal>
-      <div className="mt-10 space-y-3">
-        {faq.items.map((item, index) => (
-          <Reveal key={item.q} delay={index * 0.08}>
-            <details className="group rounded-2xl bg-sand p-5 open:bg-brand-soft">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-bold text-ink">
-                {item.q}
-                <span className="text-xl text-brand transition group-open:rotate-45">+</span>
-              </summary>
-              <p className="mt-3 leading-relaxed text-muted">{item.a}</p>
-            </details>
-          </Reveal>
-        ))}
-      </div>
-    </section>
   );
 }

@@ -309,19 +309,8 @@ export function Footer({ t, page }: { t: Content; page: Page }) {
   const year = String(new Date().getFullYear());
   return (
     <footer>
-      <div className={page === 'pricing' ? 'bg-brand px-4 py-14 text-center' : 'hidden'}>
-        <p className="text-sun">{t.footer.accent}</p>
-        <h2 className="mt-2 text-3xl font-bold text-white sm:text-4xl">{t.footer.headline}</h2>
-        <p className="mt-3 text-white/90">{t.footer.text}</p>
-        <a
-          href={signupHref(page)}
-          className="mt-8 inline-flex rounded-full bg-white px-8 py-3 text-lg font-medium text-brand shadow-lg transition hover:-translate-y-0.5"
-        >
-          {t.signupCta}
-        </a>
-      </div>
-      {/* Never the same background as the section above it (the start page's form sits on sand). */}
-      <div className={page === 'start' ? 'border-t border-[#eef0f2] bg-white' : 'bg-sand'}>
+      {/* Never the same background as the section above it (the pricing and start pages end on sand). */}
+      <div className={page === 'home' ? 'bg-sand' : 'border-t border-[#eef0f2] bg-white'}>
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 py-6 text-sm text-muted sm:flex-row sm:px-6">
           <p>{t.footer.copyright.replace('{year}', year)}</p>
           <div className="flex items-center gap-2">

@@ -956,6 +956,11 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
   opens the trial (`/public/trial/start`) and shows the "مبروك" card with the dashboard link.
 - `leads.phone` (migration 0058), shown in `/platform/trials`; business type optional on start.
 - Local: `pnpm verify` 268, integration 274, E2E 37, all passing.
+### 2026-10-18 — Leaner pricing page
+- Removed the FAQ and the green "نمِّ تجارتك مع عربات" footer band from `/pricing`, and the
+  "التالي: جهّز محلك" button from the hero price card; after the account opens only the
+  "مبروك" card stays (no hero / steps). Footer bar is white under the sand sections.
+- Tests run (owner asked for a quick turn): landing web tests 12, pricing E2E.
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.

@@ -85,6 +85,9 @@ describe('PricingPage', () => {
     expect(
       await screen.findByRole('heading', { name: 'مبروك! تجربتك المجانية 7 يوم بدأت.' }),
     ).toBeInTheDocument();
+    // Only the congratulations card stays: no hero, steps or FAQ.
+    expect(screen.queryByText(/سعر واحد واضح/)).toBeNull();
+    expect(screen.queryByText('أسئلة شائعة')).toBeNull();
     expect(screen.getByRole('link', { name: 'ادخل لوحة التحكم' })).toHaveAttribute(
       'href',
       '/manager/',
