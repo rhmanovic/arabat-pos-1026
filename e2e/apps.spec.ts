@@ -5,9 +5,9 @@ test.describe('three separate applications', () => {
     page,
   }) => {
     await page.goto('/');
-    await expect(page).toHaveTitle('عربات POS');
+    await expect(page).toHaveTitle(/عربات POS/);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-    await page.getByRole('link', { name: 'لوحة الإدارة' }).click();
+    await page.locator('#home').getByRole('link', { name: 'تسجيل الدخول' }).click();
     await expect(page).toHaveURL(/\/manager\/login$/);
     await expect(page.getByRole('heading', { name: 'تسجيل الدخول إلى الإدارة' })).toBeVisible();
   });

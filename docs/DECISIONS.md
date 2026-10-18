@@ -1549,3 +1549,13 @@ ADR; supersede it.
   The text lives in `src/content.ts` (ar/en keys side by side) so it can be changed without
   touching the layout.
 - **Replaces:** `/` used to redirect to `/manager/`.
+- **Amendment (2026-10-18, owner):** the page takes the look of the original arabatapp.com
+  landing page (`rhmanovic/arabat-sultan-app`, `artifacts/landing`): Arabat logo, Alexandria
+  font, brand teal `#339a96` with coral / tangerine accents, the same sections (hero with the
+  sliding logo mark, a muted strip, text + picture, feature cards with the orange icons, dark
+  "why" band, teal footer) and its scroll animations (fade / slide, honouring
+  `prefers-reduced-motion`). Its own `@theme` in `src/styles.css`; it no longer uses `@arabat/ui`.
+  Copy rewritten for the POS product. Left out on purpose: the payment-provider logos (no live
+  gateway is connected, CLAUDE.md §10), the store badges (no published mobile app) and the old
+  dashboard image (dollar figures of another product); the till and dashboard pictures are drawn
+  in code with illustrative KWD figures. Assets live in `public/` (fonts, logo, webp icons).

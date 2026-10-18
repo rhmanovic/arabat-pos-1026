@@ -1,2 +1,137 @@
 @import 'tailwindcss';
-@import '@arabat/ui/theme.css';
+
+/* Arabat brand (carried over from the original arabatapp.com landing page). */
+@font-face {
+  font-family: 'Alexandria';
+  src: url('/fonts/Alexandria-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Alexandria';
+  src: url('/fonts/Alexandria-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-display: swap;
+}
+
+@theme {
+  --font-sans: 'Alexandria', ui-sans-serif, system-ui, sans-serif;
+  --color-brand: #339a96;
+  --color-brand-dark: #287d7a;
+  --color-brand-soft: #e6f4f3;
+  --color-coral: #d45858;
+  --color-sky: #207cbb;
+  --color-tangerine: #f07434;
+  --color-ink: #333333;
+  --color-body: #4a4a4a;
+  --color-muted: #666666;
+  --color-sand: #f7f7f5;
+  --color-night: #36363f;
+  --color-accent-red: #c0392b;
+  --color-sun: #ffeb3b;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    font-family: var(--font-sans);
+  }
+  body {
+    color: var(--color-body);
+    background: #fff;
+  }
+  h1,
+  h2,
+  h3 {
+    color: var(--color-ink);
+  }
+  section[id] {
+    scroll-margin-top: 5.5rem;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+  }
+}
+
+/* Scroll animations (fade-in, slide-up, slide-start, slide-end) from the original site. */
+.reveal {
+  opacity: 0;
+  transition:
+    opacity 0.7s ease-out,
+    transform 0.7s ease-out;
+  transition-delay: var(--delay, 0s);
+}
+.reveal-up {
+  transform: translateY(20px);
+}
+.reveal-start {
+  transform: translateX(60px);
+}
+.reveal-end {
+  transform: translateX(-60px);
+}
+[dir='ltr'] .reveal-start {
+  transform: translateX(-60px);
+}
+[dir='ltr'] .reveal-end {
+  transform: translateX(60px);
+}
+.reveal.visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* The logo mark slides in behind the hero, as on the original site. */
+.hero-mark {
+  background-image: url('/img/logo-mark.webp');
+  background-repeat: no-repeat;
+  background-size: min(42rem, 70%) auto;
+  background-position: -20% center;
+  transition: background-position 0.9s ease-out;
+}
+.hero-mark.visible {
+  background-position: 0 center;
+}
+[dir='ltr'] .hero-mark {
+  background-position: 120% center;
+}
+[dir='ltr'] .hero-mark.visible {
+  background-position: 100% center;
+}
+@media (max-width: 1023px) {
+  .hero-mark,
+  .hero-mark.visible,
+  [dir='ltr'] .hero-mark,
+  [dir='ltr'] .hero-mark.visible {
+    background-size: 18rem auto;
+    background-position: center top;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+.float {
+  animation: float 6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .reveal,
+  .hero-mark,
+  .float {
+    transition: none;
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}

@@ -61,8 +61,9 @@ cashier, clock, language, Lock and Sign out.
 
 ## 2a. `/` — landing-web (public landing page, ADR-0113)
 
-One static page: product introduction (ar/en, language remembered in the browser) with links
-to `/manager/` and `/pos/`. No session and no API call. Until 2026-10-18 `/` redirected to
+One static page: product introduction (ar/en, language remembered in the browser), in-page
+sections `#home`, `#features`, `#why`, `#start`; sign-up links to `/manager/register`, sign-in to
+`/manager/`, and the footer links `/pos/`. No session and no API call. Until 2026-10-18 `/` redirected to
 `/manager/`.
 
 ## 2b. `/store` — store-web (public storefront, Prompt 16)

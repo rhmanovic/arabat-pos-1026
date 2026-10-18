@@ -892,6 +892,11 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
 - Tests: 2 web unit tests (language switch, links); E2E `apps.spec.ts` checks the landing page
   and its link to the manager sign-in. Local run: `pnpm verify` (258 unit/web), 259 integration,
   35 E2E, all passing.
+- Same day: redesigned in the original arabatapp.com style (ADR-0113 amendment): logo,
+  Alexandria, teal, scroll animations, sticky header with active section and phone drawer, trust
+  strip, till and dashboard pictures drawn in code (KWD), 16 feature cards, dark "why" band,
+  three steps, call to action, teal footer. Sign-up goes to `/manager/register`. Tests: 3 web
+  unit tests; `pnpm verify` (259 unit/web), 35 E2E passing.
 
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
