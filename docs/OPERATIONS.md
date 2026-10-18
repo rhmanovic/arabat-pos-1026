@@ -163,6 +163,11 @@ operators afterwards. Optional: a volume
 mounted at `/app/var` keeps uploaded product images across deploys. First platform operator:
 open a shell on the web service (`railway ssh`) and run
 `node apps/api/dist/database/cli/create-operator.js --email … --name … --role platform.super_admin`.
+Forgotten operator password, authenticator kept: `node apps/api/dist/database/cli/reset-operator-password.js
+--email …` sets a new one-time password only (TOTP secret, role and status unchanged), ends the
+operator's sessions and writes `platform.operator.password_reset` to the audit log. On Google Cloud run
+it as a one-off execution of the `arabat-migrate` job with `--args` overridden and read the password in
+that execution's log (`create-operator.js` would also replace the authenticator).
 
 Current staging deployment (2026-10-12): Railway project `arabat-pos`, environment
 `production`, services `Postgres` + `web`, URL `https://web-production-bf628.up.railway.app`

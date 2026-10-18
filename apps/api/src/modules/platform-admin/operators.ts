@@ -1,5 +1,6 @@
 import type { PlatformRole } from '@arabat/permissions';
 import { and, eq, isNull, sql } from 'drizzle-orm';
+import { auditLog } from '../audit/audit.schema.js';
 import { sessions } from '../auth/auth.schema.js';
 import type { Transaction } from '../../database/database.service.js';
 import { SecretBox } from '../../kernel/crypto/secret-box.js';
@@ -57,4 +58,37 @@ export async function upsertOperator(
     await tx.insert(platformOperators).values({ id, ...values });
   }
   return { id, totpSecret: secret, otpauthUri: otpauthUri(secret, email) };
+}
+
+/**
+ * Sets a new password for an existing operator and nothing else: the TOTP secret, role and
+ * status stay, so the operator's authenticator app keeps working. Ends the operator's sessions
+ * and records the reset in the audit log. Returns null when no operator has that e-mail.
+ */
+export async function resetOperatorPassword(
+  tx: Transaction,
+  input: { email: string; passwordHash: string },
+): Promise<{ id: string } | null> {
+  const email = input.email.trim().toLowerCase();
+  const [operator] = await tx
+    .update(platformOperators)
+    .set({ passwordHash: input.passwordHash, updatedAt: sql`now()` })
+    .where(eq(platformOperators.email, email))
+    .returning({ id: platformOperators.id });
+  if (!operator) return null;
+  await tx
+    .update(sessions)
+    .set({ revokedAt: sql`now()`, revokeReason: 'operator_password_reset' })
+    .where(and(eq(sessions.operatorId, operator.id), isNull(sessions.revokedAt)));
+  await tx.insert(auditLog).values({
+    id: newId(),
+    merchantId: null,
+    actorType: 'system',
+    actorId: null,
+    action: 'platform.operator.password_reset',
+    targetType: 'platform_operator',
+    targetId: operator.id,
+    details: { via: 'cli', mfaKept: true },
+  });
+  return operator;
 }

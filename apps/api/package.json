@@ -12,6 +12,7 @@
     "db:migrate": "node --env-file-if-exists=../../.env dist/database/cli/migrate.js",
     "db:seed": "node --env-file-if-exists=../../.env dist/database/cli/seed.js",
     "platform:create-operator": "node --env-file-if-exists=../../.env dist/database/cli/create-operator.js",
+    "platform:reset-operator-password": "node --env-file-if-exists=../../.env dist/database/cli/reset-operator-password.js",
     "dev:totp": "node dist/database/cli/dev-totp.js"
   },
   "dependencies": {
