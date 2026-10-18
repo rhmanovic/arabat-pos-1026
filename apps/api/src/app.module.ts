@@ -27,6 +27,7 @@ import { IamModule } from './modules/iam/iam.module.js';
 import { MerchantsModule } from './modules/merchants/merchants.module.js';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module.js';
 import { PlatformAdminModule } from './modules/platform-admin/platform-admin.module.js';
+import { PricingModule } from './modules/pricing/pricing.module.js';
 import { AssistantModule } from './modules/assistant/assistant.module.js';
 import { PrintingModule } from './modules/printing/printing.module.js';
 import { DevicesModule } from './modules/devices/devices.module.js';
@@ -45,6 +46,7 @@ export class AppModule {
         AuditModule,
         SubscriptionsModule,
         PlatformAdminModule,
+        PricingModule,
         AccessModule,
         AuthModule,
         HealthModule,

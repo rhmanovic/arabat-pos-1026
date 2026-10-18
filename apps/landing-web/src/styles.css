@@ -36,6 +36,11 @@
     scroll-behavior: smooth;
     font-family: var(--font-sans);
   }
+  /* Elements that slide in from the sides must never widen the page on phones. */
+  html,
+  body {
+    overflow-x: clip;
+  }
   body {
     color: var(--color-body);
     background: #fff;
@@ -76,6 +81,14 @@
 }
 [dir='ltr'] .reveal-end {
   transform: translateX(60px);
+}
+@media (max-width: 1023px) {
+  .reveal-start,
+  .reveal-end,
+  [dir='ltr'] .reveal-start,
+  [dir='ltr'] .reveal-end {
+    transform: translateY(24px);
+  }
 }
 .reveal.visible {
   opacity: 1;
@@ -122,13 +135,98 @@
   animation: float 6s ease-in-out infinite;
 }
 
+/* Pricing page: each step slides in like a slide of a presentation. */
+@keyframes step-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.step-in {
+  animation: step-in 0.5s ease-out both;
+}
+@keyframes bump {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.bump {
+  animation: bump 0.35s ease-out;
+  transform-origin: center;
+}
+@keyframes pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.pop {
+  animation: pop 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.cart-line {
+  animation: step-in 0.3s ease-out both;
+}
+
+/* Phone menu. */
+@keyframes menu-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes menu-slide-rtl {
+  from {
+    transform: translateX(-100%);
+  }
+}
+@keyframes menu-slide-ltr {
+  from {
+    transform: translateX(100%);
+  }
+}
+.menu-fade {
+  animation: menu-fade 0.25s ease-out;
+}
+.menu-slide {
+  animation: menu-slide-ltr 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+[dir='rtl'] .menu-slide {
+  animation-name: menu-slide-rtl;
+}
+.menu-item {
+  animation: step-in 0.35s ease-out both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
   .reveal,
   .hero-mark,
-  .float {
+  .float,
+  .step-in,
+  .bump,
+  .pop,
+  .cart-line,
+  .menu-fade,
+  .menu-slide,
+  .menu-item {
     transition: none;
     animation: none;
     opacity: 1;

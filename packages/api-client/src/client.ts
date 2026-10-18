@@ -1,4 +1,13 @@
 import {
+  type SaveOfferItem,
+  type SalesRequestStatus,
+  type UpdateSalesRequest,
+  offerItemListSchema,
+  offerItemSchema,
+  salesRequestListSchema,
+  salesRequestSchema,
+} from '@arabat/contracts';
+import {
   type AppInterface,
   type ForgotPasswordRequest,
   type LoginRequest,
@@ -449,6 +458,36 @@ export function createApiClient(options: ApiClientOptions = {}) {
           body,
           schema: planSchema,
         }),
+      /** Public pricing page offer and purchase requests (ADR-0114). */
+      offerItems: () => request('GET', '/platform/offer-items', { schema: offerItemListSchema }),
+      saveOfferItem: (id: string | null, body: SaveOfferItem) =>
+        request(id ? 'PUT' : 'POST', id ? `/platform/offer-items/${id}` : '/platform/offer-items', {
+          body,
+          schema: offerItemSchema,
+        }),
+      async uploadOfferImage(id: string, file: Blob) {
+        const form = new FormData();
+        form.append('file', file);
+        const response = await doFetch(`${baseUrl}/platform/offer-items/${id}/image`, {
+          method: 'POST',
+          body: form,
+          credentials: 'same-origin',
+        }).catch((error: unknown) => {
+          throw new NetworkError(error);
+        });
+        if (!response.ok) throw await toApiError(response);
+        return offerItemSchema.parse(await response.json());
+      },
+      removeOfferImage: (id: string) =>
+        request('DELETE', `/platform/offer-items/${id}/image`, { schema: offerItemSchema }),
+      salesRequests: (status?: SalesRequestStatus) =>
+        request('GET', `/platform/sales-requests${status ? `?status=${status}` : ''}`, {
+          schema: salesRequestListSchema,
+        }),
+      salesRequest: (id: string) =>
+        request('GET', `/platform/sales-requests/${id}`, { schema: salesRequestSchema }),
+      updateSalesRequest: (id: string, body: UpdateSalesRequest) =>
+        request('PUT', `/platform/sales-requests/${id}`, { body, schema: salesRequestSchema }),
       audit: (query: PlatformAuditQuery = {}) =>
         request('GET', `/platform/audit?${toParams(query)}`, { schema: platformAuditListSchema }),
       assistantUsage: (query: AssistantUsageQuery = {}) =>

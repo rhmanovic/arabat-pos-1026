@@ -1,67 +1,21 @@
-import { useEffect, useState } from 'react';
-import { CONTACT_EMAIL, type Content, content, type Language } from './content.js';
+import { CONTACT_EMAIL, type Content } from './content.js';
+import {
+  Footer,
+  Header,
+  REGISTER_URL,
+  SIGN_IN_URL,
+  outlineButton,
+  primaryButton,
+  useLanguage,
+} from './layout.js';
 import { Reveal, useInView } from './reveal.js';
 
-const STORAGE_KEY = 'arabat.landing.lang';
-const SECTIONS = ['home', 'features', 'why', 'start'] as const;
-type SectionId = (typeof SECTIONS)[number];
-
-const REGISTER_URL = '/manager/register';
-const SIGN_IN_URL = '/manager/';
-
-function initialLanguage(): Language {
-  try {
-    return localStorage.getItem(STORAGE_KEY) === 'en' ? 'en' : 'ar';
-  } catch {
-    return 'ar';
-  }
-}
-
-/** The section currently under the sticky header, for the active nav link. */
-function useActiveSection(): SectionId {
-  const [active, setActive] = useState<SectionId>('home');
-  useEffect(() => {
-    const update = () => {
-      const y = window.scrollY + 140;
-      let current: SectionId = 'home';
-      for (const id of SECTIONS) {
-        const element = document.getElementById(id);
-        if (element && element.offsetTop <= y) current = id;
-      }
-      setActive(current);
-    };
-    update();
-    window.addEventListener('scroll', update, { passive: true });
-    return () => window.removeEventListener('scroll', update);
-  }, []);
-  return active;
-}
-
-const primaryButton =
-  'inline-flex items-center justify-center rounded-full bg-brand px-8 py-3 text-lg font-medium text-white shadow-lg shadow-brand/25 transition hover:-translate-y-0.5 hover:bg-coral hover:shadow-coral/25';
-const outlineButton =
-  'inline-flex items-center justify-center rounded-full border-2 border-brand px-8 py-3 text-lg font-medium text-brand transition hover:bg-brand hover:text-white';
-
 export function LandingPage() {
-  const [lang, setLang] = useState<Language>(initialLanguage);
-  const t = content[lang];
-
-  useEffect(() => {
-    document.documentElement.lang = lang;
-    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
-    document.title = t.pageTitle;
-    try {
-      localStorage.setItem(STORAGE_KEY, lang);
-    } catch {
-      // Storage may be blocked (private mode); the page still works in the chosen language.
-    }
-  }, [lang, t.pageTitle]);
-
-  const toggleLanguage = () => setLang(lang === 'ar' ? 'en' : 'ar');
+  const { t, toggleLanguage } = useLanguage((c) => c.pageTitle);
 
   return (
     <div className="flex min-h-screen flex-col">
-      <Header t={t} onToggleLanguage={toggleLanguage} />
+      <Header t={t} onToggleLanguage={toggleLanguage} page="home" />
       <main className="flex-1">
         <Hero t={t} />
         <Trust t={t} />
@@ -69,127 +23,11 @@ export function LandingPage() {
         <Features t={t} />
         <Why t={t} />
         <Steps t={t} />
+        <PricingTeaser t={t} />
         <CallToAction t={t} />
       </main>
-      <Footer t={t} />
+      <Footer t={t} page="home" />
     </div>
-  );
-}
-
-function Header({ t, onToggleLanguage }: { t: Content; onToggleLanguage: () => void }) {
-  const active = useActiveSection();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const links = SECTIONS.map((id) => ({ id, label: t.nav[id] }));
-
-  return (
-    <header className="sticky top-0 z-40 border-b border-[#eef0f2] bg-white/95 shadow-sm backdrop-blur">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-        <a href="#home" className="shrink-0">
-          <img src="/img/logo.webp" alt="Arabat" width={160} height={48} className="h-9 w-auto" />
-        </a>
-        <nav className="hidden lg:block" aria-label="primary">
-          <ul className="flex items-center gap-7">
-            {links.map((link) => (
-              <li key={link.id}>
-                <a
-                  href={`#${link.id}`}
-                  aria-current={active === link.id ? 'true' : undefined}
-                  className={`border-b-2 pb-1 transition-colors ${
-                    active === link.id
-                      ? 'border-brand text-brand'
-                      : 'border-transparent text-muted hover:border-brand hover:text-brand'
-                  }`}
-                >
-                  {link.label}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        <div className="hidden items-center gap-2 lg:flex">
-          <button
-            type="button"
-            onClick={onToggleLanguage}
-            className="rounded-full border border-brand px-4 py-1.5 text-sm text-brand transition hover:bg-brand hover:text-white"
-          >
-            {t.switchLanguage}
-          </button>
-          <a
-            href={SIGN_IN_URL}
-            className="rounded-full bg-brand px-6 py-2 font-medium text-white transition hover:bg-coral"
-          >
-            {t.signIn}
-          </a>
-        </div>
-        <button
-          type="button"
-          className="rounded-md p-2 text-ink lg:hidden"
-          aria-label={t.openMenu}
-          aria-expanded={menuOpen}
-          onClick={() => setMenuOpen(true)}
-        >
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="2" />
-          </svg>
-        </button>
-      </div>
-
-      {menuOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true">
-          <button
-            type="button"
-            aria-label={t.closeMenu}
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setMenuOpen(false)}
-          />
-          <div className="absolute inset-y-0 end-0 flex w-3/4 max-w-xs flex-col bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-[#eef0f2] p-4">
-              <img src="/img/logo.webp" alt="Arabat" className="h-8 w-auto" />
-              <button
-                type="button"
-                aria-label={t.closeMenu}
-                className="p-2 text-2xl leading-none text-muted"
-                onClick={() => setMenuOpen(false)}
-              >
-                ×
-              </button>
-            </div>
-            <ul className="flex flex-col gap-1 p-4">
-              {links.map((link) => (
-                <li key={link.id}>
-                  <a
-                    href={`#${link.id}`}
-                    onClick={() => setMenuOpen(false)}
-                    className={`block rounded-lg px-3 py-2 ${
-                      active === link.id ? 'bg-brand-soft text-brand' : 'text-muted'
-                    }`}
-                  >
-                    {link.label}
-                  </a>
-                </li>
-              ))}
-              <li className="mt-4">
-                <button
-                  type="button"
-                  onClick={onToggleLanguage}
-                  className="w-full rounded-full border border-brand py-2 text-brand"
-                >
-                  {t.switchLanguage}
-                </button>
-              </li>
-              <li className="mt-2">
-                <a
-                  href={SIGN_IN_URL}
-                  className="block w-full rounded-full bg-brand py-2 text-center text-white"
-                >
-                  {t.signIn}
-                </a>
-              </li>
-            </ul>
-          </div>
-        </div>
-      )}
-    </header>
   );
 }
 
@@ -533,6 +371,26 @@ function Steps({ t }: { t: Content }) {
   );
 }
 
+function PricingTeaser({ t }: { t: Content }) {
+  return (
+    <section className="px-4 pb-16 sm:px-6">
+      <Reveal className="relative mx-auto max-w-5xl overflow-hidden rounded-3xl bg-night px-6 py-12 text-center sm:px-12">
+        <img
+          src="/img/logo-mark.webp"
+          alt=""
+          className="pointer-events-none absolute -start-20 -bottom-24 w-72 opacity-15"
+        />
+        <p className="font-semibold text-sun">{t.teaser.label}</p>
+        <h2 className="mt-2 text-3xl font-bold text-white sm:text-4xl">{t.teaser.title}</h2>
+        <p className="mx-auto mt-4 max-w-2xl text-lg text-white/80">{t.teaser.text}</p>
+        <a href="/pricing" className={`${primaryButton} mt-8`}>
+          {t.teaser.cta}
+        </a>
+      </Reveal>
+    </section>
+  );
+}
+
 function CallToAction({ t }: { t: Content }) {
   return (
     <section id="start" className="px-4 pb-20 sm:px-6">
@@ -559,48 +417,5 @@ function CallToAction({ t }: { t: Content }) {
         </p>
       </Reveal>
     </section>
-  );
-}
-
-function Footer({ t }: { t: Content }) {
-  const year = String(new Date().getFullYear());
-  return (
-    <footer>
-      <div className="bg-brand px-4 py-14 text-center">
-        <p className="text-sun">{t.footer.accent}</p>
-        <h2 className="mt-2 text-3xl font-bold text-white sm:text-4xl">{t.footer.headline}</h2>
-        <p className="mt-3 text-white/90">{t.footer.text}</p>
-        <div className="mt-8 flex flex-wrap justify-center gap-3">
-          <a
-            href={SIGN_IN_URL}
-            className="rounded-full bg-white px-6 py-2.5 font-medium text-ink transition hover:-translate-y-0.5"
-          >
-            {t.footer.manager}
-          </a>
-          <a
-            href="/pos/"
-            className="rounded-full bg-white px-6 py-2.5 font-medium text-ink transition hover:-translate-y-0.5"
-          >
-            {t.footer.pos}
-          </a>
-        </div>
-      </div>
-      <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 py-6 text-sm text-muted sm:flex-row sm:px-6">
-        <p>{t.footer.copyright.replace('{year}', year)}</p>
-        <div className="flex items-center gap-2">
-          <a href={SIGN_IN_URL} className="hover:text-brand">
-            {t.signIn}
-          </a>
-          <span aria-hidden="true">•</span>
-          <a href="#start" className="hover:text-brand">
-            {t.nav.start}
-          </a>
-          <span aria-hidden="true">•</span>
-          <a href={`mailto:${CONTACT_EMAIL}`} className="hover:text-brand" dir="ltr">
-            {CONTACT_EMAIL}
-          </a>
-        </div>
-      </div>
-    </footer>
   );
 }

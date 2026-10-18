@@ -58,6 +58,8 @@ export const envSchema = z.object({
   /** Public URLs of the apps, used in e-mail links (password reset). */
   PUBLIC_MANAGER_URL: z.url().default('http://localhost:5173/manager'),
   PUBLIC_POS_URL: z.url().default('http://localhost:5174/pos'),
+  /** Receives the purchase requests sent from the public pricing page (ADR-0114). */
+  SALES_NOTIFY_EMAIL: z.email().default('info@arabatapp.com'),
   /** Public URL of the storefront app (payment return links). */
   PUBLIC_STORE_URL: z.url().default('http://localhost:5176/store'),
   /**

@@ -1559,3 +1559,22 @@ ADR; supersede it.
   gateway is connected, CLAUDE.md §10), the store badges (no published mobile app) and the old
   dashboard image (dollar figures of another product); the till and dashboard pictures are drawn
   in code with illustrative KWD figures. Assets live in `public/` (fonts, logo, webp icons).
+
+## ADR-0114 — Public pricing page and purchase requests
+- **Date:** 2026-10-18 · **Status:** Accepted (owner, 2026-10-18: 99 KWD per year per company,
+  devices sold once, the request reaches the platform and e-mail, the page itself is the
+  presentation; no online payment).
+- **Decision:** a `pricing` module with global tables `offer_items`, `sales_requests`,
+  `sales_request_lines` (migration 0056). The public API returns the active offer and accepts a
+  request with only item ids and quantities; prices and totals are computed on the server in fils
+  (`bigint`), copied into the request lines, and the page's own totals (`@arabat/money`) are display
+  only. Requests are rate limited per IP (5 per hour) and audited as anonymous; e-mails go after
+  commit and their failure never loses the request. Items change only in an operator context
+  (database trigger), billing / super admin roles; requests are followed up by any operator
+  (status `new` → `contacted` → `won` / `lost`, optimistic version). Photos go through `FileStorage`
+  with the type sniffed from the bytes; without a photo the page draws the item's icon.
+- **Page:** `apps/landing-web/pricing.html` → `/pricing` (served by `serveWebApps`), steps system →
+  devices → request with a running cart, confirmation and FAQ.
+- **Not done:** online payment (no gateway is live), invoices, linking a won request to a merchant
+  or subscription — the operator does it by hand.
+

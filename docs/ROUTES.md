@@ -66,6 +66,13 @@ sections `#home`, `#features`, `#why`, `#start`; sign-up links to `/manager/regi
 `/manager/`, and the footer links `/pos/`. No session and no API call. Until 2026-10-18 `/` redirected to
 `/manager/`.
 
+## 2a-bis. `/pricing` — landing-web (public pricing page, ADR-0114)
+
+A second page of the landing build: price card, then three steps like a presentation
+(system → devices with quantities → contact form) with a running cart (sticky panel on desktop,
+bottom bar on phones), confirmation with the request number, and FAQ. Reads
+`GET /api/v1/public/pricing`; sends `POST /api/v1/public/pricing/requests`. Nothing is paid online.
+
 ## 2b. `/store` — store-web (public storefront, Prompt 16)
 
 No session; every call goes to the public store API. Cart kept per store in the browser.
@@ -87,6 +94,8 @@ No session; every call goes to the public store API. Cart kept per store in the 
 | `/platform` | Overview (merchant counts by status, trials ending, lapsed, usage, plans, newest) | any operator | M8 ✓ |
 | `/platform/merchants` | List, search, status filter, create merchant (dialog) | any operator (create: super admin, support) | M8 ✓ |
 | `/platform/merchants/:id` | Profile, owner, onboarding, usage vs limits, branches, subscription (change with readiness check), history, platform actions; suspend / reactivate / close | any operator (actions per role) | M8 ✓ |
+| `/platform/requests` | Purchase requests from the pricing page: status filter with counts, details (lines, totals, contact), follow-up status and note | any operator | ✓ |
+| `/platform/offer` | Pricing page offer: system yearly price and devices (add, price, hide, order, photo) | any operator (edit: super admin, billing) | ✓ |
 | `/platform/plans` | Plans with limits, features, informational price; create / edit | any operator (edit: super admin, billing) | M8 ✓ |
 | `/platform/audit` | Platform audit log | super admin, support | M8 ✓ |
 | `/platform/assistant` | Assistant usage: every question with its answer, lookups, tokens and estimated cost, totals per merchant, filters (app, days, merchant, text), JSONL export | super admin only | ✓ |
@@ -321,6 +330,9 @@ only staff land on `/pos/kitchen`. Sales list and reports show the service type.
 | `POST /platform/merchants`, `POST /platform/merchants/:id/status` (close: super admin only), `GET /platform/audit?merchantId=&action=` | super admin, support |
 | `PUT /platform/merchants/:id/subscription`, `POST /platform/plans`, `PUT /platform/plans/:id` | super admin, billing |
 | `GET /platform/assistant?merchantId=&surface=&from=&to=&q=&page=&pageSize=` (questions, totals, by merchant), `GET /platform/assistant/export?…` (JSONL, one line per question with the thread) | super admin only (ADR-0107 amendment) |
+| `GET /platform/offer-items`, `GET /platform/sales-requests?status=`, `GET /platform/sales-requests/:id`, `PUT /platform/sales-requests/:id` (status, note, version) | any operator (ADR-0114) |
+| `POST /platform/offer-items`, `PUT /platform/offer-items/:id`, `POST`/`DELETE /platform/offer-items/:id/image` | super admin, billing |
+| `GET /public/pricing` (active system + devices), `GET /public/pricing/images/:id`, `POST /public/pricing/requests` (5 per hour per IP; priced on the server) | 🔓 public |
 | `GET /manager/subscription` | merchant `merchant.settings.read` (own merchant only) |
 
 ### Online store API (Prompt 16)

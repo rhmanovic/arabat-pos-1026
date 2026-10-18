@@ -240,4 +240,6 @@ Receipts also print server-side through print agents (ADR-0111): jobs are queued
 (`PrintJobsService.queueAutoInTx`), announced over PostgreSQL NOTIFY to the Socket.IO namespace `/print-agent`.
 Selling decisions (prices, limits, rights, tenders, shift notes, refunds) live in `packages/pos-core` (pure, no DB);
 the services load data and call it through `rules()` (`kernel/errors/pos-rule.ts`). Local-first devices: ADR-0112 (Accepted), contract `docs/DEVICE_API.md`.
+Public site: landing `/` and pricing `/pricing` (`apps/landing-web`, ADR-0113/0114); pricing-page items and purchase
+requests live in the `pricing` module, priced on the server, followed up in `/platform/offer` and `/platform/requests`.
 See `docs/PROGRESS.md` for the current state and `docs/ROADMAP.md` for next steps.

@@ -26,6 +26,7 @@ sign in), e-mail delivery (`MAIL_PROVIDER=smtp` with a reachable `SMTP_URL`, or
 `MAIL_PROVIDER=resend|brevo` with `MAIL_API_KEY`; the API warns at start-up when it is left at
 the local Mailpit default), `MAIL_FROM`, `PUBLIC_MANAGER_URL`, `PUBLIC_POS_URL`,
 `PUBLIC_STORE_URL`, `TRUST_PROXY` (hop count or proxy CIDRs of the load balancer).
+Optional: `SALES_NOTIFY_EMAIL` (default `info@arabatapp.com`) receives the pricing-page requests (ADR-0114).
 The API refuses to start in production with the development `MFA_ENCRYPTION_KEY` or the
 default mock-gateway secret, and refuses `TRUST_PROXY=true`. Never put `NODE_ENV` in a
 `.env` read by Vite builds (CLAUDE.md §9). Secrets come from the platform's secret store,

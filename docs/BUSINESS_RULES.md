@@ -598,6 +598,13 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
 
 - **BR-030** Default currency is **KWD** with **3 decimal places** (1 KWD = 1000 fils).
 - **BR-031** No floating-point arithmetic for monetary calculations, anywhere.
+- **BR-196** Public pricing (owner, 2026-10-18, ADR-0114): the system costs 99.000 KWD per year
+  **per company**, whatever the number of branches and employees; devices (tablet, iPad, barcode
+  scanner, receipt printer, cash drawer, others the operator adds) are sold **once**. The platform
+  operator adds, prices, hides and orders them. The pricing page sends a **purchase request**
+  (contact details + chosen devices), stored for the operator and e-mailed to
+  `SALES_NOTIFY_EMAIL` (info@arabatapp.com) with a copy to the customer; nothing is paid online and
+  the operator follows up by hand. A request keeps the names and prices of the moment it was sent.
 - **BR-195** Market direction (ADR-0109): the product is sold globally as fully online
   self-service (sign-up, configuration and subscription without our involvement), marketed
   to one region at a time. Each merchant has one currency, chosen at registration; KWD is the

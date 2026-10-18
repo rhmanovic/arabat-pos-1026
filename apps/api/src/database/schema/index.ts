@@ -23,3 +23,4 @@ export * from '../../modules/subscriptions/subscriptions.schema.js';
 export * from '../../modules/assistant/assistant.schema.js';
 export * from '../../modules/printing/printing.schema.js';
 export * from '../../modules/devices/devices.schema.js';
+export * from '../../modules/pricing/pricing.schema.js';

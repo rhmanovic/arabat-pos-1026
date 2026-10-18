@@ -393,6 +393,13 @@
       "when": 1792275454689,
       "tag": "0055_device_ingest",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1792304864124,
+      "tag": "0056_pricing_offer",
+      "breakpoints": true
     }
   ]
 }

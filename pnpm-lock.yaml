@@ -332,6 +332,12 @@ importers:
 
   apps/landing-web:
     dependencies:
+      '@arabat/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@arabat/money':
+        specifier: workspace:*
+        version: link:../../packages/money
       react:
         specifier: ^19.3.0
         version: 19.3.0

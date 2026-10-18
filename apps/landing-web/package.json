@@ -10,6 +10,8 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@arabat/contracts": "workspace:*",
+    "@arabat/money": "workspace:*",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },

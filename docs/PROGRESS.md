@@ -899,6 +899,22 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
   `info@arabatapp.com` (owner; no phone or WhatsApp yet, no customer logos yet). Tests: 3 web
   unit tests; `pnpm verify` (259 unit/web), 35 E2E passing.
 
+
+### 2026-10-18 — Pricing page and purchase requests (ADR-0114)
+- `/pricing`: yearly system price card, then system → devices (cards with photo or drawn icon,
+  quantity steppers, max per item) → contact form, running cart (sticky panel / phone bottom bar),
+  confirmation with the request number, FAQ; Arabic / English.
+- API `pricing` module: public offer, photos, requests priced on the server (fils), rate limited,
+  e-mailed to `SALES_NOTIFY_EMAIL` and to the customer; platform offer items (add, price, hide,
+  order, photo) and requests (status, note). Migration 0056 seeds the system at 99.000 KWD and five
+  devices **hidden at 0 KWD until the owner prices them** in `/platform/offer`.
+- Platform pages `/platform/offer` and `/platform/requests`.
+- Landing on phones: no sideways overflow (slide-ins move vertically below `lg`, `overflow-x: clip`);
+  the phone menu is rendered into `<body>` (the blurred header trapped it), slides in, locks scroll,
+  closes with Esc / outside tap, and carries sign-up, sign-in and the language switch.
+- Tests: 8 integration (offer, roles, photos, server pricing, e-mails, follow-up, refusals, rate
+  limit), 3 web (steps and exact totals, skip, load error), 1 E2E (home → pricing → request).
+  Local: `pnpm verify` 262, integration 267, E2E 36, all passing.
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.
