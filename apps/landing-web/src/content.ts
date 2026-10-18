@@ -20,7 +20,7 @@ function englishLength(days: number): string {
 
 const ar = {
   trialLength: arabicLength,
-  pageTitle: 'عربات POS | نظام نقاط البيع وإدارة الأعمال في الكويت',
+  pageTitle: 'عربات POS — نظام نقاط البيع في الكويت',
   nav: {
     home: 'الرئيسية',
     features: 'المميزات',
