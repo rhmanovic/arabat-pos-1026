@@ -16,6 +16,21 @@ import { Reveal } from './reveal.js';
 const CURRENCY = 'KWD' as const;
 type Step = 0 | 1 | 2 | 3;
 type Quantities = Record<string, number>;
+/** The request form; kept by the configurator so going back to the devices keeps what was typed. */
+type Contact = {
+  companyName: string;
+  contactName: string;
+  phone: string;
+  email: string;
+  notes: string;
+};
+const EMPTY_CONTACT: Contact = {
+  companyName: '',
+  contactName: '',
+  phone: '',
+  email: '',
+  notes: '',
+};
 
 /** "99.000" → "99", "45.500" → "45.500": display only, never used for arithmetic. */
 const short = (amount: string) => amount.replace(/\.000$/, '');
@@ -183,6 +198,7 @@ function Configurator({ t, offer, lang }: { t: Content; offer: PublicOffer; lang
   const p = t.pricing;
   const [step, setStep] = useState<Step>(0);
   const [quantities, setQuantities] = useState<Quantities>({});
+  const [contact, setContact] = useState<Contact>(EMPTY_CONTACT);
   const [created, setCreated] = useState<SalesRequestCreated | null>(null);
   const top = useRef<HTMLDivElement>(null);
   const sum = useMemo(() => totals(offer, quantities), [offer, quantities]);
@@ -201,6 +217,7 @@ function Configurator({ t, offer, lang }: { t: Content; offer: PublicOffer; lang
         created={created}
         onAgain={() => {
           setQuantities({});
+          setContact(EMPTY_CONTACT);
           setCreated(null);
           go(0);
         }}
@@ -232,6 +249,8 @@ function Configurator({ t, offer, lang }: { t: Content; offer: PublicOffer; lang
               offer={offer}
               lang={lang}
               quantities={quantities}
+              contact={contact}
+              setContact={setContact}
               onBack={() => go(1)}
               onDone={(result) => {
                 setCreated(result);
@@ -465,6 +484,8 @@ function RequestStep({
   offer,
   lang,
   quantities,
+  contact,
+  setContact,
   onBack,
   onDone,
 }: {
@@ -472,16 +493,19 @@ function RequestStep({
   offer: PublicOffer;
   lang: Language;
   quantities: Quantities;
+  contact: Contact;
+  setContact: (update: (c: Contact) => Contact) => void;
   onBack: () => void;
   onDone: (created: SalesRequestCreated) => void;
 }) {
   const f = t.pricing.form;
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const setField = (field: keyof Contact, value: string) =>
+    setContact((c) => ({ ...c, [field]: value }));
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
     setSending(true);
     setError(null);
     try {
@@ -489,11 +513,7 @@ function RequestStep({
         method: 'POST',
         headers: { 'content-type': 'application/json', accept: 'application/json' },
         body: JSON.stringify({
-          companyName: data.get('companyName'),
-          contactName: data.get('contactName'),
-          phone: data.get('phone'),
-          email: data.get('email'),
-          notes: data.get('notes'),
+          ...contact,
           language: lang,
           devices: offer.devices
             .filter((item) => (quantities[item.id] ?? 0) > 0)
@@ -529,6 +549,8 @@ function RequestStep({
           <span className="text-sm font-medium text-ink">{f.company}</span>
           <input
             name="companyName"
+            value={contact.companyName}
+            onChange={(e) => setField('companyName', e.target.value)}
             required
             minLength={2}
             maxLength={120}
@@ -540,6 +562,8 @@ function RequestStep({
           <span className="text-sm font-medium text-ink">{f.contact}</span>
           <input
             name="contactName"
+            value={contact.contactName}
+            onChange={(e) => setField('contactName', e.target.value)}
             required
             minLength={2}
             maxLength={120}
@@ -551,6 +575,8 @@ function RequestStep({
           <span className="text-sm font-medium text-ink">{f.phone}</span>
           <input
             name="phone"
+            value={contact.phone}
+            onChange={(e) => setField('phone', e.target.value)}
             type="tel"
             required
             pattern="[+]?[0-9\s\(\)\-]{7,20}"
@@ -564,6 +590,8 @@ function RequestStep({
           <span className="text-sm font-medium text-ink">{f.email}</span>
           <input
             name="email"
+            value={contact.email}
+            onChange={(e) => setField('email', e.target.value)}
             type="email"
             required
             maxLength={200}
@@ -576,6 +604,8 @@ function RequestStep({
           <span className="text-sm font-medium text-ink">{f.notes}</span>
           <textarea
             name="notes"
+            value={contact.notes}
+            onChange={(e) => setField('notes', e.target.value)}
             rows={3}
             maxLength={1000}
             placeholder={f.notesPlaceholder}

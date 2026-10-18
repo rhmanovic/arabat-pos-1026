@@ -81,6 +81,21 @@ describe('PricingPage', () => {
     });
   });
 
+  it('keeps what was typed in the form when going back to the devices', async () => {
+    const user = userEvent.setup();
+    render(<PricingPage />);
+    await user.click((await screen.findAllByRole('button', { name: 'التالي: جهّز محلك' }))[0]!);
+    await user.click(screen.getByRole('button', { name: 'تخطَّ — عندي أجهزتي' }));
+    await user.type(screen.getByLabelText('اسم الشركة أو المحل'), 'مقهى السالمية');
+    await user.type(screen.getByLabelText('البريد الإلكتروني'), 'f@example.com');
+    await user.click(screen.getByRole('button', { name: 'رجوع للأجهزة' }));
+    const printer = screen.getByRole('heading', { name: 'جهاز p' }).closest('li')!;
+    await user.click(within(printer).getByRole('button', { name: '+ أضف' }));
+    await user.click(screen.getAllByRole('button', { name: 'التالي: راجع طلبك' })[0]!);
+    expect(screen.getByLabelText('اسم الشركة أو المحل')).toHaveValue('مقهى السالمية');
+    expect(screen.getByLabelText('البريد الإلكتروني')).toHaveValue('f@example.com');
+  });
+
   it('lets a shop skip the devices', async () => {
     const user = userEvent.setup();
     render(<PricingPage />);
