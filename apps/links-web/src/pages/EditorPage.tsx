@@ -31,13 +31,34 @@ import {
 import {
   ErrorState,
   LINK_FONT_FAMILY,
+  LinkIcon,
   LinkPageView,
   type LinkPageViewData,
   linkPageTheme,
   loadLinkFont,
+  readableOn,
   useApi,
   useNotify,
 } from '@arabat/web-core';
+import {
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   type Dispatch,
@@ -122,28 +143,138 @@ export const EMOJI_CHOICES = [
   '📅',
 ] as const;
 
+type Tab = 'links' | 'appearance' | 'settings';
+const TABS: readonly Tab[] = ['links', 'appearance', 'settings'];
+
 /**
- * The link-page editor (ADR-0116 amendments 1 and 2): links, content and style on one side, a
- * live phone preview on the other that follows unsaved changes.
+ * The link-page editor (ADR-0116 amendments 1–3): a header with the page address and a publish
+ * switch, tabs for the links (drag to reorder), the appearance and the settings, and a live
+ * phone preview that follows unsaved changes.
  */
 export function EditorPage() {
   const api = useApi();
   const page = useQuery({ queryKey: key, queryFn: () => api.linkPage.get() });
+  // Kept here so saving (which re-mounts the editor with the new version) stays on the tab.
+  const [tab, setTab] = useState<Tab>('links');
   if (page.isError) return <ErrorState error={page.error} onRetry={() => void page.refetch()} />;
   if (!page.data) return null;
-  return <Editor key={page.data.version} page={page.data} />;
+  return <Editor key={page.data.version} page={page.data} tab={tab} setTab={setTab} />;
 }
 
-function Editor({ page }: { page: LinkPage }) {
+function Editor({ page, tab, setTab }: { page: LinkPage; tab: Tab; setTab: (t: Tab) => void }) {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState<SaveLinkPage>(() => toForm(page));
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-      <div className="flex min-w-0 flex-col gap-4">
-        <LinksSection page={page} />
-        <DesignForm page={page} v={draft} setV={setDraft} />
+      <div className="flex min-w-0 flex-col gap-5">
+        <Hero page={page} draft={draft} />
+        <div
+          role="tablist"
+          aria-label={t('linkPage.sections')}
+          className="sticky top-16 z-10 flex gap-1 self-start rounded-full bg-surface-muted p-1 shadow-sm ring-1 ring-border"
+        >
+          {TABS.map((x) => (
+            <button
+              key={x}
+              type="button"
+              role="tab"
+              aria-selected={tab === x}
+              onClick={() => setTab(x)}
+              className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                tab === x ? 'bg-surface text-primary shadow' : 'text-fg-muted hover:text-fg'
+              }`}
+            >
+              {t(`linkPage.tab_${x}`)}
+            </button>
+          ))}
+        </div>
+        <div role="tabpanel" key={tab} className="lp-enter-fade-up flex flex-col gap-4">
+          {tab === 'links' ? <LinksSection page={page} /> : null}
+          {tab !== 'links' ? <DesignForm page={page} v={draft} setV={setDraft} part={tab} /> : null}
+        </div>
       </div>
       <Preview page={page} draft={draft} />
     </div>
+  );
+}
+
+/** Page address, copy / open, and the publish switch (it saves the current design too). */
+function Hero({ page, draft }: { page: LinkPage; draft: SaveLinkPage }) {
+  const { t } = useTranslation();
+  const api = useApi();
+  const notify = useNotify();
+  const queryClient = useQueryClient();
+  const published = page.status === 'published';
+  const publish = useMutation({
+    mutationFn: (status: SaveLinkPage['status']) => api.linkPage.save({ ...draft, status }),
+    onSuccess: async (saved) => {
+      queryClient.setQueryData(key, saved);
+      await queryClient.invalidateQueries({ queryKey: key });
+      notify.ok(saved.status === 'published' ? t('linkPage.nowPublished') : t('linkPage.nowDraft'));
+    },
+    onError: notify.fail,
+  });
+  return (
+    <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary to-violet-600 p-5 text-white shadow-lg sm:p-6">
+      <div aria-hidden className="absolute -end-10 -top-10 size-40 rounded-full bg-white/10" />
+      <div aria-hidden className="absolute -bottom-12 end-24 size-28 rounded-full bg-white/10" />
+      <div className="relative flex flex-wrap items-center justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm text-white/80">{t('linkPage.url')}</p>
+          <p className="mt-1 truncate text-lg font-semibold" dir="ltr">
+            {page.url.replace(/^https?:\/\//, '')}
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={published}
+          aria-label={t('linkPage.publishSwitch')}
+          disabled={publish.isPending}
+          onClick={() => publish.mutate(published ? 'draft' : 'published')}
+          className="flex items-center gap-3 rounded-full bg-white/15 py-1.5 pe-4 ps-1.5 text-sm font-semibold backdrop-blur transition hover:bg-white/25 disabled:opacity-60"
+        >
+          <span
+            className={`relative h-7 w-12 rounded-full transition ${published ? 'bg-emerald-400' : 'bg-white/30'}`}
+          >
+            <span
+              className={`absolute top-1 size-5 rounded-full bg-white shadow transition-all ${
+                published ? 'start-6' : 'start-1'
+              }`}
+            />
+          </span>
+          {published ? t('linkPage.status_published') : t('linkPage.status_draft')}
+        </button>
+      </div>
+      <div className="relative mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() =>
+            void navigator.clipboard
+              ?.writeText(page.url)
+              .then(() => notify.ok(t('linkPage.copied')))
+              .catch(() => undefined)
+          }
+          className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-primary shadow-sm transition hover:scale-105 active:scale-95"
+        >
+          {t('linkPage.copy')}
+        </button>
+        {published ? (
+          <a
+            href={page.url}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-full bg-white/15 px-4 py-2 text-sm font-semibold backdrop-blur transition hover:bg-white/25"
+          >
+            {t('linkPage.open')} ↗
+          </a>
+        ) : (
+          <span className="rounded-full bg-amber-300/90 px-3 py-2 text-xs font-semibold text-amber-950">
+            {t('linkPage.notPublished')}
+          </span>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -188,7 +319,11 @@ function Preview({ page, draft }: { page: LinkPage; draft: SaveLinkPage }) {
         ) : null}
       </div>
       <p className="mb-3 text-sm text-fg-muted">{t('linkPage.previewHint')}</p>
-      <div className="mx-auto h-[36rem] w-full max-w-[22rem] overflow-y-auto rounded-[2rem] border-8 border-fg/80 shadow-lg">
+      <div className="relative mx-auto h-[38rem] w-full max-w-[22rem] overflow-y-auto rounded-[2.75rem] border-[10px] border-neutral-900 bg-neutral-900 shadow-2xl">
+        <div
+          aria-hidden
+          className="pointer-events-none sticky top-0 z-10 mx-auto -mb-5 h-5 w-28 rounded-b-2xl bg-neutral-900"
+        />
         <LinkPageView
           className="min-h-full"
           page={previewData(page, draft)}
@@ -435,10 +570,12 @@ function DesignForm({
   page,
   v,
   setV,
+  part,
 }: {
   page: LinkPage;
   v: SaveLinkPage;
   setV: Dispatch<SetStateAction<SaveLinkPage>>;
+  part: 'appearance' | 'settings';
 }) {
   const { t, i18n } = useTranslation();
   const api = useApi();
@@ -480,253 +617,245 @@ function DesignForm({
       )}
     </Field>
   );
-  const published = page.status === 'published';
   const changed = JSON.stringify(v) !== JSON.stringify(toForm(page));
   const sample = i18n.language.startsWith('ar') ? 'أبجد' : 'Aa';
   return (
     <>
-      <Section title={t('linkPage.addressSection')} description={t('linkPage.addressHint')}>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={t('linkPage.status')}>
-            {(p) => (
-              <Select
-                {...p}
-                value={v.status}
-                onChange={(e) => set({ status: e.target.value as SaveLinkPage['status'] })}
-              >
-                <option value="draft">{t('linkPage.status_draft')}</option>
-                <option value="published">{t('linkPage.status_published')}</option>
-              </Select>
-            )}
-          </Field>
-          {text('slug', t('linkPage.slug'), true)}
-          <div className="flex flex-wrap items-center gap-2 text-sm sm:col-span-2">
-            <span>{t('linkPage.url')}:</span>
-            {published ? (
-              <a
-                className="text-primary hover:underline"
-                href={page.url}
-                target="_blank"
-                rel="noreferrer"
-                dir="ltr"
-              >
-                {page.url}
-              </a>
-            ) : (
-              <span dir="ltr">{page.url}</span>
-            )}
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() =>
-                void navigator.clipboard
-                  ?.writeText(page.url)
-                  .then(() => notify.ok(t('linkPage.copied')))
-                  .catch(() => undefined)
-              }
-            >
-              {t('linkPage.copy')}
-            </Button>
-            {!published ? <Badge tone="warning">{t('linkPage.notPublished')}</Badge> : null}
+      {part === 'settings' ? (
+        <Section title={t('linkPage.addressSection')} description={t('linkPage.addressHint')}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label={t('linkPage.status')}>
+              {(p) => (
+                <Select
+                  {...p}
+                  value={v.status}
+                  onChange={(e) => set({ status: e.target.value as SaveLinkPage['status'] })}
+                >
+                  <option value="draft">{t('linkPage.status_draft')}</option>
+                  <option value="published">{t('linkPage.status_published')}</option>
+                </Select>
+              )}
+            </Field>
+            {text('slug', t('linkPage.slug'), true)}
+            <p className="text-sm text-fg-muted sm:col-span-2">
+              {t('linkPage.url')}: <span dir="ltr">{page.url}</span>
+            </p>
           </div>
-        </div>
-      </Section>
-      <Section title={t('linkPage.designSection')}>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="flex items-center gap-4 sm:col-span-2">
-            {page.avatarUrl ? (
-              <img
-                src={page.avatarUrl}
-                alt=""
-                className="size-20 rounded-full border border-border object-cover"
-              />
-            ) : (
-              <div className="flex size-20 items-center justify-center rounded-full border border-dashed border-border text-xs text-fg-muted">
-                {t('linkPage.noAvatar')}
-              </div>
-            )}
-            <input
-              ref={fileInput}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="sr-only"
-              aria-label={t('linkPage.uploadAvatar')}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) upload.mutate(file);
-                e.target.value = '';
-              }}
-            />
-            <Button
-              variant="secondary"
-              loading={upload.isPending}
-              onClick={() => fileInput.current?.click()}
-            >
-              {t('linkPage.uploadAvatar')}
-            </Button>
-            {page.avatarUrl ? (
-              <Button
-                variant="ghost"
-                loading={removeAvatar.isPending}
-                onClick={() => removeAvatar.mutate()}
-              >
-                {t('linkPage.removeAvatar')}
-              </Button>
-            ) : null}
-          </div>
-          {text('titleAr', t('linkPage.titleAr'))}
-          {text('titleEn', t('linkPage.titleEn'), true)}
-          <Field label={t('linkPage.bioAr')}>
-            {(p) => (
-              <Textarea
-                {...p}
-                rows={3}
-                value={v.bioAr ?? ''}
-                onChange={(e) => set({ bioAr: e.target.value })}
-              />
-            )}
-          </Field>
-          <Field label={t('linkPage.bioEn')}>
-            {(p) => (
-              <Textarea
-                {...p}
-                rows={3}
-                dir="ltr"
-                value={v.bioEn ?? ''}
-                onChange={(e) => set({ bioEn: e.target.value })}
-              />
-            )}
-          </Field>
-        </div>
-      </Section>
-      <Section title={t('linkPage.styleSection')} description={t('linkPage.styleHint')}>
-        <div className="flex flex-col gap-6">
-          <div role="group" aria-label={t('linkPage.presets')} className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium">{t('linkPage.presets')}</span>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {THEME_PRESETS.map(({ key: name, style }) => {
-                const theme = linkPageTheme({
-                  ...style,
-                  buttonVariant: style.buttonVariant ?? 'fill',
-                  buttonTextColor: style.buttonTextColor ?? null,
-                  backgroundColor: style.backgroundColor ?? null,
-                  backgroundColor2: style.backgroundColor2 ?? null,
-                  textColor: style.textColor ?? null,
-                });
-                return (
-                  <button
-                    key={name}
-                    type="button"
-                    onClick={() => set(style)}
-                    className="flex flex-col items-center gap-2 rounded-lg border border-border p-3 text-sm transition hover:-translate-y-0.5 hover:shadow"
-                    style={{ ...theme.page, fontFamily: LINK_FONT_FAMILY[style.font ?? 'default'] }}
-                  >
-                    <span aria-hidden className="h-4 w-full rounded-full" style={theme.button} />
-                    {t(`linkPage.preset_${name}`)}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <Chips
-            label={t('linkPage.background')}
-            options={LINK_BACKGROUNDS}
-            value={v.background}
-            onChange={(background) =>
-              set({
-                background,
-                backgroundColor:
-                  background === 'custom' || background === 'gradient'
-                    ? v.backgroundColor || '#fef3c7'
-                    : v.backgroundColor,
-                backgroundColor2:
-                  background === 'gradient' ? v.backgroundColor2 || '#f472b6' : v.backgroundColor2,
-              })
-            }
-            render={(o) => t(`linkPage.background_${o}`)}
-          />
-          {v.background === 'custom' || v.background === 'gradient' ? (
+        </Section>
+      ) : null}
+      {part === 'appearance' ? (
+        <>
+          <Section title={t('linkPage.designSection')}>
             <div className="grid gap-4 sm:grid-cols-2">
-              <ColorField
-                label={
-                  v.background === 'gradient'
-                    ? t('linkPage.gradientFrom')
-                    : t('linkPage.backgroundColor')
-                }
-                value={v.backgroundColor}
-                fallback="#fef3c7"
-                onChange={(c) => set({ backgroundColor: c })}
-              />
-              {v.background === 'gradient' ? (
-                <ColorField
-                  label={t('linkPage.gradientTo')}
-                  value={v.backgroundColor2}
-                  fallback="#f472b6"
-                  onChange={(c) => set({ backgroundColor2: c })}
+              <div className="flex items-center gap-4 sm:col-span-2">
+                {page.avatarUrl ? (
+                  <img
+                    src={page.avatarUrl}
+                    alt=""
+                    className="size-20 rounded-full border border-border object-cover"
+                  />
+                ) : (
+                  <div className="flex size-20 items-center justify-center rounded-full border border-dashed border-border text-xs text-fg-muted">
+                    {t('linkPage.noAvatar')}
+                  </div>
+                )}
+                <input
+                  ref={fileInput}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="sr-only"
+                  aria-label={t('linkPage.uploadAvatar')}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) upload.mutate(file);
+                    e.target.value = '';
+                  }}
                 />
-              ) : null}
+                <Button
+                  variant="secondary"
+                  loading={upload.isPending}
+                  onClick={() => fileInput.current?.click()}
+                >
+                  {t('linkPage.uploadAvatar')}
+                </Button>
+                {page.avatarUrl ? (
+                  <Button
+                    variant="ghost"
+                    loading={removeAvatar.isPending}
+                    onClick={() => removeAvatar.mutate()}
+                  >
+                    {t('linkPage.removeAvatar')}
+                  </Button>
+                ) : null}
+              </div>
+              {text('titleAr', t('linkPage.titleAr'))}
+              {text('titleEn', t('linkPage.titleEn'), true)}
+              <Field label={t('linkPage.bioAr')}>
+                {(p) => (
+                  <Textarea
+                    {...p}
+                    rows={3}
+                    value={v.bioAr ?? ''}
+                    onChange={(e) => set({ bioAr: e.target.value })}
+                  />
+                )}
+              </Field>
+              <Field label={t('linkPage.bioEn')}>
+                {(p) => (
+                  <Textarea
+                    {...p}
+                    rows={3}
+                    dir="ltr"
+                    value={v.bioEn ?? ''}
+                    onChange={(e) => set({ bioEn: e.target.value })}
+                  />
+                )}
+              </Field>
             </div>
-          ) : null}
-          <div className="grid gap-4 sm:grid-cols-3">
-            <ColorField
-              label={t('linkPage.color')}
-              value={v.themeColor}
-              fallback="#1e3a8a"
-              onChange={(c) => set({ themeColor: c ?? '#1e3a8a' })}
-            />
-            <ColorField
-              label={t('linkPage.buttonTextColor')}
-              value={v.buttonTextColor}
-              fallback="#ffffff"
-              optional
-              onChange={(c) => set({ buttonTextColor: c })}
-            />
-            <ColorField
-              label={t('linkPage.textColor')}
-              value={v.textColor}
-              fallback="#0f172a"
-              optional
-              onChange={(c) => set({ textColor: c })}
-            />
-          </div>
-          <Chips
-            label={t('linkPage.buttonVariant')}
-            options={LINK_BUTTON_VARIANTS}
-            value={v.buttonVariant ?? 'fill'}
-            onChange={(buttonVariant) => set({ buttonVariant })}
-            render={(o) => t(`linkPage.variant_${o}`)}
-          />
-          <Chips
-            label={t('linkPage.buttonStyle')}
-            options={LINK_BUTTON_STYLES}
-            value={v.buttonStyle}
-            onChange={(buttonStyle) => set({ buttonStyle })}
-            render={(o) => t(`linkPage.button_${o}`)}
-          />
-          <Chips
-            label={t('linkPage.font')}
-            options={LINK_FONTS}
-            value={v.font ?? 'default'}
-            onChange={(font) => set({ font })}
-            render={(o) => (
-              <span
-                className="flex flex-col items-center"
-                style={{ fontFamily: LINK_FONT_FAMILY[o] }}
+          </Section>
+          <Section title={t('linkPage.styleSection')} description={t('linkPage.styleHint')}>
+            <div className="flex flex-col gap-6">
+              <div
+                role="group"
+                aria-label={t('linkPage.presets')}
+                className="flex flex-col gap-1.5"
               >
-                <span className="text-lg leading-tight">{sample}</span>
-                <span className="text-xs">{t(`linkPage.font_${o}`)}</span>
-              </span>
-            )}
-          />
-          <Chips
-            label={t('linkPage.animation')}
-            options={LINK_ANIMATIONS}
-            value={v.animation ?? 'fade-up'}
-            onChange={(animation) => set({ animation })}
-            render={(o) => t(`linkPage.animation_${o}`)}
-          />
-        </div>
-      </Section>
+                <span className="text-sm font-medium">{t('linkPage.presets')}</span>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {THEME_PRESETS.map(({ key: name, style }) => {
+                    const theme = linkPageTheme({
+                      ...style,
+                      buttonVariant: style.buttonVariant ?? 'fill',
+                      buttonTextColor: style.buttonTextColor ?? null,
+                      backgroundColor: style.backgroundColor ?? null,
+                      backgroundColor2: style.backgroundColor2 ?? null,
+                      textColor: style.textColor ?? null,
+                    });
+                    return (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => set(style)}
+                        className="flex flex-col items-center gap-2 rounded-lg border border-border p-3 text-sm transition hover:-translate-y-0.5 hover:shadow"
+                        style={{
+                          ...theme.page,
+                          fontFamily: LINK_FONT_FAMILY[style.font ?? 'default'],
+                        }}
+                      >
+                        <span
+                          aria-hidden
+                          className="h-4 w-full rounded-full"
+                          style={theme.button}
+                        />
+                        {t(`linkPage.preset_${name}`)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <Chips
+                label={t('linkPage.background')}
+                options={LINK_BACKGROUNDS}
+                value={v.background}
+                onChange={(background) =>
+                  set({
+                    background,
+                    backgroundColor:
+                      background === 'custom' || background === 'gradient'
+                        ? v.backgroundColor || '#fef3c7'
+                        : v.backgroundColor,
+                    backgroundColor2:
+                      background === 'gradient'
+                        ? v.backgroundColor2 || '#f472b6'
+                        : v.backgroundColor2,
+                  })
+                }
+                render={(o) => t(`linkPage.background_${o}`)}
+              />
+              {v.background === 'custom' || v.background === 'gradient' ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <ColorField
+                    label={
+                      v.background === 'gradient'
+                        ? t('linkPage.gradientFrom')
+                        : t('linkPage.backgroundColor')
+                    }
+                    value={v.backgroundColor}
+                    fallback="#fef3c7"
+                    onChange={(c) => set({ backgroundColor: c })}
+                  />
+                  {v.background === 'gradient' ? (
+                    <ColorField
+                      label={t('linkPage.gradientTo')}
+                      value={v.backgroundColor2}
+                      fallback="#f472b6"
+                      onChange={(c) => set({ backgroundColor2: c })}
+                    />
+                  ) : null}
+                </div>
+              ) : null}
+              <div className="grid gap-4 sm:grid-cols-3">
+                <ColorField
+                  label={t('linkPage.color')}
+                  value={v.themeColor}
+                  fallback="#1e3a8a"
+                  onChange={(c) => set({ themeColor: c ?? '#1e3a8a' })}
+                />
+                <ColorField
+                  label={t('linkPage.buttonTextColor')}
+                  value={v.buttonTextColor}
+                  fallback="#ffffff"
+                  optional
+                  onChange={(c) => set({ buttonTextColor: c })}
+                />
+                <ColorField
+                  label={t('linkPage.textColor')}
+                  value={v.textColor}
+                  fallback="#0f172a"
+                  optional
+                  onChange={(c) => set({ textColor: c })}
+                />
+              </div>
+              <Chips
+                label={t('linkPage.buttonVariant')}
+                options={LINK_BUTTON_VARIANTS}
+                value={v.buttonVariant ?? 'fill'}
+                onChange={(buttonVariant) => set({ buttonVariant })}
+                render={(o) => t(`linkPage.variant_${o}`)}
+              />
+              <Chips
+                label={t('linkPage.buttonStyle')}
+                options={LINK_BUTTON_STYLES}
+                value={v.buttonStyle}
+                onChange={(buttonStyle) => set({ buttonStyle })}
+                render={(o) => t(`linkPage.button_${o}`)}
+              />
+              <Chips
+                label={t('linkPage.font')}
+                options={LINK_FONTS}
+                value={v.font ?? 'default'}
+                onChange={(font) => set({ font })}
+                render={(o) => (
+                  <span
+                    className="flex flex-col items-center"
+                    style={{ fontFamily: LINK_FONT_FAMILY[o] }}
+                  >
+                    <span className="text-lg leading-tight">{sample}</span>
+                    <span className="text-xs">{t(`linkPage.font_${o}`)}</span>
+                  </span>
+                )}
+              />
+              <Chips
+                label={t('linkPage.animation')}
+                options={LINK_ANIMATIONS}
+                value={v.animation ?? 'fade-up'}
+                onChange={(animation) => set({ animation })}
+                render={(o) => t(`linkPage.animation_${o}`)}
+              />
+            </div>
+          </Section>
+        </>
+      ) : null}
       <div className="sticky bottom-0 z-10 -mx-1 flex items-center gap-3 rounded-lg border border-border bg-surface/95 p-3 shadow-sm backdrop-blur">
         <Button loading={save.isPending} onClick={() => save.mutate()}>
           {t('linkPage.save')}
@@ -738,6 +867,25 @@ function DesignForm({
 }
 
 // ------------------------------------------------------------------------------- links
+/** Colour of each link type's badge in the editor list. */
+const KIND_COLOR: Record<LinkItemKind, string> = {
+  link: '#64748b',
+  website: '#0f766e',
+  store: '#7c3aed',
+  instagram: '#e1306c',
+  tiktok: '#111827',
+  snapchat: '#facc15',
+  x: '#111827',
+  facebook: '#1877f2',
+  youtube: '#ff0000',
+  whatsapp: '#25d366',
+  telegram: '#229ed9',
+  email: '#6366f1',
+  phone: '#0ea5e9',
+  location: '#f97316',
+};
+
+/** Links of the page as cards: drag (pointer, touch or keyboard) to reorder, quick show/hide. */
 function LinksSection({ page }: { page: LinkPage }) {
   const { t, i18n } = useTranslation();
   const api = useApi();
@@ -745,12 +893,43 @@ function LinksSection({ page }: { page: LinkPage }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<LinkItem | 'new' | null>(null);
   const [deleting, setDeleting] = useState<LinkItem | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
   const done = async (saved: LinkPage) => {
     queryClient.setQueryData(key, saved);
     await queryClient.invalidateQueries({ queryKey: key });
   };
   const reorder = useMutation({
     mutationFn: (ids: string[]) => api.linkPage.reorder(ids),
+    // The new order shows at once; a refusal reloads the saved one.
+    onMutate: (ids) => {
+      const byId = new Map(page.items.map((i) => [i.id, i]));
+      queryClient.setQueryData<LinkPage>(key, {
+        ...page,
+        items: ids.map((id, n) => ({ ...byId.get(id)!, sortOrder: n })),
+      });
+    },
+    onSuccess: done,
+    onError: async (error) => {
+      notify.fail(error);
+      await queryClient.invalidateQueries({ queryKey: key });
+    },
+  });
+  const toggle = useMutation({
+    mutationFn: (item: LinkItem) =>
+      api.linkPage.saveItem(item.id, {
+        kind: item.kind,
+        labelAr: item.labelAr,
+        labelEn: item.labelEn,
+        emoji: item.emoji,
+        effect: item.effect,
+        url: item.url,
+        status: item.status === 'active' ? 'hidden' : 'active',
+        version: item.version,
+      }),
     onSuccess: done,
     onError: notify.fail,
   });
@@ -763,74 +942,64 @@ function LinksSection({ page }: { page: LinkPage }) {
     },
     onError: notify.fail,
   });
-  const move = (index: number, by: -1 | 1) => {
-    const ids = page.items.map((i) => i.id);
-    const [moved] = ids.splice(index, 1);
-    ids.splice(index + by, 0, moved!);
-    reorder.mutate(ids);
+  const ids = page.items.map((i) => i.id);
+  const move = (from: number, to: number) => reorder.mutate(arrayMove(ids, from, to));
+  const onDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    move(ids.indexOf(String(active.id)), ids.indexOf(String(over.id)));
   };
   const ar = i18n.language.startsWith('ar');
   const label = (i: LinkItem) => (ar ? i.labelAr || i.labelEn : i.labelEn || i.labelAr) ?? '';
   return (
-    <Section
-      title={t('linkPage.linksSection')}
-      description={t('linkPage.linksHint')}
-      actions={<Button onClick={() => setEditing('new')}>{t('linkPage.add')}</Button>}
-    >
+    <section className="flex flex-col gap-3" aria-label={t('linkPage.linksSection')}>
+      <button
+        type="button"
+        onClick={() => setEditing('new')}
+        className="group flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-primary/40 bg-primary-soft/40 p-4 font-semibold text-primary transition hover:border-primary hover:bg-primary-soft"
+      >
+        <span
+          aria-hidden
+          className="grid size-7 place-items-center rounded-full bg-primary text-lg leading-none text-primary-fg transition group-hover:rotate-90"
+        >
+          +
+        </span>
+        {t('linkPage.add')}
+      </button>
       {page.items.length === 0 ? (
         <EmptyState title={t('linkPage.noLinks')} description={t('linkPage.noLinksHint')} />
       ) : (
-        <ul className="flex flex-col divide-y divide-border">
-          {page.items.map((item, index) => (
-            <li key={item.id} className="flex flex-wrap items-center gap-3 py-2">
-              <div className="flex flex-col">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  aria-label={t('linkPage.moveUp', { name: label(item) })}
-                  disabled={index === 0 || reorder.isPending}
-                  onClick={() => move(index, -1)}
-                >
-                  ▲
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  aria-label={t('linkPage.moveDown', { name: label(item) })}
-                  disabled={index === page.items.length - 1 || reorder.isPending}
-                  onClick={() => move(index, 1)}
-                >
-                  ▼
-                </Button>
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="flex flex-wrap items-center gap-2 font-medium">
-                  {item.emoji ? <span aria-hidden>{item.emoji}</span> : null}
-                  {label(item)}
-                  <Badge tone="neutral">{t(`linkPage.kind_${item.kind}`)}</Badge>
-                  {item.status === 'hidden' ? (
-                    <Badge tone="warning">{t('linkPage.hidden')}</Badge>
-                  ) : null}
-                  {item.effect !== 'none' ? (
-                    <Badge tone="primary">{t(`linkPage.effect_${item.effect}`)}</Badge>
-                  ) : null}
-                </p>
-                <p className="truncate text-sm text-fg-muted" dir="ltr">
-                  {item.url}
-                </p>
-              </div>
-              <span className="text-sm text-fg-muted">
-                {t('linkPage.clicks', { count: item.clicks })}
-              </span>
-              <Button size="sm" variant="secondary" onClick={() => setEditing(item)}>
-                {t('linkPage.edit')}
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setDeleting(item)}>
-                {t('linkPage.delete')}
-              </Button>
-            </li>
-          ))}
-        </ul>
+        <>
+          <p className="text-xs text-fg-muted">{t('linkPage.dragHint')}</p>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            modifiers={[restrictToVerticalAxis]}
+            onDragEnd={onDragEnd}
+            accessibility={{
+              screenReaderInstructions: { draggable: t('linkPage.dragInstructions') },
+            }}
+          >
+            <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+              <ul className="flex flex-col gap-3">
+                {page.items.map((item, index) => (
+                  <LinkCard
+                    key={item.id}
+                    item={item}
+                    label={label(item)}
+                    first={index === 0}
+                    last={index === page.items.length - 1}
+                    busy={reorder.isPending}
+                    toggling={toggle.isPending && toggle.variables?.id === item.id}
+                    onMove={(by) => move(index, index + by)}
+                    onToggle={() => toggle.mutate(item)}
+                    onEdit={() => setEditing(item)}
+                    onDelete={() => setDeleting(item)}
+                  />
+                ))}
+              </ul>
+            </SortableContext>
+          </DndContext>
+        </>
       )}
       {editing ? (
         <ItemDialog
@@ -851,7 +1020,186 @@ function LinksSection({ page }: { page: LinkPage }) {
         loading={remove.isPending}
         onConfirm={() => deleting && remove.mutate(deleting.id)}
       />
-    </Section>
+    </section>
+  );
+}
+
+const iconButton =
+  'grid size-9 place-items-center rounded-full text-fg-muted transition hover:bg-surface-muted hover:text-fg disabled:opacity-30';
+
+function LinkCard({
+  item,
+  label,
+  first,
+  last,
+  busy,
+  toggling,
+  onMove,
+  onToggle,
+  onEdit,
+  onDelete,
+}: {
+  item: LinkItem;
+  label: string;
+  first: boolean;
+  last: boolean;
+  busy: boolean;
+  toggling: boolean;
+  onMove: (by: -1 | 1) => void;
+  onToggle: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const { t } = useTranslation();
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.id });
+  const color = KIND_COLOR[item.kind];
+  const visible = item.status === 'active';
+  return (
+    <li
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      data-dragging={isDragging || undefined}
+      className={`group relative flex flex-wrap items-center gap-3 rounded-2xl sm:flex-nowrap border border-border bg-surface p-3 shadow-sm transition-shadow hover:shadow-md ${
+        isDragging ? 'z-20 scale-[1.02] shadow-2xl ring-2 ring-primary' : ''
+      } ${visible ? '' : 'opacity-60'}`}
+    >
+      <button
+        type="button"
+        ref={setActivatorNodeRef}
+        {...attributes}
+        {...listeners}
+        aria-label={t('linkPage.dragHandle', { name: label })}
+        className="grid h-10 w-6 shrink-0 cursor-grab touch-none place-items-center rounded-md text-fg-subtle hover:bg-surface-muted hover:text-fg active:cursor-grabbing"
+      >
+        <svg viewBox="0 0 12 20" width="12" height="20" fill="currentColor" aria-hidden>
+          {[3, 10, 17].map((y) => (
+            <g key={y}>
+              <circle cx="3" cy={y} r="1.6" />
+              <circle cx="9" cy={y} r="1.6" />
+            </g>
+          ))}
+        </svg>
+      </button>
+      <span
+        aria-hidden
+        className="grid size-11 shrink-0 place-items-center rounded-xl text-xl shadow-sm"
+        style={
+          item.emoji
+            ? { backgroundColor: `${color}22` }
+            : { backgroundColor: color, color: readableOn(color) }
+        }
+      >
+        {item.emoji ?? <LinkIcon kind={item.kind} />}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="flex flex-wrap items-center gap-2 font-semibold">
+          <span className="truncate">{label}</span>
+          {item.effect !== 'none' ? (
+            <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
+              ✨ {t(`linkPage.effect_${item.effect}`)}
+            </span>
+          ) : null}
+        </p>
+        <p className="truncate text-sm text-fg-muted" dir="ltr">
+          {item.url}
+        </p>
+      </div>
+      <div className="flex w-full items-center gap-1 border-t border-border pt-2 sm:w-auto sm:border-0 sm:pt-0">
+        <span className="me-auto shrink-0 rounded-full bg-surface-muted px-2.5 py-1 text-xs font-medium text-fg-muted sm:me-2">
+          {t('linkPage.clicks', { count: item.clicks })}
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={visible}
+          aria-label={t('linkPage.visibleSwitch', { name: label })}
+          title={visible ? t('linkPage.visible') : t('linkPage.hidden')}
+          disabled={toggling}
+          onClick={onToggle}
+          className={`relative h-6 w-11 shrink-0 rounded-full transition ${visible ? 'bg-emerald-500' : 'bg-border-strong'}`}
+        >
+          <span
+            className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-all ${
+              visible ? 'start-[1.375rem]' : 'start-0.5'
+            }`}
+          />
+        </button>
+        <div className="flex shrink-0 items-center">
+          <button
+            type="button"
+            className={iconButton}
+            aria-label={`${t('linkPage.edit')} ${label}`}
+            title={t('linkPage.edit')}
+            onClick={onEdit}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className={`${iconButton} hover:!text-danger`}
+            aria-label={`${t('linkPage.delete')} ${label}`}
+            title={t('linkPage.delete')}
+            onClick={onDelete}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+            </svg>
+          </button>
+          {/* Buttons for moving without dragging (keyboard and screen readers, small screens). */}
+          <div className="flex flex-col">
+            <button
+              type="button"
+              className="grid h-5 w-7 place-items-center rounded text-xs text-fg-subtle hover:bg-surface-muted disabled:opacity-20"
+              aria-label={t('linkPage.moveUp', { name: label })}
+              disabled={first || busy}
+              onClick={() => onMove(-1)}
+            >
+              ▲
+            </button>
+            <button
+              type="button"
+              className="grid h-5 w-7 place-items-center rounded text-xs text-fg-subtle hover:bg-surface-muted disabled:opacity-20"
+              aria-label={t('linkPage.moveDown', { name: label })}
+              disabled={last || busy}
+              onClick={() => onMove(1)}
+            >
+              ▼
+            </button>
+          </div>
+        </div>
+      </div>
+    </li>
   );
 }
 

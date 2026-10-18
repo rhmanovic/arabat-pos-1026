@@ -322,8 +322,11 @@ describe('link page', () => {
     link.addEventListener('click', (e) => e.preventDefault());
     await user.click(link);
     expect(beacon).toHaveBeenCalledWith(`/api/v1/public/links/demo/items/${LINK}/click`);
-    await i18n.changeLanguage('ar');
+    // One globe button switches the language; its name is the language it switches to.
+    expect(screen.queryByRole('radiogroup')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'العربية' }));
     expect(await screen.findByRole('link', { name: 'إنستقرام' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'English' })).toBeInTheDocument();
   });
 
   it('answers not found for an unpublished page', async () => {

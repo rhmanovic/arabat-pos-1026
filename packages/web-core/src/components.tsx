@@ -97,6 +97,43 @@ export function LanguageSwitcher({ className }: { className?: string }) {
   );
 }
 
+/**
+ * One round globe button that switches between Arabic and English (link pages, ADR-0116
+ * amendment 3). Its accessible name is the language it switches to.
+ */
+export function LanguageToggle({ className }: { className?: string }) {
+  const { t, i18n } = useTranslation('common');
+  const next = i18n.resolvedLanguage === 'en' ? 'ar' : 'en';
+  const label = t(`language.${next}`);
+  return (
+    <button
+      type="button"
+      onClick={() => void i18n.changeLanguage(next)}
+      aria-label={label}
+      title={label}
+      lang={next}
+      className={cn(
+        'grid size-10 place-items-center rounded-full bg-white/80 text-fg shadow-sm ring-1 ring-black/5 backdrop-blur transition hover:scale-105 hover:bg-white active:scale-95',
+        className,
+      )}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        width="20"
+        height="20"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        aria-hidden
+      >
+        <circle cx="12" cy="12" r="9.5" />
+        <path d="M2.5 12h19M12 2.5c2.6 2.8 3.9 6 3.9 9.5s-1.3 6.7-3.9 9.5c-2.6-2.8-3.9-6-3.9-9.5s1.3-6.7 3.9-9.5z" />
+      </svg>
+    </button>
+  );
+}
+
 /** Live connection indicator: proves the frontend reaches the backend and the database. */
 export function ApiStatus({ className }: { className?: string }) {
   const api = useApi();

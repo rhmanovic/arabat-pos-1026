@@ -100,6 +100,7 @@ describe('link page app', () => {
         ids: [ID2, ID1],
       }),
     );
+    await user.click(screen.getByRole('tab', { name: 'Settings' }));
     await user.selectOptions(screen.getByLabelText('Page status'), 'published');
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() =>
@@ -139,6 +140,65 @@ describe('link page app', () => {
   });
 });
 
+describe('link page header', () => {
+  it('publishes from the switch and keeps unsaved design changes in the same save', async () => {
+    const user = userEvent.setup();
+    let current: object = page;
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'online.manage']),
+      routes: {
+        'GET /manager/link-page': () => ({ status: 200, body: current }),
+        'PUT /manager/link-page': (body) => {
+          current = { ...page, ...(body as object), version: 3 };
+          return { status: 200, body: current };
+        },
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/', fetch });
+    const publish = await screen.findByRole('switch', { name: 'Page published' });
+    expect(publish).toHaveAttribute('aria-checked', 'false');
+    await user.click(screen.getByRole('tab', { name: 'Appearance' }));
+    await user.click(screen.getByRole('button', { name: 'Mint' }));
+    await user.click(publish);
+    await waitFor(() =>
+      expect(fetch.calls.find((c) => c.method === 'PUT')?.body).toMatchObject({
+        status: 'published',
+        backgroundColor: '#ecfdf5',
+        font: 'almarai',
+      }),
+    );
+    expect(await screen.findByRole('switch', { name: 'Page published' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    // Saving keeps the open tab.
+    expect(screen.getByRole('tab', { name: 'Appearance' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+  });
+
+  it('hides a link from its card switch', async () => {
+    const user = userEvent.setup();
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'online.manage']),
+      routes: {
+        'GET /manager/link-page': () => ({ status: 200, body: page }),
+        [`PUT /manager/link-page/items/${ID1}`]: () => ({ status: 200, body: page }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/', fetch });
+    await user.click(await screen.findByRole('switch', { name: 'Show Instagram on the page' }));
+    await waitFor(() =>
+      expect(fetch.calls.find((c) => c.method === 'PUT')?.body).toMatchObject({
+        status: 'hidden',
+        url: 'https://instagram.com/demo',
+        version: 1,
+      }),
+    );
+  });
+});
+
 describe('link page style', () => {
   function setup() {
     const fetch = fakeApiFetch({
@@ -159,7 +219,8 @@ describe('link page style', () => {
   it('applies a ready-made theme, shows it in the preview before saving and saves it', async () => {
     const user = userEvent.setup();
     const fetch = setup();
-    await user.click(await screen.findByRole('button', { name: 'Sunset' }));
+    await user.click(await screen.findByRole('tab', { name: 'Appearance' }));
+    await user.click(screen.getByRole('button', { name: 'Sunset' }));
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
     const preview = screen.getByRole('complementary', { name: 'Preview' });
     const shell = within(preview).getByRole('heading', { name: 'Demo' }).closest('[data-font]')!;
@@ -186,7 +247,8 @@ describe('link page style', () => {
   it('switches a colour back to automatic', async () => {
     const user = userEvent.setup();
     const fetch = setup();
-    await user.click(await screen.findByRole('button', { name: 'Night' }));
+    await user.click(await screen.findByRole('tab', { name: 'Appearance' }));
+    await user.click(screen.getByRole('button', { name: 'Night' }));
     const auto = screen.getAllByRole('checkbox', { name: 'Automatic' });
     // Button text colour is set by the theme; text colour stays automatic.
     expect(auto[0]).not.toBeChecked();

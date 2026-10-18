@@ -1,6 +1,6 @@
 import { ApiError } from '@arabat/api-client';
 import { Spinner } from '@arabat/ui';
-import { ErrorState, LanguageSwitcher, LinkPageView, NotFound, useApi } from '@arabat/web-core';
+import { ErrorState, LanguageToggle, LinkPageView, NotFound, useApi } from '@arabat/web-core';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -52,7 +52,7 @@ export function LinksPage() {
       language={i18n.language}
       emptyLabel={t('links.empty')}
       onOpen={open}
-      toolbar={<LanguageSwitcher />}
+      toolbar={<LanguageToggle />}
     />
   );
 }

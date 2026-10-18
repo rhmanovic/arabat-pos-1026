@@ -997,6 +997,12 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
   glow). No motion for visitors with reduced motion. Migration 0060, BR-202.
 - Tests: API integration 8 (links), links-web 9, store-web / web-core link view, E2E links 2.
 - Local: `pnpm verify`, integration 282, E2E 39, all passing.
+### 2026-10-18 — Modern link-page editor, drag and drop, globe button (ADR-0116 amendment 3)
+- `/links`: header card with the address, copy / open and a publish switch; tabs Links /
+  Appearance / Settings; link cards dragged to reorder (mouse, touch, keyboard) with a show / hide
+  switch and icon buttons; phone-frame preview; cards wrap into two rows on phones.
+- Public page and editor: one globe button switches Arabic / English.
+- Tests: links-web 11, storefront (globe), E2E drags a card with the mouse.
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.

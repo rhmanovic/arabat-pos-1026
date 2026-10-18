@@ -3,7 +3,7 @@ import {
   ApiStatus,
   AuthHeading,
   ForgotPasswordForm,
-  LanguageSwitcher,
+  LanguageToggle,
   MerchantLoginForm,
 } from '@arabat/web-core';
 import type { ReactNode } from 'react';
@@ -14,7 +14,7 @@ function AuthShell({ children }: { children: ReactNode }) {
     <div className="flex min-h-dvh flex-col bg-canvas p-4 sm:p-8">
       <div className="flex items-center justify-between">
         <ApiStatus />
-        <LanguageSwitcher />
+        <LanguageToggle />
       </div>
       <div className="flex flex-1 items-center justify-center py-10">
         <Card className="w-full max-w-md">

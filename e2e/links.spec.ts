@@ -47,19 +47,31 @@ test('the owner builds a link page in its own interface and a visitor opens it (
   await dialog.getByLabel('Address').fill('+965 5000 0001');
   await dialog.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByText('https://wa.me/96550000001')).toBeVisible();
-  // WhatsApp first.
-  await page.getByRole('button', { name: 'Move WhatsApp up' }).click();
+  // WhatsApp first, by dragging its card above Instagram.
+  const from = await page.getByRole('button', { name: 'Drag WhatsApp' }).boundingBox();
+  const to = await page.getByRole('button', { name: 'Drag Instagram' }).boundingBox();
+  await page.mouse.move(from!.x + from!.width / 2, from!.y + from!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(to!.x + to!.width / 2, to!.y + 4, { steps: 12 });
+  await page.mouse.move(to!.x + to!.width / 2, to!.y - 2, { steps: 4 });
+  await page.mouse.up();
   await expect(page.getByRole('button', { name: 'Move WhatsApp up' })).toBeDisabled();
 
+  await page.getByRole('tab', { name: 'Settings' }).click();
   await page.getByLabel('Address (letters, digits and dashes)').fill(slug);
+  await page.getByRole('tab', { name: 'Appearance' }).click();
   await page.getByLabel('Title (English)').fill('Links Co');
   await page.getByLabel('Description (English)').fill('Coffee & sweets');
   // A ready-made theme (gradient, Cairo font) and a motion.
   await page.getByRole('button', { name: 'Sunset' }).click();
   await page.getByRole('button', { name: 'Pop' }).click();
-  await page.getByLabel('Page status').selectOption('published');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(page.getByRole('link', { name: new RegExp(`/store/links/${slug}$`) })).toBeVisible();
+  // The header switch publishes and saves the design in one go.
+  await page.getByRole('switch', { name: 'Page published' }).click();
+  await expect(page.getByRole('switch', { name: 'Page published' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await expect(page.getByText(`/store/links/${slug}`)).toBeVisible();
   // The live preview follows the saved page.
   await expect(
     page.getByRole('complementary', { name: 'Preview' }).getByRole('heading', { name: 'Links Co' }),

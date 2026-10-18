@@ -1,5 +1,5 @@
 import { Alert, Button } from '@arabat/ui';
-import { LanguageSwitcher, localizedName, useAuth, useLogout } from '@arabat/web-core';
+import { LanguageToggle, localizedName, useAuth, useLogout } from '@arabat/web-core';
 import { useTranslation } from 'react-i18next';
 import { Outlet } from 'react-router';
 
@@ -35,7 +35,7 @@ export function LinksLayout() {
           >
             {t('backToManager')}
           </a>
-          <LanguageSwitcher />
+          <LanguageToggle />
           <Button
             variant="ghost"
             size="sm"

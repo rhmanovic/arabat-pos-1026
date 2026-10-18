@@ -1659,4 +1659,13 @@ ADR; supersede it.
   keyframes live in `@arabat/ui/theme.css` and are switched off under `prefers-reduced-motion`.
   The editor offers eight ready-made themes (one click, every value editable afterwards) and its
   preview now shows unsaved changes. Colours a background no longer uses are dropped on save.
+- **Amendment 3 (owner, 2026-10-18): a modern editor and a globe language button.** The `/links`
+  editor has a header card (page address, copy, open, and a publish switch that saves the current
+  design with the new status), tabs Links / Appearance / Settings (the open tab survives a save),
+  and link cards reordered by drag and drop with `@dnd-kit` (pointer, touch with a short press,
+  and keyboard; the order shows at once and is reloaded if the server refuses it). Each card has a
+  show / hide switch, edit and delete icons, and small up / down buttons kept for screen readers.
+  The phone preview has a device frame. On the public page and in the editor the «العربية /
+  English» switch is replaced by `LanguageToggle` (`@arabat/web-core`): one round globe button
+  whose accessible name is the language it switches to. No API or database change.
 
