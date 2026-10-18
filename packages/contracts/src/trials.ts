@@ -42,6 +42,8 @@ export const publicTrialOfferSchema = z.object({
   trialDaysOwn: z.number().int(),
   trialDaysDevices: z.number().int(),
   waitlistEnabled: z.boolean(),
+  systemNameAr: z.string(),
+  systemNameEn: z.string(),
   systemPrice: moneySchema,
   devices: z.array(trialDeviceSchema),
 });

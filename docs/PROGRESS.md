@@ -942,6 +942,14 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
   sand → power white → features sand (white cards) → why night → pricing white → footer sand;
   pricing hero is brand-soft under the white header.
 - Local: `pnpm verify` 266, integration 273, E2E 37, all passing.
+### 2026-10-18 — Honest trial summary on /start
+- The `/start` side panel is the pricing page's cart: system and device lines at their real prices,
+  system (yearly) and devices (once) subtotals, the trial length, and "first payment after the
+  trial" with the yearly renewal. The word "مجاناً" as a headline is gone (owner: we do not sell
+  with words). Trial lengths read as words everywhere: whole weeks as weeks ("3 أسابيع"),
+  otherwise days with Arabic number agreement (`trialLength` in `content.ts`).
+- `GET /public/trial` also returns the system's name (`systemNameAr` / `systemNameEn`).
+- Local: `pnpm verify` 267, integration 273, E2E 37, all passing.
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.

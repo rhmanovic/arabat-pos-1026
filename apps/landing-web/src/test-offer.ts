@@ -19,6 +19,8 @@ export function trialOffer(overrides: Partial<PublicTrialOffer> = {}): PublicTri
     trialDaysOwn: 14,
     trialDaysDevices: 7,
     waitlistEnabled: true,
+    systemNameAr: 'نظام عربات POS',
+    systemNameEn: 'Arabat POS system',
     systemPrice: { amount: '99.000', currency: 'KWD' },
     devices: [device('t', true), device('p', false)],
     ...overrides,

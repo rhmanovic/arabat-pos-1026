@@ -605,7 +605,9 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
   customer is more engaged). The operator sets in the platform: trial days on own devices (from account creation),
   trial days with devices (from the day the operator marks them delivered), units of each device
   available for trials (available = stock − approved/delivered not yet returned) and whether a
-  waiting list is used when they run out. Device trials always wait for the operator. No demo till.
+  waiting list is used when they run out. Device trials always wait for the operator. No demo till. The sign-up summary shows
+  the real prices (system per year, devices once, first payment after the trial) and the trial
+  length, never a bare "free" headline (owner, 2026-10-18).
   No payment, phone or WhatsApp in this phase.
 - **BR-196** Public pricing (owner, 2026-10-18, ADR-0114): the system costs 99.000 KWD per year
   **per company**, whatever the number of branches and employees; devices (tablet, iPad, barcode

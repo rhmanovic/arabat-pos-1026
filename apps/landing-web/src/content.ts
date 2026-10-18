@@ -10,7 +10,21 @@ export interface Feature {
   text: string;
 }
 
+/** Trial length in words: whole weeks as weeks ("3 أسابيع"), otherwise days. */
+function arabicLength(days: number): string {
+  const unit = (n: number, one: string, two: string, few: string, many: string) =>
+    n === 1 ? one : n === 2 ? two : n <= 10 ? `${n} ${few}` : `${n} ${many}`;
+  return days >= 7 && days % 7 === 0
+    ? unit(days / 7, 'أسبوع', 'أسبوعين', 'أسابيع', 'أسبوع')
+    : unit(days, 'يوم واحد', 'يومين', 'أيام', 'يوم');
+}
+function englishLength(days: number): string {
+  const [n, word] = days >= 7 && days % 7 === 0 ? [days / 7, 'week'] : [days, 'day'];
+  return `${n} ${word}${n === 1 ? '' : 's'}`;
+}
+
 const ar = {
+  trialLength: arabicLength,
   pageTitle: 'عربات POS | نظام نقاط البيع وإدارة الأعمال في الكويت',
   nav: {
     home: 'الرئيسية',
@@ -22,8 +36,8 @@ const ar = {
   switchLanguage: 'English',
   signIn: 'تسجيل الدخول',
   signupCta: 'أنشئ حساب وجهّز محلك',
-  priceLine: '{price} د.ك سنوياً · تجربة مجانية {days} يوم بدون بطاقة',
-  trialLine: 'تجربة مجانية {days} يوم بدون بطاقة',
+  priceLine: '{price} د.ك سنوياً · تجربة مجانية {length} بدون بطاقة',
+  trialLine: 'تجربة مجانية {length} بدون بطاقة',
   pricingLink: 'شاهد تفاصيل الأسعار',
   openMenu: 'فتح القائمة',
   closeMenu: 'إغلاق القائمة',
@@ -305,15 +319,15 @@ const ar = {
       skip: 'تخطَّ، عندي أجهزتي',
     },
     summary: {
-      title: 'تجربتك',
-      business: 'النشاط',
-      devices: 'الأجهزة',
-      own: 'على أجهزتك',
-      length: 'مدة التجربة',
-      days: '{days} يوم',
-      today: 'تدفع اليوم',
-      free: 'مجاناً',
-      after: 'بعد التجربة {price} د.ك سنوياً',
+      title: 'طلبك',
+      own: 'بدون أجهزة (على أجهزتك)',
+      system: 'النظام (سنوياً)',
+      devices: 'الأجهزة (مرة واحدة)',
+      items: '{n} جهاز',
+      trial: 'الفترة التجريبية',
+      fromDelivery: 'تبدأ من يوم استلام الأجهزة',
+      firstPayment: 'الدفعة الأولى بعد التجربة',
+      renewal: 'بعدها {amount} د.ك سنوياً للنظام',
     },
     account: {
       title: 'خطوة أخيرة وتبدأ تجربتك',
@@ -322,7 +336,7 @@ const ar = {
       password: 'الرقم السري',
       passwordHint: '10 أحرف على الأقل',
       company: 'اسم المحل (اختياري)',
-      trial: 'تجربة مجانية {days} يوم، بدون بطاقة.',
+      trial: 'تجربة مجانية {length}، بدون بطاقة.',
       submit: 'أنشئ حسابي',
       sending: 'جارٍ الإنشاء…',
       emailTaken: 'هذا الإيميل مسجّل عندنا. سجّل دخولك بدل ما تنشئ حساب جديد.',
@@ -332,7 +346,7 @@ const ar = {
       error: 'تعذّر إنشاء الحساب. تأكد من البيانات وحاول مرة ثانية.',
     },
     done: {
-      title: 'مبروك! تجربتك المجانية {days} يوم بدأت.',
+      title: 'مبروك! تجربتك المجانية ({length}) بدأت.',
       devices: 'وصلنا طلب الأجهزة ونتواصل معك لموعد التسليم. التجربة تبدأ من يوم الاستلام.',
       waitlist: 'أضفناك لقائمة الانتظار للأجهزة ونبلغك أول ما تتوفر. تجربتك على أجهزتك بدأت الحين.',
       enter: 'ادخل لوحة التحكم',
@@ -359,6 +373,7 @@ const ar = {
 };
 
 const en: typeof ar = {
+  trialLength: englishLength,
   pageTitle: 'Arabat POS | Point of sale and business management in Kuwait',
   nav: {
     home: 'Home',
@@ -370,8 +385,8 @@ const en: typeof ar = {
   switchLanguage: 'العربية',
   signIn: 'Sign in',
   signupCta: 'Create an account and set up your shop',
-  priceLine: '{price} KWD per year · free {days}-day trial, no card',
-  trialLine: 'Free {days}-day trial, no card',
+  priceLine: '{price} KWD per year · free trial for {length}, no card',
+  trialLine: 'Free trial for {length}, no card',
   pricingLink: 'See pricing details',
   openMenu: 'Open menu',
   closeMenu: 'Close menu',
@@ -699,15 +714,15 @@ const en: typeof ar = {
       skip: 'Skip, I have my own devices',
     },
     summary: {
-      title: 'Your trial',
-      business: 'Business',
-      devices: 'Devices',
-      own: 'Your own devices',
-      length: 'Trial length',
-      days: '{days} days',
-      today: 'You pay today',
-      free: 'Free',
-      after: 'After the trial {price} KWD per year',
+      title: 'Your order',
+      own: 'No devices (your own)',
+      system: 'System (per year)',
+      devices: 'Devices (once)',
+      items: '{n} devices',
+      trial: 'Free trial',
+      fromDelivery: 'Starts on the day the devices arrive',
+      firstPayment: 'First payment after the trial',
+      renewal: 'then {amount} KWD per year for the system',
     },
     account: {
       title: 'One last step',
@@ -716,7 +731,7 @@ const en: typeof ar = {
       password: 'Password',
       passwordHint: 'At least 10 characters',
       company: 'Shop name (optional)',
-      trial: 'Free {days}-day trial, no card.',
+      trial: 'Free trial for {length}, no card.',
       submit: 'Create my account',
       sending: 'Creating…',
       emailTaken: 'This e-mail is already registered. Sign in instead.',
@@ -726,7 +741,7 @@ const en: typeof ar = {
       error: 'The account could not be created. Check your details and try again.',
     },
     done: {
-      title: "You're in! Your free {days}-day trial has started.",
+      title: "You're in! Your free trial ({length}) has started.",
       devices:
         'We received your device request and will contact you to arrange delivery. The trial starts on the day you receive them.',
       waitlist:

@@ -20,7 +20,7 @@ test('a visitor picks a business, skips the devices and lands in a trial account
   await page.getByRole('button', { name: 'أنشئ حسابي' }).click();
 
   await expect(
-    page.getByRole('heading', { name: /مبروك! تجربتك المجانية \d+ يوم بدأت/ }),
+    page.getByRole('heading', { name: /مبروك! تجربتك المجانية \(.+\) بدأت/ }),
   ).toBeVisible();
   await page.getByRole('link', { name: 'ادخل لوحة التحكم' }).click();
   await expect(page).toHaveURL(/\/manager\/?$/);

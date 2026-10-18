@@ -5,12 +5,14 @@ import {
   type TrialStarted,
   BUSINESS_TYPES,
 } from '@arabat/contracts';
+import { Money } from '@arabat/money';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { CONTACT_EMAIL, type Content, type Language } from './content.js';
 import { ItemIllustration } from './illustrations.js';
-import { Footer, Header, SIGN_IN_URL, primaryButton, shortAmount, useLanguage } from './layout.js';
+import { Footer, Header, SIGN_IN_URL, primaryButton, useLanguage } from './layout.js';
 import { Reveal } from './reveal.js';
 
+const CURRENCY = 'KWD' as const;
 type Step = 0 | 1 | 2 | 3;
 type Quantities = Record<string, number>;
 type Account = { fullName: string; email: string; password: string; company: string };
@@ -172,7 +174,6 @@ export function StartPage() {
                   t={t}
                   lang={lang}
                   offer={offer}
-                  business={business}
                   quantities={quantities}
                   trialDays={trialDays}
                 />
@@ -523,7 +524,7 @@ function AccountStep({
       </div>
       <p className="mt-6 flex items-start gap-2 rounded-2xl bg-brand-soft px-4 py-3 text-sm text-brand">
         <span aria-hidden="true">🎁</span>
-        {fill(a.trial, { days: trialDays })}
+        {fill(a.trial, { length: t.trialLength(trialDays) })}
       </p>
       {error ? (
         <p role="alert" className="mt-4 rounded-2xl bg-coral/10 px-4 py-3 text-sm text-coral">
@@ -559,57 +560,87 @@ function Summary({
   t,
   lang,
   offer,
-  business,
   quantities,
   trialDays,
 }: {
   t: Content;
   lang: Language;
   offer: PublicTrialOffer;
-  business: BusinessType | null;
   quantities: Quantities;
   trialDays: number;
 }) {
   const m = t.start.summary;
   const chosen = offer.devices.filter((d) => (quantities[d.id] ?? 0) > 0);
+  const system = Money.parse(offer.systemPrice.amount, CURRENCY);
+  let devices = Money.zero(CURRENCY);
+  let count = 0;
+  for (const d of chosen) {
+    const quantity = quantities[d.id] ?? 0;
+    devices = devices.add(Money.parse(d.price.amount, CURRENCY).multiply(String(quantity)));
+    count += quantity;
+  }
+  const total = system.add(devices).toDecimalString();
   return (
     <aside className="hidden lg:block">
       <div className="sticky top-24 rounded-3xl bg-white p-6 shadow-sm">
         <h3 className="text-lg font-bold">{m.title}</h3>
-        <dl className="mt-4 space-y-3 text-sm">
+        <ul className="mt-4 space-y-3 text-sm">
+          <li className="flex items-start justify-between gap-3">
+            <span className="text-ink">
+              {lang === 'ar' ? offer.systemNameAr : offer.systemNameEn}
+            </span>
+            <span className="tabular-nums" dir="ltr">
+              {system.toDecimalString()}
+            </span>
+          </li>
+          {chosen.map((d) => (
+            <li key={d.id} className="cart-line flex items-start justify-between gap-3">
+              <span className="text-ink">
+                {lang === 'ar' ? d.nameAr : d.nameEn}{' '}
+                <span className="text-muted">× {quantities[d.id]}</span>
+              </span>
+              <span className="tabular-nums" dir="ltr">
+                {Money.parse(d.price.amount, CURRENCY)
+                  .multiply(String(quantities[d.id]))
+                  .toDecimalString()}
+              </span>
+            </li>
+          ))}
+          {chosen.length === 0 ? <li className="text-muted">{m.own}</li> : null}
+        </ul>
+        <dl className="mt-5 space-y-2 border-t border-black/5 pt-4 text-sm">
           <div className="flex justify-between gap-3">
-            <dt className="text-muted">{m.business}</dt>
-            <dd className="text-ink">{business ? t.start.business.types[business] : '—'}</dd>
-          </div>
-          <div className="flex justify-between gap-3">
-            <dt className="text-muted">{m.devices}</dt>
-            <dd className="text-end text-ink">
-              {chosen.length === 0 ? (
-                m.own
-              ) : (
-                <ul className="space-y-1">
-                  {chosen.map((d) => (
-                    <li key={d.id} className="cart-line">
-                      {lang === 'ar' ? d.nameAr : d.nameEn}{' '}
-                      <span className="text-muted">× {quantities[d.id]}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+            <dt className="text-muted">{m.system}</dt>
+            <dd className="tabular-nums" dir="ltr">
+              {system.toDecimalString()}
             </dd>
           </div>
-          <div className="flex justify-between gap-3 border-t border-black/5 pt-3">
-            <dt className="text-muted">{m.length}</dt>
-            <dd key={trialDays} className="bump font-bold text-ink">
-              {fill(m.days, { days: trialDays })}
+          <div className="flex justify-between gap-3">
+            <dt className="text-muted">
+              {m.devices}
+              {count ? ` · ${fill(m.items, { n: count })}` : ''}
+            </dt>
+            <dd className="tabular-nums" dir="ltr">
+              {devices.toDecimalString()}
             </dd>
           </div>
         </dl>
-        <div className="mt-4 rounded-2xl bg-brand p-4 text-white">
-          <p className="text-sm text-white/85">{m.today}</p>
-          <p className="text-3xl font-bold">{m.free}</p>
+        <div className="mt-4 flex items-start justify-between gap-3 rounded-2xl bg-brand-soft px-4 py-3 text-sm">
+          <div>
+            <p className="font-medium text-brand">{m.trial}</p>
+            {chosen.length ? <p className="mt-0.5 text-xs text-muted">{m.fromDelivery}</p> : null}
+          </div>
+          <p key={trialDays} className="bump font-bold text-brand">
+            {t.trialLength(trialDays)}
+          </p>
+        </div>
+        <div className="mt-3 rounded-2xl bg-brand p-4 text-white">
+          <p className="text-sm text-white/85">{m.firstPayment}</p>
+          <p key={total} className="bump text-3xl font-bold tabular-nums" dir="ltr">
+            {total} <span className="text-base">{t.pricing.currency}</span>
+          </p>
           <p className="mt-1 text-xs text-white/80">
-            {fill(m.after, { price: shortAmount(offer.systemPrice.amount) })}
+            {fill(m.renewal, { amount: system.toDecimalString() })}
           </p>
         </div>
       </div>
@@ -624,7 +655,9 @@ function Done({ t, result }: { t: Content; result: TrialStarted }) {
       <span className="pop mx-auto grid size-20 place-items-center rounded-full bg-brand text-4xl text-white shadow-lg shadow-brand/30">
         ✓
       </span>
-      <h1 className="mt-6 text-3xl font-bold">{fill(d.title, { days: result.trialDays })}</h1>
+      <h1 className="mt-6 text-3xl font-bold">
+        {fill(d.title, { length: t.trialLength(result.trialDays) })}
+      </h1>
       {result.devices !== 'none' ? (
         <p className="mt-3 text-lg leading-relaxed text-muted">
           {result.devices === 'waitlist' ? d.waitlist : d.devices}

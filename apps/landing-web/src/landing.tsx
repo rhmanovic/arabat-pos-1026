@@ -378,7 +378,7 @@ function Steps({ t, offer }: { t: Content; offer: PublicTrialOffer | null }) {
           perYear={t.pricing.perYear}
           includes={t.pricing.system.includes}
           className="border border-black/5 shadow-xl shadow-brand/10"
-          badge={offer ? fill(t.trialLine, { days: offer.trialDaysOwn }) : null}
+          badge={offer ? fill(t.trialLine, { length: t.trialLength(offer.trialDaysOwn) }) : null}
           action={
             <a href={REGISTER_URL} className={primaryButton}>
               {t.signupCta}
@@ -404,7 +404,7 @@ function PriceLine({
     <p className={className}>
       {fill(t.priceLine, {
         price: shortAmount(offer.systemPrice.amount),
-        days: offer.trialDaysOwn,
+        length: t.trialLength(offer.trialDaysOwn),
       })}
     </p>
   );
@@ -437,7 +437,7 @@ function PricingAndStart({ t, offer }: { t: Content; offer: PublicTrialOffer | n
         </a>
         {offer ? (
           <p className="mt-4 text-sm text-muted">
-            {fill(t.trialLine, { days: offer.trialDaysOwn })}
+            {fill(t.trialLine, { length: t.trialLength(offer.trialDaysOwn) })}
           </p>
         ) : null}
         <p className="mt-6 text-sm text-muted">

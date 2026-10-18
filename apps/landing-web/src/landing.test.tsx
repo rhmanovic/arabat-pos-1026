@@ -24,7 +24,7 @@ describe('LandingPage', () => {
       '/start',
     );
     expect(
-      await within(hero).findByText('99 د.ك سنوياً · تجربة مجانية 14 يوم بدون بطاقة'),
+      await within(hero).findByText('99 د.ك سنوياً · تجربة مجانية أسبوعين بدون بطاقة'),
     ).toBeInTheDocument();
     // Every big button goes to the same place; sign-in stays a small link in the header.
     for (const link of screen.getAllByRole('link', { name: 'أنشئ حساب وجهّز محلك' }))

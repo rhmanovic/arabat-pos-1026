@@ -1604,4 +1604,7 @@ ADR; supersede it.
   device cards, sticky summary). `demo-receipt`, `resend` and `verify` are gone; the
   `trial_signups` table and the `receipt` lead stage stay in the schema unused (no destructive
   migration). Funnel steps: `business`, `devices`, `account`.
+- **Amendment 2 (owner, 2026-10-18):** no "free" headline as a selling word. The `/start` summary
+  shows the real prices like the pricing cart (system yearly, devices once, first payment after
+  the trial, renewal) plus the trial length, written in weeks when it is whole weeks.
 

@@ -101,6 +101,8 @@ export class TrialsService {
       trialDaysOwn: settings.trialDaysOwn,
       trialDaysDevices: settings.trialDaysDevices,
       waitlistEnabled: settings.waitlistEnabled,
+      systemNameAr: system.nameAr,
+      systemNameEn: system.nameEn,
       systemPrice: Money.ofMinor(system.priceMinor, CURRENCY).toJSON(),
       devices: items
         .filter((i) => i.kind === 'device')
