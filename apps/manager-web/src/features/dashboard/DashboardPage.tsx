@@ -6,6 +6,7 @@ import { Link } from 'react-router';
 import { useBranchContext, useSession } from '../../app/context.js';
 import { formatAmount } from '../catalog/ProductsPage.js';
 import { TodayKpis } from './TodayKpis.js';
+import { YourApps } from './YourApps.js';
 
 /** Overview built only from data that exists (no invented sales or revenue). */
 export function DashboardPage() {
@@ -294,6 +295,8 @@ export function DashboardPage() {
         title={t('dashboard.welcome', { name: session.actor.fullName })}
         description={t('dashboard.subtitle', { company })}
       />
+
+      {can('merchant.settings.read') ? <YourApps /> : null}
 
       {can('reports.sales') ? <TodayKpis /> : null}
 

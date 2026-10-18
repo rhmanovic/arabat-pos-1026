@@ -1003,6 +1003,17 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
   switch and icon buttons; phone-frame preview; cards wrap into two rows on phones.
 - Public page and editor: one globe button switches Arabic / English.
 - Tests: links-web 11, storefront (globe), E2E drags a card with the mouse.
+### 2026-10-19 — "Your apps" card on the dashboard; staging follows `main`
+- Owner request: the merchant could not tell what the subscription includes. The dashboard now
+  opens with a "برامجك" card (`features/dashboard/YourApps.tsx`): the plan name, status and
+  trial / end date from `GET /manager/subscription`, then one tile per product with its own icon
+  and state — business management, point of sale and the link page (included with every plan),
+  online store and restaurant (from the plan's `features`; a missing one links to the
+  subscription page), own website (coming soon; the restaurant tile says the digital menu is
+  coming). Shown to holders of `merchant.settings.read`; tiles open their app when the user also
+  holds its permission.
+- Tests: manager-web `dashboard.test.tsx` (states, links, hidden without the permission).
+- Railway staging reconnected to `main` (was on the ADR-0107 branch); OPERATIONS §8 updated.
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.
