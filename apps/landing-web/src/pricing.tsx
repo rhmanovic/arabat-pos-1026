@@ -327,15 +327,6 @@ function Configurator({
               </p>
             ) : null}
           </div>
-          {step < 2 ? (
-            <button
-              type="button"
-              onClick={() => (step === 0 ? fromSystem() : go((step + 1) as Step))}
-              className="rounded-full bg-brand px-5 py-2.5 font-medium text-white"
-            >
-              {step === 0 ? p.system.next : p.devices.next}
-            </button>
-          ) : null}
         </div>
       </div>
     </div>
