@@ -174,10 +174,11 @@ Current staging deployment (2026-10-12): Railway project `arabat-pos`, environme
 (deploys on push to the connected branch). Verified after deploy: `/api/v1/health/ready` ok
 (database ok), `/manager`, `/pos` and `/platform` load and report the server connected. No
 volume yet; e-mail goes through Resend (below). First platform operator created by the bootstrap (credentials only
-in the deploy log of 2026-10-12 14:42 UTC). Since 2026-10-14 21:47 UTC the web service follows
+in the deploy log of 2026-10-12 14:42 UTC). From 2026-10-14 21:47 UTC the web service followed
 branch `claude/tender-wright-t34f5x` (POS assistant, ADR-0107) at the owner's request to try
-the assistant as a cashier; switch it back to the default branch in the service's Source
-settings once the branch is merged. `ANTHROPIC_API_KEY` is set on the service only with the
+the assistant as a cashier; since 2026-10-18 22:27 UTC it follows **`main`** again
+(`connect-service-source`, branch `main`), so staging carries what production carries
+(§8a of CLAUDE.md: `main` is the only integration branch). `ANTHROPIC_API_KEY` is set on the service only with the
 owner's say-so (paid usage). Since 2026-10-14 it holds a dedicated Anthropic workspace key
 named `arabat-pos-staging` (rotated in from the owner's personal key, which is to be revoked
 in the Anthropic Console); rotate it again by setting the variable on the web service, which
@@ -204,7 +205,7 @@ logs `Password reset request failed: ResendMailer: provider answered <status> <b
 repository's default branch (`claude/busy-babbage-yty2bo`, which has no `MAIL_PROVIDER`
 code: it falls back to SMTP and logs `connect ECONNREFUSED ::1:1025`). After any variable
 change, set it with deploys skipped and run `connect-service-source` (repo
-`rhmanovic/arabat-pos-1026`, branch `claude/tender-wright-t34f5x`) so the build comes from
+`rhmanovic/arabat-pos-1026`, branch `main`) so the build comes from
 the right branch; `list-deployments` shows each deployment's `meta.branch`. Pushes to the
 branch are also not picked up reliably; reconnect the source after pushing.
 `POST /auth/password/forgot` for an address that has no
