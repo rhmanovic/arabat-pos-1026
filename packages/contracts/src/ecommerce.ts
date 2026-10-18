@@ -37,8 +37,8 @@ export const GATEWAY_STATUSES = [
 ] as const;
 
 // ---------------------------------------------------------------- manager: store settings
-/** Paths of the storefront app that cannot be store addresses (`/store/pay/...`). */
-export const RESERVED_STORE_SLUGS: readonly string[] = ['pay', 'assets', 'api', 'admin'];
+/** Paths of the storefront app that cannot be store addresses (`/store/pay/...`, `/store/links/...`). */
+export const RESERVED_STORE_SLUGS: readonly string[] = ['pay', 'links', 'assets', 'api', 'admin'];
 export const onlineStoreSchema = z.object({
   slug: z.string(),
   status: z.enum(STORE_STATUSES),

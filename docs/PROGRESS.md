@@ -965,6 +965,16 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
 - Homepage: the system card under the steps is back to a single "أنشئ حساب وجهّز محلك" button.
 - Pricing form: business type picked with cards (محل / مطعم / كافيه / أخرى), required, sent to
   `/public/trial/start`. Tests run: landing web 12, pricing E2E.
+### 2026-10-18 — Link page ("link in bio", ADR-0116)
+- `/manager/online` → "صفحة الروابط": address, draft / published, picture, Arabic / English title
+  and description, button colour / shape, background; links (Instagram, TikTok, Snapchat, X,
+  Facebook, YouTube, WhatsApp, Telegram, e-mail, phone, location, website, online store, any link)
+  added, edited, hidden, reordered and deleted, with open counts. `@name`, phone numbers, e-mails
+  and bare domains are completed into full addresses.
+- Public page `/store/links/:slug` (Arabic / English, RTL / LTR), counts opens with
+  `navigator.sendBeacon`. Migration 0059, BR-198…BR-201.
+- Tests: API integration `links.int.test.ts` (7), manager `link-page.test.tsx` (3), storefront (4),
+  E2E `links.spec.ts`.
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.

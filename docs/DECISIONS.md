@@ -1616,3 +1616,28 @@ ADR; supersede it.
   owner's wording). `/start` stays reachable; the sales-request endpoint stays but is unused by
   the site.
 
+## ADR-0116 — Link page ("link in bio")
+- **Date:** 2026-10-18 · **Status:** Accepted (owner request, 2026-10-18: a Linktree-like page
+  set up in the manager, to put in an Instagram or other profile).
+- **Decision:** a `links` module (migration 0059). One `link_pages` row per merchant (address,
+  draft / published, Arabic and English title and description, button colour, button shape
+  rounded / pill / square, background light / dark / brand colour, optional profile picture in
+  `FileStorage`) and `link_page_items` (type for the icon, Arabic / English button text, address,
+  active / hidden, order, open count). Managed in `/manager/online` → tab "صفحة الروابط" under the
+  existing `online.manage` permission (no new permission, no plan feature). The public page is a
+  route of the storefront app, `/store/links/:slug` (`links` is now a reserved store address), and
+  reads `GET /public/links/:slug`; the merchant is resolved by the `SECURITY DEFINER` function
+  `link_page_merchant` (published page, active merchant), never by a client id.
+- **Addresses:** a link-page address is unique and may not be another merchant's link page or
+  online store address (`link_slug_available`), so a shop cannot pose as another. The first
+  address offered is the merchant's online store address when it is free.
+- **Links:** only `http(s)://`, `mailto:` and `tel:` (contract regex + database CHECK), opened in a
+  new tab with `noopener noreferrer nofollow`; the manager completes what people type (`@name`,
+  a phone number, an e-mail, a bare domain). At most 50 links (`LINK_LIMIT_REACHED`).
+- **Opens:** the public page counts a click with `navigator.sendBeacon` to
+  `POST /public/links/:slug/items/:id/click` (60 per 10 min per IP and page) — best effort, the
+  visitor always reaches the link directly (no redirect through our domain). Counts are a plain
+  counter on the link, not a financial record.
+- **Not done:** a short address (`arabatapp.com/l/name`), per-day click statistics, "made with
+  Arabat" branding on the page, link scheduling. Page changes are audited (`links.*`).
+

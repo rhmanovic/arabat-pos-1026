@@ -273,3 +273,59 @@ describe('storefront', () => {
     expect(flattenKeys(resources.ar).sort()).toEqual(flattenKeys(resources.en).sort());
   });
 });
+
+describe('link page', () => {
+  const LINK = '0190a000-0000-7000-8000-0000000000d1';
+  const PAGE = {
+    slug: 'demo',
+    titleAr: 'متجر تجريبي',
+    titleEn: 'Demo Shop',
+    bioAr: null,
+    bioEn: 'Fresh daily',
+    themeColor: '#0f766e',
+    buttonStyle: 'pill',
+    background: 'dark',
+    avatarUrl: null,
+    items: [
+      {
+        id: LINK,
+        kind: 'instagram',
+        labelAr: 'إنستقرام',
+        labelEn: 'Follow us',
+        url: 'https://instagram.com/demo',
+      },
+    ],
+  };
+
+  it('shows the links in the visitor language and counts an open', async () => {
+    const user = userEvent.setup();
+    const beacon = vi.fn(() => true);
+    vi.stubGlobal('navigator', { ...navigator, sendBeacon: beacon });
+    renderStore('/links/demo', { 'GET /public/links/demo': () => ({ status: 200, body: PAGE }) });
+    expect(await screen.findByRole('heading', { name: 'Demo Shop' })).toBeInTheDocument();
+    expect(screen.getByText('Fresh daily')).toBeInTheDocument();
+    const link = screen.getByRole('link', { name: 'Follow us' });
+    expect(link).toHaveAttribute('href', 'https://instagram.com/demo');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer nofollow');
+    link.addEventListener('click', (e) => e.preventDefault());
+    await user.click(link);
+    expect(beacon).toHaveBeenCalledWith(`/api/v1/public/links/demo/items/${LINK}/click`);
+    await i18n.changeLanguage('ar');
+    expect(await screen.findByRole('link', { name: 'إنستقرام' })).toBeInTheDocument();
+  });
+
+  it('answers not found for an unpublished page', async () => {
+    renderStore('/links/missing', {
+      'GET /public/links/missing': () => ({
+        status: 404,
+        body: {
+          type: 'urn:arabat:error:not_found',
+          title: 'Not found',
+          status: 404,
+          code: 'NOT_FOUND',
+        },
+      }),
+    });
+    expect(await screen.findByText(/not found/i)).toBeInTheDocument();
+  });
+});

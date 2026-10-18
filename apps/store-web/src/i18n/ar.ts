@@ -3,6 +3,7 @@ import type { storeEn } from './en.js';
 /** Storefront strings (Arabic). Keys must match en.ts. */
 export const storeAr: typeof storeEn = {
   brand: 'المتجر الإلكتروني',
+  links: { empty: 'لا توجد روابط بعد.' },
   nav: { catalog: 'المنتجات', cart: 'السلة', cartCount: 'السلة ({{count}})' },
   home: {
     title: 'المتجر الإلكتروني',

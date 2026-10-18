@@ -194,7 +194,7 @@ export const PERMISSIONS = {
   'online.manage': {
     scope: 'merchant',
     group: 'online',
-    description: 'Configure the online store, listings and online payment methods',
+    description: 'Configure the online store, listings, online payment methods and the link page',
   },
   'online.orders': {
     scope: 'branch',

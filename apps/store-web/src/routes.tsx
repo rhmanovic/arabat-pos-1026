@@ -4,6 +4,7 @@ import { CartPage } from './pages/CartPage.js';
 import { CatalogPage } from './pages/CatalogPage.js';
 import { CheckoutPage } from './pages/CheckoutPage.js';
 import { HomePage } from './pages/HomePage.js';
+import { LinksPage } from './pages/LinksPage.js';
 import { OrderPage } from './pages/OrderPage.js';
 import { PayPage } from './pages/PayPage.js';
 import { ProductPage } from './pages/ProductPage.js';
@@ -14,6 +15,8 @@ export const routes: RouteObject[] = [
   { path: '/', element: <HomePage />, errorElement: <RouteErrorBoundary /> },
   // Sandbox gateway page (mock adapter only; 'pay' is a reserved store address).
   { path: '/pay/:reference', element: <PayPage />, errorElement: <RouteErrorBoundary /> },
+  // Link page of a merchant (ADR-0116; 'links' is a reserved store address).
+  { path: '/links/:slug', element: <LinksPage />, errorElement: <RouteErrorBoundary /> },
   {
     path: '/:slug',
     element: <StoreLayout />,

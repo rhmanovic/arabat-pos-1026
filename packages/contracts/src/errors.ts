@@ -122,6 +122,7 @@ export const ERROR_CODES = [
   'UNKNOWN_VARIANT',
   'MEMBER_NOT_ALLOWED',
   'WRONG_DEVICE',
+  'LINK_LIMIT_REACHED',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

@@ -1,4 +1,10 @@
 import {
+  type SaveLinkItem,
+  type SaveLinkPage,
+  linkPageSchema,
+  publicLinkPageSchema,
+} from '@arabat/contracts';
+import {
   type DeviceTrialStatus,
   type LeadStage,
   type SaveTrialSettings,
@@ -1065,6 +1071,48 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('POST', '/manager/online/reconcile', {
           schema: z.object({ checked: z.number(), paid: z.number(), expired: z.number() }),
         }),
+    },
+    /** Link page ("link in bio", ADR-0116). */
+    linkPage: {
+      get: () => request('GET', '/manager/link-page', { schema: linkPageSchema }),
+      save: (body: SaveLinkPage) =>
+        request('PUT', '/manager/link-page', { body, schema: linkPageSchema }),
+      saveItem: (id: string | null, body: SaveLinkItem) =>
+        request(
+          id ? 'PUT' : 'POST',
+          id ? `/manager/link-page/items/${id}` : '/manager/link-page/items',
+          {
+            body,
+            schema: linkPageSchema,
+          },
+        ),
+      deleteItem: (id: string) =>
+        request('DELETE', `/manager/link-page/items/${id}`, { schema: linkPageSchema }),
+      reorder: (ids: string[]) =>
+        request('PUT', '/manager/link-page/items/order', { body: { ids }, schema: linkPageSchema }),
+      async uploadAvatar(file: Blob) {
+        const form = new FormData();
+        form.append('file', file);
+        const response = await doFetch(`${baseUrl}/manager/link-page/avatar`, {
+          method: 'POST',
+          body: form,
+          credentials: 'same-origin',
+        }).catch((error: unknown) => {
+          throw new NetworkError(error);
+        });
+        if (!response.ok) throw await toApiError(response);
+        return linkPageSchema.parse(await response.json());
+      },
+      removeAvatar: () =>
+        request('DELETE', '/manager/link-page/avatar', { schema: linkPageSchema }),
+      /** Public page (no session). */
+      public: (slug: string) =>
+        request('GET', `/public/links/${encodeURIComponent(slug)}`, {
+          schema: publicLinkPageSchema,
+        }),
+      /** Address that counts one open of a link (sent with navigator.sendBeacon). */
+      clickUrl: (slug: string, itemId: string) =>
+        `${baseUrl}/public/links/${encodeURIComponent(slug)}/items/${itemId}/click`,
     },
     /** Public storefront (no session). */
     store: {

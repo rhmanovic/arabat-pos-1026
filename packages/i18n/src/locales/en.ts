@@ -186,6 +186,7 @@ export const commonEn = {
     GATEWAY_NOT_CONFIGURED: 'Online payment is not available yet. Choose another method.',
     PAYMENT_SIGNATURE_INVALID: 'The payment notification could not be verified.',
     MINIMUM_ORDER: 'The order is below the store’s minimum.',
+    LINK_LIMIT_REACHED: 'A link page holds at most 50 links.',
     PLAN_LIMIT_REACHED:
       'Your subscription plan limit is reached. Ask the platform to change your plan.',
     PLAN_FEATURE_UNAVAILABLE: 'Your subscription plan does not include this feature.',

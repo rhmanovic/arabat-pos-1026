@@ -598,6 +598,14 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
 
 - **BR-030** Default currency is **KWD** with **3 decimal places** (1 KWD = 1000 fils).
 - **BR-031** No floating-point arithmetic for monetary calculations, anywhere.
+- **BR-198** Link page (owner, 2026-10-18, ADR-0116): every merchant can publish one page of
+  links ("link in bio") at `/store/links/<address>`, set up by holders of `online.manage`. The
+  address is unique and cannot be another business's link-page or online-store address. A draft
+  page is never public; a suspended or closed merchant has no public page.
+- **BR-199** A link page holds at most 50 links; hidden links stay saved but are not shown.
+- **BR-200** A link is a web (`http`/`https`), e-mail (`mailto:`) or phone (`tel:`) address only.
+- **BR-201** Opens of a link are counted from the public page (best effort, rate-limited per
+  visitor); the count is shown to the merchant next to each link.
 - **BR-197** Free trial and sign-up funnel (owner, 2026-10-18, ADR-0115): the site's one call
   to action is "أنشئ حساب وجهّز محلك" → `/pricing` (amendment 3; the pricing page's form opens
   the trial account, phone asked, shop name optional; `/start` stays reachable). Registration stays open to everyone. The funnel is business type → devices (pick

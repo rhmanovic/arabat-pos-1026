@@ -30,7 +30,7 @@ the permission.
 | `/reports` | Reports (tabs per report permission: sales, payments & cash incl. cash by type, expenses, shifts, inventory, purchasing) | any `reports.*` |
 | `/customers`, `/customers/:customerId` | Customers, history, notes | `customers.read` |
 | `/restaurant` | Restaurant setup (module, floor, stations, modifiers, menu) | `restaurant.manage` |
-| `/online` | Online store: orders, settings, products online | `online.orders` / `online.manage` |
+| `/online` | Online store: orders, settings, products online, link page (ADR-0116) | `online.orders` / `online.manage` |
 | `/payments` | Payment methods and internal balances | `payments.settings` |
 | `/cash` | Cash custody: treasury and register balances per branch, counts, statements, transfers, expenses and supplier payments, bank deposits, transfers between branches | `cash.custody` (deposits: `cash.deposit`) |
 | `/registers` | Registers | `registers.manage` |
@@ -96,6 +96,7 @@ No session; every call goes to the public store API. Cart kept per store in the 
 | `/store/:slug/checkout` | Contact, pickup/delivery, address, payment method, summary |
 | `/store/:slug/orders/:token` | Order tracking (status, history, pay link while unpaid) |
 | `/store/pay/:reference` | Sandbox gateway page (mock adapter only) |
+| `/store/links/:slug` | Link page of a merchant ("link in bio", ADR-0116) |
 
 ## 3. `/platform` — platform-web
 
@@ -361,6 +362,14 @@ only staff land on `/pos/kitchen`. Sales list and reports show the service type.
 | `GET /store/:slug/orders/:token` | 🔓 tracking token |
 | `POST /webhooks/payments/:provider` | 🔓 provider signature (raw body) |
 | `GET/POST /payments/mock/:reference` | 🔓 sandbox only (disabled in production by default) |
+
+### Link page API (ADR-0116)
+
+| Method & path | Permission |
+|---|---|
+| `GET/PUT /manager/link-page`, `POST /manager/link-page/items`, `PUT/DELETE /manager/link-page/items/:id`, `PUT /manager/link-page/items/order`, `GET/POST/DELETE /manager/link-page/avatar` | merchant-wide `online.manage` |
+| `GET /public/links/:slug`, `GET /public/links/:slug/avatar` | 🔓 published page of an active merchant |
+| `POST /public/links/:slug/items/:id/click` | 🔓 published page; 60 per 10 min per IP and page |
 
 ### Reports API (Prompt 14)
 

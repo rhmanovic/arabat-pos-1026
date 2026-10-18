@@ -1,6 +1,7 @@
 /** Storefront strings (English). Keys must match ar.ts. */
 export const storeEn = {
   brand: 'Online store',
+  links: { empty: 'No links yet.' },
   nav: { catalog: 'Products', cart: 'Cart', cartCount: 'Cart ({{count}})' },
   home: {
     title: 'Online store',

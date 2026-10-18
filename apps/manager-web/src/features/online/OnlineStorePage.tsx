@@ -29,9 +29,10 @@ import { CashTabs } from '../cash/shared.js';
 import { formatAmount } from '../catalog/ProductsPage.js';
 import { formatDateTime } from '../inventory/AdjustmentsPage.js';
 import { Pager } from '../inventory/shared.js';
+import { LinkPageTab } from './LinkPageTab.js';
 
 const key = ['manager', 'online'] as const;
-type Tab = 'orders' | 'settings' | 'products';
+type Tab = 'orders' | 'settings' | 'products' | 'links';
 type Action = 'preparing' | 'ready' | 'out_for_delivery' | 'completed' | 'cancel';
 
 export const ORDER_TONE: Record<
@@ -67,7 +68,10 @@ export function nextActions(order: Pick<OnlineOrder, 'status' | 'fulfillment'>):
   );
 }
 
-/** Online store (Prompt 16): orders, storefront settings and which products are sold online. */
+/**
+ * Online store (Prompt 16): orders, storefront settings, which products are sold online and
+ * the link page (ADR-0116).
+ */
 export function OnlineStorePage() {
   const { t } = useTranslation();
   const { can } = useSession();
@@ -76,6 +80,7 @@ export function OnlineStorePage() {
       { key: 'orders', label: t('online.tabOrders'), perm: 'online.orders' },
       { key: 'settings', label: t('online.tabSettings'), perm: 'online.manage' },
       { key: 'products', label: t('online.tabProducts'), perm: 'online.manage' },
+      { key: 'links', label: t('online.tabLinks'), perm: 'online.manage' },
     ] as const
   ).filter((x) => can(x.perm));
   const [tab, setTab] = useState<Tab>(tabs[0]?.key ?? 'orders');
@@ -87,6 +92,7 @@ export function OnlineStorePage() {
       {tab === 'orders' ? <OrdersTab /> : null}
       {tab === 'settings' ? <SettingsTab /> : null}
       {tab === 'products' ? <ProductsTab /> : null}
+      {tab === 'links' ? <LinkPageTab /> : null}
     </div>
   );
 }
