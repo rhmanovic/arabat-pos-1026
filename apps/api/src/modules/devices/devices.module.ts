@@ -6,13 +6,20 @@ import { DeviceRegistrationController, ManagerDevicesController } from './device
 import { DeviceExceptionsService } from './device-exceptions.service.js';
 import { DeviceIngestService } from './device-ingest.service.js';
 import { DeviceSyncService } from './device-sync.service.js';
+import { PinResetService } from './pin-reset.service.js';
 import { DevicesService } from './devices.service.js';
 
 /** Local-first devices (ADR-0112): registration, revocation, sync. */
 @Module({
   imports: [InventoryModule, PrintingModule, RefundsModule],
   controllers: [DeviceRegistrationController, ManagerDevicesController],
-  providers: [DevicesService, DeviceSyncService, DeviceIngestService, DeviceExceptionsService],
+  providers: [
+    DevicesService,
+    DeviceSyncService,
+    DeviceIngestService,
+    DeviceExceptionsService,
+    PinResetService,
+  ],
   exports: [DevicesService],
 })
 export class DevicesModule {}

@@ -11,6 +11,7 @@ import { POSLayout } from './layouts/POSLayout.js';
 import {
   ForgotPasswordPage,
   LoginPage,
+  PinPage,
   ResetPasswordPage,
   AcceptInvitePage,
 } from './pages/LoginPage.js';
@@ -49,6 +50,7 @@ export const routes: RouteObject[] = [
     element: <ForgotPasswordPage />,
   },
   { path: '/reset-password', errorElement: <RouteErrorBoundary />, element: <ResetPasswordPage /> },
+  { path: '/pin', errorElement: <RouteErrorBoundary />, element: <PinPage /> },
   { path: '/accept-invite', errorElement: <RouteErrorBoundary />, element: <AcceptInvitePage /> },
   {
     path: '/',

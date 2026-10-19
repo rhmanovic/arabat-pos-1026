@@ -68,6 +68,21 @@ only grows; codes are never reused, even after removal). Errors: `401` `INVALID_
 
 `GET /device/me` → the `device` object above. Use it to check the token.
 
+## 2a. Cashier PINs (self-service)
+
+Nobody but the cashier knows their PIN; the manager is not involved. From the sign-in screen
+(the cashier's name selected, device online):
+
+`POST /device/pin-reset` (device token) `{ "membershipId": "…" }` → `202 { "status": "accepted" }`.
+A single-use link valid for **one hour** goes to the member's own e-mail
+(`https://www.arabatapp.com/pos/pin?token=…`); the page behind it asks for the PIN twice and calls
+`POST /device/pin-reset/complete` `{ token, pin }` (public, 6–12 digits, not one repeated digit, not
+a straight run; `400 RESET_TOKEN_INVALID` when the link is used, expired or unknown). The device
+receives the new `pinHash` at its next sync. A second request for the same person within 5 minutes
+answers `429 RATE_LIMITED`; a request for someone who is not an active member of the device's
+company still answers 202 and sends nothing. Show the cashier: "if your e-mail is on file, a link
+is on its way; the till picks the new PIN up at its next sync".
+
 ## 3. Sync download
 
 `GET /device/sync` (full snapshot) or `GET /device/sync?since=<version>` (changes since a
@@ -314,6 +329,6 @@ bodies, and resends a refusal only for `SHIFT_REQUIRED`, `NOT_FOUND`, `INTERNAL_
   (`offlineLimitHours`, 1–720, default 72), and the exceptions after uploads (negative stock,
   device clock, not accepted) with "mark handled" and a note. The dashboard checklist counts open
   exceptions.
-- PINs: `/manager/employees/:membershipId` → "Device PIN" (6–12 digits, not all the
-  same digit, not a straight run). Setting another person's PIN follows the same authority rules as
-  any other change to that employee.
+- PINs: the manager never sets or sees one (§2a). `/manager/employees/:membershipId` shows when the
+  PIN was set and offers only "Clear PIN" (`DELETE /manager/employees/:id/pin`, `employees.manage`)
+  for someone who left or whose PIN may have leaked; the person then chooses a new PIN from the till.

@@ -7,11 +7,10 @@ import {
   employeeStatusSchema,
   inviteEmployeeSchema,
   setAssignmentsSchema,
-  setEmployeePinSchema,
   updateEmployeeSchema,
   updateRoleSchema,
 } from '@arabat/contracts';
-import { PERMISSIONS, canAnywhere } from '@arabat/permissions';
+import { PERMISSIONS } from '@arabat/permissions';
 import {
   Body,
   Controller,
@@ -30,7 +29,6 @@ import type { z } from 'zod';
 import { RequirePermission } from '../../kernel/access/access.decorators.js';
 import { CurrentMerchantActor } from '../../kernel/access/current-actor.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
-import { AppError } from '../../kernel/errors/app-error.js';
 import { ZodPipe } from '../../kernel/validation/zod.pipe.js';
 import { EmployeesService } from './employees.service.js';
 import { RolesService } from './roles.service.js';
@@ -158,20 +156,16 @@ export class IamController {
     return this.employees.updateProfile(actor, membershipId, body, req.ip);
   }
 
-  /** Sets or resets the device PIN (ADR-0112); 204, the PIN is never returned. */
-  @RequirePermission('manager', 'manager.access')
-  @Put('employees/:membershipId/pin')
+  /** Clears the device PIN (ADR-0112); the person chooses a new one from the till. */
+  @RequirePermission('manager', 'employees.manage')
+  @Delete('employees/:membershipId/pin')
   @HttpCode(204)
-  async setPin(
+  async clearPin(
     @CurrentMerchantActor() actor: MerchantActor,
     @Param('membershipId', uuid) membershipId: string,
-    @Body(new ZodPipe(setEmployeePinSchema)) body: z.output<typeof setEmployeePinSchema>,
     @Req() req: FastifyRequest,
   ): Promise<void> {
-    // Others' PINs need employees.manage somewhere; the service checks the member's scope.
-    if (membershipId !== actor.membershipId && !canAnywhere(actor.access, 'employees.manage'))
-      throw AppError.forbidden();
-    await this.employees.setPin(actor, membershipId, body.pin, req.ip);
+    await this.employees.clearPin(actor, membershipId, req.ip);
   }
 
   @RequirePermission('manager', 'employees.manage')

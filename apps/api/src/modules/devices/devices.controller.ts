@@ -7,6 +7,8 @@ import {
   type RegisterDeviceResult,
   type RegisteredDevice,
   deviceExceptionQuerySchema,
+  devicePinResetCompleteSchema,
+  devicePinResetRequestSchema,
   deviceSettingsSchema,
   deviceSyncQuerySchema,
   deviceUploadSchema,
@@ -35,6 +37,7 @@ import { ZodPipe } from '../../kernel/validation/zod.pipe.js';
 import { DeviceExceptionsService } from './device-exceptions.service.js';
 import { DeviceIngestService } from './device-ingest.service.js';
 import { DeviceSyncService } from './device-sync.service.js';
+import { PinResetService } from './pin-reset.service.js';
 import { DevicesService } from './devices.service.js';
 
 /** Device registration, called by the device app (ADR-0112, docs/DEVICE_API.md). */
@@ -44,7 +47,38 @@ export class DeviceRegistrationController {
     private readonly devices: DevicesService,
     private readonly sync: DeviceSyncService,
     private readonly ingest: DeviceIngestService,
+    private readonly pins: PinResetService,
   ) {}
+
+  /**
+   * A cashier at the till asks for a link to choose their own PIN (ADR-0112, owner decision 6).
+   * Always 202; the link goes to the member's e-mail. 429 when asked again within 5 minutes.
+   */
+  @RequireDevice()
+  @Post('pin-reset')
+  @HttpCode(202)
+  async requestPinReset(
+    @CurrentDevice() device: Device,
+    @Body(new ZodPipe(devicePinResetRequestSchema))
+    body: z.output<typeof devicePinResetRequestSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<{ status: 'accepted' }> {
+    await this.pins.request(device, body.membershipId, req.ip);
+    return { status: 'accepted' };
+  }
+
+  /** The page behind the e-mailed link sets the PIN (public; the token is the credential). */
+  @Public()
+  @Post('pin-reset/complete')
+  @HttpCode(200)
+  async completePinReset(
+    @Body(new ZodPipe(devicePinResetCompleteSchema))
+    body: z.output<typeof devicePinResetCompleteSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<{ status: 'pin_set' }> {
+    await this.pins.complete(body.token, body.pin, req.ip);
+    return { status: 'pin_set' };
+  }
 
   /** Public: the manager's e-mail and password are the credential; rate-limited like a login. */
   @Public()

@@ -170,3 +170,25 @@ export const deviceExceptions = pgTable(
       .where(sql`${t.kind} = 'refused'`),
   ],
 );
+
+/**
+ * Links for cashiers to choose their own device PIN (ADR-0112, owner decision 6): asked from a
+ * registered till, sent to the member's e-mail, used once within the hour. Global like
+ * `password_reset_tokens` (the link carries no company); only the SHA-256 of the token is kept.
+ */
+export const pinResetTokens = pgTable(
+  'pin_reset_tokens',
+  {
+    id: id(),
+    merchantId: uuid()
+      .notNull()
+      .references(() => merchants.id),
+    membershipId: uuid().notNull(),
+    deviceId: uuid().notNull(),
+    tokenHash: bytea().notNull().unique(),
+    expiresAt: timestamp({ withTimezone: true }).notNull(),
+    usedAt: timestamp({ withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('pin_reset_tokens_membership_idx').on(t.membershipId)],
+);

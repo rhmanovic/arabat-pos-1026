@@ -285,12 +285,14 @@ back to the same conversation. The assistant only reads (BR-194).
 | `POST /device/register` (`{ email, password, deviceName, merchantId?, branchId? }` → `select_branch` choices or `registered` with the device and its token, shown once) | public, the credentials of a holder of `registers.manage` at the branch; rate-limited like a login |
 | `GET /device/me` | device bearer token (401 `UNAUTHENTICATED`, 401 `DEVICE_REVOKED`) |
 | `GET /device-app/manifest.json`, `GET /device-app/*` (the till bundle for the native app, ADR-0112; manifest never cached) | public static |
+| `POST /device/pin-reset` (`{ membershipId }` → 202; a one-hour single-use link to the member's e-mail; 429 within 5 minutes of the last request) | device bearer token |
+| `POST /device/pin-reset/complete` (`{ token, pin }`: 6–12 digits, not one repeated digit, not a straight run → 200; 400 `RESET_TOKEN_INVALID`) | public (the token is the credential), rate-limited per IP |
 | `GET /device/sync?since=<version>` (snapshot of the branch: full without `since`, product changes since it otherwise; `docs/DEVICE_API.md`) | device bearer token |
 | `POST /device/sync` (`{ records: [...] }`, up to 200, causal order; per record `accepted` / `duplicate` / `refused`; `docs/DEVICE_API.md`) | device bearer token |
 | `GET /manager/devices`, `POST /manager/devices/:id/revoke` | manager `registers.manage` |
 | `GET /manager/device-settings`, `PUT /manager/device-settings` (`{ offlineLimitHours }`, 1–720) | manager `merchant.settings.read` / `merchant.settings.update` |
 | `GET /manager/device-exceptions?status=open\|resolved`, `POST /manager/device-exceptions/:id/resolve` (`{ note }`) | manager `registers.manage` (per branch) |
-| `PUT /manager/employees/:membershipId/pin` (`{ pin }`: 6–12 digits, not one repeated digit, not a straight run → 204) | own PIN: `manager.access`; others: `employees.manage` within the usual anti-escalation rule |
+| `DELETE /manager/employees/:membershipId/pin` (clears the device PIN; the person chooses a new one from the till → 204) | `employees.manage` within the usual anti-escalation rule |
 
 ### Server-side receipt printing API (ADR-0111)
 

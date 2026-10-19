@@ -70,9 +70,14 @@ first" path: the same code runs in both cases, so the offline path is exercised 
     platform equivalent). A 6-digit PIN hash can still be brute-forced offline by someone holding
     the device's data file, so PINs are **at least 6 digits** and a stolen device must be revoked
     (which also makes the server refuse its token).
-- Managers set or reset a cashier's PIN from the manager web, online only: a PIN field in staff
-  management (`/employees/:membershipId`). Setting a PIN needs `employees.manage`; it is audited
-  (`employee.pin_set`, never the value).
+- **Nobody but the cashier knows their PIN** (owner decision 6, 2026-10-19, replacing the earlier
+  manager-set PIN): on the till's sign-in screen the cashier picks their name and presses
+  "Set / reset PIN"; the device asks the server (`POST /device/pin-reset`, device token, one request
+  per person per 5 minutes) and a single-use link valid for one hour goes to the cashier's own
+  e-mail; the public page behind it (`/pos/pin?token=…`, `POST /device/pin-reset/complete`) sets the
+  PIN. Both steps are audited (`employee.pin_reset_requested`, `employee.pin_set`, never the value).
+  A manager cannot set or see a PIN; `DELETE /manager/employees/:id/pin` (`employees.manage`) only
+  clears one (someone left, a PIN may have leaked), audited `employee.pin_cleared`.
 - **Supervisor overrides** (BR-177): when a sale needs a right the cashier lacks, a supervisor
   present at the till types **their own PIN** on the device. The device checks that the
   supervisor holds the permission at the branch (from the downloaded permissions), records an
@@ -187,6 +192,8 @@ cross-branch and financial reports; month close; the online store.
 4. **Device refunds:** a device refunds only sales **it made itself** (it has them locally); a
    refund of another register's sale uses the online flow. The server refuses an uploaded refund of
    another device's sale (`refused`, `NOT_OWN_SALE`).
+6. **PIN ownership (2026-10-19):** the manager is out of it; the cashier sets or resets their own
+   PIN from the till through a link to their e-mail (section 3). Manager-set PINs are removed.
 5. **One supervisor rule:** the till's "does this cart need a supervisor" check
    (`apps/pos-web/src/sale/cart.tsx`) now uses `requiredSaleRights` from `packages/pos-core`, the
    server's rule.

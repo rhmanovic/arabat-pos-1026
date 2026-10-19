@@ -35,6 +35,12 @@ export const deviceEn = {
     revoked: 'This device was removed by a manager. Unsent records are kept; register it again.',
     suspended: 'The company is suspended. Selling is stopped.',
     registerAgain: 'Register again',
+    resetPin: 'Set / reset PIN',
+    resetPinSent:
+      'If your e-mail is on file, a link to choose your PIN is on its way. It works for one hour; the till picks the new PIN up at its next sync.',
+    resetPinWait:
+      'A link was already sent a few minutes ago. Check your e-mail or try again later.',
+    resetPinOffline: 'Sending the link needs internet.',
   },
   status: {
     synced: 'Synced',

@@ -1038,6 +1038,17 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
 - Not on the device (online only, as decided): restaurant, customers, exchanges, voids, custody
   cash moves, gateway payments, product images, held sales across tills.
 
+### 2026-10-19 — Cashier PINs become self-service (ADR-0112, owner decision 6)
+
+- The manager is out of PINs: `PUT /manager/employees/:id/pin` is gone; `DELETE …/pin` only clears.
+- From the till's sign-in screen, "Set / reset PIN" (`POST /device/pin-reset`, device token, one
+  request per person per 5 minutes) e-mails the cashier a single-use one-hour link; the public page
+  `/pos/pin?token=…` (`POST /device/pin-reset/complete`) sets the PIN. Migration 0061
+  `pin_reset_tokens`. Audited: `employee.pin_reset_requested`, `employee.pin_set`,
+  `employee.pin_cleared` (never the value). Devices receive the hash at their next sync.
+- Tests: 3 integration cases (link flow, limits / newest-link-only / expiry / other company,
+  manager clear only), web test of the PIN page, device Lock screen button.
+
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.

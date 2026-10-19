@@ -6,9 +6,14 @@ import {
   MerchantLoginForm,
   ResetPasswordForm,
   ApiStatus,
+  useApi,
+  useErrorMessage,
 } from '@arabat/web-core';
-import type { ReactNode } from 'react';
+import { Alert, Button, Field, Input } from '@arabat/ui';
+import { useMutation } from '@tanstack/react-query';
+import { type ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router';
 
 /** Touch-first auth shell of the POS: dark full screen with one large card. */
 function PosAuthShell({ children }: { children: ReactNode }) {
@@ -55,6 +60,77 @@ export function ResetPasswordPage() {
     <PosAuthShell>
       <AuthHeading title={t('auth.resetTitle')} />
       <ResetPasswordForm size="touch" />
+    </PosAuthShell>
+  );
+}
+
+/**
+ * The page behind the e-mailed PIN link (ADR-0112, owner decision 6): the cashier chooses their
+ * own device PIN; nobody else sees it. Public; the token in the link is the credential.
+ */
+export function PinPage() {
+  const { t } = useTranslation();
+  const api = useApi();
+  const message = useErrorMessage();
+  const [params] = useSearchParams();
+  const token = params.get('token') ?? '';
+  const [pin, setPin] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const valid = /^\d{6,12}$/.test(pin);
+  const same = pin === confirm;
+  const save = useMutation({ mutationFn: () => api.auth.completePinReset({ token, pin }) });
+  return (
+    <PosAuthShell>
+      <AuthHeading title={t('pin.title')} subtitle={t('pin.subtitle')} />
+      {token.length < 20 ? (
+        <Alert tone="danger" title={t('pin.missingToken')} />
+      ) : save.isSuccess ? (
+        <Alert tone="success" title={t('pin.done')} />
+      ) : (
+        <form
+          className="flex flex-col gap-4"
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (valid && same) save.mutate();
+          }}
+        >
+          {save.isError ? <Alert tone="danger">{message(save.error)}</Alert> : null}
+          <Field label={t('pin.pin')} hint={t('pin.hint')}>
+            {(p) => (
+              <Input
+                {...p}
+                type="password"
+                inputMode="numeric"
+                autoComplete="off"
+                dir="ltr"
+                maxLength={12}
+                className="h-touch text-lg"
+                value={pin}
+                onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+              />
+            )}
+          </Field>
+          <Field label={t('pin.confirm')} error={confirm && !same ? t('pin.mismatch') : undefined}>
+            {(p) => (
+              <Input
+                {...p}
+                type="password"
+                inputMode="numeric"
+                autoComplete="off"
+                dir="ltr"
+                maxLength={12}
+                className="h-touch text-lg"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value.replace(/\D/g, ''))}
+              />
+            )}
+          </Field>
+          <Button type="submit" size="touch" disabled={!valid || !same} loading={save.isPending}>
+            {t('pin.save')}
+          </Button>
+        </form>
+      )}
     </PosAuthShell>
   );
 }

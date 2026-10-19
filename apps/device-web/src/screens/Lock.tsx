@@ -119,6 +119,26 @@ export function LockScreen() {
   const [error, setError] = useState<string | null>(null);
   const offlineHours = offline.hoursSinceSync === null ? null : Math.floor(offline.hoursSinceSync);
 
+  const [notice, setNotice] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  // Owner decision 6: the cashier chooses their own PIN through a link to their e-mail.
+  const requestPinLink = async () => {
+    if (!who) return;
+    setSending(true);
+    setError(null);
+    try {
+      const res = await bridge.api.request('POST', '/device/pin-reset', {
+        membershipId: who.membershipId,
+      });
+      setNotice(t(res.status === 429 ? 'lock.resetPinWait' : 'lock.resetPinSent'));
+    } catch (e) {
+      const code = e instanceof Error ? e.message.split(':')[0] : '';
+      setError(code === 'NETWORK' ? t('lock.resetPinOffline') : t('errors.unknown'));
+    } finally {
+      setSending(false);
+    }
+  };
+
   const submit = async (pin: string) => {
     if (!who) return;
     setBusy(true);
@@ -195,16 +215,32 @@ export function LockScreen() {
             )
           ) : (
             <div className="mt-4 flex flex-col items-center gap-3">
+              {notice ? (
+                <Alert tone="success" className="w-full py-2">
+                  {notice}
+                </Alert>
+              ) : null}
               <PinPad onSubmit={(pin) => void submit(pin)} busy={busy} error={error} />
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setWho(null);
-                  setError(null);
-                }}
-              >
-                {t('lock.back')}
-              </Button>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setWho(null);
+                    setError(null);
+                    setNotice(null);
+                  }}
+                >
+                  {t('lock.back')}
+                </Button>
+                <Button
+                  variant="secondary"
+                  loading={sending}
+                  onClick={() => void requestPinLink()}
+                  data-testid="reset-pin"
+                >
+                  {t('lock.resetPin')}
+                </Button>
+              </div>
             </div>
           )}
         </div>

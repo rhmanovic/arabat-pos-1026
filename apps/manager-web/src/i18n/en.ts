@@ -235,13 +235,14 @@ export const managerEn = {
   },
   employees: {
     pin: 'Device PIN',
-    pinNew: 'New PIN',
     pinHint:
-      '6 to 12 digits. The cashier signs in to the Arabat app with it, also without internet.',
-    pinSet: 'Set PIN',
-    pinReset: 'Reset PIN',
-    pinSaved: 'PIN saved. Devices use it after their next sync.',
-    pinNone: 'No PIN yet: this person cannot sign in on Arabat app devices.',
+      'The cashier chooses the PIN from the till: “Set / reset PIN” on the Arabat app sends a link to their own e-mail. Nobody else knows it.',
+    pinClear: 'Clear PIN',
+    pinClearTitle: 'Clear the PIN of {{name}}?',
+    pinClearBody:
+      'This person can no longer sign in on devices until they choose a new PIN from the till. Use it when someone leaves or a PIN may have leaked.',
+    pinCleared: 'PIN cleared. Devices drop it after their next sync.',
+    pinNone: 'No PIN yet: this person chooses one from the Arabat app on the till.',
     pinSetOn: 'PIN set on {{date}}.',
     title: 'Employees',
     subtitle: 'People who work in your company and what they may do.',

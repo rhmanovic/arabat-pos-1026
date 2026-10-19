@@ -438,3 +438,11 @@ export type DeviceException = z.infer<typeof deviceExceptionSchema>;
 export const resolveDeviceExceptionSchema = z.object({
   note: z.string().trim().min(1).max(500),
 });
+
+/* Self-service PINs (ADR-0112, owner decision 6): asked from the till, set through an e-mailed link. */
+
+export const devicePinResetRequestSchema = z.object({ membershipId: z.uuid() });
+export const devicePinResetCompleteSchema = z.object({
+  token: z.string().min(20).max(200),
+  pin: z.string().regex(/^\d{6,12}$/),
+});

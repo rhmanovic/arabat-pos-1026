@@ -140,7 +140,6 @@ export const employeeSchema = z.object({
 export type Employee = z.infer<typeof employeeSchema>;
 
 /** A cashier PIN for local-first devices (ADR-0112): 6–12 digits, checked again by the API. */
-export const setEmployeePinSchema = z.object({ pin: z.string().regex(/^\d{6,12}$/) });
 
 export const invitationSchema = z.object({
   id: z.string(),

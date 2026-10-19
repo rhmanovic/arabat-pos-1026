@@ -380,6 +380,9 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('POST', '/auth/password/forgot', { body }),
       resetPassword: (body: ResetPasswordRequest) =>
         request('POST', '/auth/password/reset', { body }),
+      /** The page behind the e-mailed PIN link (ADR-0112): sets the cashier's own device PIN. */
+      completePinReset: (body: { token: string; pin: string }) =>
+        request('POST', '/device/pin-reset/complete', { body }),
       logout: (appInterface: AppInterface) =>
         request('POST', `/auth/${appInterface}/logout`, { body: {} }),
       /** Account hygiene (BR-193): own password and sessions. */
@@ -1361,8 +1364,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
       list: () => request('GET', '/manager/employees', { schema: employeeListSchema }),
       get: (id: string) => request('GET', `/manager/employees/${id}`, { schema: employeeSchema }),
       /** Device PIN (ADR-0112): 6–12 digits; 204. */
-      setPin: (id: string, pin: string) =>
-        request('PUT', `/manager/employees/${id}/pin`, { body: { pin } }),
+      clearPin: (id: string) => request('DELETE', `/manager/employees/${id}/pin`),
       invite: (body: InviteEmployee) =>
         request('POST', '/manager/employees/invitations', { body, schema: invitationSchema }),
       resendInvitation: (id: string) =>

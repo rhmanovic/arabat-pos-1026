@@ -226,8 +226,8 @@ function EmployeeDetail({ employee, roles }: { employee: Employee; roles: Role[]
 }
 
 /**
- * The device PIN (ADR-0112): the cashier signs in to the Arabat app with it, also offline.
- * Only its hash is stored; devices get the change at their next sync.
+ * The device PIN (ADR-0112, owner decision 6): the cashier chooses it from the till through an
+ * e-mailed link; nobody else knows it. A manager can only clear it.
  */
 function PinSection({
   employee,
@@ -239,14 +239,13 @@ function PinSection({
   const { t, i18n } = useTranslation();
   const api = useApi();
   const notify = useNotify();
-  const [pin, setPin] = useState('');
-  const valid = /^\d{6,12}$/.test(pin);
-  const save = useMutation({
-    mutationFn: () => api.employees.setPin(employee.membershipId, pin),
+  const [confirm, setConfirm] = useState(false);
+  const clear = useMutation({
+    mutationFn: () => api.employees.clearPin(employee.membershipId),
     onSuccess: async () => {
-      setPin('');
+      setConfirm(false);
       await onSaved(await api.employees.get(employee.membershipId));
-      notify.ok(t('employees.pinSaved'));
+      notify.ok(t('employees.pinCleared'));
     },
     onError: notify.fail,
   });
@@ -259,35 +258,25 @@ function PinSection({
           : t('employees.pinNone')
       }
     >
-      <form
-        noValidate
-        className="flex flex-wrap items-end gap-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (valid) save.mutate();
-        }}
-      >
-        <Field
-          label={employee.pinSetAt ? t('employees.pinNew') : t('employees.pin')}
-          hint={t('employees.pinHint')}
-        >
-          {(p) => (
-            <Input
-              {...p}
-              type="password"
-              inputMode="numeric"
-              autoComplete="off"
-              dir="ltr"
-              maxLength={12}
-              value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-            />
-          )}
-        </Field>
-        <Button type="submit" disabled={!valid} loading={save.isPending}>
-          {employee.pinSetAt ? t('employees.pinReset') : t('employees.pinSet')}
-        </Button>
-      </form>
+      <p className="text-sm text-fg-muted">{t('employees.pinHint')}</p>
+      {employee.pinSetAt ? (
+        <div className="mt-3">
+          <Button variant="secondary" onClick={() => setConfirm(true)}>
+            {t('employees.pinClear')}
+          </Button>
+        </div>
+      ) : null}
+      <ConfirmDialog
+        open={confirm}
+        onOpenChange={setConfirm}
+        title={t('employees.pinClearTitle', { name: employee.fullName })}
+        description={t('employees.pinClearBody')}
+        confirmLabel={t('employees.pinClear')}
+        cancelLabel={t('common.cancel')}
+        tone="danger"
+        loading={clear.isPending}
+        onConfirm={() => clear.mutate()}
+      />
     </Section>
   );
 }

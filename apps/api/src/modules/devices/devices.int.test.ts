@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DbFixtures, PASSWORD, createCompany } from '../../testing/auth-fixtures.js';
 import { prepareIntegrationDatabase } from '../../testing/integration-db.js';
 import { InMemoryMailer, createTestApp, testEnv } from '../../testing/test-app.js';
+import { PinResetService } from './pin-reset.service.js';
 
 let app: NestFastifyApplication;
 let owner: pg.Pool;
@@ -182,10 +183,7 @@ describe('device registration', () => {
   });
 });
 
-describe('cashier PINs', () => {
-  const setPin = (c: Co, membershipId: string, pin: string, cookies = c.cookies) =>
-    c.client.request('PUT', `/manager/employees/${membershipId}/pin`, { cookies, body: { pin } });
-
+describe('cashier PINs (self-service through an e-mailed link)', () => {
   async function membershipOf(c: Co, email: string) {
     const r = await owner.query(
       `select m.id from memberships m join users u on u.id = m.user_id where u.email = $1 and m.merchant_id = $2`,
@@ -193,61 +191,125 @@ describe('cashier PINs', () => {
     );
     return r.rows[0].id as string;
   }
+  const requestLink = (c: Co, token: string, membershipId: string) =>
+    c.client.request('POST', '/device/pin-reset', {
+      headers: { authorization: `Bearer ${token}` },
+      body: { membershipId },
+    });
+  const complete = (c: Co, token: string, pin: string) =>
+    c.client.request('POST', '/device/pin-reset/complete', { body: { token, pin } });
+  const pins = () => app.get(PinResetService);
+  const linkToken = (text: string) =>
+    decodeURIComponent(/\/pos\/pin\?token=([A-Za-z0-9_%-]+)/.exec(text)![1]!);
 
-  it('stores only an argon2id hash (64 MiB, 3 passes) and shows when it was set', async () => {
+  it('sends the cashier a one-hour link from the till; the link sets an argon2id hash once', async () => {
     const c = await createCompany(app, db, mailer);
     const cashier = await c.hire([{ roleId: c.roles.cashier, branchId: c.main }], 'pos');
     const id = await membershipOf(c, cashier.email);
-    const res = await setPin(c, id, '482913');
-    expect(res.statusCode).toBe(204);
+    const { token: deviceToken, device } = await registerDevice(c, c.main);
+    const res = await requestLink(c, deviceToken, id);
+    expect(res.statusCode).toBe(202);
+    await pins().drain();
+    const mail = mailer.lastTo(cashier.email)!;
+    expect(mail.text).toContain('/pos/pin?token=');
+    const token = linkToken(mail.text);
+    // Wrong PINs are refused and keep the link usable.
+    for (const pin of ['12345', '111111', '123456', '987654', '12a456'])
+      expect((await complete(c, token, pin)).statusCode).toBe(400);
+    expect((await complete(c, token, '482913')).statusCode).toBe(200);
     const row = await owner.query(`select pin_hash, pin_set_at from memberships where id = $1`, [
       id,
     ]);
     expect(row.rows[0].pin_hash).toMatch(/^\$argon2id\$v=19\$m=65536,t=3,p=1\$/);
     expect(row.rows[0].pin_hash).not.toContain('482913');
+    // Single use.
+    const again = await complete(c, token, '482913');
+    expect(again.statusCode).toBe(400);
+    expect(again.json().code).toBe('RESET_TOKEN_INVALID');
     const employee = (
       await c.client.request('GET', `/manager/employees/${id}`, { cookies: c.cookies })
     ).json();
     expect(employee.pinSetAt).toEqual(expect.any(String));
     expect(JSON.stringify(employee)).not.toContain('argon2');
     const audit = await owner.query(
-      `select details from audit_log where action = 'employee.pin_set' and target_id = $1`,
+      `select action, details from audit_log where target_id = $1 and action like 'employee.pin%' order by occurred_at`,
       [id],
     );
+    expect(audit.rows.map((r) => r.action)).toEqual([
+      'employee.pin_reset_requested',
+      'employee.pin_set',
+    ]);
+    expect(audit.rows[0].details).toMatchObject({ deviceId: device.id });
     expect(JSON.stringify(audit.rows)).not.toContain('482913');
+    // The device gets the hash at its next sync.
+    const snap = (
+      await c.client.request('GET', '/device/sync', {
+        headers: { authorization: `Bearer ${deviceToken}` },
+      })
+    ).json();
+    expect(snap.staff.find((s: { membershipId: string }) => s.membershipId === id).pinHash).toMatch(
+      /^\$argon2id/,
+    );
   });
 
-  it('refuses short, repeated and straight-run PINs', async () => {
+  it('limits requests to one per person per 5 minutes, only the newest link works, and the link expires', async () => {
     const c = await createCompany(app, db, mailer);
     const cashier = await c.hire([{ roleId: c.roles.cashier, branchId: c.main }], 'pos');
     const id = await membershipOf(c, cashier.email);
-    for (const pin of ['12345', '111111', '123456', '987654', '12a456'])
-      expect((await setPin(c, id, pin)).statusCode).toBe(400);
+    const { token: deviceToken } = await registerDevice(c, c.main);
+    expect((await requestLink(c, deviceToken, id)).statusCode).toBe(202);
+    expect((await requestLink(c, deviceToken, id)).statusCode).toBe(429);
+    await pins().drain();
+    const first = linkToken(mailer.lastTo(cashier.email)!.text);
+    await owner.query(`delete from rate_limit_buckets where key like 'pin-reset:%'`);
+    expect((await requestLink(c, deviceToken, id)).statusCode).toBe(202);
+    await pins().drain();
+    const second = linkToken(mailer.lastTo(cashier.email)!.text);
+    expect(second).not.toBe(first);
+    expect((await complete(c, first, '482913')).statusCode).toBe(400);
+    await owner.query(
+      `update pin_reset_tokens set expires_at = now() - interval '1 minute' where membership_id = $1`,
+      [id],
+    );
+    expect((await complete(c, second, '482913')).statusCode).toBe(400);
+    // Another company's device cannot ask for this person: nothing is sent.
+    const other = await createCompany(app, db, mailer);
+    const foreign = await registerDevice(other, other.main);
+    await owner.query(`delete from rate_limit_buckets where key like 'pin-reset:%'`);
+    expect((await requestLink(other, foreign.token, id)).statusCode).toBe(202);
+    await pins().drain();
+    expect(
+      mailer.outbox.filter((m) => m.to === cashier.email && m.text.includes('/pos/pin?token=')),
+    ).toHaveLength(2);
   });
 
-  it('lets only managers within their authority set other people’s PINs, anyone their own', async () => {
+  it('managers never set a PIN; they can only clear one', async () => {
     const c = await createCompany(app, db, mailer);
     const cashier = await c.hire([{ roleId: c.roles.cashier, branchId: c.main }], 'pos');
-    const cashierId = await membershipOf(c, cashier.email);
-    const manager = await c.hire([{ roleId: c.roles.company_manager, branchId: null }], 'manager');
-    const managerId = await membershipOf(c, manager.email);
-    // A manager sets the cashier's PIN (within their authority, as for any employee change)
-    // and their own; a cashier cannot set anyone else's.
-    // Same anti-escalation rule as any employee change: the cashier template holds rights a
-    // company manager lacks, so the owner sets it.
-    expect((await setPin(c, cashierId, '582014', manager.cookies)).statusCode).toBe(403);
-    expect((await setPin(c, cashierId, '582014')).statusCode).toBe(204);
-    expect((await setPin(c, managerId, '730291', manager.cookies)).statusCode).toBe(204);
-    const cashierManager = await c.client.request('PUT', `/manager/employees/${managerId}/pin`, {
-      cookies: cashier.cookies,
-      body: { pin: '730291' },
+    const id = await membershipOf(c, cashier.email);
+    const put = await c.client.request('PUT', `/manager/employees/${id}/pin`, {
+      cookies: c.cookies,
+      body: { pin: '482913' },
     });
-    expect(cashierManager.statusCode).toBe(401);
-    // Nobody below the owner sets the owner's PIN.
-    const ownerId = await membershipOf(c, c.email);
-    expect((await setPin(c, ownerId, '730291', manager.cookies)).statusCode).toBeGreaterThanOrEqual(
-      403,
-    );
+    expect(put.statusCode).toBe(404);
+    await owner.query(`update memberships set pin_hash = 'x', pin_set_at = now() where id = $1`, [
+      id,
+    ]);
+    const cleared = await c.client.request('DELETE', `/manager/employees/${id}/pin`, {
+      cookies: c.cookies,
+    });
+    expect(cleared.statusCode).toBe(204);
+    const row = await owner.query(`select pin_hash, pin_set_at from memberships where id = $1`, [
+      id,
+    ]);
+    expect(row.rows[0]).toEqual({ pin_hash: null, pin_set_at: null });
+    expect(
+      (
+        await c.client.request('DELETE', `/manager/employees/${id}/pin`, {
+          cookies: cashier.cookies,
+        })
+      ).statusCode,
+    ).toBe(401);
   });
 });
 

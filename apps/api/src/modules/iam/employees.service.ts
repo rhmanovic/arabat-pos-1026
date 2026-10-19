@@ -19,7 +19,6 @@ import type { Env } from '../../config/env.js';
 import { DatabaseService, type Transaction } from '../../database/database.service.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { generateToken, hashToken } from '../../kernel/crypto/tokens.js';
-import { assertAcceptablePin, hashPin } from '../../kernel/crypto/pin.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
 import { Mailer } from '../../kernel/mail/mailer.js';
@@ -272,24 +271,19 @@ export class EmployeesService {
   }
 
   /**
-   * Sets or resets a member's device PIN (ADR-0112), online only. Managers within their
-   * authority, or anyone for themselves (an owner who also sells). Devices pick the new hash up at
-   * their next sync; the PIN is never stored or logged in plain text.
+   * Clears a member's device PIN (ADR-0112, owner decision 6): a manager never sets or sees a
+   * PIN, only removes one (a person who left, a PIN that may have leaked). The person chooses a
+   * new PIN from the till through the e-mailed link. Devices drop the hash at their next sync.
    */
-  async setPin(actor: MerchantActor, membershipId: string, pin: string, ip: string): Promise<void> {
-    assertAcceptablePin(pin);
-    const pinHash = await hashPin(pin);
+  async clearPin(actor: MerchantActor, membershipId: string, ip: string): Promise<void> {
     await this.database.withMerchantTx(actor.merchantId, async (tx) => {
-      const member =
-        membershipId === actor.membershipId
-          ? await this.findMember(tx, membershipId)
-          : await this.manageableMember(tx, actor, membershipId, { allowSelf: false });
+      const member = await this.manageableMember(tx, actor, membershipId, { allowSelf: true });
       await tx
         .update(memberships)
-        .set({ pinHash, pinSetAt: sql`now()`, updatedAt: sql`now()` })
+        .set({ pinHash: null, pinSetAt: null, updatedAt: sql`now()` })
         .where(eq(memberships.id, member.membershipId));
-      await this.record(tx, actor, 'employee.pin_set', 'membership', membershipId, ip, {
-        replaced: member.pinSetAt !== null,
+      await this.record(tx, actor, 'employee.pin_cleared', 'membership', membershipId, ip, {
+        hadPin: member.pinSetAt !== null,
       });
     });
   }

@@ -5,6 +5,18 @@ export const posEn = {
   branch: 'Branch',
   noBranch: 'No branch selected',
   lock: 'Lock',
+  pin: {
+    title: 'Choose your till PIN',
+    subtitle:
+      'Only you know it. You sign in to the Arabat app on the till with it, also without internet.',
+    pin: 'PIN',
+    hint: '6 to 12 digits; not one repeated digit, not a straight run.',
+    confirm: 'Repeat the PIN',
+    mismatch: 'The PINs do not match.',
+    save: 'Save PIN',
+    done: 'Your PIN is set. The till uses it after its next sync (a few minutes).',
+    missingToken: 'This link is incomplete. Ask for a new one from the till.',
+  },
   login: {
     title: 'Cashier sign-in',
     subtitle: 'Sign in to start selling at your branch.',
