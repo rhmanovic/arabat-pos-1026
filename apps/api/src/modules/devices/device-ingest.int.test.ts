@@ -76,7 +76,7 @@ type Setup = Awaited<ReturnType<typeof setup>>;
 
 async function register(c: Co, branchId: string) {
   const res = await c.client.request('POST', '/device/register', {
-    body: { email: c.email, password: PASSWORD, deviceName: 'Till', branchId },
+    body: { email: c.email, password: PASSWORD, deviceName: 'Till', branchId, role: 'secondary' },
   });
   expect(res.statusCode).toBe(200);
   return res.json() as {

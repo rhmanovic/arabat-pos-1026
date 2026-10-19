@@ -29,16 +29,27 @@ afterAll(async () => {
 type Co = Awaited<ReturnType<typeof createCompany>>;
 
 /** Registers a device at a branch with the owner's credentials; returns the 200 body. */
-async function registerDevice(c: Co, branchId: string, name = 'Till Mac') {
+async function registerDevice(
+  c: Co,
+  branchId: string,
+  name = 'Till Mac',
+  role: 'primary' | 'secondary' = 'secondary',
+) {
   const res = await c.client.request('POST', '/device/register', {
-    body: { email: c.email, password: PASSWORD, deviceName: name, branchId },
+    body: { email: c.email, password: PASSWORD, deviceName: name, branchId, role },
   });
   expect(res.statusCode).toBe(200);
   const body = res.json();
   expect(body.status).toBe('registered');
   return body as {
     token: string;
-    device: { id: string; registerId: string; registerCode: string; branchCode: string };
+    device: {
+      id: string;
+      registerId: string;
+      registerCode: string;
+      branchCode: string;
+      role: string;
+    };
   };
 }
 
@@ -90,6 +101,112 @@ describe('device registration', () => {
       device.id,
     ]);
     expect(audit.rows.map((r) => r.action)).toEqual(['device.registered']);
+  });
+
+  it('asks for the role after the branch and refuses a second primary in the branch (Plan A)', async () => {
+    const c = await createCompany(app, db, mailer);
+    const step = await c.client.request('POST', '/device/register', {
+      body: { email: c.email, password: PASSWORD, deviceName: 'Front', branchId: c.main },
+    });
+    expect(step.json()).toMatchObject({
+      status: 'select_role',
+      merchantId: c.merchantId,
+      branch: { id: c.main, code: 'MAIN' },
+      primaryTaken: false,
+    });
+    const primary = await registerDevice(c, c.main, 'Front', 'primary');
+    expect(primary.device.role).toBe('primary');
+    const again = await c.client.request('POST', '/device/register', {
+      body: { email: c.email, password: PASSWORD, deviceName: 'Back', branchId: c.main },
+    });
+    expect(again.json()).toMatchObject({ status: 'select_role', primaryTaken: true });
+    const refused = await c.client.request('POST', '/device/register', {
+      body: {
+        email: c.email,
+        password: PASSWORD,
+        deviceName: 'Back',
+        branchId: c.main,
+        role: 'primary',
+      },
+    });
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().code).toBe('PRIMARY_EXISTS');
+    // An additional device is fine, and the other branch may have its own primary.
+    const extra = await registerDevice(c, c.main, 'Back', 'secondary');
+    expect(extra.device.role).toBe('secondary');
+    expect((await registerDevice(c, c.second, 'Mall', 'primary')).device.role).toBe('primary');
+    expect((await me(c, extra.token)).json().role).toBe('secondary');
+
+    // The owner cannot promote the additional device while the primary is live…
+    const promote = await c.client.request('PUT', `/manager/devices/${extra.device.id}`, {
+      cookies: c.cookies,
+      body: { role: 'primary' },
+    });
+    expect(promote.json().code).toBe('PRIMARY_EXISTS');
+    // …but can after making the primary additional; nothing is revoked.
+    const demote = await c.client.request('PUT', `/manager/devices/${primary.device.id}`, {
+      cookies: c.cookies,
+      body: { role: 'secondary' },
+    });
+    expect(demote.json()).toMatchObject({ role: 'secondary', revokedAt: null });
+    const promoted = await c.client.request('PUT', `/manager/devices/${extra.device.id}`, {
+      cookies: c.cookies,
+      body: { role: 'primary' },
+    });
+    expect(promoted.json()).toMatchObject({ role: 'primary' });
+    const snap = await c.client.request('GET', '/device/sync', {
+      headers: { authorization: `Bearer ${extra.token}` },
+    });
+    expect(snap.json().device.role).toBe('primary');
+    // Revoking the primary frees the role.
+    await c.client.request('POST', `/manager/devices/${extra.device.id}/revoke`, {
+      cookies: c.cookies,
+    });
+    expect((await registerDevice(c, c.main, 'New', 'primary')).device.role).toBe('primary');
+  });
+
+  it('lets only the owner move a device to another branch, with a new register and a full snapshot', async () => {
+    const c = await createCompany(app, db, mailer);
+    const { token, device } = await registerDevice(c, c.main, 'Mover', 'secondary');
+    const first = await c.client.request('GET', '/device/sync', {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const version = first.json().version as string;
+    const manager = await c.hire([{ roleId: c.roles.company_manager, branchId: null }], 'manager');
+    const notOwner = await c.client.request('PUT', `/manager/devices/${device.id}`, {
+      cookies: manager.cookies,
+      body: { branchId: c.second },
+    });
+    expect(notOwner.statusCode).toBe(403);
+    const moved = await c.client.request('PUT', `/manager/devices/${device.id}`, {
+      cookies: c.cookies,
+      body: { branchId: c.second },
+    });
+    expect(moved.statusCode).toBe(200);
+    expect(moved.json()).toMatchObject({ branchId: c.second, revokedAt: null });
+    expect(moved.json().registerId).not.toBe(device.registerId);
+    const old = await owner.query(`select status from registers where id = $1`, [
+      device.registerId,
+    ]);
+    expect(old.rows[0].status).toBe('inactive');
+    const after = await c.client.request(
+      'GET',
+      `/device/sync?since=${encodeURIComponent(version)}`,
+      {
+        headers: { authorization: `Bearer ${token}` },
+      },
+    );
+    expect(after.json()).toMatchObject({
+      full: true,
+      branch: { id: c.second, code: 'B2' },
+      device: { branchId: c.second, registerId: moved.json().registerId },
+      counters: { lastReceiptNumber: null },
+    });
+    const audit = await owner.query(
+      `select details from audit_log where target_id = $1 and action = 'device.updated'`,
+      [device.id],
+    );
+    expect(audit.rows[0].details.changes.branchId).toEqual({ from: c.main, to: c.second });
   });
 
   it('never reuses a register code, skipping codes manual registers use', async () => {

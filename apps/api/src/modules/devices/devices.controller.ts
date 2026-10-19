@@ -14,6 +14,7 @@ import {
   deviceUploadSchema,
   registerDeviceSchema,
   resolveDeviceExceptionSchema,
+  updatePosDeviceSchema,
 } from '@arabat/contracts';
 import {
   Body,
@@ -177,6 +178,18 @@ export class ManagerDevicesController {
   @Get('devices')
   async list(@CurrentMerchantActor() actor: MerchantActor): Promise<{ devices: PosDevice[] }> {
     return { devices: await this.devices.list(actor) };
+  }
+
+  /** Owner only (checked in the service): role and branch; nothing is revoked (Plan A). */
+  @RequirePermission('manager', 'registers.manage')
+  @Put('devices/:id')
+  update(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body(new ZodPipe(updatePosDeviceSchema)) body: z.output<typeof updatePosDeviceSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<PosDevice> {
+    return this.devices.update(actor, id, body, req.ip);
   }
 
   @RequirePermission('manager', 'registers.manage')

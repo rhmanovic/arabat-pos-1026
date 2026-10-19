@@ -5,6 +5,7 @@ import {
   type PrintAgent,
   type PrintJob,
   type PrintSettings,
+  type SalePrintStatus,
   agentJobResultSchema,
   createPrintAgentSchema,
   printSettingsSchema,
@@ -88,6 +89,21 @@ export class PrintingController {
     @Req() req: FastifyRequest,
   ): Promise<PrintJob> {
     return this.jobs.reprint(actor, id, req.ip);
+  }
+}
+
+/** The browser POS follows its receipt until it is printed (Plan A). */
+@Controller('pos')
+export class PosPrintController {
+  constructor(private readonly jobs: PrintJobsService) {}
+
+  @RequirePermission('pos', 'sales.create')
+  @Get('sales/:id/print-status')
+  status(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+  ): Promise<SalePrintStatus> {
+    return this.jobs.saleStatus(actor, id);
   }
 }
 

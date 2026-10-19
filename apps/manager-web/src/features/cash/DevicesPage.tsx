@@ -1,4 +1,4 @@
-import type { PosDevice } from '@arabat/contracts';
+import type { DeviceRole, PosDevice } from '@arabat/contracts';
 import {
   Badge,
   Button,
@@ -9,15 +9,17 @@ import {
   CardTitle,
   ConfirmDialog,
   DataTable,
+  Dialog,
   Field,
   Input,
   PageHeader,
+  Select,
 } from '@arabat/ui';
-import { ErrorState, useApi, useNotify } from '@arabat/web-core';
+import { ErrorState, localizedName, useApi, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useBranchName } from '../../app/context.js';
+import { useBranchContext, useBranchName, useSession } from '../../app/context.js';
 import { formatDateTime } from '../inventory/AdjustmentsPage.js';
 import { DeviceExceptions } from './DeviceExceptions.js';
 
@@ -87,6 +89,84 @@ function OfflineLimit() {
   );
 }
 
+/**
+ * The browser POS's PIN sign-in link per branch (Plan A): cashiers open it on any browser and
+ * sign in with their name and till PIN. The link is shown once; a new link replaces the old one.
+ */
+function PinLinks() {
+  const { t } = useTranslation();
+  const api = useApi();
+  const notify = useNotify();
+  const queryClient = useQueryClient();
+  const branchName = useBranchName();
+  const [shown, setShown] = useState<{ branchId: string; url: string } | null>(null);
+  const key = ['manager', 'pin-links'] as const;
+  const links = useQuery({ queryKey: key, queryFn: () => api.devices.pinLinks(), retry: false });
+  const create = useMutation({
+    mutationFn: (branchId: string) => api.devices.createPinLink(branchId),
+    onSuccess: async (made) => {
+      setShown({ branchId: made.branchId, url: made.url });
+      await queryClient.invalidateQueries({ queryKey: key });
+    },
+    onError: notify.fail,
+  });
+  const remove = useMutation({
+    mutationFn: (branchId: string) => api.devices.removePinLink(branchId),
+    onSuccess: async () => {
+      setShown(null);
+      await queryClient.invalidateQueries({ queryKey: key });
+      notify.ok(t('devices.pinLinkRemoved'));
+    },
+    onError: notify.fail,
+  });
+  if (!links.data || links.data.branches.length === 0) return null;
+  return (
+    <Card className="mb-4">
+      <CardHeader>
+        <CardTitle>{t('devices.pinLinks')}</CardTitle>
+        <CardDescription>{t('devices.pinLinksHint')}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {links.data.branches.map((b) => (
+          <div key={b.branchId} className="flex flex-col gap-2 rounded-md border border-border p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-medium">
+                {branchName(b.branchId)}{' '}
+                {b.active ? (
+                  <Badge tone="success">{t('devices.pinLinkOn')}</Badge>
+                ) : (
+                  <Badge>{t('devices.pinLinkOff')}</Badge>
+                )}
+              </span>
+              <span className="flex flex-wrap gap-1">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  loading={create.isPending && create.variables === b.branchId}
+                  onClick={() => create.mutate(b.branchId)}
+                >
+                  {b.active ? t('devices.pinLinkNew') : t('devices.pinLinkCreate')}
+                </Button>
+                {b.active ? (
+                  <Button size="sm" variant="ghost" onClick={() => remove.mutate(b.branchId)}>
+                    {t('devices.pinLinkRemove')}
+                  </Button>
+                ) : null}
+              </span>
+            </div>
+            {shown?.branchId === b.branchId ? (
+              <div className="flex flex-col gap-1">
+                <Input readOnly dir="ltr" value={shown.url} aria-label={t('devices.pinLinks')} />
+                <span className="text-xs text-fg-muted">{t('devices.pinLinkOnce')}</span>
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 /** Local-first tills (ADR-0112): registered devices, their state, and removal. */
 export function DevicesPage() {
   const { t, i18n } = useTranslation();
@@ -94,7 +174,9 @@ export function DevicesPage() {
   const notify = useNotify();
   const queryClient = useQueryClient();
   const branchName = useBranchName();
+  const { session } = useSession();
   const [removing, setRemoving] = useState<PosDevice | null>(null);
+  const [changing, setChanging] = useState<PosDevice | null>(null);
   const devices = useQuery({
     queryKey: devicesKey,
     queryFn: () => api.devices.list(),
@@ -114,6 +196,7 @@ export function DevicesPage() {
     <div>
       <PageHeader title={t('devices.title')} description={t('devices.subtitle')} />
       <OfflineLimit />
+      <PinLinks />
       <DataTable
         caption={t('devices.title')}
         loading={devices.isPending}
@@ -136,6 +219,16 @@ export function DevicesPage() {
             key: 'register',
             header: t('devices.register'),
             cell: (d) => <span dir="ltr">{d.registerCode}</span>,
+          },
+          {
+            key: 'role',
+            header: t('devices.role'),
+            cell: (d) =>
+              d.role === 'primary' ? (
+                <Badge tone="primary">{t('devices.primary')}</Badge>
+              ) : (
+                <Badge>{t('devices.secondary')}</Badge>
+              ),
           },
           {
             key: 'state',
@@ -166,9 +259,16 @@ export function DevicesPage() {
             header: <span className="sr-only">{t('common.actions')}</span>,
             cell: (d) =>
               d.revokedAt ? null : (
-                <Button size="sm" variant="ghost" onClick={() => setRemoving(d)}>
-                  {t('devices.revoke')}
-                </Button>
+                <span className="flex flex-wrap justify-end gap-1">
+                  {session.isOwner ? (
+                    <Button size="sm" variant="ghost" onClick={() => setChanging(d)}>
+                      {t('devices.change')}
+                    </Button>
+                  ) : null}
+                  <Button size="sm" variant="ghost" onClick={() => setRemoving(d)}>
+                    {t('devices.revoke')}
+                  </Button>
+                </span>
               ),
           },
         ]}
@@ -184,7 +284,75 @@ export function DevicesPage() {
         loading={revoke.isPending}
         onConfirm={() => removing && revoke.mutate(removing.id)}
       />
+      {changing ? (
+        <ChangeDeviceDialog key={changing.id} device={changing} onClose={() => setChanging(null)} />
+      ) : null}
       <DeviceExceptions />
     </div>
+  );
+}
+
+/** Owner: the device's role and branch (Plan A). The device learns it at its next sync. */
+function ChangeDeviceDialog({ device, onClose }: { device: PosDevice; onClose: () => void }) {
+  const { t, i18n } = useTranslation();
+  const api = useApi();
+  const notify = useNotify();
+  const queryClient = useQueryClient();
+  const { branches } = useBranchContext();
+  const [role, setRole] = useState<DeviceRole>(device.role);
+  const [branchId, setBranchId] = useState(device.branchId);
+  const save = useMutation({
+    mutationFn: () =>
+      api.devices.update(device.id, {
+        ...(role !== device.role ? { role } : {}),
+        ...(branchId !== device.branchId ? { branchId } : {}),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: devicesKey });
+      notify.ok(t('devices.changed'));
+      onClose();
+    },
+    onError: notify.fail,
+  });
+  const unchanged = role === device.role && branchId === device.branchId;
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => (!open ? onClose() : undefined)}
+      title={t('devices.changeTitle', { name: device.name })}
+      description={t('devices.changeHint')}
+      footer={
+        <Button disabled={unchanged} loading={save.isPending} onClick={() => save.mutate()}>
+          {t('common.save')}
+        </Button>
+      }
+    >
+      <div className="grid gap-3">
+        <Field label={t('devices.role')} hint={t('devices.roleHint')}>
+          {(field) => (
+            <Select {...field} value={role} onChange={(e) => setRole(e.target.value as DeviceRole)}>
+              <option value="primary">{t('devices.primary')}</option>
+              <option value="secondary">{t('devices.secondary')}</option>
+            </Select>
+          )}
+        </Field>
+        <Field
+          label={t('inventory.branch')}
+          hint={branchId !== device.branchId ? t('devices.moveHint') : undefined}
+        >
+          {(field) => (
+            <Select {...field} value={branchId} onChange={(e) => setBranchId(e.target.value)}>
+              {branches
+                .filter((b) => b.status === 'active' || b.id === device.branchId)
+                .map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {localizedName(b, i18n.language)}
+                  </option>
+                ))}
+            </Select>
+          )}
+        </Field>
+      </div>
+    </Dialog>
   );
 }

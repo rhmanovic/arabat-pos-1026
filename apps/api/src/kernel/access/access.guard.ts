@@ -51,6 +51,12 @@ export class AccessGuard implements CanActivate {
       // A separate identity: a device token, never a user session (ADR-0111).
       const agent = await this.printAgents.fromRequest(request);
       if (!agent) throw AppError.unauthenticated('A valid print agent token is required.');
+      if (agent === 'not_primary')
+        throw new AppError(
+          403,
+          'NOT_PRIMARY_DEVICE',
+          "Only the branch's primary device prints queued receipts.",
+        );
       request.printAgent = agent;
       return true;
     }

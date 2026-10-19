@@ -40,7 +40,7 @@ Request:
 
 ```json
 { "email": "owner@example.com", "password": "…", "deviceName": "Front till",
-  "merchantId": "optional uuid", "branchId": "optional uuid" }
+  "merchantId": "optional uuid", "branchId": "optional uuid", "role": "primary | secondary (optional)" }
 ```
 
 1. Send `email`, `password`, `deviceName` only. If the person can register at exactly one branch of
@@ -52,12 +52,23 @@ Request:
                       "branches": [ { "id": "…", "code": "MAIN", "nameEn": "Main", "nameAr": "الرئيسي" } ] } ] }
    ```
 
-2. Send the same request again with `merchantId` and `branchId`:
+2. Send the same request again with `merchantId` and `branchId`. Without `role` the answer asks
+   for it (Plan A), once:
+
+   ```json
+   { "status": "select_role", "merchantId": "…",
+     "branch": { "id": "…", "code": "MAIN", "nameEn": "Main", "nameAr": "الرئيسي" },
+     "primaryTaken": false }
+   ```
+
+3. Send it again with `role`: `primary` (the till with the cash drawer; it also prints the browser
+   POS's receipts, §2b; **one per branch**, a second one → `409 PRIMARY_EXISTS`) or `secondary`
+   (an additional till that never opens the drawer):
 
    ```json
    { "status": "registered",
      "device": { "id": "…", "name": "Front till", "merchantId": "…", "branchId": "…",
-                 "branchCode": "MAIN", "registerId": "…", "registerCode": "R2" },
+                 "branchCode": "MAIN", "registerId": "…", "registerCode": "R2", "role": "primary" },
      "token": "q3V…43 chars" }
    ```
 
@@ -67,6 +78,18 @@ only grows; codes are never reused, even after removal). Errors: `401` `INVALID_
 `PLAN_LIMIT_REACHED` (the company's plan allows no more registers), `404` (inactive branch).
 
 `GET /device/me` → the `device` object above. Use it to check the token.
+
+**Role and branch change later (owner only, `/manager/devices`, `PUT /manager/devices/:id`
+`{ role?, branchId? }`):** nothing is revoked; the device keeps its token and learns the change
+from `device` in its next sync. A **move** to another branch needs the device's shift closed and
+its drawer emptied (`409 REGISTER_BUSY` / `REGISTER_HAS_CASH`), deactivates the old register and
+gives the device a new one in the new branch: a new `registerCode` and a new receipt series from
+`000001`. The next `GET /device/sync?since=…` after a move is a **full** snapshot of the new branch.
+The device engine resets its receipt counter whenever `register.id` changes.
+
+**Cash drawer.** The native app kicks the drawer only on a `primary` device, after a receipt the
+page prints itself (`print.receipt(html)` during a cash sale). A `secondary` device never kicks it.
+Queued jobs from the server (§2b) never open the drawer (`openDrawer: false`).
 
 ## 2a. Cashier PINs (self-service)
 
@@ -82,6 +105,26 @@ receives the new `pinHash` at its next sync. A second request for the same perso
 answers `429 RATE_LIMITED`; a request for someone who is not an active member of the device's
 company still answers 202 and sends nothing. Show the cashier: "if your e-mail is on file, a link
 is on its way; the till picks the new PIN up at its next sync".
+
+## 2b. The primary device prints the browser POS's receipts
+
+The branch's **primary** device is also its print agent, with its own device token — no separate
+print-agent token. It uses the print-agent API of ADR-0111 unchanged:
+
+- Socket.IO namespace `/print-agent` (path `/socket.io`), `auth: { token: <device token> }`; the
+  server pushes `print:job { id }` for jobs of the device's branch.
+- `GET /print-agent/jobs/pending` → `[{ id, html, orderUuid, createdAt, openDrawer: false }]`
+  (also after every reconnect).
+- `POST /print-agent/jobs/:id/claim` → `{ id, html, openDrawer: false }` (`409` when another
+  printer claimed it), then print the HTML on the receipt printer **without** kicking the drawer.
+- `POST /print-agent/jobs/:id/result` `{ ok: true }` or `{ ok: false, error }`. A job id is printed
+  at most once: a second claim answers 409.
+
+A `secondary` device's token gets `403 NOT_PRIMARY_DEVICE` there (the socket is refused with
+`forbidden: …`); a revoked token, 401. When the owner makes the primary `secondary` or moves it,
+its socket is disconnected. Branches without a primary keep using standalone print agents
+(`/manager/printers`). The browser POS shows each receipt's state (waiting / printed / failed)
+from `GET /pos/sales/:id/print-status`.
 
 ## 3. Sync download
 
@@ -145,7 +188,7 @@ snapshot). Call it at start-up, after every successful upload and every few minu
 | Topic | Rule |
 |---|---|
 | Offline limit | Count hours since the last **successful** sync (download or upload). Yellow warning after 24 h, red after 48 h, **stop selling** at `offlineLimitHours` until a sync succeeds. |
-| PIN | Verify with argon2id against `pinHash` (PHC string: 64 MiB, 3 passes, 1 lane). 5 wrong PINs lock that person on that device for 5 minutes, doubling on repeat. Never upload or display the hash. |
+| PIN | Verify with argon2id against `pinHash` (PHC string: 64 MiB, 3 passes, 1 lane). 3 wrong PINs lock that person on that device for 5 minutes, doubling on repeat (Plan A). Never upload or display the hash. |
 | Selling | Price and check every sale with `@arabat/pos-core` and the downloaded `settings` / `staff[].permissions`, in the order in `packages/pos-core/README.md` (rights, `evaluateSale`, `checkPayments`). Pass `expectedTotalMinor: null`. |
 | Supervisor | When `requiredSaleRights` lists rights the cashier lacks, a supervisor types **their own PIN**; check the right in their `permissions`; record `override` on the sale. |
 | Receipt numbers | `formatDeviceReceiptNumber(branch.code, register.code, n)` → `MAIN-R2-000042`; `n` is gap-free per device, taken in the same local transaction as the sale. |
@@ -325,7 +368,8 @@ bodies, and resends a refusal only for `SHIFT_REQUIRED`, `NOT_FOUND`, `INTERNAL_
 
 ## 8. What managers see
 
-- `/manager/devices`: devices (online / last seen / last sync), removal, the offline limit
+- `/manager/devices`: devices (role, online / last seen / last sync), the owner's role / branch
+  change, removal, the browser POS's PIN sign-in link per branch, the offline limit
   (`offlineLimitHours`, 1–720, default 72), and the exceptions after uploads (negative stock,
   device clock, not accepted) with "mark handled" and a note. The dashboard checklist counts open
   exceptions.

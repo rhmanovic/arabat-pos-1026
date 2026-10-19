@@ -11,6 +11,14 @@ import { discountInputSchema } from './sales.js';
 export const DEVICE_ONLINE_SECONDS = 120;
 
 /**
+ * The device's role in its branch (ADR-0112 amendment, Plan A): exactly one `primary` per branch
+ * (the till with the cash drawer, which also prints the browser POS's receipts); any number of
+ * `secondary` devices, which never open the drawer.
+ */
+export const DEVICE_ROLES = ['primary', 'secondary'] as const;
+export type DeviceRole = (typeof DEVICE_ROLES)[number];
+
+/**
  * Registration, done once on the device by a manager (online): e-mail and password, then the
  * company and branch. Without `merchantId` / `branchId` the answer lists the choices.
  */
@@ -20,6 +28,8 @@ export const registerDeviceSchema = z.object({
   deviceName: z.string().trim().min(1).max(80),
   merchantId: z.uuid().optional(),
   branchId: z.uuid().optional(),
+  /** Chosen once, after the branch; without it the answer is `select_role`. */
+  role: z.enum(DEVICE_ROLES).optional(),
 });
 export type RegisterDevice = z.infer<typeof registerDeviceSchema>;
 
@@ -32,6 +42,7 @@ export const registeredDeviceSchema = z.object({
   registerId: z.uuid(),
   /** Never reused within the branch (`R1`, `R2`, …); the receipt series is `{branch}-{register}-`. */
   registerCode: z.string(),
+  role: z.enum(DEVICE_ROLES),
 });
 export type RegisteredDevice = z.infer<typeof registeredDeviceSchema>;
 
@@ -57,6 +68,13 @@ export const registerDeviceResultSchema = z.discriminatedUnion('status', [
     ),
   }),
   z.object({
+    status: z.literal('select_role'),
+    merchantId: z.uuid(),
+    branch: deviceBranchOptionSchema,
+    /** The branch already has a primary device: only `secondary` will be accepted. */
+    primaryTaken: z.boolean(),
+  }),
+  z.object({
     status: z.literal('registered'),
     device: registeredDeviceSchema,
     /** The device's bearer token: shown only here, store it in the OS keychain. */
@@ -72,6 +90,7 @@ export const posDeviceSchema = z.object({
   branchId: z.uuid(),
   registerId: z.uuid(),
   registerCode: z.string(),
+  role: z.enum(DEVICE_ROLES),
   createdAt: z.string(),
   lastSeenAt: z.string().nullable(),
   lastSyncAt: z.string().nullable(),
@@ -79,6 +98,21 @@ export const posDeviceSchema = z.object({
   online: z.boolean(),
 });
 export type PosDevice = z.infer<typeof posDeviceSchema>;
+
+/**
+ * The owner changes a device's role or branch (`PUT /manager/devices/:id`). Nothing is revoked:
+ * the device learns the change at its next sync. A move to another branch gives the device a new
+ * register (a new receipt series) and is refused while its shift is open.
+ */
+export const updatePosDeviceSchema = z
+  .object({
+    role: z.enum(DEVICE_ROLES).optional(),
+    branchId: z.uuid().optional(),
+  })
+  .refine((v) => v.role !== undefined || v.branchId !== undefined, {
+    error: 'Nothing to change.',
+  });
+export type UpdatePosDevice = z.infer<typeof updatePosDeviceSchema>;
 
 /* Sync download: GET /device/sync?since=<version> (ADR-0112 §7a). */
 

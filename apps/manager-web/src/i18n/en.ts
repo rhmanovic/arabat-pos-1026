@@ -956,6 +956,27 @@ export const managerEn = {
     revokeHint:
       'The device stops selling at its next connection and must be registered again. Sales it already made are kept.',
     revokedDone: 'Device removed',
+    role: 'Role',
+    primary: 'Primary',
+    secondary: 'Additional',
+    roleHint:
+      'One primary per branch: it opens the cash drawer and prints the receipts of the browser POS. Additional devices never open the drawer.',
+    change: 'Change',
+    changeTitle: 'Change “{{name}}”',
+    changeHint: 'The device keeps selling and applies the change at its next sync.',
+    moveHint:
+      'Moving starts a new receipt series in the new branch. The device’s shift must be closed and its drawer emptied first.',
+    changed: 'Device updated',
+    pinLinks: 'Browser POS sign-in with PIN',
+    pinLinksHint:
+      'Share a branch’s link with its cashiers: on any browser they pick their name and type their till PIN. 3 wrong PINs lock that person for 5 minutes.',
+    pinLinkOn: 'Link active',
+    pinLinkOff: 'No link',
+    pinLinkCreate: 'Create link',
+    pinLinkNew: 'New link',
+    pinLinkRemove: 'Turn off',
+    pinLinkRemoved: 'Link turned off',
+    pinLinkOnce: 'Copy it now: it is shown only once. A new link stops the old one.',
     offlineLimit: 'Selling without internet',
     offlineLimitHint:
       'A device stops selling when it has not synced for this long (warnings after 24 and 48 hours). It syncs by itself whenever it is online.',

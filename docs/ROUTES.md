@@ -46,7 +46,9 @@ the permission.
 
 ## 2. `/pos` — pos-web
 
-Public: `/login`, `/forgot-password`, `/reset-password`, `/accept-invite`. A POS session is
+Public: `/login`, `/forgot-password`, `/reset-password`, `/accept-invite`, `/pin` (choose the till
+PIN from the e-mailed link), `/pin-sign-in#<key>` (sign in with name + PIN behind a branch link,
+Plan A; the browser remembers the link and `/login` then offers it). A POS session is
 bound to one branch. Full-screen layout (no sidebar): top strip with company, branch,
 cashier, clock, language, Lock and Sign out.
 
@@ -285,7 +287,7 @@ back to the same conversation. The assistant only reads (BR-194).
 
 | Method & path | Permission |
 |---|---|
-| `POST /device/register` (`{ email, password, deviceName, merchantId?, branchId? }` → `select_branch` choices or `registered` with the device and its token, shown once) | public, the credentials of a holder of `registers.manage` at the branch; rate-limited like a login |
+| `POST /device/register` (`{ email, password, deviceName, merchantId?, branchId?, role? }` → `select_branch` choices, `select_role` (with `primaryTaken`), or `registered` with the device, its role and its token, shown once; 409 `PRIMARY_EXISTS`) | public, the credentials of a holder of `registers.manage` at the branch; rate-limited like a login |
 | `GET /device/me` | device bearer token (401 `UNAUTHENTICATED`, 401 `DEVICE_REVOKED`) |
 | `GET /device-app/manifest.json`, `GET /device-app/*` (the till bundle for the native app, ADR-0112; manifest never cached) | public static |
 | `POST /device/pin-reset` (`{ membershipId }` → 202; a one-hour single-use link to the member's e-mail; 429 within 5 minutes of the last request) | device bearer token |
@@ -293,6 +295,9 @@ back to the same conversation. The assistant only reads (BR-194).
 | `GET /device/sync?since=<version>` (snapshot of the branch: full without `since`, product changes since it otherwise; `docs/DEVICE_API.md`) | device bearer token |
 | `POST /device/sync` (`{ records: [...] }`, up to 200, causal order; per record `accepted` / `duplicate` / `refused`; `docs/DEVICE_API.md`) | device bearer token |
 | `GET /manager/devices`, `POST /manager/devices/:id/revoke` | manager `registers.manage` |
+| `PUT /manager/devices/:id` (`{ role?, branchId? }`; Plan A: nothing revoked, a move gives a new register; 409 `PRIMARY_EXISTS` / `REGISTER_BUSY` / `REGISTER_HAS_CASH`) | owner only (`registers.manage` + owner check) |
+| `GET /manager/pin-links`, `POST /manager/pin-links/:branchId` (a new link `{ key, url }`, shown once; replaces the old one), `DELETE /manager/pin-links/:branchId` | manager `registers.manage` at the branch |
+| `POST /auth/pos/pin-sign-in/branch` (`{ key }` → company, branch, people with `pos.access` and whether they have a PIN), `POST /auth/pos/pin-sign-in` (`{ key, membershipId, pin }` → POS session; 3 wrong PINs → 429 for 5 minutes; 409 `PIN_NOT_SET`; 404 `PIN_LINK_INVALID`) | public, the link key and the PIN are the credentials; 60 per IP per 10 min |
 | `GET /manager/device-settings`, `PUT /manager/device-settings` (`{ offlineLimitHours }`, 1–720) | manager `merchant.settings.read` / `merchant.settings.update` |
 | `GET /manager/device-exceptions?status=open\|resolved`, `POST /manager/device-exceptions/:id/resolve` (`{ note }`) | manager `registers.manage` (per branch) |
 | `DELETE /manager/employees/:membershipId/pin` (clears the device PIN; the person chooses a new one from the till → 204) | `employees.manage` within the usual anti-escalation rule |
@@ -307,9 +312,10 @@ back to the same conversation. The assistant only reads (BR-194).
 | `GET` / `PUT /manager/print-settings` (`{ autoPrintReceipts }`, default true) | manager `merchant.settings.read` / `.update` |
 | `POST /manager/sales/:id/print` (numbered copy as a new job → `{ id, status, createdAt, copyNumber, agentOnline }`) | manager `sales.read` at the sale's branch |
 | `POST /pos/sales/:id/print` (the till's "Print receipt": same answer; copy logged with the cashier's shift) | POS `sales.create` at the session branch |
-| `GET /print-agent/jobs/pending` (`[{ id, html, orderUuid, createdAt }]`, oldest first, max 50) | agent bearer token |
-| `POST /print-agent/jobs/:id/claim` (`{ id, html }`; 409 when already claimed) | agent bearer token |
-| `POST /print-agent/jobs/:id/result` (`{ ok, error? }` → `{ id, status }`; 409 when not claimed by this agent) | agent bearer token |
+| `GET /print-agent/jobs/pending` (`[{ id, html, orderUuid, createdAt, openDrawer: false }]`, oldest first, max 50) | agent bearer token, or the branch's **primary device** token (Plan A); a secondary device 403 `NOT_PRIMARY_DEVICE` |
+| `POST /print-agent/jobs/:id/claim` (`{ id, html, openDrawer: false }`; 409 when already claimed) | same |
+| `POST /print-agent/jobs/:id/result` (`{ ok, error? }` → `{ id, status }`; 409 when not claimed by this agent or device) | same |
+| `GET /pos/sales/:id/print-status` (`{ status: none\|pending\|printing\|printed\|failed, jobId, error, printerOnline }`, the sale's latest job) | POS `sales.create` at the sale's branch |
 
 Socket.IO (path `/socket.io`): namespace `/print-agent`, `auth: { token }` (refused:
 `connect_error` "unauthorized"); event `print:job` `{ id }`.

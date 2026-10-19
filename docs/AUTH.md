@@ -122,6 +122,16 @@ Client IPs come from `X-Forwarded-For` only when `TRUST_PROXY` names the load ba
 
 ---
 
+### Browser POS sign-in with name + PIN (Plan A, ADR-0112 amendment 2)
+
+A manager with `registers.manage` makes a branch link on `/manager/devices`
+(`POST /manager/pin-links/:branchId`); only the key's SHA-256 is stored and a new link replaces the
+old one. The page `/pos/pin-sign-in#<key>` lists the branch's active people with `pos.access` and
+signs one in with the PIN they chose for the tills (`PinSignInService`, same argon2id hash). The
+result is an ordinary POS session bound to that branch (`LoginService.complete`, audit
+`auth.pin_login.succeeded`; failures `auth.pin_login.failed`). 3 wrong PINs lock that person for
+5 minutes; 60 calls per IP per 10 minutes. The key never appears in a URL the server sees.
+
 ## 3. Authorization model
 
 ### 3.1 Concepts

@@ -1538,6 +1538,35 @@ ADR; supersede it.
   series, server acceptance of completed device sales (no refusal for stock or price), device
   UUIDv7 ids, versioned download and ledger-running upload sync without database replication,
   and the shared rules package `packages/pos-core`.
+- **Amendment 2 — Plan A (owner, 2026-10-19).** The owner's revised plan for a branch: a server
+  (catalog, invoices, reports), one **primary** till per branch (works offline, owns the cash
+  drawer, prints the browser POS's receipts), optional **additional** tills (offline, never open
+  the drawer), and the browser POS (online only, no drawer). Decisions:
+  - `pos_devices.role` `primary` | `secondary` (migration 0063), chosen once at registration after
+    the branch (`select_role` step); a unique index allows one live primary per branch
+    (`409 PRIMARY_EXISTS`). The oldest live device of each branch became its primary.
+  - The owner alone changes a device's role or branch (`PUT /manager/devices/:id`). Nothing is
+    revoked; the next sync carries the change. A move needs the old register settled (no open
+    shift, no drawer cash, same rule as deactivating a register), deactivates it and gives the
+    device a new register in the new branch, hence a new receipt series; the first sync after it
+    is full (`branch_changed_at`). Records made before the move but uploaded after it are refused
+    by the existing receipt-prefix and shift checks, never booked to the wrong branch.
+  - The primary device's own token is accepted by the print-agent API and socket of ADR-0111,
+    bound to its branch (`print_jobs.device_id` records the claim); a secondary device gets
+    `403 NOT_PRIMARY_DEVICE`. Standalone print agents keep working. Queued jobs carry
+    `openDrawer: false`: receipts of the browser POS and the manager never open the drawer.
+    A primary device counts as a branch printer for auto-print and the "printer online" check.
+  - The browser POS gains sign-in with name + PIN through a branch link made by a manager
+    (`/manager/devices`): only the key's SHA-256 is stored (`branches.pin_link_key_hash`), a new
+    link replaces the old one, the key travels in the page's `#` part and in request bodies only.
+    The list shows active people with `pos.access` at the branch; the PIN is the one chosen for
+    the tills (same argon2id hash). 3 wrong PINs lock that person for 5 minutes, as on the tills
+    (which moved from 5 to 3). Everything else in the browser POS stays online only.
+  - The browser POS shows each receipt's print state from `GET /pos/sales/:id/print-status`
+    (waiting / printed / failed, polled until it settles). Devices download every minute (was 3).
+  - Not done in this amendment: the till does not yet hide cash tenders on a secondary device (a
+    secondary still takes cash; it only never opens the drawer), and the browser POS's unlock of a
+    locked session still asks for the password.
 
 ## ADR-0113 — Public landing page at `/`
 - **Date:** 2026-10-18 · **Status:** Accepted (owner, 2026-10-18: "a simple React landing page

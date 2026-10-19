@@ -6,7 +6,7 @@ import type {
   SaleOverrideGrant,
 } from '@arabat/contracts';
 import { Money, MoneyError, parseQuantity } from '@arabat/money';
-import { Badge, Button, Dialog, Field, Input, Select, Spinner } from '@arabat/ui';
+import { Alert, Badge, Button, Dialog, Field, Input, Select, Spinner } from '@arabat/ui';
 import { ApiError } from '@arabat/api-client';
 import { localizedName, useApi, useAuth, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -905,8 +905,11 @@ export function ReceiptDialog({ saleId, onClose }: { saleId: string; onClose: ()
     onSuccess: async (job) => {
       if (job.agentOnline) notify.ok(t('sale.sentToPrinter'));
       else notify.info(t('sale.noPrinterOnline'));
-      // The copy number shown on the receipt.
-      await queryClient.invalidateQueries({ queryKey: ['pos', 'receipt', saleId] });
+      // The copy number shown on the receipt, and the new job's state.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['pos', 'receipt', saleId] }),
+        queryClient.invalidateQueries({ queryKey: ['pos', 'print-status', saleId] }),
+      ]);
     },
     onError: notify.fail,
   });
@@ -932,8 +935,42 @@ export function ReceiptDialog({ saleId, onClose }: { saleId: string; onClose: ()
         </>
       }
     >
+      <PrintStatusLine saleId={saleId} />
       {receipt.data ? <ReceiptView receipt={receipt.data} /> : <Spinner />}
     </Dialog>
+  );
+}
+
+/**
+ * Where the receipt is (Plan A): queued for the branch's primary device or print agent, printed,
+ * or failed. Followed every 2 seconds until it settles; a new copy starts it again.
+ */
+function PrintStatusLine({ saleId }: { saleId: string }) {
+  const { t } = useTranslation();
+  const api = useApi();
+  const status = useQuery({
+    queryKey: ['pos', 'print-status', saleId],
+    queryFn: () => api.sales.printStatus(saleId),
+    refetchInterval: (q) => {
+      const s = q.state.data?.status;
+      return s === 'pending' || s === 'printing' ? 2000 : false;
+    },
+  });
+  const s = status.data;
+  if (!s || s.status === 'none') return null;
+  const tone = s.status === 'printed' ? 'success' : s.status === 'failed' ? 'danger' : 'info';
+  const label =
+    s.status === 'printed'
+      ? t('sale.printStatus.printed')
+      : s.status === 'failed'
+        ? t('sale.printStatus.failed', { error: s.error ?? '' })
+        : s.printerOnline
+          ? t('sale.printStatus.waiting')
+          : t('sale.printStatus.offline');
+  return (
+    <Alert tone={tone} className="mb-3" data-testid="print-status">
+      {label}
+    </Alert>
   );
 }
 

@@ -4,7 +4,7 @@ import type pg from 'pg';
 import { type Socket, io } from 'socket.io-client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { newId } from '../../kernel/ids.js';
-import { DbFixtures, createCompany } from '../../testing/auth-fixtures.js';
+import { DbFixtures, PASSWORD, createCompany } from '../../testing/auth-fixtures.js';
 import { prepareIntegrationDatabase } from '../../testing/integration-db.js';
 import { InMemoryMailer, createTestApp, testEnv } from '../../testing/test-app.js';
 
@@ -84,7 +84,7 @@ async function shop() {
     if (res.statusCode !== 201) throw new Error(res.body);
     return res.json() as { id: string; receiptNumber: string };
   };
-  return { c, sell };
+  return { c, sell, cashier };
 }
 
 async function createAgent(c: Co, body: { name: string; branchId?: string | null }) {
@@ -260,7 +260,7 @@ describe('print jobs', () => {
     ]);
     expect(results.map((r) => r.statusCode).sort()).toEqual([200, 409]);
     const winner = results.find((r) => r.statusCode === 200)!;
-    expect(winner.json()).toEqual({ id: job!.id, html: job!.html });
+    expect(winner.json()).toEqual({ id: job!.id, html: job!.html, openDrawer: false });
     expect(await pending(c, first.token)).toEqual([]);
 
     const winnerToken = winner === results[0] ? first.token : second.token;
@@ -377,5 +377,72 @@ describe('print agent socket', () => {
     expect(await dropped).toBe('io server disconnect');
     socket.close();
     foreign.close();
+  });
+
+  it('lets the primary device print the browser queue with its own token; an additional device gets 403 (Plan A)', async () => {
+    const { c, sell, cashier } = await shop();
+    const status = async (saleId: string) =>
+      (
+        await c.client.request('GET', `/pos/sales/${saleId}/print-status`, {
+          cookies: cashier.cookies,
+        })
+      ).json();
+    const device = async (deviceName: string, role: 'primary' | 'secondary') => {
+      const res = await c.client.request('POST', '/device/register', {
+        body: { email: c.email, password: PASSWORD, deviceName, branchId: c.main, role },
+      });
+      expect(res.statusCode).toBe(200);
+      return res.json() as { token: string; device: { id: string } };
+    };
+    const primary = await device('Front', 'primary');
+    const extra = await device('Back', 'secondary');
+
+    // No standalone agent: the primary device alone makes the browser sale queue its receipt.
+    const socket = connect(primary.token);
+    await new Promise<void>((resolve) => socket.on('connect', () => resolve()));
+    const received = new Promise<{ id: string }>((resolve) => socket.on('print:job', resolve));
+    const sale = await sell();
+    const event = await received;
+    const [job] = await pending(c, primary.token);
+    expect(job).toMatchObject({ id: event.id, orderUuid: sale.id, openDrawer: false });
+    expect(await status(sale.id)).toEqual({
+      status: 'pending',
+      jobId: job!.id,
+      error: null,
+      printerOnline: true,
+    });
+    const claim = await agentCall(c, primary.token, 'POST', `/jobs/${job!.id}/claim`);
+    expect(claim.json()).toMatchObject({ id: job!.id, openDrawer: false });
+    const done = await agentCall(c, primary.token, 'POST', `/jobs/${job!.id}/result`, { ok: true });
+    expect(done.json()).toEqual({ id: job!.id, status: 'printed' });
+    expect((await status(sale.id)).status).toBe('printed');
+    const row = await owner.query(
+      `select agent_id, device_id, status from print_jobs where id = $1`,
+      [job!.id],
+    );
+    expect(row.rows[0]).toEqual({
+      agent_id: null,
+      device_id: primary.device.id,
+      status: 'printed',
+    });
+
+    // The additional device is refused on REST and on the socket.
+    const refused = await agentCall(c, extra.token, 'GET', '/jobs/pending');
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json().code).toBe('NOT_PRIMARY_DEVICE');
+    const extraSocket = connect(extra.token);
+    const error = await new Promise<Error>((resolve) => extraSocket.on('connect_error', resolve));
+    expect(error.message).toMatch(/^forbidden/);
+    extraSocket.close();
+
+    // Made additional by the owner, the old primary is disconnected and refused from then on.
+    const dropped = new Promise<string>((resolve) => socket.on('disconnect', resolve));
+    await c.client.request('PUT', `/manager/devices/${primary.device.id}`, {
+      cookies: c.cookies,
+      body: { role: 'secondary' },
+    });
+    expect(await dropped).toBe('io server disconnect');
+    expect((await agentCall(c, primary.token, 'GET', '/jobs/pending')).statusCode).toBe(403);
+    socket.close();
   });
 });

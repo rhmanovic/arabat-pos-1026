@@ -6,6 +6,7 @@ import {
   type PrintAgent,
   type PrintJob,
   type PrintSettings,
+  type SalePrintStatus,
   type agentJobResultSchema,
   type createPrintAgentSchema,
 } from '@arabat/contracts';
@@ -61,8 +62,11 @@ export class PrintJobsService {
         const [row] = (
           await sp.execute(sql`
             select coalesce((select auto_print_receipts from sales_settings where merchant_id = ${args.merchantId}), true) as auto,
-                   exists (select 1 from print_agents where merchant_id = ${args.merchantId}
-                           and (branch_id is null or branch_id = ${args.branchId})) as has_agent`)
+                   (exists (select 1 from print_agents where merchant_id = ${args.merchantId}
+                            and (branch_id is null or branch_id = ${args.branchId}))
+                    or exists (select 1 from pos_devices where merchant_id = ${args.merchantId}
+                            and branch_id = ${args.branchId} and role = 'primary'
+                            and revoked_at is null)) as has_agent`)
         ).rows as { auto: boolean; has_agent: boolean }[];
         if (!row?.auto || !row.has_agent) return;
         await this.insertJob(sp, { ...args, kind: 'auto', userId: null });
@@ -137,11 +141,48 @@ export class PrintJobsService {
     });
     const [online] = (
       await tx.execute(sql`
-        select exists (select 1 from print_agents where merchant_id = ${args.merchantId}
-                       and (branch_id is null or branch_id = ${args.branchId})
-                       and last_seen_at > now() - make_interval(secs => ${PRINT_AGENT_ONLINE_SECONDS})) as online`)
+        select (exists (select 1 from print_agents where merchant_id = ${args.merchantId}
+                        and (branch_id is null or branch_id = ${args.branchId})
+                        and last_seen_at > now() - make_interval(secs => ${PRINT_AGENT_ONLINE_SECONDS}))
+             or exists (select 1 from pos_devices where merchant_id = ${args.merchantId}
+                        and branch_id = ${args.branchId} and role = 'primary' and revoked_at is null
+                        and last_seen_at > now() - make_interval(secs => ${PRINT_AGENT_ONLINE_SECONDS}))) as online`)
     ).rows as { online: boolean }[];
     return { ...job, copyNumber, agentOnline: online!.online };
+  }
+
+  /** The browser POS: the latest print job of a sale of the session's branch (Plan A). */
+  async saleStatus(actor: MerchantActor, saleId: string): Promise<SalePrintStatus> {
+    return this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const [sale] = (
+        await tx.execute(
+          sql`select branch_id from sales where id = ${saleId} and merchant_id = ${actor.merchantId}`,
+        )
+      ).rows as { branch_id: string }[];
+      if (!sale) throw AppError.notFound();
+      assertCan(actor, 'sales.create', sale.branch_id);
+      const [job] = (
+        await tx.execute(sql`
+          select id, status, error from print_jobs
+          where merchant_id = ${actor.merchantId} and sale_id = ${saleId}
+          order by created_at desc, id desc limit 1`)
+      ).rows as { id: string; status: PrintJob['status']; error: string | null }[];
+      const [online] = (
+        await tx.execute(sql`
+          select (exists (select 1 from print_agents where merchant_id = ${actor.merchantId}
+                          and (branch_id is null or branch_id = ${sale.branch_id})
+                          and last_seen_at > now() - make_interval(secs => ${PRINT_AGENT_ONLINE_SECONDS}))
+               or exists (select 1 from pos_devices where merchant_id = ${actor.merchantId}
+                          and branch_id = ${sale.branch_id} and role = 'primary' and revoked_at is null
+                          and last_seen_at > now() - make_interval(secs => ${PRINT_AGENT_ONLINE_SECONDS}))) as online`)
+      ).rows as { online: boolean }[];
+      return {
+        status: job?.status ?? 'none',
+        jobId: job?.id ?? null,
+        error: job?.error ?? null,
+        printerOnline: online!.online,
+      };
+    });
   }
 
   /** Manager: a numbered copy of a sale's receipt, sent to the print agents. */
@@ -308,6 +349,11 @@ export class PrintJobsService {
       : sql`merchant_id = ${agent.merchantId}`;
   }
 
+  /** The claim column of this printer: a print agent or the primary device (Plan A). */
+  private claimedBy(agent: AgentIdentity): SQL {
+    return agent.kind === 'device' ? sql`device_id = ${agent.id}` : sql`agent_id = ${agent.id}`;
+  }
+
   private claimable(): SQL {
     return sql`(status = 'pending' or (status = 'printing' and claimed_at < now() - ${STALE_CLAIM}))`;
   }
@@ -326,6 +372,7 @@ export class PrintJobsService {
         html: r['html'] as string,
         orderUuid: (r['sale_id'] as string | null) ?? null,
         createdAt: iso(r['created_at']),
+        openDrawer: false,
       }));
     });
   }
@@ -335,11 +382,13 @@ export class PrintJobsService {
     return this.database.withMerchantTx(agent.merchantId, async (tx) => {
       const [job] = (
         await tx.execute(sql`
-          update print_jobs set status = 'printing', agent_id = ${agent.id}, claimed_at = now()
+          update print_jobs set status = 'printing', claimed_at = now(),
+            agent_id = ${agent.kind === 'agent' ? agent.id : null},
+            device_id = ${agent.kind === 'device' ? agent.id : null}
           where id = ${id} and ${this.scope(agent)} and ${this.claimable()}
           returning id, html`)
-      ).rows as AgentClaimedJob[];
-      if (job) return { id: job.id, html: job.html };
+      ).rows as { id: string; html: string }[];
+      if (job) return { id: job.id, html: job.html, openDrawer: false };
       const { rows } = await tx.execute(
         sql`select 1 from print_jobs where id = ${id} and ${this.scope(agent)}`,
       );
@@ -359,11 +408,11 @@ export class PrintJobsService {
         await tx.execute(
           input.ok
             ? sql`update print_jobs set status = 'printed', printed_at = now(), error = null
-                  where id = ${id} and ${this.scope(agent)} and status = 'printing' and agent_id = ${agent.id}
+                  where id = ${id} and ${this.scope(agent)} and status = 'printing' and ${this.claimedBy(agent)}
                   returning id, status`
             : sql`update print_jobs set status = 'failed', attempts = attempts + 1,
                          error = ${input.error?.trim() || 'Printing failed.'}
-                  where id = ${id} and ${this.scope(agent)} and status = 'printing' and agent_id = ${agent.id}
+                  where id = ${id} and ${this.scope(agent)} and status = 'printing' and ${this.claimedBy(agent)}
                   returning id, status`,
         )
       ).rows as { id: string; status: 'printed' | 'failed' }[];
@@ -378,16 +427,25 @@ export class PrintJobsService {
 
   /** Keeps socket-connected agents "online" while they wait without REST calls. */
   async touch(agents: AgentIdentity[]): Promise<void> {
-    const byMerchant = new Map<string, string[]>();
+    const byMerchant = new Map<string, AgentIdentity[]>();
     for (const a of agents)
-      byMerchant.set(a.merchantId, [...(byMerchant.get(a.merchantId) ?? []), a.id]);
-    for (const [merchantId, ids] of byMerchant)
-      await this.database.withMerchantTx(merchantId, (tx) =>
-        tx.execute(sql`update print_agents set last_seen_at = now()
-                       where merchant_id = ${merchantId} and id in (${sql.join(
-                         ids.map((i) => sql`${i}`),
-                         sql`, `,
-                       )})`),
+      byMerchant.set(a.merchantId, [...(byMerchant.get(a.merchantId) ?? []), a]);
+    const list = (xs: AgentIdentity[]) =>
+      sql.join(
+        xs.map((x) => sql`${x.id}`),
+        sql`, `,
       );
+    for (const [merchantId, all] of byMerchant)
+      await this.database.withMerchantTx(merchantId, async (tx) => {
+        const agentsOnly = all.filter((a) => a.kind === 'agent');
+        const devices = all.filter((a) => a.kind === 'device');
+        if (agentsOnly.length)
+          await tx.execute(sql`update print_agents set last_seen_at = now()
+                               where merchant_id = ${merchantId} and id in (${list(agentsOnly)})`);
+        if (devices.length)
+          await tx.execute(sql`update pos_devices set last_seen_at = now()
+                               where merchant_id = ${merchantId} and revoked_at is null
+                                 and id in (${list(devices)})`);
+      });
   }
 }

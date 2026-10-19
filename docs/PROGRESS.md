@@ -1060,6 +1060,24 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
   validation), 3 platform-web cases (list + create, delete, read-only), 2 landing cases
   (dropdown + phone menu, empty list).
 
+### 2026-10-19 — Plan A: device roles, the primary as print agent, browser PIN sign-in (ADR-0112 amendment 2)
+
+- Migration 0063: `pos_devices.role` (one live primary per branch), `branch_changed_at`,
+  `print_jobs.device_id`, `branches.pin_link_key_hash`; `device_authenticate` returns the role.
+- Registration asks for the role after the branch (`select_role`); `409 PRIMARY_EXISTS`. The owner
+  changes role or branch on `/manager/devices` (nothing revoked; a move gives a new register and a
+  full snapshot). The till's registration screen has the role step and resets its receipt counter
+  when its register changes.
+- The primary device's token works on `/print-agent` (REST and socket), bound to its branch;
+  secondary devices get `403 NOT_PRIMARY_DEVICE`; jobs carry `openDrawer: false`. The browser POS
+  shows the receipt's print state (`GET /pos/sales/:id/print-status`).
+- Browser POS sign-in with name + PIN behind a branch link (`/pos/pin-sign-in#key`, links on
+  `/manager/devices`); 3 wrong PINs lock 5 minutes; the tills also lock after 3 (was 5); the tills
+  download every minute (was 3), with "Sync now".
+- Not done: a secondary till still accepts cash (it only never opens the drawer); the browser POS's
+  lock screen still unlocks with the password; the native app must open the print-agent socket on
+  the primary (handover §7).
+
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.

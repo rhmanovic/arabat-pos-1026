@@ -13,6 +13,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { createdAt, id, merchantId } from '../../database/schema/columns.js';
+import { posDevices } from '../devices/devices.schema.js';
 import { branches } from '../branches/branches.schema.js';
 import { users } from '../iam/iam.schema.js';
 import { merchants } from '../merchants/merchants.schema.js';
@@ -62,6 +63,8 @@ export const printJobs = pgTable(
     merchantId: merchantId().references(() => merchants.id),
     branchId: uuid(),
     agentId: uuid().references(() => printAgents.id, { onDelete: 'set null' }),
+    /** The branch's primary device when it claimed the job instead of a print agent (Plan A). */
+    deviceId: uuid(),
     saleId: uuid(),
     kind: text().notNull(),
     status: text().notNull().default('pending'),
@@ -82,6 +85,11 @@ export const printJobs = pgTable(
       columns: [t.merchantId, t.saleId],
       foreignColumns: [sales.merchantId, sales.id],
     }),
+    foreignKey({
+      columns: [t.merchantId, t.deviceId],
+      foreignColumns: [posDevices.merchantId, posDevices.id],
+    }),
+    check('print_jobs_one_claimer', sql`${t.agentId} is null or ${t.deviceId} is null`),
     index('print_jobs_queue_idx').on(t.merchantId, t.status, t.createdAt),
     index('print_jobs_sale_idx').on(t.merchantId, t.saleId),
     check('print_jobs_kind_valid', sql`${t.kind} in ('auto', 'reprint')`),

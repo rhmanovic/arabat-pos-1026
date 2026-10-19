@@ -55,6 +55,7 @@ function snapshot(partial: Partial<DeviceSnapshot> = {}): DeviceSnapshot {
       branchCode: 'MAIN',
       registerId: U(4),
       registerCode: 'R2',
+      role: 'primary',
     },
     merchant: {
       id: U(2),
@@ -413,6 +414,28 @@ describe('schema and snapshot', () => {
     await applySnapshot(d.db, snapshot({ counters: { lastReceiptNumber: 'MAIN-000099' } }));
     expect(await getMeta(d.db, META.receiptCounter)).toBe('41');
   });
+
+  it('starts a new receipt series when the owner moves the device to another branch', async () => {
+    const d = await device();
+    await applySnapshot(d.db, snapshot({ counters: { lastReceiptNumber: 'MAIN-R2-000041' } }));
+    const base = snapshot();
+    await applySnapshot(d.db, {
+      ...base,
+      branch: { ...base.branch, id: U(30), code: 'MALL' },
+      register: { ...base.register, id: U(40), code: 'R1' },
+      device: {
+        ...base.device,
+        branchId: U(30),
+        branchCode: 'MALL',
+        registerId: U(40),
+        registerCode: 'R1',
+        role: 'secondary',
+      },
+      counters: { lastReceiptNumber: null },
+    });
+    expect(await getMeta(d.db, META.receiptCounter)).toBe('0');
+    expect((await loadContext(d.db))!.device.role).toBe('secondary');
+  });
 });
 
 describe('offline limit', () => {
@@ -436,27 +459,27 @@ describe('PIN', () => {
     expect(await verifyPinHash(PIN_HASH, 'abc')).toBe(false);
   });
 
-  it('locks after 5 wrong PINs for 5 minutes, doubling on repeat', async () => {
+  it('locks after 3 wrong PINs (Plan A) for 5 minutes, doubling on repeat', async () => {
     const now = new Date('2026-10-18T12:00:00Z');
     let s = freshLock;
-    for (let i = 0; i < 4; i += 1) s = afterFailure(s, now);
+    for (let i = 0; i < 2; i += 1) s = afterFailure(s, now);
     expect(isLocked(s, now)).toBe(false);
     s = afterFailure(s, now);
     expect(s.lockedUntil!.getTime() - now.getTime()).toBe(5 * 60_000);
     expect(isLocked(s, new Date(now.getTime() + 4 * 60_000))).toBe(true);
     const later = new Date(now.getTime() + 6 * 60_000);
     expect(isLocked(s, later)).toBe(false);
-    for (let i = 0; i < 5; i += 1) s = afterFailure(s, later);
+    for (let i = 0; i < 3; i += 1) s = afterFailure(s, later);
     expect(s.lockedUntil!.getTime() - later.getTime()).toBe(10 * 60_000);
 
     const d = await ready();
     const member = { membershipId: d.sara.membershipId, pinHash: PIN_HASH };
     const verify = (hash: string, pin: string) => verifyPinHash(hash, pin);
-    for (let i = 0; i < 4; i += 1)
+    for (let i = 0; i < 2; i += 1)
       expect(await attemptPin(d.db, member, '000000', verify, now)).toEqual({
         ok: false,
         reason: 'wrong',
-        failuresLeft: 4 - i,
+        failuresLeft: 2 - i,
       });
     const locked = await attemptPin(d.db, member, '000000', verify, now);
     expect(locked).toMatchObject({ ok: false, reason: 'locked' });

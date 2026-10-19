@@ -79,6 +79,8 @@ test('register → full sync → PIN → open shift → sale → upload accepted
   await page.getByLabel('Password').fill(password);
   await page.getByLabel('Device name').fill('E2E till');
   await page.getByRole('button', { name: 'Register' }).click();
+  // Then its role: the first device of the branch is its primary (drawer, browser receipts).
+  await page.getByRole('button', { name: /Primary till/ }).click();
 
   // The first full sync brings the staff list. The owner has no PIN yet: "Set / reset PIN" on the
   // till e-mails a link (owner decision 6); the page behind it sets the PIN, nobody else sees it.

@@ -22,7 +22,7 @@ export interface SyncStatus {
 }
 
 export interface SyncEngineOptions {
-  /** Background sync period while online (default 3 minutes). */
+  /** Background sync period while online (default 1 minute, Plan A). */
   intervalMs?: number;
   /** Delay between a new record and its upload (default 1.5 s). */
   uploadDelayMs?: number;
@@ -71,7 +71,7 @@ export class SyncEngine {
     private readonly db: BridgeDb,
     options: SyncEngineOptions = {},
   ) {
-    this.intervalMs = options.intervalMs ?? 3 * 60_000;
+    this.intervalMs = options.intervalMs ?? 60_000;
     this.uploadDelayMs = options.uploadDelayMs ?? 1500;
     this.now = options.now ?? (() => new Date());
     this.log = options.log ?? (() => {});

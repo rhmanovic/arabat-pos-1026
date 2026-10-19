@@ -70,6 +70,7 @@ export class PrintAgentGateway implements OnApplicationBootstrap, OnApplicationS
         .fromToken(token)
         .then((agent) => {
           if (!agent) return next(new Error('unauthorized'));
+          if (agent === 'not_primary') return next(new Error('forbidden: not the primary device'));
           socket.data['agent'] = agent;
           next();
         })

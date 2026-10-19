@@ -16,6 +16,7 @@ const device = {
   branchId: '0190a000-0000-7000-8000-000000000001',
   registerId: '0190a000-0000-7000-8000-000000000101',
   registerCode: 'R2',
+  role: 'primary',
   createdAt: '2026-10-17T07:00:00.000Z',
   lastSeenAt: '2026-10-17T08:00:00.000Z',
   lastSyncAt: '2026-10-17T08:00:00.000Z',
@@ -141,5 +142,38 @@ describe('devices', () => {
           ?.body,
       ).toEqual({ note: 'Counted the shelf' }),
     );
+  });
+
+  it('lets the owner make a device additional; others see no change button (Plan A)', async () => {
+    const fetch = fakeApiFetch({
+      session: { ...makeSession('manager', ['manager.access', 'registers.manage']), isOwner: true },
+      routes: {
+        'GET /manager/devices': () => ({ status: 200, body: { devices: [device] } }),
+        [`PUT /manager/devices/${DEVICE}`]: (body) => ({
+          status: 200,
+          body: { ...device, ...(body as object) },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/devices', fetch });
+    const row = await screen.findByRole('row', { name: /Till Mac/ });
+    expect(within(row).getByText('Primary')).toBeInTheDocument();
+    await userEvent.click(within(row).getByRole('button', { name: 'Change' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.selectOptions(within(dialog).getByLabelText('Role'), 'secondary');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await vi.waitFor(() =>
+      expect(fetch.calls.find((c) => c.method === 'PUT')?.body).toEqual({ role: 'secondary' }),
+    );
+  });
+
+  it('hides the change button from managers who are not the owner', async () => {
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'registers.manage']),
+      routes: { 'GET /manager/devices': () => ({ status: 200, body: { devices: [device] } }) },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/devices', fetch });
+    const row = await screen.findByRole('row', { name: /Till Mac/ });
+    expect(within(row).queryByRole('button', { name: 'Change' })).toBeNull();
   });
 });

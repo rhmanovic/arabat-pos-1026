@@ -442,6 +442,13 @@
       "when": 1792398906904,
       "tag": "0062_site_apps",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1792432187329,
+      "tag": "0063_device_roles",
+      "breakpoints": true
     }
   ]
 }

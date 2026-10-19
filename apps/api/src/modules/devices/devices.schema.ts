@@ -36,6 +36,8 @@ export const posDevices = pgTable(
     branchId: uuid().notNull(),
     registerId: uuid().notNull(),
     name: text().notNull(),
+    /** `primary` (one per branch: the cash drawer and the browser print queue) or `secondary`. */
+    role: text().notNull().default('secondary'),
     tokenHash: bytea().notNull(),
     registeredByUserId: uuid()
       .notNull()
@@ -45,6 +47,8 @@ export const posDevices = pgTable(
     lastSyncAt: timestamp({ withTimezone: true }),
     revokedAt: timestamp({ withTimezone: true }),
     revokedByUserId: uuid().references(() => users.id),
+    /** Last move to another branch: a sync `since` before it gets a full snapshot. */
+    branchChangedAt: timestamp({ withTimezone: true }),
   },
   (t) => [
     unique('pos_devices_merchant_id_id_key').on(t.merchantId, t.id),
@@ -59,6 +63,10 @@ export const posDevices = pgTable(
       foreignColumns: [registers.merchantId, registers.id, registers.branchId],
     }),
     check('pos_devices_name_present', sql`length(trim(${t.name})) between 1 and 80`),
+    check('pos_devices_role_valid', sql`${t.role} in ('primary', 'secondary')`),
+    uniqueIndex('pos_devices_one_primary_per_branch')
+      .on(t.merchantId, t.branchId)
+      .where(sql`${t.role} = 'primary' and ${t.revokedAt} is null`),
   ],
 );
 

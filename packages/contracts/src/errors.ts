@@ -123,6 +123,10 @@ export const ERROR_CODES = [
   'MEMBER_NOT_ALLOWED',
   'WRONG_DEVICE',
   'LINK_LIMIT_REACHED',
+  'PRIMARY_EXISTS',
+  'NOT_PRIMARY_DEVICE',
+  'PIN_LINK_INVALID',
+  'PIN_NOT_SET',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

@@ -12,6 +12,7 @@ import {
   ForgotPasswordPage,
   LoginPage,
   PinPage,
+  PinSignInPage,
   ResetPasswordPage,
   AcceptInvitePage,
 } from './pages/LoginPage.js';
@@ -51,6 +52,15 @@ export const routes: RouteObject[] = [
   },
   { path: '/reset-password', errorElement: <RouteErrorBoundary />, element: <ResetPasswordPage /> },
   { path: '/pin', errorElement: <RouteErrorBoundary />, element: <PinPage /> },
+  {
+    path: '/pin-sign-in',
+    errorElement: <RouteErrorBoundary />,
+    element: (
+      <RedirectIfAuthenticated>
+        <PinSignInPage />
+      </RedirectIfAuthenticated>
+    ),
+  },
   { path: '/accept-invite', errorElement: <RouteErrorBoundary />, element: <AcceptInvitePage /> },
   {
     path: '/',

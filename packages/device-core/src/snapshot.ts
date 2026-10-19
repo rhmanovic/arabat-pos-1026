@@ -142,7 +142,10 @@ export async function applySnapshot(
   snap: DeviceSnapshot,
   now = new Date(),
 ): Promise<void> {
-  const counter = Number((await getMeta(db, META.receiptCounter)) ?? '0');
+  // A device moved to another branch gets a new register and so a new series from 1.
+  const stored = await getMeta(db, META.register);
+  const sameRegister = !stored || (JSON.parse(stored) as { id: string }).id === snap.register.id;
+  const counter = sameRegister ? Number((await getMeta(db, META.receiptCounter)) ?? '0') : 0;
   await db.transaction(snapshotStatements(snap, counter, now.toISOString()));
 }
 

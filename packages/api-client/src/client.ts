@@ -39,6 +39,10 @@ import {
   type RegisterRequest,
   type ResetPasswordRequest,
   type SelectMerchantRequest,
+  type PinSignInRequest,
+  pinSignInBranchSchema,
+  pinLinkListSchema,
+  createdPinLinkSchema,
   type SwitchInterfaceRequest,
   type SwitchMerchantRequest,
   type UpdateMerchantProfile,
@@ -158,8 +162,10 @@ import {
   deviceExceptionSchema,
   deviceSettingsSchema,
   posDeviceSchema,
+  type UpdatePosDevice,
   printAgentSchema,
   printJobSchema,
+  salePrintStatusSchema,
   printSettingsSchema,
   type PrintSettings,
   registerSchema,
@@ -384,6 +390,14 @@ export function createApiClient(options: ApiClientOptions = {}) {
       /** The page behind the e-mailed PIN link (ADR-0112): sets the cashier's own device PIN. */
       completePinReset: (body: { token: string; pin: string }) =>
         request('POST', '/device/pin-reset/complete', { body }),
+      /** Browser POS sign-in with name + PIN behind a branch link (Plan A). */
+      pinSignInBranch: (key: string) =>
+        request('POST', '/auth/pos/pin-sign-in/branch', {
+          body: { key },
+          schema: pinSignInBranchSchema,
+        }),
+      pinSignIn: (body: PinSignInRequest): Promise<LoginResult> =>
+        request('POST', '/auth/pos/pin-sign-in', { body, schema: loginResultSchema }),
       logout: (appInterface: AppInterface) =>
         request('POST', `/auth/${appInterface}/logout`, { body: {} }),
       /** Account hygiene (BR-193): own password and sessions. */
@@ -859,6 +873,17 @@ export function createApiClient(options: ApiClientOptions = {}) {
           schema: z.object({ devices: z.array(posDeviceSchema) }),
         }),
       revoke: (id: string) => request('POST', `/manager/devices/${id}/revoke`, { body: {} }),
+      /** The browser POS's PIN sign-in link per branch (Plan A); the key is shown once. */
+      pinLinks: () => request('GET', '/manager/pin-links', { schema: pinLinkListSchema }),
+      createPinLink: (branchId: string) =>
+        request('POST', `/manager/pin-links/${branchId}`, {
+          body: {},
+          schema: createdPinLinkSchema,
+        }),
+      removePinLink: (branchId: string) => request('DELETE', `/manager/pin-links/${branchId}`),
+      /** Owner: role (primary / secondary) or branch (Plan A). */
+      update: (id: string, body: UpdatePosDevice) =>
+        request('PUT', `/manager/devices/${id}`, { body, schema: posDeviceSchema }),
       settings: () => request('GET', '/manager/device-settings', { schema: deviceSettingsSchema }),
       updateSettings: (body: { offlineLimitHours: number }) =>
         request('PUT', '/manager/device-settings', { body, schema: deviceSettingsSchema }),
@@ -948,6 +973,9 @@ export function createApiClient(options: ApiClientOptions = {}) {
       /** A numbered receipt copy, printed by the branch's print agent (ADR-0111). */
       print: (id: string) =>
         request('POST', `/pos/sales/${id}/print`, { body: {}, schema: printJobSchema }),
+      /** The sale's latest print job, followed until it settles (Plan A). */
+      printStatus: (id: string) =>
+        request('GET', `/pos/sales/${id}/print-status`, { schema: salePrintStatusSchema }),
       cartEvent: (body: CartEvent) => request('POST', '/pos/cart-events', { body }),
       recent: () =>
         request('GET', '/pos/sales/recent', {

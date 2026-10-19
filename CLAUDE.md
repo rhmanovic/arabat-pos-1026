@@ -244,6 +244,8 @@ Receipts also print server-side through print agents (ADR-0111): jobs are queued
 (`PrintJobsService.queueAutoInTx`), announced over PostgreSQL NOTIFY to the Socket.IO namespace `/print-agent`.
 Selling decisions (prices, limits, rights, tenders, shift notes, refunds) live in `packages/pos-core` (pure, no DB);
 the services load data and call it through `rules()` (`kernel/errors/pos-rule.ts`). Local-first devices: ADR-0112 (Accepted), contract `docs/DEVICE_API.md`, handover `docs/DEVICE_APP_HANDOVER.md`.
+Plan A (ADR-0112 amendment 2): one `primary` device per branch (`pos_devices.role`), which is also the branch's print
+agent with its device token; the browser POS signs in with name + PIN through a branch link (`PinSignInService`).
 Public site: landing `/` and pricing `/pricing` (`apps/landing-web`, ADR-0113/0114); pricing-page items live in the `pricing`
 module (`/platform/offer`); the pricing page's form opens a trial account through `/public/trial/start` (ADR-0115 amendment 3).
 Free-trial funnel `/start` and `/platform/trials` (`trials` module, ADR-0115): the account opens at once (no e-mail

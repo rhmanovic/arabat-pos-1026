@@ -36,8 +36,8 @@ Screens, in order of use:
 | Screen | Behaviour |
 |---|---|
 | Not in app | `window.ArabatApp?.bridgeVersion !== 2` → "Open this in the Arabat app". |
-| Register | E-mail + password of a manager (`registers.manage`) + device name → `api.register`; when more than one company / branch is possible, a picker, then `api.register` again with `merchantId` / `branchId`. On success: first full sync. |
-| Sign-in (lock) | Staff list from the last sync; the cashier picks their name and types their PIN on the pad. Verified **locally** (argon2id, Web Worker). 5 wrong PINs lock that person on the device for 5 minutes, doubling. Idle lock after 5 minutes without input. **"Set / reset PIN"** button → `POST /device/pin-reset` → the cashier gets a link by e-mail and chooses the PIN on `https://www.arabatapp.com/pos/pin?token=…`; the till receives the new hash at its next sync. Nobody else ever knows a PIN. |
+| Register | E-mail + password of a manager (`registers.manage`) + device name → `api.register`; when more than one company / branch is possible, a picker, then `api.register` again with `merchantId` / `branchId`; then the role (**primary** till with the cash drawer, one per branch, or **additional**) and `api.register` with `role`. On success: first full sync. |
+| Sign-in (lock) | Staff list from the last sync; the cashier picks their name and types their PIN on the pad. Verified **locally** (argon2id, Web Worker). 3 wrong PINs lock that person on the device for 5 minutes, doubling. Idle lock after 5 minutes without input. **"Set / reset PIN"** button → `POST /device/pin-reset` → the cashier gets a link by e-mail and chooses the PIN on `https://www.arabatapp.com/pos/pin?token=…`; the till receives the new hash at its next sync. Nobody else ever knows a PIN. |
 | Open shift | Counted drawer cash → local shift + `shift_open` record. One open shift per device. |
 | Sell | Search / barcode / categories, cart, line and sale discounts, price change with a reason, supervisor PIN when the cart needs rights the cashier lacks, split tenders (cash with change, card / transfer with reference), zero-total reason. Decisions through `@arabat/pos-core` with the downloaded settings and permissions (same code as the server). Receipt number `{branch}-{register}-NNNNNN`, gap-free, taken in the same SQLite transaction as the sale. Printed with `print.receipt(html)` using the server's receipt template. Pay-in / pay-out, recent sales with reprint. |
 | Refunds | Only this device's sales; amounts, pay-back and approval reasons by `pos-core`; a second person approves with their PIN when needed. |
@@ -46,7 +46,7 @@ Screens, in order of use:
 
 Sync: upload the outbox in causal order (batches ≤ 200, byte-identical bodies on retry; results
 `accepted` / `duplicate` / `refused`), then download (`?since=` deltas), at start, 1.5 s after a
-new record, after each upload, every 3 minutes. `401 DEVICE_REVOKED` → stop selling, keep unsent
+new record, after each upload, every minute, and from the "Sync now" button. `401 DEVICE_REVOKED` → stop selling, keep unsent
 records, `api.forget()`, show "register again". `403 MERCHANT_SUSPENDED` → stop selling.
 
 Local database (SQLite through `db.*`): `meta`, snapshot tables (`payment_methods`, `staff`,
@@ -101,3 +101,27 @@ Full shapes, refusal codes and an example session: `docs/DEVICE_API.md`.
 Restaurant (tables, kitchen), customers, exchanges and voids, custody cash moves (safe drops,
 deposits, expenses, supplier payments), gateway payments, product images, held sales across tills.
 A pay-out above the company limit is allowed on the device for the owner only.
+
+## 7. Changes of Plan A (2026-10-19)
+
+What changes for the native side:
+
+1. **Device role.** `device.role` (`primary` | `secondary`) is in the registration answer, in
+   `GET /device/me` and in every snapshot. Kick the cash drawer **only on a primary device**, after
+   a receipt the page prints during a cash sale. A secondary device never kicks it. The owner can
+   change the role or move the device later from `/manager/devices`; the next sync carries it (no
+   new registration, no new token).
+2. **The primary device is the branch's print agent.** With its device token (the one you already
+   keep), connect to Socket.IO `/print-agent` and use `GET /print-agent/jobs/pending`,
+   `POST /print-agent/jobs/:id/claim` and `/result` exactly as a print agent (DEVICE_API.md §2b).
+   These jobs are the browser POS's receipts: print them on the till printer and **never** open the
+   drawer for them (`openDrawer: false`). A secondary device gets 403 there: do not connect it.
+   Keep the connection while the app runs; reconnect with back-off; after each reconnect read
+   `pending`. Re-check `device.role` after each sync and connect / disconnect accordingly.
+3. **PIN lock after 3 wrong PINs** (was 5), handled by the page.
+4. **Sync every minute** while online (was 3 minutes), plus the "Sync now" button; handled by the
+   page.
+
+Nothing changes in the bridge methods (bridge version stays 2). The socket connection for print
+jobs is native (the page cannot hold the token): the page needs no new bridge call for it.
+

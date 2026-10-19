@@ -2,7 +2,7 @@ import { argon2Verify } from 'hash-wasm';
 import type { BridgeDb } from './bridge.js';
 
 /** 5 wrong PINs lock the person on this device for 5 minutes, doubling on each repeat. */
-export const PIN_MAX_FAILURES = 5;
+export const PIN_MAX_FAILURES = 3;
 export const PIN_LOCK_BASE_MS = 5 * 60_000;
 
 /**

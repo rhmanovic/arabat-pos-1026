@@ -328,6 +328,7 @@ describe('pos app', () => {
   });
 
   it('scans a barcode, prices the cart exactly and pays cash with change', async () => {
+    let statusCalls = 0;
     const item = {
       variantId: '0190a000-0000-7000-8000-000000000a01',
       productId: '0190a000-0000-7000-8000-000000000b01',
@@ -393,6 +394,16 @@ describe('pos app', () => {
           },
         }),
         'POST /pos/sales': () => ({ status: 201, body: sale }),
+        // The receipt waits for the main till, then prints (Plan A).
+        'GET /pos/sales/0190a000-0000-7000-8000-000000000c01/print-status': () => ({
+          status: 200,
+          body: {
+            status: ++statusCalls === 1 ? 'pending' : 'printed',
+            jobId: '0190a000-0000-7000-8000-000000000f01',
+            error: null,
+            printerOnline: true,
+          },
+        }),
         'GET /pos/sales/0190a000-0000-7000-8000-000000000c01/receipt': () => ({
           status: 200,
           body: {
@@ -453,6 +464,13 @@ describe('pos app', () => {
     expect(within(dialog).getByTestId('change')).toHaveTextContent('KWD 4.001');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Complete sale' }));
     expect(await screen.findAllByTestId('receipt-number')).not.toHaveLength(0);
+    expect(await screen.findByTestId('print-status')).toHaveTextContent('Waiting for the printer');
+    await vi.waitFor(
+      () => expect(screen.getByTestId('print-status')).toHaveTextContent('Printed.'),
+      {
+        timeout: 5000,
+      },
+    );
     const call = fetch.calls.find((c) => c.method === 'POST' && c.path === '/pos/sales')!;
     expect(call.body).toMatchObject({
       lines: [{ variantId: item.variantId, quantity: '3' }],

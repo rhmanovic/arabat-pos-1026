@@ -61,8 +61,8 @@ first" path: the same code runs in both cases, so the offline path is exercised 
     employee got a PIN;
   - deactivation, a changed PIN or changed permissions take effect at the device's next sync.
 - Security:
-  - 5 wrong PINs lock that user on that device for 5 minutes (doubling on repeat), counted on the
-    device;
+  - 3 wrong PINs (5 until Plan A, 2026-10-19) lock that user on that device for 5 minutes
+    (doubling on repeat), counted on the device;
   - the PIN hash is never uploaded back and never shown;
   - every sign-in, sign-out, lock, failed PIN and lock-out is recorded locally and uploaded to
     `audit_log` (actor = membership, `details.deviceId`);
@@ -232,3 +232,8 @@ cross-branch and financial reports; month close; the online store.
     (`priceCart`) to check that the figures add up; it never compares with its own catalog.
   - A suspended company's devices get 403 `MERCHANT_SUSPENDED` on download; uploads of records made
     before are still accepted.
+- Plan A (2026-10-19): device roles (one primary per branch), the primary as the branch's print
+  agent, owner role / branch changes, the browser POS's name + PIN sign-in, 3-attempt PIN lock,
+  1-minute sync. Summary in `docs/DECISIONS.md` (ADR-0112 amendment 2); contract in
+  `docs/DEVICE_API.md` §2 and §2b.
+

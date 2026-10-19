@@ -197,3 +197,41 @@ export const sessionInfoSchema = z.object({
 });
 export const sessionListSchema = z.object({ sessions: z.array(sessionInfoSchema) });
 export type SessionInfo = z.infer<typeof sessionInfoSchema>;
+
+/*
+ * Browser POS sign-in with name + PIN (Plan A). A branch link (`/pos/pin-sign-in#<key>`, made by a
+ * manager) lists the branch's cashiers; each signs in with the PIN they chose for the tills
+ * (same argon2id hash, 3 wrong PINs lock that person for 5 minutes).
+ */
+export const PIN_LINK_KEY = /^[A-Za-z0-9_-]{43}$/;
+
+export const pinSignInBranchSchema = z.object({
+  merchant: z.object({ nameEn: z.string().nullable(), nameAr: z.string().nullable() }),
+  branch: z.object({
+    id: z.uuid(),
+    code: z.string(),
+    nameEn: z.string().nullable(),
+    nameAr: z.string().nullable(),
+  }),
+  staff: z.array(z.object({ membershipId: z.uuid(), fullName: z.string(), hasPin: z.boolean() })),
+});
+export type PinSignInBranch = z.infer<typeof pinSignInBranchSchema>;
+
+export const pinSignInRequestSchema = z.object({
+  key: z.string().regex(PIN_LINK_KEY),
+  membershipId: z.uuid(),
+  pin: z.string().regex(/^\d{6,12}$/),
+});
+export type PinSignInRequest = z.infer<typeof pinSignInRequestSchema>;
+
+/** Managers: which branches have a PIN sign-in link (the key itself is shown once). */
+export const pinLinkListSchema = z.object({
+  branches: z.array(z.object({ branchId: z.uuid(), active: z.boolean() })),
+});
+export type PinLinkList = z.infer<typeof pinLinkListSchema>;
+export const createdPinLinkSchema = z.object({
+  branchId: z.uuid(),
+  key: z.string(),
+  url: z.string(),
+});
+export type CreatedPinLink = z.infer<typeof createdPinLinkSchema>;

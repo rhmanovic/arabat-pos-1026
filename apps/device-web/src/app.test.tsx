@@ -41,6 +41,7 @@ function snapshot(): DeviceSnapshot {
       branchCode: 'MAIN',
       registerId: U(4),
       registerCode: 'R1',
+      role: 'primary',
     },
     merchant: {
       id: U(2),
@@ -150,7 +151,14 @@ function fakeServer() {
   const fetchImpl: typeof fetch = async (url, init) => {
     const u = String(url);
     if (u.endsWith('/device/register')) {
-      const body = JSON.parse(String(init?.body)) as { branchId?: string };
+      const body = JSON.parse(String(init?.body)) as { branchId?: string; role?: string };
+      if (body.branchId && !body.role)
+        return json(200, {
+          status: 'select_role',
+          merchantId: U(2),
+          branch: { id: U(3), code: 'MAIN', nameEn: 'Main', nameAr: null },
+          primaryTaken: false,
+        });
       if (!body.branchId)
         return json(200, {
           status: 'select_branch',
@@ -214,6 +222,7 @@ describe('device till', () => {
     await user.type(screen.getByLabelText('Device name'), 'Front till');
     await user.click(screen.getByRole('button', { name: 'Register' }));
     await user.click(await screen.findByRole('button', { name: /Main/ }));
+    await user.click(await screen.findByRole('button', { name: /Primary till/ }));
     expect(bridge.token).toBe('T'.repeat(43));
 
     // The staff list came with the first sync; Sara signs in with her PIN.

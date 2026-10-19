@@ -17,6 +17,20 @@ export const posEn = {
     done: 'Your PIN is set. The till uses it after its next sync (a few minutes).',
     missingToken: 'This link is incomplete. Ask for a new one from the till.',
   },
+  pinSignIn: {
+    title: 'Sign in with your PIN',
+    subtitle: 'Choose your name, then type the PIN you use on the till.',
+    usePin: 'Sign in with name and PIN',
+    signIn: 'Sign in',
+    someoneElse: 'Someone else',
+    wrong: 'Wrong PIN.',
+    locked: 'Too many wrong PINs. Try again in 5 minutes.',
+    noPin: 'No PIN yet: set it from the till app.',
+    nobody: 'Nobody at this branch can use the POS yet.',
+    noLink:
+      'Open the sign-in link your manager shared for this branch (Devices page in the management dashboard).',
+    withPassword: 'Sign in with e-mail and password',
+  },
   login: {
     title: 'Cashier sign-in',
     subtitle: 'Sign in to start selling at your branch.',
@@ -185,6 +199,12 @@ export const posEn = {
     receiptNo: 'Receipt no.',
     print: 'Print receipt',
     sentToPrinter: 'Sent to the printer',
+    printStatus: {
+      waiting: 'Waiting for the printer…',
+      offline: 'Waiting for the printer: the main till is offline. It prints when it reconnects.',
+      printed: 'Printed.',
+      failed: 'Printing failed: {{error}}',
+    },
     noPrinterOnline: 'No printer connected; the receipt prints when one connects',
     newSale: 'New sale',
     cashier: 'Cashier',

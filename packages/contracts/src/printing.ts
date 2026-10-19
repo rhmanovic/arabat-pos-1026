@@ -50,6 +50,19 @@ export const printJobSchema = z.object({
 });
 export type PrintJob = z.infer<typeof printJobSchema>;
 
+/**
+ * The receipt printing state of a sale for the browser POS (Plan A): its latest print job.
+ * `none` = nothing was queued (no printer for the branch, or auto-print off).
+ */
+export const salePrintStatusSchema = z.object({
+  status: z.enum(['none', ...PRINT_JOB_STATUSES]),
+  jobId: z.uuid().nullable(),
+  error: z.string().nullable(),
+  /** A primary device or print agent of the branch was seen in the last minute. */
+  printerOnline: z.boolean(),
+});
+export type SalePrintStatus = z.infer<typeof salePrintStatusSchema>;
+
 /* Agent API (field names are the agent's contract). */
 
 export const agentPendingJobSchema = z.object({
@@ -58,10 +71,19 @@ export const agentPendingJobSchema = z.object({
   /** The sale the receipt belongs to. */
   orderUuid: z.uuid().nullable(),
   createdAt: z.string(),
+  /**
+   * Whether to kick the cash drawer after printing. Always false for queued jobs: receipts from
+   * the browser POS and the manager never open the drawer, even on the primary device (Plan A).
+   */
+  openDrawer: z.boolean(),
 });
 export type AgentPendingJob = z.infer<typeof agentPendingJobSchema>;
 
-export const agentClaimedJobSchema = z.object({ id: z.uuid(), html: z.string() });
+export const agentClaimedJobSchema = z.object({
+  id: z.uuid(),
+  html: z.string(),
+  openDrawer: z.boolean(),
+});
 export type AgentClaimedJob = z.infer<typeof agentClaimedJobSchema>;
 
 export const agentJobResultSchema = z.object({

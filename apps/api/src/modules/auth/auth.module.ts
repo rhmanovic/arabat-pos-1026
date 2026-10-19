@@ -7,6 +7,8 @@ import { DbSessionResolver } from './db-session.resolver.js';
 import { LoginService } from './login.service.js';
 import { PasswordResetService } from './password-reset.service.js';
 import { PasswordService } from './password.service.js';
+import { PinLinksController, PinSignInController } from './pin-sign-in.controller.js';
+import { PinSignInService } from './pin-sign-in.service.js';
 import { PlatformAuthService } from './platform-auth.service.js';
 import { PosLockService } from './pos-lock.service.js';
 import { RateLimiterService } from './rate-limiter.service.js';
@@ -17,7 +19,7 @@ import { TicketService } from './ticket.service.js';
 
 @Global()
 @Module({
-  controllers: [AuthController],
+  controllers: [AuthController, PinSignInController, PinLinksController],
   providers: [
     AccessRepository,
     PasswordService,
@@ -31,6 +33,7 @@ import { TicketService } from './ticket.service.js';
     SessionContextService,
     PosLockService,
     AccountService,
+    PinSignInService,
     { provide: SessionResolver, useClass: DbSessionResolver },
   ],
   exports: [

@@ -45,9 +45,19 @@ export class DeviceSyncService {
 
   async download(device: Device, since: string | undefined): Promise<DeviceSnapshot> {
     const sinceDate = since ? new Date(since) : null;
-    const delta = sinceDate !== null && !Number.isNaN(sinceDate.getTime());
     const described = await this.devices.describe(device);
     return this.database.withMerchantTx(device.merchantId, async (tx) => {
+      // A device moved to another branch since `since` needs that branch's whole catalog.
+      const [moved] = (
+        await tx.execute(sql`select branch_changed_at from pos_devices where id = ${device.id}`)
+      ).rows as Row[];
+      const movedAt = moved?.['branch_changed_at']
+        ? new Date(moved['branch_changed_at'] as string)
+        : null;
+      const delta =
+        sinceDate !== null &&
+        !Number.isNaN(sinceDate.getTime()) &&
+        (movedAt === null || sinceDate > movedAt);
       const [clock] = (await tx.execute(sql`select now() as now`)).rows as Row[];
       const version = iso(clock!['now']);
       const [merchant] = (
