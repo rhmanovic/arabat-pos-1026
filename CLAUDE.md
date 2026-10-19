@@ -243,7 +243,7 @@ ADR-0105) and live since 2026-10-15 at `https://www.arabatapp.com` (started empt
 Receipts also print server-side through print agents (ADR-0111): jobs are queued in the sale's transaction
 (`PrintJobsService.queueAutoInTx`), announced over PostgreSQL NOTIFY to the Socket.IO namespace `/print-agent`.
 Selling decisions (prices, limits, rights, tenders, shift notes, refunds) live in `packages/pos-core` (pure, no DB);
-the services load data and call it through `rules()` (`kernel/errors/pos-rule.ts`). Local-first devices: ADR-0112 (Accepted), contract `docs/DEVICE_API.md`.
+the services load data and call it through `rules()` (`kernel/errors/pos-rule.ts`). Local-first devices: ADR-0112 (Accepted), contract `docs/DEVICE_API.md`, handover `docs/DEVICE_APP_HANDOVER.md`.
 Public site: landing `/` and pricing `/pricing` (`apps/landing-web`, ADR-0113/0114); pricing-page items live in the `pricing`
 module (`/platform/offer`); the pricing page's form opens a trial account through `/public/trial/start` (ADR-0115 amendment 3).
 Free-trial funnel `/start` and `/platform/trials` (`trials` module, ADR-0115): the account opens at once (no e-mail
