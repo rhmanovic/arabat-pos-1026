@@ -288,7 +288,27 @@ POST /device/sync {records: [S1, A1, C1, F1, X1]}  (retry)     → duplicate ×5
 GET  /device/sync?since=V1                                     → changed products only, version V2
 ```
 
-## 7. What managers see
+## 7. The device web app (`apps/device-web`, bundle at `/device-app/`)
+
+The till itself is this repository's `apps/device-web`, built with relative asset URLs and
+published by the API at `GET /device-app/manifest.json` (`Cache-Control: no-cache`):
+
+```json
+{ "version": "20261019T002423Z-468f78d179c1", "entry": "index.html",
+  "files": [ { "path": "index.html", "sha256": "…", "size": 1234 }, { "path": "assets/…", "sha256": "…", "size": 1 } ] }
+```
+
+The native app downloads every file, verifies its SHA-256 and serves the bundle from
+`arabat://app/`; unknown paths fall back to `index.html`. The page talks to the server only
+through `window.ArabatApp` (bridge version 2; the token stays native) and shows "Open this in the
+Arabat app" anywhere else. Its engine is `packages/device-core` (local SQLite schema, snapshot
+store, outbox, sync, PIN check, selling / refund / shift logic on `pos-core`); a fake bridge for
+tests and development lives in `@arabat/device-core/testing` (sql.js in memory). The device
+database keeps every record and the exact JSON it uploaded (`outbox`), retries byte-identical
+bodies, and resends a refusal only for `SHIFT_REQUIRED`, `NOT_FOUND`, `INTERNAL_ERROR` and
+`SERVICE_UNAVAILABLE`; other refusals stay in the "not accepted" list.
+
+## 8. What managers see
 
 - `/manager/devices`: devices (online / last seen / last sync), removal, the offline limit
   (`offlineLimitHours`, 1–720, default 72), and the exceptions after uploads (negative stock,

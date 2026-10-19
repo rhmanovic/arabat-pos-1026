@@ -133,9 +133,12 @@ apps/platform-web   React SPA, basename /platform (PlatformLayout)
 apps/store-web      Public storefront SPA, basename /store (no session; public store API)
 apps/links-web      Link-page editor SPA, basename /links (manager session + online.manage, ADR-0116)
 apps/landing-web    Public landing page at / (static React, no API; copy in src/content.ts, ADR-0113)
+apps/device-web     Local-first till inside the native Arabat app (ADR-0112): built with base './',
+                    published at /device-app/ with manifest.json; talks to the server only through window.ArabatApp
 packages/money        bigint Money (KWD 3 decimals)          — built to dist (used by API)
 packages/permissions  permission catalog + can()             — built to dist (used by API)
-packages/pos-core     shared selling rules (ADR-0112)        — built to dist (used by API, and the device app)
+packages/pos-core     shared selling rules + receipt template (ADR-0112) — built to dist (used by API and the device app)
+packages/device-core  device engine: local SQLite schema, sync, PIN, outbox, selling — built to dist (device app; `/testing` = fake bridge)
 packages/contracts    Zod API contracts                      — built to dist (used by API)
 packages/api-client   typed fetch client, ApiError           — source-only (web)
 packages/i18n         i18next setup, ar/en common strings    — source-only (web)

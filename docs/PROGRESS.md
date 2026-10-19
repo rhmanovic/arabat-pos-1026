@@ -1014,6 +1014,30 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
   holds its permission.
 - Tests: manager-web `dashboard.test.tsx` (states, links, hidden without the permission).
 - Railway staging reconnected to `main` (was on the ADR-0107 branch); OPERATIONS §8 updated.
+### 2026-10-19 — The device till itself (ADR-0112, device side)
+
+- `packages/device-core`: local SQLite schema and migrations over `window.ArabatApp.db`, snapshot
+  store (full / delta in one transaction), outbox in causal order with byte-identical retries,
+  sync engine (upload then download, every few minutes and after each record; `DEVICE_REVOKED`
+  stops selling and keeps unsent records; `MERCHANT_SUSPENDED` stops selling), offline limit
+  (24 h / 48 h / stop), argon2id PIN check with 5-attempt lockouts that double, gap-free device
+  receipt counter taken in the sale's own transaction, UUIDv7 ids, selling / cash / refund / shift
+  logic on `pos-core`, receipt data for the shared template (moved to `pos-core`), fake bridge on
+  sql.js. 13 unit tests, browser-build guard.
+- `apps/device-web`: registration, cashier picker + PIN pad (Web Worker), idle lock, shift open,
+  selling (search, barcode, discounts, price change, supervisor PIN, split tenders, change), print
+  through the bridge, pay-in / pay-out, refunds of own sales with approver PIN, shift close with
+  the Z summary, status strip (sync / waiting / not accepted, last sync, offline warnings, printer,
+  version), update at a safe moment, "open this in the Arabat app" guard. Arabic + English.
+- Publishing: `pnpm build` writes `apps/device-web/dist/manifest.json` (sha256, size, version
+  `<UTC stamp>-<content hash>`); the API serves `/device-app/` (manifest `no-cache`, assets
+  immutable); CSP allows `wasm-unsafe-eval` for argon2id.
+- Tests: jsdom flow (register → PIN → shift → sale → print → upload order) and
+  `e2e/device.spec.ts` against the real server (register → full sync → PIN → open shift → sale →
+  accepted → retry duplicate → refund → close shift).
+- Not on the device (online only, as decided): restaurant, customers, exchanges, voids, custody
+  cash moves, gateway payments, product images, held sales across tills.
+
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.

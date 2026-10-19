@@ -211,6 +211,9 @@ cross-branch and financial reports; month close; the online store.
   change; the server and the browser till call it. Public API in `packages/pos-core/README.md`.
 - Server side (2026-10-17): devices and registration, PINs, sync download and upload, exceptions,
   per-device receipt series. Contract: `docs/DEVICE_API.md`; progress: `docs/PROGRESS.md`.
+  Device side (2026-10-19): `packages/device-core` (engine) and `apps/device-web` (the till),
+  published at `/device-app/` with `manifest.json`; the receipt template moved to `pos-core` so both
+  print one document; E2E `e2e/device.spec.ts` with the fake bridge against the real server.
   Code: `apps/api/src/modules/devices/` (`devices.service.ts` registration, `device-sync.service.ts`
   download, `device-ingest.service.ts` upload, `device-exceptions.service.ts`), migrations
   0052–0055. Choices made while building it:

@@ -284,6 +284,7 @@ back to the same conversation. The assistant only reads (BR-194).
 |---|---|
 | `POST /device/register` (`{ email, password, deviceName, merchantId?, branchId? }` → `select_branch` choices or `registered` with the device and its token, shown once) | public, the credentials of a holder of `registers.manage` at the branch; rate-limited like a login |
 | `GET /device/me` | device bearer token (401 `UNAUTHENTICATED`, 401 `DEVICE_REVOKED`) |
+| `GET /device-app/manifest.json`, `GET /device-app/*` (the till bundle for the native app, ADR-0112; manifest never cached) | public static |
 | `GET /device/sync?since=<version>` (snapshot of the branch: full without `since`, product changes since it otherwise; `docs/DEVICE_API.md`) | device bearer token |
 | `POST /device/sync` (`{ records: [...] }`, up to 200, causal order; per record `accepted` / `duplicate` / `refused`; `docs/DEVICE_API.md`) | device bearer token |
 | `GET /manager/devices`, `POST /manager/devices/:id/revoke` | manager `registers.manage` |
