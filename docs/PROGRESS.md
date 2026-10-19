@@ -1106,6 +1106,13 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
   cases (cascade + discard, secondary, server-closed shift / sign-in / forced close), 3 till cases
   (cascade banner, secondary, manager escape hatch) + lock / log out / Arabic count in the main
   flow, 1 manager case, money normaliser.
+- Released to production 2026-10-19 with the owner's approval: `5723ed971611` (revision
+  `arabat-web-00034-gnk`; migration 0064 applied by the job; the first attempt `a61735b` stopped
+  at the migration because closed device shifts are immutable, fixed by attributing them with the
+  trigger off). Then the owner's test company بقاله سلطان (`01a143fb-…`) was wiped with
+  `reset-merchant-data` (OPERATIONS.md §9.2a): 38 sales / 38 orders, 11 shifts, 39 ledger
+  entries, 39 stock movements + 1 adjustment, 15 print jobs, 13 reprints, 29 device records,
+  7 device exceptions, 1 device and its register, 1 PIN link; products, staff and settings kept.
 - Not done: the till records only sign-ins (not locks, sign-outs or failed PINs) in the audit log;
   the browser POS keeps its own shifts and password unlock; the cause of the original
   "Invalid amount" on `0.250` could not be reproduced with ASCII input (the normaliser covers the
