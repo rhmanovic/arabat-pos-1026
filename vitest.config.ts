@@ -25,7 +25,7 @@ export default defineConfig({
           name: 'unit',
           environment: 'node',
           include: [
-            'packages/{money,permissions,contracts,pos-core}/src/**/*.test.ts',
+            'packages/{money,permissions,contracts,pos-core,device-core}/src/**/*.test.ts',
             'apps/api/src/**/*.test.ts',
           ],
           exclude: ['**/*.int.test.ts', '**/node_modules/**'],

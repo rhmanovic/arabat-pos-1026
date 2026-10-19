@@ -1,0 +1,36 @@
+{
+  "name": "@arabat/device-core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "source": "./src/testing/index.ts",
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@arabat/contracts": "workspace:*",
+    "@arabat/money": "workspace:*",
+    "@arabat/pos-core": "workspace:*",
+    "hash-wasm": "^4.12.0",
+    "uuidv7": "^1.2.1"
+  },
+  "devDependencies": {
+    "@types/sql.js": "^1.4.11",
+    "sql.js": "^1.15.0"
+  }
+}
