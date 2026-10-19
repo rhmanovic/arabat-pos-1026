@@ -1049,6 +1049,17 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
 - Tests: 3 integration cases (link flow, limits / newest-link-only / expiry / other company,
   manager clear only), web test of the PIN page, device Lock screen button.
 
+### 2026-10-19 — "Our apps" menu on the site, managed from the platform (ADR-0117)
+
+- Migration 0062 `site_apps`; `GET /public/site/apps`; `/platform/site-apps` CRUD (super admin,
+  billing; support reads) with version check, audit and a confirmed delete.
+- Landing header: "تطبيقاتنا / Our apps" dropdown on desktop and a group in the phone menu, read
+  from the API; no menu when the list is empty. Seeded with the four web apps and the hidden
+  computer till app.
+- Tests: 3 integration cases (public list and order, roles / version / delete / audit, address
+  validation), 3 platform-web cases (list + create, delete, read-only), 2 landing cases
+  (dropdown + phone menu, empty list).
+
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.

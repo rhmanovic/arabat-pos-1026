@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PricingPage } from './pricing.js';
-import { trialOffer } from './test-offer.js';
+import { publicFetch } from './test-offer.js';
 
 const item = (id: string, kind: 'system' | 'device', amount: string, max = 5) => ({
   id,
@@ -32,15 +32,14 @@ beforeEach(() => {
     new Response(JSON.stringify({ trialDays: 7, devices: 'pending', redirectTo: '/manager/' }), {
       status: 201,
     });
-  fetchMock = vi.fn((url: string, init?: RequestInit) => {
+  fetchMock = publicFetch((url, init) => {
     if (init?.method === 'POST') {
       expect(url).toBe('/api/v1/public/trial/start');
-      return Promise.resolve(startResponse());
+      return startResponse();
     }
-    if (url === '/api/v1/public/trial')
-      return Promise.resolve(new Response(JSON.stringify(trialOffer()), { status: 200 }));
-    expect(url).toBe('/api/v1/public/pricing');
-    return Promise.resolve(new Response(JSON.stringify(offer), { status: 200 }));
+    if (url === '/api/v1/public/pricing')
+      return new Response(JSON.stringify(offer), { status: 200 });
+    return undefined;
   });
   vi.stubGlobal('fetch', fetchMock);
 });

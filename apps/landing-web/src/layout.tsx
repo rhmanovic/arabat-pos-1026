@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { PublicTrialOffer } from '@arabat/contracts';
+import type { PublicSiteApp, PublicTrialOffer } from '@arabat/contracts';
+import { AppsDropdown, AppsMenuSection, useSiteApps } from './apps-menu.js';
 import { CONTACT_EMAIL, type Content, content, type Language } from './content.js';
 
 export const STORAGE_KEY = 'arabat.landing.lang';
@@ -90,14 +91,17 @@ export function useLanguage(title: (t: Content) => string) {
 
 export function Header({
   t,
+  lang,
   onToggleLanguage,
   page,
 }: {
   t: Content;
+  lang: Language;
   onToggleLanguage: () => void;
   page: Page;
 }) {
   const section = useActiveSection();
+  const apps = useSiteApps();
   const active = page === 'pricing' ? 'pricing' : page === 'home' ? section : '';
   const [menuOpen, setMenuOpen] = useState(false);
   const home = page === 'home' ? '' : '/';
@@ -130,6 +134,7 @@ export function Header({
                 </a>
               </li>
             ))}
+            {apps.length > 0 ? <AppsDropdown t={t} lang={lang} apps={apps} /> : null}
           </ul>
         </nav>
         <div className="hidden items-center gap-2 lg:flex">
@@ -166,6 +171,8 @@ export function Header({
       {menuOpen ? (
         <MobileMenu
           t={t}
+          lang={lang}
+          apps={apps}
           links={links}
           active={active}
           signupHref={signupHref(page)}
@@ -183,6 +190,8 @@ export function Header({
  */
 function MobileMenu({
   t,
+  lang,
+  apps,
   links,
   active,
   signupHref,
@@ -190,6 +199,8 @@ function MobileMenu({
   onClose,
 }: {
   t: Content;
+  lang: Language;
+  apps: PublicSiteApp[];
   links: { id: string; label: string; href: string }[];
   active: string;
   signupHref: string;
@@ -282,6 +293,15 @@ function MobileMenu({
                 </a>
               </li>
             ))}
+            {apps.length > 0 ? (
+              <AppsMenuSection
+                t={t}
+                lang={lang}
+                apps={apps}
+                onClose={onClose}
+                delay={0.05 + links.length * 0.04}
+              />
+            ) : null}
           </ul>
         </nav>
         <div className="flex flex-col gap-3 border-t border-[#eef0f2] p-5">

@@ -25,6 +25,7 @@ import {
   salesRequestListSchema,
   salesRequestSchema,
 } from '@arabat/contracts';
+import { type SaveSiteApp, siteAppListSchema, siteAppSchema } from '@arabat/contracts';
 import {
   type AppInterface,
   type ForgotPasswordRequest,
@@ -501,6 +502,14 @@ export function createApiClient(options: ApiClientOptions = {}) {
       },
       removeOfferImage: (id: string) =>
         request('DELETE', `/platform/offer-items/${id}/image`, { schema: offerItemSchema }),
+      /** The public site's "Our apps" menu (ADR-0117). */
+      siteApps: () => request('GET', '/platform/site-apps', { schema: siteAppListSchema }),
+      saveSiteApp: (id: string | null, body: SaveSiteApp) =>
+        request(id ? 'PUT' : 'POST', id ? `/platform/site-apps/${id}` : '/platform/site-apps', {
+          body,
+          schema: siteAppSchema,
+        }),
+      deleteSiteApp: (id: string) => request('DELETE', `/platform/site-apps/${id}`),
       /** Free trials, leads and the funnel (ADR-0115). */
       trialSettings: () =>
         request('GET', '/platform/trials/settings', { schema: trialSettingsSchema }),

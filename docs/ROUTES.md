@@ -65,6 +65,8 @@ One static page: product introduction (ar/en, language remembered in the browser
 sections `#home`, `#features`, `#why`, `#start`; sign-up links to `/manager/register`, sign-in to
 `/manager/`, and the footer links `/pos/`. No session and no API call. Until 2026-10-18 `/` redirected to
 `/manager/`.
+Since ADR-0117 the header reads `GET /api/v1/public/site/apps` once and, when the list is not empty,
+shows the "تطبيقاتنا / Our apps" dropdown (desktop) and group (phone menu).
 
 ## 2a-bis. `/pricing` — landing-web (public pricing page, ADR-0114)
 
@@ -121,6 +123,7 @@ The manager menu shows "صفحة الروابط" (↗) to holders of `online.man
 | `/platform/trials` | Trials & leads: leads by stage with trial activity, device trials (approve, waiting list, delivered → trial from delivery, returned, reject), trial stock per device (available = stock − out), funnel numbers per step, trial settings | any operator (settings and stock: super admin, billing) | ✓ |
 | `/platform/requests` | Purchase requests from the pricing page: status filter with counts, details (lines, totals, contact), follow-up status and note | any operator | ✓ |
 | `/platform/offer` | Pricing page offer: system yearly price and devices (add, price, hide, order, photo) | any operator (edit: super admin, billing) | ✓ |
+| `/platform/site-apps` | Apps menu of the public site (ADR-0117): entries of the "Our apps" dropdown (add, edit, hide, order, delete) | any operator (edit: super admin, billing) | ✓ |
 | `/platform/plans` | Plans with limits, features, informational price; create / edit | any operator (edit: super admin, billing) | M8 ✓ |
 | `/platform/audit` | Platform audit log | super admin, support | M8 ✓ |
 | `/platform/assistant` | Assistant usage: every question with its answer, lookups, tokens and estimated cost, totals per merchant, filters (app, days, merchant, text), JSONL export | super admin only | ✓ |
@@ -360,10 +363,13 @@ only staff land on `/pos/kitchen`. Sales list and reports show the service type.
 | `GET /platform/assistant?merchantId=&surface=&from=&to=&q=&page=&pageSize=` (questions, totals, by merchant), `GET /platform/assistant/export?…` (JSONL, one line per question with the thread) | super admin only (ADR-0107 amendment) |
 | `GET /platform/offer-items`, `GET /platform/sales-requests?status=`, `GET /platform/sales-requests/:id`, `PUT /platform/sales-requests/:id` (status, note, version) | any operator (ADR-0114) |
 | `POST /platform/offer-items`, `PUT /platform/offer-items/:id`, `POST`/`DELETE /platform/offer-items/:id/image` | super admin, billing |
+| `GET /platform/site-apps` | any operator (ADR-0117) |
+| `POST /platform/site-apps`, `PUT /platform/site-apps/:id` (version), `DELETE /platform/site-apps/:id` | super admin, billing |
 | `GET /platform/trials/settings`, `GET /platform/trials/stock`, `GET /platform/trials/leads?stage=`, `GET /platform/trials/devices?status=`, `PUT /platform/trials/devices/:id`, `GET /platform/trials/funnel?days=` | any operator (ADR-0115) |
 | `PUT /platform/trials/settings`, `PUT /platform/trials/stock/:itemId` | super admin, billing |
 | `GET /public/trial`, `POST /public/trial/events`, `POST /public/trial/start` (registration limit; creates the account and sets the manager session) | 🔓 public |
 | `GET /public/pricing` (active system + devices), `GET /public/pricing/images/:id`, `POST /public/pricing/requests` (5 per hour per IP; priced on the server) | 🔓 public |
+| `GET /public/site/apps` (active entries of the "Our apps" menu, in order) | 🔓 public |
 | `GET /manager/subscription` | merchant `merchant.settings.read` (own merchant only) |
 
 ### Online store API (Prompt 16)

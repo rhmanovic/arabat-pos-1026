@@ -69,7 +69,7 @@ export function StartPage() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <Header t={t} onToggleLanguage={toggleLanguage} page="start" />
+      <Header t={t} lang={lang} onToggleLanguage={toggleLanguage} page="start" />
       <main className="flex-1 bg-sand py-10 sm:py-14">
         <div ref={top} className="mx-auto max-w-7xl scroll-mt-24 px-4 sm:px-6">
           {!offer ? (

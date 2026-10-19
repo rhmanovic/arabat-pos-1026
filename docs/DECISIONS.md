@@ -1669,3 +1669,35 @@ ADR; supersede it.
   English» switch is replaced by `LanguageToggle` (`@arabat/web-core`): one round globe button
   whose accessible name is the language it switches to. No API or database change.
 
+## ADR-0117 — "Our apps" menu on the public site, kept by platform operators
+
+- **Status:** Accepted (owner request, 2026-10-19)
+- **Context:** The landing navbar listed the site's sections only. The owner wants a dropdown
+  with every Arabat app (dashboard, till, store, link page, the computer till, phone apps to
+  come) and the freedom to add, edit and delete entries from `/platform` without a release.
+- **Decision:**
+  - Migration 0062 adds the global table `site_apps` (Arabic / English name and one-line
+    description, address, icon, open-in-new-tab, `active` / `hidden`, order, version). No
+    merchant, no RLS; a trigger allows INSERT / UPDATE / DELETE only in an operator context.
+    A menu entry is not a financial record, so **deleting is allowed** (audited with a snapshot
+    of the entry: `site.app.deleted`); hiding keeps it.
+  - Addresses are a path on this site (`/pos/`) or an absolute `http(s)://` address (an app
+    store page), checked by the contract and by a database CHECK. Nothing else (`javascript:`
+    never reaches the page).
+  - API: `GET /public/site/apps` (active entries in order, public, no session);
+    `GET /platform/site-apps` for any operator; `POST`, `PUT /:id` (with the version, 409 on a
+    stale edit) and `DELETE /:id` for super admin and billing — the same people who manage the
+    pricing page. Audited: `site.app.created` / `updated` / `deleted`.
+  - `/platform/site-apps` ("Apps menu"): table, dialog to add / edit, delete behind a
+    confirmation, read-only for support.
+  - Landing (`apps/landing-web`): the header reads the list once; when it is not empty a
+    "تطبيقاتنا / Our apps" item appears in the desktop navbar (button with `aria-expanded`,
+    panel with icon, name and one line; closes on Escape, outside click or focus leaving) and a
+    titled group appears in the phone menu. An empty or unreachable list leaves the navbar
+    exactly as before.
+  - Seeded: management dashboard `/manager/`, till `/pos/`, online store `/store/`, link page
+    `/links/` (shown) and the computer till app (hidden until it has a download address).
+- **Consequences:** marketing changes to the menu need no deployment. The native app's
+  download address is entered by the operator when it exists. No image upload for entries
+  (seven built-in icons); add one later if a logo per app is wanted.
+

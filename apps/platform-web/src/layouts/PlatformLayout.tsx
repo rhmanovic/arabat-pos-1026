@@ -10,6 +10,7 @@ const NAV = [
   { key: 'trials', to: '/trials', end: false },
   { key: 'requests', to: '/requests', end: false },
   { key: 'offer', to: '/offer', end: false },
+  { key: 'siteApps', to: '/site-apps', end: false },
   { key: 'plans', to: '/plans', end: false },
   { key: 'audit', to: '/audit', end: false, roles: ['platform.super_admin', 'platform.support'] },
   // The record of every assistant question: the system owner alone (ADR-0107 amendment).

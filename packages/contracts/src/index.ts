@@ -23,5 +23,6 @@ export * from './assistant.js';
 export * from './printing.js';
 export * from './devices.js';
 export * from './pricing.js';
+export * from './site.js';
 export * from './trials.js';
 export * from './links.js';

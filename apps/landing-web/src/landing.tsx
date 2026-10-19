@@ -15,12 +15,12 @@ const fill = (text: string, values: Record<string, string | number>) =>
   text.replace(/\{(\w+)\}/g, (_, k: string) => String(values[k] ?? ''));
 
 export function LandingPage() {
-  const { t, toggleLanguage } = useLanguage((c) => c.pageTitle);
+  const { lang, t, toggleLanguage } = useLanguage((c) => c.pageTitle);
   const offer = useTrialOffer();
 
   return (
     <div className="flex min-h-screen flex-col">
-      <Header t={t} onToggleLanguage={toggleLanguage} page="home" />
+      <Header t={t} lang={lang} onToggleLanguage={toggleLanguage} page="home" />
       <main className="flex-1">
         <Hero t={t} offer={offer} />
         <Steps t={t} />

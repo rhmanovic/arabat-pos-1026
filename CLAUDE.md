@@ -248,4 +248,5 @@ Public site: landing `/` and pricing `/pricing` (`apps/landing-web`, ADR-0113/01
 module (`/platform/offer`); the pricing page's form opens a trial account through `/public/trial/start` (ADR-0115 amendment 3).
 Free-trial funnel `/start` and `/platform/trials` (`trials` module, ADR-0115): the account opens at once (no e-mail
 code in this phase, amendment 1), through `RegistrationService.createAccount`; every trial number is an operator setting.
+The landing navbar's "Our apps" dropdown reads `site_apps` (`site` module, `/platform/site-apps`, ADR-0117).
 See `docs/PROGRESS.md` for the current state and `docs/ROADMAP.md` for next steps.

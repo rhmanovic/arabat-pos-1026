@@ -100,7 +100,7 @@ export function PricingPage() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <Header t={t} onToggleLanguage={toggleLanguage} page="pricing" />
+      <Header t={t} lang={lang} onToggleLanguage={toggleLanguage} page="pricing" />
       <main className="flex-1">
         {started ? null : <PricingHero t={t} offer={offer} lang={lang} />}
         <section id="configure" className="bg-sand py-14 sm:py-20">

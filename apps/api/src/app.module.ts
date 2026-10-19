@@ -29,6 +29,7 @@ import { MerchantsModule } from './modules/merchants/merchants.module.js';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module.js';
 import { PlatformAdminModule } from './modules/platform-admin/platform-admin.module.js';
 import { PricingModule } from './modules/pricing/pricing.module.js';
+import { SiteModule } from './modules/site/site.module.js';
 import { TrialsModule } from './modules/trials/trials.module.js';
 import { AssistantModule } from './modules/assistant/assistant.module.js';
 import { PrintingModule } from './modules/printing/printing.module.js';
@@ -49,6 +50,7 @@ export class AppModule {
         SubscriptionsModule,
         PlatformAdminModule,
         PricingModule,
+        SiteModule,
         TrialsModule,
         AccessModule,
         AuthModule,
