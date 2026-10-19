@@ -65,6 +65,30 @@ export async function serveWebApps(fastify: FastifyInstance): Promise<void> {
     fastify.get(`/${appInterface}/*`, sendIndex);
   }
 
+  // The local-first till bundle for the native Arabat app (ADR-0112): the app reads
+  // `manifest.json` (never cached), downloads the listed files and serves them itself.
+  const deviceApp = fileURLToPath(new URL('../../../device-web/dist', import.meta.url));
+  if (!existsSync(deviceApp))
+    throw new Error(`SERVE_WEB is enabled but ${deviceApp} does not exist. Run pnpm build first.`);
+  await fastify.register(fastifyStatic, {
+    root: deviceApp,
+    prefix: '/device-app/',
+    wildcard: false,
+    decorateReply: false,
+    index: false,
+    setHeaders(res, filePath) {
+      res.header(
+        'cache-control',
+        filePath.includes('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache',
+      );
+    },
+  });
+  fastify.get('/device-app', (_req, reply) => reply.redirect('/device-app/'));
+  const sendDeviceIndex = (_req: unknown, reply: FastifyReply) =>
+    reply.header('cache-control', 'no-cache').sendFile('index.html', deviceApp);
+  fastify.get('/device-app/', sendDeviceIndex);
+  fastify.get('/device-app/*', sendDeviceIndex);
+
   // The public landing page (ADR-0113) owns `/`: its built files are registered one by one
   // (wildcard: false), so no catch-all route shadows `/api` or the apps above.
   const landing = fileURLToPath(new URL('../../../landing-web/dist', import.meta.url));

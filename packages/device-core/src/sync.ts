@@ -117,6 +117,8 @@ export class SyncEngine {
   /** A record was queued: upload soon (debounced so a burst of records goes in one batch). */
   requestUpload(): void {
     if (this.stopped) return;
+    // The new record counts as waiting at once, before the upload runs.
+    void this.refresh();
     if (this.uploadTimer) clearTimeout(this.uploadTimer);
     this.uploadTimer = setTimeout(() => {
       this.uploadTimer = null;

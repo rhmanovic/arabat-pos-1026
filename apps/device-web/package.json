@@ -1,0 +1,31 @@
+{
+  "name": "@arabat/device-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node ../../scripts/build-device-manifest.mjs",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@arabat/contracts": "workspace:*",
+    "@arabat/device-core": "workspace:*",
+    "@arabat/i18n": "workspace:*",
+    "@arabat/money": "workspace:*",
+    "@arabat/pos-core": "workspace:*",
+    "@arabat/ui": "workspace:*",
+    "i18next": "^26.4.3",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-i18next": "^17.0.16"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-react": "^6.1.2",
+    "hash-wasm": "^4.12.0",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.3.4"
+  }
+}

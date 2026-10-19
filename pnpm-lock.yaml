@@ -330,6 +330,55 @@ importers:
         specifier: ^4.8.1
         version: 4.8.1(supports-color@10.2.2)
 
+  apps/device-web:
+    dependencies:
+      '@arabat/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@arabat/device-core':
+        specifier: workspace:*
+        version: link:../../packages/device-core
+      '@arabat/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
+      '@arabat/money':
+        specifier: workspace:*
+        version: link:../../packages/money
+      '@arabat/pos-core':
+        specifier: workspace:*
+        version: link:../../packages/pos-core
+      '@arabat/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      i18next:
+        specifier: ^26.4.3
+        version: 26.4.3(typescript@6.0.3)
+      react:
+        specifier: ^19.3.0
+        version: 19.3.0
+      react-dom:
+        specifier: ^19.3.0
+        version: 19.3.0(react@19.3.0)
+      react-i18next:
+        specifier: ^17.0.16
+        version: 17.0.16(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
+    devDependencies:
+      '@tailwindcss/vite':
+        specifier: ^4.3.3
+        version: 4.3.3(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
+      '@vitejs/plugin-react':
+        specifier: ^6.1.2
+        version: 6.1.2(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
+      hash-wasm:
+        specifier: ^4.12.0
+        version: 4.12.0
+      tailwindcss:
+        specifier: ^4.3.3
+        version: 4.3.3
+      vite:
+        specifier: ^8.3.4
+        version: 8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)
+
   apps/landing-web:
     dependencies:
       '@arabat/contracts':
