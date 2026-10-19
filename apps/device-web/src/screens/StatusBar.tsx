@@ -104,8 +104,21 @@ export function RefusedDialog({
 /** Always-visible top strip: sync, offline warning, printer, version, update, lock. */
 export function StatusBar({ title }: { title?: string }) {
   const { t, i18n } = useTranslation();
-  const { ctx, info, printer, updateReady, applyUpdate, cart, lock, cashier, shift, staff } =
-    useDevice();
+  const {
+    ctx,
+    info,
+    printer,
+    updateReady,
+    applyUpdate,
+    cart,
+    lock,
+    logOut,
+    canLogOut,
+    cashier,
+    shift,
+    staff,
+    role,
+  } = useDevice();
   const [refusedOpen, setRefusedOpen] = useState(false);
   const offline = offlineState(ctx?.lastSuccessfulSyncAt ?? null, ctx?.offlineLimitHours ?? 72);
   const hours = offline.hoursSinceSync === null ? '—' : Math.floor(offline.hoursSinceSync);
@@ -122,9 +135,9 @@ export function StatusBar({ title }: { title?: string }) {
           </span>
         ) : null}
         {shiftOwner ? (
-          <span className="hidden text-sm text-console-fg/80 sm:inline">
+          <span className="hidden text-sm text-console-fg/80 sm:inline" data-testid="shift-owner">
             <span className="me-1.5 inline-block size-2 rounded-full bg-success" aria-hidden />
-            {shiftOwner}
+            {role === 'secondary' ? t('status.branchShiftOf', { name: shiftOwner }) : shiftOwner}
           </span>
         ) : null}
         <div className="flex-1" />
@@ -157,8 +170,18 @@ export function StatusBar({ title }: { title?: string }) {
             <span className="hidden max-w-32 truncate text-sm sm:inline">
               <bdi>{cashier.fullName}</bdi>
             </span>
-            <Button variant="secondary" size="sm" onClick={lock}>
+            <Button variant="secondary" size="sm" onClick={lock} data-testid="lock">
               {t('status.lockNow')}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={logOut}
+              disabled={!canLogOut}
+              title={canLogOut ? undefined : t('lock.logOutBlocked')}
+              data-testid="log-out"
+            >
+              {t('lock.logOut')}
             </Button>
           </>
         ) : null}

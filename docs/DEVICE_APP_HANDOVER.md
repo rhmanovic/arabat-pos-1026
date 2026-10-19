@@ -125,3 +125,20 @@ What changes for the native side:
 Nothing changes in the bridge methods (bridge version stays 2). The socket connection for print
 jobs is native (the page cannot hold the token): the page needs no new bridge call for it.
 
+## 8. Changes after the first real test (2026-10-19, ADR-0112 amendment 3)
+
+All inside the page and the server; **nothing changes for the native side** (bridge version 2):
+
+1. One shift per branch on the **primary** till; an additional till sells into it and shows "no
+   open shift at the branch" until the primary opens one (it learns it at the next sync).
+2. A refused shift blocks selling on the till at once (with the reason); the records are retried
+   automatically with the same bytes.
+3. "Lock" keeps the cashier (PIN only); "Log out" only with the shift closed; a manager can close
+   an absent cashier's shift from the lock screen with their own PIN.
+4. Device sign-ins are uploaded (`sign_in` records) and show as the employee's last sign-in.
+5. Amounts typed with Arabic digits or a comma are accepted.
+
+Manual check (after §5): lock the till, type the same PIN, sell; try "Log out" with the shift
+open (disabled); close the shift with `٥,٥٠٠`; on an additional till, sign in before the primary
+opened a shift ("no open shift at the branch"), then after it did (sells; no pay-in / pay-out).
+

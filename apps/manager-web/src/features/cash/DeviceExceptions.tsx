@@ -35,6 +35,29 @@ export function DeviceExceptions() {
     },
     onError: notify.fail,
   });
+  // "Shift left open" (ADR-0112 amendment 3): the manager closes the stale shift from here, an
+  // uncounted forced close (the drawer is counted at the next opening), and the exception is
+  // marked handled with the same note.
+  const [closingStale, setClosingStale] = useState<DeviceException | null>(null);
+  const [closeNote, setCloseNote] = useState('');
+  const closeStale = useMutation({
+    mutationFn: async ({ e, text }: { e: DeviceException; text: string }) => {
+      const staleShiftId = String(e.details['staleShiftId']);
+      if (!e.details['staleShiftClosed']) {
+        const shift = await api.shifts.get(staleShiftId);
+        await api.shifts.forceClose(staleShiftId, { note: text, version: shift.version });
+      }
+      await api.devices.resolveException(e.id, text);
+    },
+    onSuccess: async () => {
+      setClosingStale(null);
+      setCloseNote('');
+      await queryClient.invalidateQueries({ queryKey: exceptionsKey });
+      await queryClient.invalidateQueries({ queryKey: ['manager', 'shifts'] });
+      notify.ok(t('devices.staleShiftClosed'));
+    },
+    onError: notify.fail,
+  });
   const describe = (e: DeviceException) => {
     const d = e.details as Record<string, string | boolean | null | undefined>;
     if (e.kind === 'negative_stock')
@@ -57,6 +80,24 @@ export function DeviceExceptions() {
             at: formatDateTime(e.occurredAt, i18n.language),
             received: formatDateTime(e.receivedAt, i18n.language),
           });
+    if (e.kind === 'shift_left_open')
+      return t(d['staleShiftClosed'] ? 'devices.staleShiftClosedText' : 'devices.staleShiftText', {
+        name: d['fullName'] ?? '',
+        register: d['staleRegisterCode'] ?? '',
+        where: t(d['staleOnDevice'] ? 'devices.onDevice' : 'devices.inBrowser'),
+        since: formatDateTime(String(d['staleOpenedAt'] ?? e.occurredAt), i18n.language),
+      });
+    if (e.kind === 'late')
+      return t('devices.lateText', {
+        record: t(`devices.record.${e.recordKind}`, { defaultValue: e.recordKind }),
+        closedAt: d['closedAt'] ? formatDateTime(String(d['closedAt']), i18n.language) : '—',
+      });
+    if (e.kind === 'forced_close')
+      return t('devices.forcedCloseText', {
+        name: d['absentName'] ?? '',
+        note: d['note'] ?? '',
+        discrepancy: d['discrepancy'] ?? '',
+      });
     return t('devices.refusedText', {
       record: t(`devices.record.${e.recordKind}`, { defaultValue: e.recordKind }),
       message: d['message'] ?? '',
@@ -95,7 +136,7 @@ export function DeviceExceptions() {
             key: 'kind',
             header: t('devices.kindHeader'),
             cell: (e) => (
-              <Badge tone={e.kind === 'refused' ? 'danger' : 'warning'}>
+              <Badge tone={e.kind === 'refused' || e.kind === 'late' ? 'danger' : 'warning'}>
                 {t(`devices.kind.${e.kind}`)}
               </Badge>
             ),
@@ -126,9 +167,16 @@ export function DeviceExceptions() {
                   {e.resolvedByName ?? '—'}: {e.resolutionNote}
                 </span>
               ) : (
-                <Button size="sm" variant="ghost" onClick={() => setHandling(e)}>
-                  {t('devices.markHandled')}
-                </Button>
+                <span className="flex flex-wrap gap-1">
+                  {e.kind === 'shift_left_open' && !e.details['staleShiftClosed'] ? (
+                    <Button size="sm" onClick={() => setClosingStale(e)}>
+                      {t('devices.closeStaleShift')}
+                    </Button>
+                  ) : null}
+                  <Button size="sm" variant="ghost" onClick={() => setHandling(e)}>
+                    {t('devices.markHandled')}
+                  </Button>
+                </span>
               ),
           },
         ]}
@@ -156,6 +204,41 @@ export function DeviceExceptions() {
         <Field label={t('devices.resolutionNote')}>
           {(field) => (
             <Textarea {...field} value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
+          )}
+        </Field>
+      </Dialog>
+      <Dialog
+        open={closingStale !== null}
+        onOpenChange={(open) => !open && setClosingStale(null)}
+        title={t('devices.closeStaleShift')}
+        description={
+          closingStale ? `${describe(closingStale)} ${t('devices.closeStaleHint')}` : undefined
+        }
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setClosingStale(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              disabled={closeNote.trim() === ''}
+              loading={closeStale.isPending}
+              onClick={() =>
+                closingStale && closeStale.mutate({ e: closingStale, text: closeNote.trim() })
+              }
+            >
+              {t('devices.closeStaleShift')}
+            </Button>
+          </>
+        }
+      >
+        <Field label={t('devices.resolutionNote')}>
+          {(field) => (
+            <Textarea
+              {...field}
+              value={closeNote}
+              onChange={(e) => setCloseNote(e.target.value)}
+              rows={3}
+            />
           )}
         </Field>
       </Dialog>

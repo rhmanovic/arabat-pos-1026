@@ -53,14 +53,25 @@ const toEntry = (r: Record<string, unknown>): OutboxEntry => ({
   updatedAt: String(r['updated_at']),
 });
 
-/** The next batch to upload, in causal order: pending records and retryable refusals. */
+/**
+ * The next batch to upload, in causal order: pending records and retryable refusals. A refused
+ * `shift_open` is always sent again (byte-identical): everything of the shift waits behind it,
+ * and its refusal may have been settled on the server meanwhile (ADR-0112 amendment 3).
+ */
 export async function nextBatch(db: BridgeDb, limit = 200): Promise<OutboxEntry[]> {
   const rows = await db.query(
-    `SELECT * FROM outbox WHERE status = 'pending' OR (status = 'refused' AND code IN (${[...RETRYABLE_CODES].map(() => '?').join(', ')}))
+    `SELECT * FROM outbox WHERE status = 'pending'
+        OR (status = 'refused' AND (kind = 'shift_open' OR code IN (${[...RETRYABLE_CODES].map(() => '?').join(', ')})))
      ORDER BY seq LIMIT ?`,
     [...RETRYABLE_CODES, limit],
   );
   return rows.map(toEntry);
+}
+
+/** The server's answer for one record (null before the first upload or for an unknown id). */
+export async function outboxEntry(db: BridgeDb, id: string): Promise<OutboxEntry | null> {
+  const [row] = await db.query(`SELECT * FROM outbox WHERE id = ?`, [id]);
+  return row ? toEntry(row) : null;
 }
 
 export async function listOutbox(db: BridgeDb, status?: OutboxStatus): Promise<OutboxEntry[]> {

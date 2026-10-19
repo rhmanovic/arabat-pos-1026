@@ -61,6 +61,13 @@ export const MIGRATIONS: readonly string[][] = [
     `CREATE TABLE IF NOT EXISTS pin_attempts (membership_id TEXT PRIMARY KEY, failures INTEGER NOT NULL, lockouts INTEGER NOT NULL,
        locked_until TEXT)`,
   ],
+  // ADR-0112 amendment 3: the branch shift. `origin` is 'local' for a shift this device opened
+  // (the primary) and 'branch' for the primary's shift a secondary device learned from sync;
+  // `closed_by` tells a local close ('device', 'forced') from one learned from the server.
+  [
+    `ALTER TABLE shifts ADD COLUMN origin TEXT NOT NULL DEFAULT 'local'`,
+    `ALTER TABLE shifts ADD COLUMN closed_by TEXT`,
+  ],
 ];
 
 export const META = {
@@ -76,6 +83,9 @@ export const META = {
   settings: 'settings',
   /** The last receipt sequence number this device used (integer as text). */
   receiptCounter: 'receiptCounter',
+  /** The branch shift as the server last described it (JSON, amendment 3). */
+  branchShift: 'branchShift',
+  primaryDevice: 'primaryDevice',
 } as const;
 
 export const setMeta = (key: string, value: string | null): SqlStatement => ({

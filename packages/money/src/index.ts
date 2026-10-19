@@ -4,3 +4,4 @@ export * from './money.js';
 export * from './quantity.js';
 export * from './fees.js';
 export * from './pricing.js';
+export * from './input.js';

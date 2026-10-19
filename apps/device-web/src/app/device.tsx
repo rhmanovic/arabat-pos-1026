@@ -10,6 +10,7 @@ import {
   type LocalShift,
   type OfflineState,
   type PrinterStatus,
+  type ShiftAcceptance,
   type StaffMember,
   SyncEngine,
   type SyncStatus,
@@ -20,6 +21,8 @@ import {
   migrate,
   offlineState,
   openShiftOf,
+  recordSignIn,
+  shiftAcceptance,
 } from '@arabat/device-core';
 import { PosRuleError } from '@arabat/pos-core';
 import {
@@ -44,10 +47,20 @@ export interface DeviceState {
   catalog: Catalog | null;
   methods: DevicePaymentMethod[];
   shift: LocalShift | null;
+  /** Whether the server has taken the open shift (null without a shift), amendment 3. */
+  acceptance: ShiftAcceptance | null;
+  /** The server refused the open shift: selling is blocked until it is taken or discarded. */
+  shiftBlocked: ShiftAcceptance | null;
+  /** 'primary' holds the branch shift and the drawer; 'secondary' sells into it. */
+  role: 'primary' | 'secondary';
   sync: SyncStatus;
   printer: PrinterStatus | null;
   updateReady: string | null;
   cashier: StaffMember | null;
+  /** The cashier is still signed in but the screen asks for their PIN again. */
+  locked: boolean;
+  /** Logging out is possible: no open shift held by this device (primary: branch shift closed). */
+  canLogOut: boolean;
   cart: Cart;
   /** Re-reads the local database after a write (snapshot, shift, sale). */
   reload: () => Promise<void>;
@@ -55,7 +68,12 @@ export interface DeviceState {
   requestUpload: () => void;
   setRegistered: (v: boolean) => void;
   signIn: (member: StaffMember) => void;
+  /** Back to the PIN pad for the same cashier (also on idle). */
   lock: () => void;
+  /** Unlock after the same cashier typed their PIN. */
+  unlock: () => void;
+  /** Ends the cashier's session; the picker shows again. */
+  logOut: () => void;
   setCart: (cart: Cart) => void;
   applyUpdate: () => Promise<void>;
   offline: OfflineState;
@@ -86,9 +104,11 @@ export function DeviceProvider({
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [methods, setMethods] = useState<DevicePaymentMethod[]>([]);
   const [shift, setShift] = useState<LocalShift | null>(null);
+  const [acceptance, setAcceptance] = useState<ShiftAcceptance | null>(null);
   const [printer, setPrinter] = useState<PrinterStatus | null>(null);
   const [updateReady, setUpdateReady] = useState<string | null>(null);
   const [cashier, setCashier] = useState<StaffMember | null>(null);
+  const [locked, setLocked] = useState(false);
   const [cart, setCart] = useState<Cart>(EMPTY_CART);
   const [engine] = useState(
     () => new SyncEngine(bridge, bridge.db, { log: (m) => void bridge.app.log(m) }),
@@ -109,6 +129,7 @@ export function DeviceProvider({
     setCatalog(cat);
     setMethods(m);
     setShift(sh);
+    setAcceptance(sh ? await shiftAcceptance(bridge.db, sh) : null);
   }, [bridge]);
 
   // Start: schema, device info, registration state, local data, then the sync schedule.
@@ -162,10 +183,11 @@ export function DeviceProvider({
     if (updateReady && cart.lines.length === 0 && !cashier) void applyUpdate();
   }, [updateReady, cart.lines.length, cashier, applyUpdate]);
 
-  // Idle lock: no touch, mouse or keyboard input for POS_IDLE_LOCK_SECONDS.
+  // Idle lock: no touch, mouse or keyboard input for POS_IDLE_LOCK_SECONDS locks the screen
+  // for the same cashier (amendment 3: a lock is never a sign-out).
   const last = useRef(0);
   useEffect(() => {
-    if (!cashier) return;
+    if (!cashier || locked) return;
     last.current = Date.now();
     const seen = () => {
       last.current = Date.now();
@@ -173,17 +195,32 @@ export function DeviceProvider({
     const events = ['pointerdown', 'keydown', 'touchstart', 'wheel'] as const;
     for (const e of events) window.addEventListener(e, seen, { passive: true });
     const id = setInterval(() => {
-      if (Date.now() - last.current >= POS_IDLE_LOCK_SECONDS * 1000) setCashier(null);
+      if (Date.now() - last.current >= POS_IDLE_LOCK_SECONDS * 1000) setLocked(true);
     }, 10_000);
     return () => {
       for (const e of events) window.removeEventListener(e, seen);
       clearInterval(id);
     };
-  }, [cashier]);
+  }, [cashier, locked]);
 
   // A signed-in person who left the staff list (deactivated, moved) is signed out.
   const activeCashier =
     cashier && staff.some((s) => s.membershipId === cashier.membershipId) ? cashier : null;
+  const role = ctx?.device.role ?? 'primary';
+  // The primary holds the branch shift: nobody logs out while it is open (lock instead).
+  const canLogOut = !(role === 'primary' && shift !== null && shift.origin === 'local');
+
+  const signIn = useCallback(
+    (member: StaffMember) => {
+      setCashier(member);
+      setLocked(false);
+      // Their "last sign-in" and the device audit log (uploaded with the next sync).
+      void recordSignIn(bridge.db, member)
+        .then(() => engine.requestUpload())
+        .catch((e: unknown) => void bridge.app.log(`sign-in record failed: ${String(e)}`));
+    },
+    [bridge, engine],
+  );
 
   const offline = useMemo(
     () => offlineState(ctx?.lastSuccessfulSyncAt ?? null, ctx?.offlineLimitHours ?? 72),
@@ -201,17 +238,27 @@ export function DeviceProvider({
       catalog,
       methods,
       shift,
+      acceptance,
+      shiftBlocked: acceptance?.status === 'refused' ? acceptance : null,
+      role,
       sync,
       printer,
       updateReady,
       cashier: activeCashier,
+      locked,
+      canLogOut,
       cart,
       reload,
       syncNow: () => engine.syncNow(),
       requestUpload: () => engine.requestUpload(),
       setRegistered,
-      signIn: setCashier,
-      lock: () => setCashier(null),
+      signIn,
+      lock: () => setLocked(true),
+      unlock: () => setLocked(false),
+      logOut: () => {
+        setCashier(null);
+        setLocked(false);
+      },
       setCart,
       applyUpdate,
       offline,
@@ -226,13 +273,18 @@ export function DeviceProvider({
       catalog,
       methods,
       shift,
+      acceptance,
+      role,
       sync,
       printer,
       updateReady,
       activeCashier,
+      locked,
+      canLogOut,
       cart,
       reload,
       engine,
+      signIn,
       applyUpdate,
       offline,
     ],

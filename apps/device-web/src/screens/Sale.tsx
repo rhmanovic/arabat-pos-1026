@@ -8,6 +8,7 @@ import {
   type StaffMember,
   attemptPin,
   commitSale,
+  discardRefusedShift,
   getSale,
   listSales,
   missingRights,
@@ -20,7 +21,7 @@ import {
   supervisorRights,
 } from '@arabat/device-core';
 import { formatDateTime } from '@arabat/i18n';
-import { Money } from '@arabat/money';
+import { Money, normalizeAmountInput } from '@arabat/money';
 import type { PaymentInput } from '@arabat/pos-core';
 import { Alert, Button, Dialog, Field, Input, Segmented, cn, useToast } from '@arabat/ui';
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
@@ -50,8 +51,25 @@ export function SaleScreen({ onRefunds, onClose }: { onRefunds: () => void; onCl
     reload,
     requestUpload,
     canSell,
+    shiftBlocked,
+    role,
   } = useDevice();
   const toast = useToast();
+  const [discarding, setDiscarding] = useState(false);
+  // A shift the server refused blocks everything until it is taken or discarded (amendment 3).
+  const blocked = shiftBlocked !== null;
+  const discardShift = async () => {
+    if (!shift) return;
+    setDiscarding(true);
+    try {
+      await discardRefusedShift(bridge.db, shift);
+      await reload();
+    } catch (e) {
+      toast.error(describeError(e, t));
+    } finally {
+      setDiscarding(false);
+    }
+  };
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string | null>(null);
   const [editing, setEditing] = useState<CartLine | null>(null);
@@ -136,6 +154,28 @@ export function SaleScreen({ onRefunds, onClose }: { onRefunds: () => void; onCl
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-surface-muted select-none">
       <StatusBar />
+      {shiftBlocked ? (
+        <Alert tone="danger" className="rounded-none border-x-0 py-2" data-testid="shift-blocked">
+          <span className="font-semibold">
+            {t('shift.refusedTitle', { code: shiftBlocked.code ?? '' })}
+          </span>{' '}
+          {t(`shift.refusedFix.${shiftBlocked.code ?? 'other'}`, {
+            defaultValue: t('shift.refusedFix.other'),
+          })}{' '}
+          {shiftBlocked.message ? <span dir="auto">({shiftBlocked.message})</span> : null}{' '}
+          {t('shift.refusedRetry', { attempts: shiftBlocked.attempts })}
+          <Button
+            size="sm"
+            variant="secondary"
+            className="ms-2"
+            loading={discarding}
+            onClick={() => void discardShift()}
+            data-testid="discard-shift"
+          >
+            {t('shift.discard')}
+          </Button>
+        </Alert>
+      ) : null}
       <main className="grid min-h-0 flex-1 grid-cols-1 gap-2 p-2 md:grid-cols-[1fr_minmax(20rem,26rem)]">
         <section className="flex min-h-0 flex-col gap-2 rounded-lg bg-surface p-2">
           <form onSubmit={scan} className="flex gap-2">
@@ -195,7 +235,7 @@ export function SaleScreen({ onRefunds, onClose }: { onRefunds: () => void; onCl
         <section className="flex min-h-0 flex-col rounded-lg bg-surface" data-testid="cart">
           <div className="flex items-center justify-between border-b border-border px-3 py-2">
             <span className="font-semibold">
-              {t('shift.openedBy', {
+              {t(role === 'secondary' ? 'shift.branchShiftBy' : 'shift.openedBy', {
                 name: staff.find((s) => s.membershipId === shift.membershipId)?.fullName ?? '',
                 since: formatDateTime(shift.openedAt, i18n.language),
               })}
@@ -305,7 +345,9 @@ export function SaleScreen({ onRefunds, onClose }: { onRefunds: () => void; onCl
               size="touch"
               block
               className="mt-3"
-              disabled={!pricing?.ok || cart.lines.length === 0 || missing.length > 0 || !canSell}
+              disabled={
+                !pricing?.ok || cart.lines.length === 0 || missing.length > 0 || !canSell || blocked
+              }
               onClick={() => setPaying(true)}
               data-testid="pay"
             >
@@ -321,22 +363,38 @@ export function SaleScreen({ onRefunds, onClose }: { onRefunds: () => void; onCl
               </p>
             ) : null}
             <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <Button variant="secondary" size="sm" onClick={() => setCashOpen('cash_in')}>
-                {t('sale.cashIn')}
-              </Button>
-              <Button variant="secondary" size="sm" onClick={() => setCashOpen('cash_out')}>
-                {t('sale.cashOut')}
-              </Button>
+              {role === 'primary' ? (
+                <>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setCashOpen('cash_in')}
+                    disabled={blocked}
+                  >
+                    {t('sale.cashIn')}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setCashOpen('cash_out')}
+                    disabled={blocked}
+                  >
+                    {t('sale.cashOut')}
+                  </Button>
+                </>
+              ) : null}
               <Button variant="secondary" size="sm" onClick={() => setRecentOpen(true)}>
                 {t('sale.recent')}
               </Button>
-              <Button variant="secondary" size="sm" onClick={onRefunds}>
+              <Button variant="secondary" size="sm" onClick={onRefunds} disabled={blocked}>
                 {t('sale.refundsNav')}
               </Button>
             </div>
-            <Button variant="ghost" size="sm" block className="mt-1" onClick={onClose}>
-              {t('sale.closeNav')}
-            </Button>
+            {role === 'primary' ? (
+              <Button variant="ghost" size="sm" block className="mt-1" onClick={onClose}>
+                {t('sale.closeNav')}
+              </Button>
+            ) : null}
           </div>
         </section>
       </main>
@@ -413,6 +471,7 @@ export function SaleScreen({ onRefunds, onClose }: { onRefunds: () => void; onCl
             amountMinor,
             note,
             settings: ctx.settings,
+            role,
           });
           requestUpload();
           toast.success(t('sale.cashDone'));
@@ -456,10 +515,12 @@ function LineDialog({
   const [reason, setReason] = useState(line?.priceOverrideReason ?? '');
   if (!line || !item) return null;
   const apply = () => {
+    const q = normalizeAmountInput(qty);
+    const p = normalizeAmountInput(price);
     onChange({
-      quantity: qty.trim() || '1',
-      priceOverride: price.trim() ? price.trim() : null,
-      priceOverrideReason: price.trim() ? reason.trim() || null : null,
+      quantity: q || '1',
+      priceOverride: p ? p : null,
+      priceOverrideReason: p ? reason.trim() || null : null,
     });
     onClose();
   };
@@ -527,8 +588,9 @@ function DiscountFields({
   const [type, setType] = useState<'none' | 'percent' | 'amount'>(value?.type ?? 'none');
   const [amount, setAmount] = useState(value?.value ?? '');
   const emit = (ty: typeof type, v: string) => {
-    if (ty === 'none' || !v.trim()) onChange(null);
-    else onChange({ type: ty, value: v.trim() });
+    const value = normalizeAmountInput(v);
+    if (ty === 'none' || !value) onChange(null);
+    else onChange({ type: ty, value });
   };
   return (
     <div className="flex flex-col gap-2">
@@ -701,7 +763,7 @@ function PaymentDialog({
   const addPayment = () => {
     setError(null);
     try {
-      const minor = Money.parse(amount.trim(), 'KWD').minor;
+      const minor = Money.parseInput(amount, 'KWD').minor;
       if (minor <= 0n || minor > remaining) throw new Error('PAYMENT_TOTAL_MISMATCH');
       const p: PaymentInput = {
         methodId,
@@ -709,7 +771,7 @@ function PaymentDialog({
         tendered:
           method?.kind === 'cash'
             ? Money.ofMinor(
-                tendered.trim() ? Money.parse(tendered.trim(), 'KWD').minor : minor,
+                tendered.trim() ? Money.parseInput(tendered, 'KWD').minor : minor,
                 'KWD',
               ).toDecimalString()
             : null,
@@ -897,7 +959,7 @@ function CashDialog({
     setBusy(true);
     setError(null);
     try {
-      await onDone(direction, Money.parse(amount.trim(), 'KWD').minor, note.trim() || null);
+      await onDone(direction, Money.parseInput(amount, 'KWD').minor, note.trim() || null);
     } catch (e) {
       setError(describeError(e, t));
     } finally {

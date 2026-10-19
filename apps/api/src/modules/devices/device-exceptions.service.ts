@@ -31,7 +31,8 @@ export class DeviceExceptionsService {
                  e.record_id, r.kind as record_kind, e.details, r.occurred_at, r.received_at, e.created_at,
                  e.resolved_at, u.full_name as resolved_by, e.resolution_note,
                  case when r.status = 'refused' then r.payload end as payload,
-                 coalesce(p.name_en, p.name_ar) as product_name_en, coalesce(p.name_ar, p.name_en) as product_name_ar
+                 coalesce(p.name_en, p.name_ar) as product_name_en, coalesce(p.name_ar, p.name_en) as product_name_ar,
+                 st.status as stale_status
           from device_exceptions e
           join pos_devices d on d.id = e.device_id
           join registers g on g.id = d.register_id
@@ -39,6 +40,7 @@ export class DeviceExceptionsService {
           left join users u on u.id = e.resolved_by_user_id
           left join product_variants v on e.kind = 'negative_stock' and v.id = (e.details->>'variantId')::uuid
           left join products p on p.id = v.product_id
+          left join shifts st on e.kind = 'shift_left_open' and st.id = (e.details->>'staleShiftId')::uuid
           where e.merchant_id = ${actor.merchantId}
             and ${status === 'open' ? sql`e.resolved_at is null` : sql`e.resolved_at is not null`}
           order by e.created_at desc, e.id desc
@@ -59,6 +61,10 @@ export class DeviceExceptionsService {
             ...(r['details'] as Record<string, unknown>),
             ...(r['kind'] === 'negative_stock'
               ? { productNameEn: r['product_name_en'], productNameAr: r['product_name_ar'] }
+              : {}),
+            // The stale shift may have been closed meanwhile (online, or by the manager's action).
+            ...(r['kind'] === 'shift_left_open'
+              ? { staleShiftClosed: r['stale_status'] !== 'open' }
               : {}),
           },
           occurredAt: iso(r['occurred_at'])!,

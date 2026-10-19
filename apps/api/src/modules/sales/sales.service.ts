@@ -1442,7 +1442,7 @@ export class SalesService {
       if (!sale) throw AppError.notFound();
       const [shift] = (
         await tx.execute(
-          sql`select id from shifts where membership_id = ${actor.membershipId} and status = 'open'`,
+          sql`select id from shifts where membership_id = ${actor.membershipId} and status = 'open' and device_id is null`,
         )
       ).rows as { id: string }[];
       const job = await this.printJobs.queueCopyInTx(tx, {
@@ -1690,7 +1690,7 @@ export class SalesService {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const [shift] = (
         await tx.execute(sql`select id from shifts where membership_id = ${actor.membershipId} and status = 'open'
-                             and branch_id = ${branchId}`)
+                             and branch_id = ${branchId} and device_id is null`)
       ).rows as { id: string }[];
       if (!shift) return [];
       return this.summaries(tx, sql`s.shift_id = ${shift.id}`, 50, 0);

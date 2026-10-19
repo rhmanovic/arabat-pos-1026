@@ -150,6 +150,10 @@ snapshot). Call it at start-up, after every successful upload and every few minu
     "allowNegativeStock": false, "heldSaleExpiryHours": 24
   },
   "counters": { "lastReceiptNumber": "MAIN-R2-000041" },
+  "branchShift": { "id": "…", "status": "open", "registerId": "…", "registerCode": "R1",
+                   "openedAt": "2026-10-17T08:00:00.000Z", "closedAt": null,
+                   "openedBy": { "membershipId": "…", "userId": "…", "fullName": "Sara" } },
+  "primaryDevice": { "id": "…", "name": "Front till" },
   "paymentMethods": [ { "id": "…", "kind": "cash", "status": "active", "availableInPos": true, "gatewayProvider": null,
                         "financialAccountId": null, "nameEn": "Cash", "nameAr": "نقدي", "feeType": "none",
                         "feeFixedMinor": "0", "feePercent": "0", "sortOrder": 0 } ],
@@ -178,6 +182,11 @@ snapshot). Call it at start-up, after every successful upload and every few minu
   (removed, deactivated, moved) must be signed out.
 - `counters.lastReceiptNumber`: the highest receipt number of this register the server has. After
   restoring a device from scratch with the same token, continue above it.
+- `branchShift` / `primaryDevice` (amendment 3, always complete): the latest shift on the register
+  of the branch's **primary** device (open or closed, with who opened it) and the primary itself;
+  `null` when the branch has no primary or it never opened a shift. A **secondary** device sells
+  into the open branch shift (its sales carry that `shiftId`) and shows "no open shift at the
+  branch" otherwise. The primary uses it to learn that a manager closed its shift online.
 - Payment methods: offer those with `status: "active"`, `availableInPos: true` and no
   `gatewayProvider` (gateway payments are online only).
 - Not in the snapshot: product images, customers, modifiers and recipes (restaurant only, online
@@ -192,8 +201,11 @@ snapshot). Call it at start-up, after every successful upload and every few minu
 | Selling | Price and check every sale with `@arabat/pos-core` and the downloaded `settings` / `staff[].permissions`, in the order in `packages/pos-core/README.md` (rights, `evaluateSale`, `checkPayments`). Pass `expectedTotalMinor: null`. |
 | Supervisor | When `requiredSaleRights` lists rights the cashier lacks, a supervisor types **their own PIN**; check the right in their `permissions`; record `override` on the sale. |
 | Receipt numbers | `formatDeviceReceiptNumber(branch.code, register.code, n)` → `MAIN-R2-000042`; `n` is gap-free per device, taken in the same local transaction as the sale. |
-| Shifts | One open shift on the device at a time. A person can hold only one open shift anywhere (browser or device). |
-| Cash movements | Only pay-ins / pay-outs (`other`). Safe drops, float top-ups, bank deposits, expenses and supplier payments stay in the online flows. |
+| Shifts | **One shift per branch, held by the primary device** (amendment 3): the primary opens and closes it with a cash count; a secondary sells into the branch shift from the snapshot and never opens, closes or moves cash (`NOT_PRIMARY_DEVICE`). Device shifts are per register: the server never refuses a device shift because the person has a shift open elsewhere (it lists that shift for the managers). Only the opener closes the shift; a manager (`registers.manage`) may force-close it at the till with a note. |
+| Refused shift | If the server refuses the `shift_open`, **block selling, cash and refunds at once** (show the code and what to do), keep resending the same record at every sync, and let the cashier discard the shift only when nothing was recorded in it. Never pile up records behind a refused shift. |
+| Lock vs. sign-out | "Lock" (button or 5 min idle) keeps the cashier and asks for their PIN only; while the primary holds an open shift, only its opener can sign in. "Log out" only when the device holds no open shift (primary: branch shift closed). |
+| Cash movements | Only pay-ins / pay-outs (`other`), **on the primary only**. Safe drops, float top-ups, bank deposits, expenses and supplier payments stay in the online flows. |
+| Amounts typed | Accept Arabic-Indic digits, a comma or `٫` as the decimal separator, spaces and a currency word (`Money.parseInput` in `@arabat/money`). |
 | Refunds | Only of sales **this device made**, through `computeRefund`, `paybackAllocation` and `refundApprovalReasons`; when approval is needed, a second person types their PIN (`approval`). |
 | Not on devices | Restaurant (tables, kitchen), customers, exchanges, voids, held sales across tills, gateway payments: online only. |
 
@@ -217,13 +229,13 @@ Answer (always `200` when the token is valid):
 |---|---|---|
 | `accepted` | Recorded now. | Mark sent. |
 | `duplicate` | Already recorded with the same content (a retry). `result` is the stored one. | Mark sent. |
-| `refused` | Not recorded; `code` / `message` say why. The server keeps it for the managers. | Keep it, show it as "not accepted". Sending the **same** record again retries it (useful when it arrived before its shift); a fixed record needs a **new id**. |
+| `refused` | Not recorded; `code` / `message` say why. The server keeps it for the managers. | Keep it, show it as "not accepted". Sending the **same** record again retries it (useful when it arrived before its shift); a fixed record needs a **new id**. A refused `shift_open` is resent at every sync, and selling is blocked meanwhile (§4). A retry with the same answer does not reopen an exception a manager already handled. |
 
 Every record has:
 
 | Field | |
 |---|---|
-| `kind` | `shift_open`, `sale`, `cash_movement`, `refund`, `shift_close` |
+| `kind` | `shift_open`, `sale`, `cash_movement`, `refund`, `shift_close`, `sign_in` |
 | `id` | UUIDv7 made by the device. It is the record's id on the server **and** its idempotency key: the same id with the same JSON is a `duplicate`; the same id with different content is refused `IDEMPOTENCY_CONFLICT`. Send the record byte-for-byte the same when retrying. |
 | `occurredAt` | Device time when it happened; the server stores it as the business time (shift, sale, refund times, report days) and its own `receivedAt`. More than 10 minutes after the upload, or before its shift opened → accepted with `clockSkew: true` and shown to managers. |
 | `membershipId` | Who did it (signed in with their PIN). Must be a member who may use the POS at this branch (`pos.access`), or one deactivated after `occurredAt`; otherwise `MEMBER_NOT_ALLOWED`. |
@@ -235,10 +247,13 @@ Every record has:
   "countedCashMinor": "5000", "note": null }
 ```
 
-The id becomes the shift id. The count is compared with the drawer balance the server holds; a
-difference is booked to the shift (as in the browser). Result: `{ shiftId, expectedCashMinor }`.
-Refusals: `REGISTER_BUSY` (another shift of this register is open on the server),
-`SHIFT_ALREADY_OPEN` (this person has an open shift elsewhere).
+The id becomes the shift id. **Primary devices only** (`NOT_PRIMARY_DEVICE` otherwise). The count
+is compared with the drawer balance the server holds; a difference is booked to the shift (as in
+the browser). Result: `{ shiftId, expectedCashMinor }`. Refusals: `REGISTER_BUSY` (another shift
+of this register is open on the server: a manager closes it in `/manager`), `MEMBER_NOT_ALLOWED`.
+An open shift the same person left elsewhere (another register, the browser) does **not** refuse
+the device shift: it is accepted and the stale shift is listed for the managers
+(`shift_left_open`, with a close action).
 
 ### `sale`
 
@@ -275,8 +290,12 @@ Refusals: `REGISTER_BUSY` (another shift of this register is open on the server)
   for the branch's print agents. Otherwise the server never prints device sales.
 - Stock: the server books the sale through the stock ledger (recipes expanded). Stock **may go
   negative**; each item driven below zero becomes a manager exception. Never refused for stock.
+- `shiftId`: the branch shift (the primary's own, or the one a secondary learned from the
+  snapshot). A sale for a branch shift that is **already closed** (the device was offline while the
+  primary counted) is still accepted, booked to that shift and flagged `late` for the managers;
+  its cash reaches the drawer under the shift open on it now.
 - Result: `{ saleId, receiptNumber }`. Refusals: `SHIFT_REQUIRED` (shift not uploaded),
-  `SHIFT_CLOSED`, `WRONG_DEVICE` (shift of another register), `RECEIPT_NUMBER_INVALID` (not
+  `WRONG_DEVICE` (a browser shift, or a shift of another branch), `RECEIPT_NUMBER_INVALID` (not
   `{branch}-{register}-NNNNNN` of this device), `RECEIPT_NUMBER_TAKEN`, `UNKNOWN_VARIANT`,
   `TOTALS_MISMATCH`, `PAYMENT_TOTAL_MISMATCH`, `PAYMENT_METHOD_UNAVAILABLE` (unknown method),
   `PAYMENT_NOT_VERIFIED` (gateway method), `REASON_REQUIRED`, `INVALID_QUANTITY`.
@@ -288,9 +307,10 @@ Refusals: `REGISTER_BUSY` (another shift of this register is open on the server)
   "direction": "cash_out", "amountMinor": "1500", "note": "Ice" }
 ```
 
-A pay-in (`cash_in`) or pay-out (`cash_out`) of the drawer, reason "other". A pay-out above the
-company limits (`cashOutOtherLimitMinor`, `cashOutOtherShiftLimitMinor`) is accepted and flagged for
-review (`result.limitExceeded`). Result: `{ movementId, limitExceeded }`.
+A pay-in (`cash_in`) or pay-out (`cash_out`) of the drawer, reason "other", **primary devices
+only** (`NOT_PRIMARY_DEVICE`). A pay-out above the company limits (`cashOutOtherLimitMinor`,
+`cashOutOtherShiftLimitMinor`) is accepted and flagged for review (`result.limitExceeded`).
+Result: `{ movementId, limitExceeded }`.
 
 ### `refund`
 
@@ -319,18 +339,34 @@ review (`result.limitExceeded`). Result: `{ movementId, limitExceeded }`.
 
 ```json
 { "kind": "shift_close", "id": "…", "occurredAt": "…", "membershipId": "…", "shiftId": "…",
-  "countedCashMinor": "12500", "note": null }
+  "countedCashMinor": "12500", "note": null, "forced": false }
 ```
 
-Closes the shift against the drawer balance on the server (all of the shift's records must be
-uploaded first). Result: `{ shiftId, expectedCashMinor, discrepancyMinor, outcome }` (`outcome`:
-`balanced`, `over`, `short`).
+Closes the branch shift against the drawer balance on the server (all of the shift's records
+must be uploaded first; the primary only, except a shift the device opened itself). The person
+closing is the one who opened it (`FORBIDDEN` otherwise), **or** a manager present at the till
+with `forced: true`: `membershipId` is the manager, who needs `registers.manage` at the branch
+(`FORBIDDEN`), and `note` is required (`REASON_REQUIRED`); the close is recorded as forced,
+audited `shift.force_closed` and listed for review (`forced_close`). Result:
+`{ shiftId, expectedCashMinor, discrepancyMinor, outcome }` (`outcome`: `balanced`, `over`,
+`short`). `SHIFT_CLOSED` when a manager already closed it online (the next snapshot's
+`branchShift` says so; the device closes its copy).
+
+### `sign_in`
+
+```json
+{ "kind": "sign_in", "id": "…", "occurredAt": "…", "membershipId": "…" }
+```
+
+A cashier signed in on the device with their PIN. Sets the employee's "last sign-in" (never
+backwards) and writes the device audit log (`pos.device_sign_in`, `details.deviceId`).
+Result: `{ membershipId }`. Refusal: `MEMBER_NOT_ALLOWED`.
 
 ### Refusal codes (all kinds)
 
 `VALIDATION_FAILED` (shape; `message` names the field), `IDEMPOTENCY_CONFLICT`, `WRONG_DEVICE`,
-`MEMBER_NOT_ALLOWED`, `SHIFT_REQUIRED`, `SHIFT_CLOSED`, `INTERNAL_ERROR` (retry later), plus the
-per-kind codes above.
+`MEMBER_NOT_ALLOWED`, `SHIFT_REQUIRED`, `SHIFT_CLOSED`, `NOT_PRIMARY_DEVICE`, `FORBIDDEN`,
+`INTERNAL_ERROR` (retry later), plus the per-kind codes above.
 
 ## 6. Example session
 
@@ -363,16 +399,23 @@ Arabat app" anywhere else. Its engine is `packages/device-core` (local SQLite sc
 store, outbox, sync, PIN check, selling / refund / shift logic on `pos-core`); a fake bridge for
 tests and development lives in `@arabat/device-core/testing` (sql.js in memory). The device
 database keeps every record and the exact JSON it uploaded (`outbox`), retries byte-identical
-bodies, and resends a refusal only for `SHIFT_REQUIRED`, `NOT_FOUND`, `INTERNAL_ERROR` and
-`SERVICE_UNAVAILABLE`; other refusals stay in the "not accepted" list.
+bodies, and resends a refusal only for `SHIFT_REQUIRED`, `NOT_FOUND`, `INTERNAL_ERROR`,
+`SERVICE_UNAVAILABLE` and every refused `shift_open`; other refusals stay in the "not accepted"
+list. While the open shift's `shift_open` is refused, the till blocks selling with the code and
+guidance (`SHIFT_NOT_ACCEPTED`) and offers "discard this shift" when it has no records.
 
 ## 8. What managers see
 
 - `/manager/devices`: devices (role, online / last seen / last sync), the owner's role / branch
   change, removal, the browser POS's PIN sign-in link per branch, the offline limit
-  (`offlineLimitHours`, 1–720, default 72), and the exceptions after uploads (negative stock,
-  device clock, not accepted) with "mark handled" and a note. The dashboard checklist counts open
-  exceptions.
+  (`offlineLimitHours`, 1–720, default 72), and the exceptions after uploads with "mark handled"
+  and a note: `negative_stock`, `clock_skew`, `refused`, `shift_left_open` (the opener of a device
+  shift still had a shift open elsewhere; "close the shift" force-closes it uncounted and marks
+  the exception handled), `late` (a record booked to a branch shift after its closing count) and
+  `forced_close` (a manager closed an absent cashier's shift at the till). The dashboard checklist
+  counts open exceptions.
+- Device sign-ins show as the employee's "last sign-in" on `/manager/employees` and in the audit
+  log (`pos.device_sign_in`).
 - PINs: the manager never sets or sees one (§2a). `/manager/employees/:membershipId` shows when the
   PIN was set and offers only "Clear PIN" (`DELETE /manager/employees/:id/pin`, `employees.manage`)
   for someone who left or whose PIN may have leaked; the person then chooses a new PIN from the till.

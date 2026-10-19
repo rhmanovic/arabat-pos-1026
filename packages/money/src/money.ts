@@ -7,6 +7,7 @@ import {
   parseDecimal,
   pow10,
 } from './decimal.js';
+import { normalizeAmountInput } from './input.js';
 
 export class MoneyError extends Error {
   constructor(message: string) {
@@ -65,6 +66,11 @@ export class Money {
       );
     }
     return new Money(units * pow10(exponent - scale), currency);
+  }
+
+  /** `parse` of what a person typed (Arabic digits, comma, currency word): see `normalizeAmountInput`. */
+  static parseInput(raw: string, currency: CurrencyCode): Money {
+    return Money.parse(normalizeAmountInput(raw), currency);
   }
 
   static fromJSON(json: MoneyJson): Money {

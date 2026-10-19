@@ -237,3 +237,51 @@ cross-branch and financial reports; month close; the online store.
   1-minute sync. Summary in `docs/DECISIONS.md` (ADR-0112 amendment 2); contract in
   `docs/DEVICE_API.md` §2 and §2b.
 
+## Amendment 3 — The branch shift, lock vs. sign-out, refused-shift cascade (owner, 2026-10-19)
+
+Fixes from the first real test of the device app (Plan A). Migration 0064; contract in
+`docs/DEVICE_API.md` §3–§5 and §8; code in `apps/api/src/modules/devices/device-ingest.service.ts`,
+`packages/device-core/src/shifts.ts`, `apps/device-web/src/screens/Lock.tsx`.
+
+1. **One shift per branch, held by the primary device.** The cash drawer is on the primary, so the
+   primary alone opens and closes the branch shift (counted cash) and records pay-ins / pay-outs.
+   Secondary devices learn the branch shift from every snapshot (`branchShift`, `primaryDevice`),
+   sell into it while it is open (their sales carry the branch shift and their own cashier) and
+   show "no open shift at the branch" otherwise; their cash payments settle into the primary's
+   drawer, so the server's expected cash of the branch shift covers every device. A secondary's
+   `shift_open` or `cash_movement` is refused `NOT_PRIMARY_DEVICE`. The owner cannot demote a
+   primary whose shift is open (`409 REGISTER_BUSY`).
+2. **Shifts are per register (`shifts.device_id`).** A device `shift_open` is never refused because
+   the same person left a shift open elsewhere (another register, the browser): the device shift is
+   accepted and the stale one becomes a `shift_left_open` exception with a "close the shift" action
+   for the managers (an uncounted forced close, then the exception is marked handled). The
+   one-open-shift-per-member index now binds browser shifts only; browser sessions never see or use
+   device shifts. The `SHIFT_ALREADY_OPEN` refusal is gone from the device contract.
+3. **Late records.** A record uploaded for a branch shift that is already closed (a secondary that
+   was offline while the primary counted the drawer) is accepted, booked to that shift and flagged
+   `late`; its cash reaches the drawer under the shift open on it at that moment (ledger guard of
+   migration 0033), or under none.
+4. **Refused shift on the device.** When the server refuses a `shift_open`, the device blocks
+   selling, cash and refunds at once (`SHIFT_NOT_ACCEPTED`), shows the code with guidance, retries
+   the record byte-identically at every sync (a refused `shift_open` is always resent) and lets the
+   cashier discard a refused shift that has no records. Records refused `SHIFT_REQUIRED` behind it
+   are retried unchanged and accepted once the shift is; a retry with the same answer never
+   reopens an exception the manager already handled.
+5. **Lock vs. sign-out.** "Lock" (button or 5 minutes idle) keeps the cashier and asks for their
+   PIN only; "other person" is gone while the primary holds an open shift, and only the shift's
+   opener can sign in on it. "Log out" is possible only when the device holds no open shift (the
+   primary: branch shift closed); otherwise it is disabled with the reason. A secondary logs out
+   freely. A manager with `registers.manage` present at the till can close an absent cashier's
+   shift with their own PIN, a counted drawer and a required note (`shift_close` with
+   `forced: true`): recorded as a forced close, audited `shift.force_closed`, listed as a
+   `forced_close` exception, and the cashier is logged out.
+6. **Device sign-ins** are uploaded (`sign_in` record: membership, device, time): they set the
+   employee's last sign-in (`users.last_login_at`, never backwards) and are audited
+   `pos.device_sign_in` with the device id.
+7. **Amounts as typed.** Counted cash, tenders, pay-outs, prices, discounts and quantities accept
+   Arabic-Indic digits, a comma or the Arabic decimal separator, spaces and a currency word
+   (`Money.parseInput`, `normalizeAmountInput` in `@arabat/money`). The "Invalid amount" seen on
+   `0.250` could not be reproduced with ASCII input; the normaliser covers the known locale forms.
+   Digits typed into a field next to a PIN pad no longer feed the pad.
+8. Not changed: the browser POS (online only, its own shifts), restaurant, custody moves.
+

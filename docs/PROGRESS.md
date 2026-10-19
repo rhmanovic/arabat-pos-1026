@@ -1078,6 +1078,39 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
   lock screen still unlocks with the password; the native app must open the print-agent socket on
   the primary (handover §7).
 
+### 2026-10-19 — Fixes from the first real test of the device app (ADR-0112 amendment 3)
+
+- Migration 0064: `shifts.device_id`, the one-open-per-member rule narrowed to browser shifts,
+  `device_records.kind` `sign_in`, exception kinds `shift_left_open` / `late` / `forced_close`.
+- Server: a device `shift_open` is never refused for a stale shift elsewhere (the stale one is a
+  `shift_left_open` exception; `/manager/devices` closes it); the branch shift is held by the
+  primary (`NOT_PRIMARY_DEVICE` for a secondary's `shift_open` / `cash_movement`); secondaries'
+  records attach to the primary's shift and their cash to its drawer; records for a closed branch
+  shift are accepted and flagged `late` (drawer entry under the shift open now); `shift_close`
+  `forced` by a manager with `registers.manage` and a note; `sign_in` records set
+  `users.last_login_at` and audit `pos.device_sign_in`; the snapshot carries `branchShift` and
+  `primaryDevice`; demoting a primary with an open shift is refused; a retried refusal with the
+  same answer keeps the manager's "handled" mark.
+- Device engine: local shift `origin` / `closed_by`, the branch shift materialised for secondaries
+  and closed from the snapshot, `SHIFT_NOT_ACCEPTED` blocks sales / cash / refunds behind a refused
+  shift, refused `shift_open` always retried, `discardRefusedShift`, `recordSignIn`, forced close,
+  `Money.parseInput` / `normalizeAmountInput` (Arabic digits, comma, currency word).
+- Till: lock keeps the cashier (PIN only, idle too); log out only without an open shift on the
+  device; only the opener signs in while the primary's shift is open; "Manager: close the shift"
+  with PIN + count + note; "no open shift at the branch" on secondaries (no cash / close
+  controls); blocked-shift banner with guidance and "discard"; lenient amount inputs; digits typed
+  in a field next to a PIN pad no longer feed the pad.
+- Manager: new exception kinds with "close the shift" (force-close uncounted + mark handled).
+- Tests: 3 new integration cases (stale shift accepted + closed from the list; secondary sells
+  into the branch shift, late upload, demotion refused; sign-ins and forced close), 3 device-core
+  cases (cascade + discard, secondary, server-closed shift / sign-in / forced close), 3 till cases
+  (cascade banner, secondary, manager escape hatch) + lock / log out / Arabic count in the main
+  flow, 1 manager case, money normaliser.
+- Not done: the till records only sign-ins (not locks, sign-outs or failed PINs) in the audit log;
+  the browser POS keeps its own shifts and password unlock; the cause of the original
+  "Invalid amount" on `0.250` could not be reproduced with ASCII input (the normaliser covers the
+  locale forms seen on Mac keyboards).
+
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.

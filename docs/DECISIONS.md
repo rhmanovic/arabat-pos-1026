@@ -1568,6 +1568,28 @@ ADR; supersede it.
     secondary still takes cash; it only never opens the drawer), and the browser POS's unlock of a
     locked session still asks for the password.
 
+- **Amendment 3 — The branch shift, lock vs. sign-out, refused-shift cascade (owner, 2026-10-19).**
+  Fixes from the first real test (full text in the ADR file, migration 0064):
+  - One shift per branch, held by the **primary** device: it alone opens / closes the shift and
+    moves drawer cash; secondary devices learn it from the snapshot (`branchShift`,
+    `primaryDevice`), sell into it (cash into the primary's drawer) and cannot sell without it
+    (`NOT_PRIMARY_DEVICE` for their `shift_open` / `cash_movement`). Demoting a primary with an
+    open shift is refused.
+  - Shifts are per register (`shifts.device_id`): a device shift is never refused because the
+    person has a stale open shift elsewhere; the stale shift becomes a `shift_left_open` exception
+    with a close action in `/manager/devices`. The one-open-per-member rule binds browser shifts
+    only. Records for an already closed branch shift are accepted and flagged `late`.
+  - The device blocks selling as soon as the server refuses its `shift_open`
+    (`SHIFT_NOT_ACCEPTED`, guidance per code, "discard" when empty), retries the record unchanged
+    at every sync, and re-uploads the `SHIFT_REQUIRED` records behind it unchanged once it is
+    accepted.
+  - Lock keeps the cashier (PIN only, also on idle); log out only without an open shift on the
+    device; a manager (`registers.manage`) closes an absent cashier's shift at the till with PIN,
+    count and note (`shift_close.forced`, `forced_close` exception, `shift.force_closed`).
+  - `sign_in` records set the employee's last sign-in and are audited `pos.device_sign_in`.
+  - Amounts as typed (Arabic digits, comma, currency word) are accepted on the till
+    (`Money.parseInput`).
+
 ## ADR-0113 — Public landing page at `/`
 - **Date:** 2026-10-18 · **Status:** Accepted (owner, 2026-10-18: "a simple React landing page
   we can develop later", deployed to Google Cloud production).

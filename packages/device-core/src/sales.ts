@@ -36,7 +36,7 @@ import {
   type StaffMember,
   holds,
 } from './snapshot.js';
-import type { LocalShift } from './shifts.js';
+import { type LocalShift, assertShiftUsable, getShift } from './shifts.js';
 
 export type SaleRecord = Extract<DeviceRecord, { kind: 'sale' }>;
 
@@ -297,6 +297,10 @@ export function commitSale(
   now: Date = new Date(),
 ): Promise<CommittedSale> {
   const run = async (): Promise<CommittedSale> => {
+    // Nothing piles up behind a shift the server refused (amendment 3).
+    const shift = await getShift(db, prepared.record.shiftId);
+    if (!shift) throw new PosRuleError(409, 'SHIFT_REQUIRED', 'Open a shift first.');
+    await assertShiftUsable(db, shift);
     const current = Number((await getMeta(db, META.receiptCounter)) ?? '0');
     const next = current + 1;
     const receiptNumber = formatDeviceReceiptNumber(ctx.branch.code, ctx.register.code, next);

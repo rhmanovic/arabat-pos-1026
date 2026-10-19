@@ -104,7 +104,7 @@ export const deviceRecords = pgTable(
     merchantId: merchantId(),
     deviceId: uuid().notNull(),
     branchId: uuid().notNull(),
-    /** shift_open | sale | cash_movement | refund | shift_close */
+    /** shift_open | sale | cash_movement | refund | shift_close | sign_in */
     kind: text().notNull(),
     /** accepted | refused */
     status: text().notNull(),
@@ -128,7 +128,7 @@ export const deviceRecords = pgTable(
     }),
     check(
       'device_records_kind_valid',
-      sql`${t.kind} in ('shift_open', 'sale', 'cash_movement', 'refund', 'shift_close')`,
+      sql`${t.kind} in ('shift_open', 'sale', 'cash_movement', 'refund', 'shift_close', 'sign_in')`,
     ),
     check('device_records_status_valid', sql`${t.status} in ('accepted', 'refused')`),
     index('device_records_refused_idx')
@@ -149,7 +149,7 @@ export const deviceExceptions = pgTable(
     branchId: uuid().notNull(),
     deviceId: uuid().notNull(),
     recordId: uuid().notNull(),
-    /** negative_stock | clock_skew | refused */
+    /** negative_stock | clock_skew | refused | shift_left_open | late | forced_close */
     kind: text().notNull(),
     details: jsonb().notNull().default({}),
     createdAt: createdAt(),
@@ -164,7 +164,7 @@ export const deviceExceptions = pgTable(
     }),
     check(
       'device_exceptions_kind_valid',
-      sql`${t.kind} in ('negative_stock', 'clock_skew', 'refused')`,
+      sql`${t.kind} in ('negative_stock', 'clock_skew', 'refused', 'shift_left_open', 'late', 'forced_close')`,
     ),
     check(
       'device_exceptions_resolved_consistent',

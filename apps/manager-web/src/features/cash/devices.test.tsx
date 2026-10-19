@@ -144,6 +144,104 @@ describe('devices', () => {
     );
   });
 
+  it('closes a shift left open elsewhere from the exceptions list (amendment 3)', async () => {
+    const stale = '0190a000-0000-7000-8000-000000000e11';
+    const exception = {
+      id: '0190a000-0000-7000-8000-000000000e10',
+      kind: 'shift_left_open',
+      branchId: device.branchId,
+      deviceId: DEVICE,
+      deviceName: 'Till Mac',
+      registerCode: 'R2',
+      recordId: '0190a000-0000-7000-8000-000000000e12',
+      recordKind: 'shift_open',
+      details: {
+        staleShiftId: stale,
+        staleRegisterCode: 'R1',
+        staleOnDevice: false,
+        staleOpenedAt: '2026-10-17T07:00:00.000Z',
+        staleShiftClosed: false,
+        fullName: 'Sara',
+      },
+      occurredAt: '2026-10-17T08:00:00.000Z',
+      receivedAt: '2026-10-17T09:00:00.000Z',
+      createdAt: '2026-10-17T09:00:00.000Z',
+      resolvedAt: null,
+      resolvedByName: null,
+      resolutionNote: null,
+      payload: null,
+    };
+    const shift = {
+      id: stale,
+      branchId: device.branchId,
+      registerId: '0190a000-0000-7000-8000-000000000e13',
+      registerName: { nameEn: 'R1', nameAr: null },
+      membershipId: '0190a000-0000-7000-8000-000000000e14',
+      employeeName: 'Sara',
+      status: 'open',
+      openedAt: '2026-10-17T07:00:00.000Z',
+      openingNote: null,
+      closedAt: null,
+      closedByName: null,
+      closeType: null,
+      summary: {
+        openingFloat: { amount: '0.000', currency: 'KWD' },
+        cashIn: { amount: '0.000', currency: 'KWD' },
+        cashOut: { amount: '0.000', currency: 'KWD' },
+        cashSales: { amount: '0.000', currency: 'KWD' },
+        cashRefunds: { amount: '0.000', currency: 'KWD' },
+        expectedCash: { amount: '0.000', currency: 'KWD' },
+        openingExpected: null,
+        openingDiscrepancy: null,
+        openingIsInitial: true,
+      },
+      countedCash: null,
+      discrepancy: null,
+      outcome: null,
+      countedBreakdown: null,
+      closingNote: null,
+      movements: [],
+      version: 3,
+    };
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'registers.manage']),
+      routes: {
+        'GET /manager/devices': () => ({ status: 200, body: { devices: [device] } }),
+        'GET /manager/device-exceptions': () => ({
+          status: 200,
+          body: { exceptions: [exception] },
+        }),
+        [`GET /manager/shifts/${stale}`]: () => ({ status: 200, body: shift }),
+        [`POST /manager/shifts/${stale}/force-close`]: () => ({
+          status: 201,
+          body: { ...shift, status: 'closed', closeType: 'forced_uncounted' },
+        }),
+        [`POST /manager/device-exceptions/${exception.id}/resolve`]: () => ({
+          status: 204,
+          body: null,
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/devices', fetch });
+    const row = await screen.findByRole('row', { name: /Shift left open/ });
+    expect(within(row).getByText(/Sara opened the branch shift/)).toBeInTheDocument();
+    await userEvent.click(within(row).getByRole('button', { name: 'Close the shift' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText('What was done'), 'Left open yesterday');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close the shift' }));
+    await vi.waitFor(() =>
+      expect(
+        fetch.calls.find((c) => c.path === `/manager/shifts/${stale}/force-close`)?.body,
+      ).toEqual({ note: 'Left open yesterday', version: 3 }),
+    );
+    await vi.waitFor(() =>
+      expect(
+        fetch.calls.find((c) => c.path === `/manager/device-exceptions/${exception.id}/resolve`)
+          ?.body,
+      ).toEqual({ note: 'Left open yesterday' }),
+    );
+  });
+
   it('lets the owner make a device additional; others see no change button (Plan A)', async () => {
     const fetch = fakeApiFetch({
       session: { ...makeSession('manager', ['manager.access', 'registers.manage']), isOwner: true },

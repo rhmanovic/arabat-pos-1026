@@ -48,6 +48,11 @@ export const deviceAr: typeof deviceEn = {
       'إذا كان بريدك مسجّلًا فسيصلك رابط لاختيار رقمك السري. الرابط صالح ساعة واحدة، والكاشير يستلم الرقم الجديد في المزامنة الجاية.',
     resetPinWait: 'أُرسل رابط قبل دقائق. راجع بريدك أو حاول لاحقًا.',
     resetPinOffline: 'إرسال الرابط يحتاج اتصالًا بالإنترنت.',
+    lockedTitle: 'مقفل',
+    logOut: 'تسجيل الخروج',
+    logOutBlocked: 'وردية الفرع مفتوحة على هذا الجهاز: أغلقها قبل تسجيل الخروج.',
+    heldShift: 'وردية {{name}} مفتوحة منذ {{since}}: هو وحده من يستطيع الدخول.',
+    managerClose: 'مدير: إغلاق الوردية',
   },
   status: {
     synced: 'متزامن',
@@ -72,6 +77,7 @@ export const deviceAr: typeof deviceEn = {
     updateReady: 'نسخة جديدة جاهزة.',
     updateApply: 'حدّث الآن',
     lockNow: 'قفل',
+    branchShiftOf: 'وردية الفرع لـ {{name}}',
   },
   shift: {
     openTitle: 'فتح الوردية',
@@ -99,6 +105,29 @@ export const deviceAr: typeof deviceEn = {
     closed: 'أُغلقت الوردية. الفرق {{amount}}.',
     print: 'اطبع الملخص',
     anotherPerson: 'وردية {{name}} مفتوحة على هذا الجهاز. هو وحده من يبيع أو يغلقها.',
+    branchShiftBy: 'وردية الفرع لـ {{name}} منذ {{since}} (على الجهاز الرئيسي)',
+    noBranchShiftTitle: 'لا توجد وردية مفتوحة في الفرع',
+    noBranchShiftBody:
+      'هذا الجهاز يبيع ضمن وردية الفرع التي تُفتح على الجهاز الرئيسي «{{primary}}». افتحها هناك ثم زامن هنا.',
+    noPrimary: 'لا يوجد جهاز رئيسي لهذا الفرع بعد. يحدده المالك من الإدارة ← الأجهزة.',
+    lastBranchShift: 'آخر وردية: {{name}}، أُغلقت {{at}}.',
+    refusedTitle: 'البيع متوقف: رفض الخادم هذه الوردية ({{code}}).',
+    refusedRetry: 'تُعاد المحاولة في كل مزامنة ({{attempts}} حتى الآن)؛ البيع متوقف حتى تُقبل.',
+    refusedFix: {
+      REGISTER_BUSY:
+        'ما زالت وردية لهذا الصندوق مفتوحة على الخادم. يغلقها مدير من الإدارة ← النقد ← الورديات، ثم تُقبل هذه.',
+      NOT_PRIMARY_DEVICE:
+        'لم يعد هذا الجهاز هو الرئيسي في الفرع. تجاهل هذه الوردية؛ الوردية تُفتح على الجهاز الرئيسي.',
+      MEMBER_NOT_ALLOWED:
+        'من فتحها لا يملك صلاحية الكاشير في هذا الفرع. تجاهل هذه الوردية وافتحها بحساب مخوّل.',
+      WRONG_DEVICE: 'هذه الوردية تخص جهازًا آخر. تجاهلها.',
+      other: 'عالج السبب مع مدير، أو تجاهل هذه الوردية إن لم يُبع فيها شيء.',
+    },
+    discard: 'تجاهل هذه الوردية',
+    forceCloseTitle: 'إغلاق الوردية بصفة مدير',
+    forceCloseBody:
+      'مدير يملك صلاحية إغلاق الورديات يعدّ الدرج ويكتب السبب ويدخل رقمه السري. يُسجَّل خروج الكاشير ويُدرج الإغلاق للمراجعة.',
+    forceCloseNote: 'السبب (مطلوب)',
   },
   sale: {
     search: 'ابحث أو امسح الباركود',
@@ -181,6 +210,14 @@ export const deviceAr: typeof deviceEn = {
       price_adjustment: 'تعديل سعر',
       other: 'أخرى',
     },
+    record: {
+      shift_open: 'فتح وردية',
+      shift_close: 'إغلاق وردية',
+      sale: 'بيع',
+      cash_movement: 'حركة نقد',
+      refund: 'مرتجع',
+      sign_in: 'تسجيل دخول',
+    },
     approvalReasons: {
       over_limit: 'فوق الحد',
       outside_window: 'خارج مدة الإرجاع',
@@ -191,6 +228,10 @@ export const deviceAr: typeof deviceEn = {
     FORBIDDEN: 'غير مسموح لك بهذا.',
     SHIFT_REQUIRED: 'افتح وردية أولًا.',
     REGISTER_BUSY: 'وردية مفتوحة بالفعل على هذا الجهاز.',
+    NOT_PRIMARY_DEVICE: 'هذا يُجرى على الجهاز الرئيسي فقط؛ هذا الجهاز يبيع ضمن ورديته.',
+    SHIFT_NOT_ACCEPTED: 'رفض الخادم هذه الوردية؛ البيع متوقف حتى تُقبل.',
+    SHIFT_CLOSED: 'هذه الوردية مغلقة.',
+    INVALID_STATE: 'لا يمكن إجراء هذا الآن.',
     INVALID_PRICE: 'مبلغ غير صحيح.',
     INVALID_QUANTITY: 'كمية غير صحيحة.',
     INSUFFICIENT_CASH: 'لا يوجد نقد كافٍ في الدرج.',

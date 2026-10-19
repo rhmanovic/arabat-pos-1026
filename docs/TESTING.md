@@ -66,6 +66,17 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-19 (device app fixes, ADR-0112 amendment 3, cloud sandbox run)
+
+`pnpm verify` green (325 unit/web tests: + money input normaliser, 3 device-core cases incl. the
+refused-shift cascade and the secondary's branch shift, 3 till cases incl. the manager escape
+hatch, 1 manager case for "close the stale shift"); `pnpm test:integration` 293 passed (+3
+device ingest cases: stale shift accepted and closed from the list, secondary into the branch
+shift with a late upload, sign-ins and forced close); `pnpm test:e2e` 40 passed (device spec
+extended with lock / log out / sign-in; `checkout.spec.ts` flaked once under the parallel run and
+passed alone). The reset script `reset-merchant-data` was exercised on an E2E company locally
+(dry run, then apply) before production.
+
 ### Results 2026-10-15 (Google Cloud preparation, ADR-0105, local run)
 
 Local PostgreSQL 18 recreated with `app_owner` **without BYPASSRLS** (all 49 migrations from

@@ -9,7 +9,7 @@ import {
   refundableSale,
 } from '@arabat/device-core';
 import { formatDateTime } from '@arabat/i18n';
-import { formatQuantity } from '@arabat/money';
+import { formatQuantity, normalizeAmountInput } from '@arabat/money';
 import { Alert, Button, Checkbox, Dialog, Field, Input, Select, useToast } from '@arabat/ui';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -55,7 +55,7 @@ export function RefundsScreen({ onBack }: { onBack: () => void }) {
         .filter(([, q]) => q.trim() && q.trim() !== '0')
         .map(([pos, q]) => ({
           position: Number(pos),
-          quantity: q.trim(),
+          quantity: normalizeAmountInput(q),
           ...(restock[Number(pos)] === undefined ? {} : { restock: restock[Number(pos)] }),
         })),
     [quantities, restock],

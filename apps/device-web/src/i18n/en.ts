@@ -47,6 +47,11 @@ export const deviceEn = {
     resetPinWait:
       'A link was already sent a few minutes ago. Check your e-mail or try again later.',
     resetPinOffline: 'Sending the link needs internet.',
+    lockedTitle: 'Locked',
+    logOut: 'Log out',
+    logOutBlocked: 'The branch shift is open on this till: close it before logging out.',
+    heldShift: 'Shift of {{name}} open since {{since}}: only they can sign in.',
+    managerClose: 'Manager: close the shift',
   },
   status: {
     synced: 'Synced',
@@ -71,6 +76,7 @@ export const deviceEn = {
     updateReady: 'A new version is ready.',
     updateApply: 'Update now',
     lockNow: 'Lock',
+    branchShiftOf: 'Branch shift of {{name}}',
   },
   shift: {
     openTitle: 'Open the shift',
@@ -98,6 +104,30 @@ export const deviceEn = {
     closed: 'Shift closed. Difference {{amount}}.',
     print: 'Print summary',
     anotherPerson: 'A shift of {{name}} is open on this device. Only they can sell or close it.',
+    branchShiftBy: 'Branch shift of {{name}} since {{since}} (on the primary till)',
+    noBranchShiftTitle: 'No open shift at the branch',
+    noBranchShiftBody:
+      'This till sells into the branch shift, which is opened on the primary till “{{primary}}”. Open it there, then sync here.',
+    noPrimary: 'This branch has no primary till yet. The owner sets one in Manager → Devices.',
+    lastBranchShift: 'Last shift: {{name}}, closed {{at}}.',
+    refusedTitle: 'Selling is blocked: the server refused this shift ({{code}}).',
+    refusedRetry:
+      'It is retried at every sync ({{attempts}} so far); sales are blocked until it is accepted.',
+    refusedFix: {
+      REGISTER_BUSY:
+        'A shift of this register is still open on the server. A manager closes it in Manager → Cash → Shifts, then this one is accepted.',
+      NOT_PRIMARY_DEVICE:
+        'This till is no longer the branch’s primary. Discard this shift; the shift is opened on the primary till.',
+      MEMBER_NOT_ALLOWED:
+        'The person who opened it may not use the POS at this branch. Discard this shift and open it as someone who may.',
+      WRONG_DEVICE: 'This shift belongs to another device. Discard it.',
+      other: 'Fix the cause with a manager, or discard this shift if nothing was sold in it.',
+    },
+    discard: 'Discard this shift',
+    forceCloseTitle: 'Close the shift as a manager',
+    forceCloseBody:
+      'A manager with the right to close shifts counts the drawer, writes why, and enters their own PIN. The cashier is logged out and the close is listed for review.',
+    forceCloseNote: 'Why (required)',
   },
   sale: {
     search: 'Search or scan a barcode',
@@ -180,6 +210,14 @@ export const deviceEn = {
       price_adjustment: 'Price adjustment',
       other: 'Other',
     },
+    record: {
+      shift_open: 'Shift opening',
+      shift_close: 'Shift closing',
+      sale: 'Sale',
+      cash_movement: 'Cash movement',
+      refund: 'Refund',
+      sign_in: 'Sign-in',
+    },
     approvalReasons: {
       over_limit: 'above the limit',
       outside_window: 'outside the refund window',
@@ -190,6 +228,10 @@ export const deviceEn = {
     FORBIDDEN: 'You are not allowed to do this.',
     SHIFT_REQUIRED: 'Open a shift first.',
     REGISTER_BUSY: 'A shift is already open on this device.',
+    NOT_PRIMARY_DEVICE: 'Only the primary till does this; this till sells into its shift.',
+    SHIFT_NOT_ACCEPTED: 'The server refused this shift; selling is blocked until it is accepted.',
+    SHIFT_CLOSED: 'This shift is closed.',
+    INVALID_STATE: 'This cannot be done now.',
     INVALID_PRICE: 'Invalid amount.',
     INVALID_QUANTITY: 'Invalid quantity.',
     INSUFFICIENT_CASH: 'The drawer does not hold enough cash.',

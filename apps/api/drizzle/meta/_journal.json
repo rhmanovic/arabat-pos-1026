@@ -449,6 +449,13 @@
       "when": 1792432187329,
       "tag": "0063_device_roles",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1792436605609,
+      "tag": "0064_branch_shifts",
+      "breakpoints": true
     }
   ]
 }

@@ -106,7 +106,19 @@ engineering defaults pending owner confirmation.
 - **BR-072** Registers belong to a branch; open to everyone allowed to work shifts at the
   branch, or restricted to listed employees. Every branch starts with one register.
 - **BR-073** Shift policy: one employee per register at a time; one open shift per
-  employee; only the owner of the shift uses it; managers may force-close with a note.
+  employee in the browser; only the owner of the shift uses it; managers may force-close with
+  a note. Device shifts are per register (BR-203): a person may hold one besides a browser shift.
+- **BR-203** Branch shift on devices (owner, 2026-10-19, ADR-0112 amendment 3): one shift per
+  branch, opened and closed with a cash count on the branch's **primary** device, which alone
+  records pay-ins / pay-outs; secondary devices sell into it (their cash counts toward the
+  primary's drawer) and cannot sell while none is open. A device shift is never refused because
+  the person left a shift open elsewhere; that shift is listed for the managers to close. Records
+  that reach the server after the branch shift closed are booked to it and flagged "late".
+- **BR-204** On a device, "lock" keeps the signed-in cashier (PIN only; also after 5 minutes
+  idle); while the primary holds an open shift only its opener signs in; "log out" needs the
+  device's shift closed. A manager with `registers.manage` present at the till may close an
+  absent cashier's shift with their own PIN, a count and a note; it is recorded as a forced
+  close and listed for review. Device sign-ins count as the employee's last sign-in.
 - **BR-074** Closing a shift records expected cash, counted cash (optionally by notes and
   coins) and the difference (counted − expected). Differences within the register's
   tolerance are "balanced"; otherwise "over" or "short". Closed shifts never change.

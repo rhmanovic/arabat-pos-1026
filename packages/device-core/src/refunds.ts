@@ -14,7 +14,7 @@ import type { BridgeDb } from './bridge.js';
 import { newId, nowIso } from './ids.js';
 import { enqueueStatement } from './outbox.js';
 import { type LocalSale, getSale } from './sales.js';
-import { type LocalShift, shiftSummary } from './shifts.js';
+import { type LocalShift, assertShiftUsable, shiftSummary } from './shifts.js';
 import { type LocalContext, type StaffMember, holds } from './snapshot.js';
 
 export type RefundRecord = Extract<DeviceRecord, { kind: 'refund' }>;
@@ -239,6 +239,7 @@ export async function commitRefund(
   input: { refundable: RefundableSale; shift: LocalShift; approver: StaffMember | null },
   now: Date = new Date(),
 ): Promise<{ refundId: string; refundNumber: string; totalMinor: bigint }> {
+  await assertShiftUsable(db, input.shift);
   if (prepared.cashPaybackMinor > 0n) {
     const summary = await shiftSummary(db, input.shift);
     if (prepared.cashPaybackMinor > summary.expectedCashMinor)

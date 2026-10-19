@@ -136,6 +136,7 @@ test('register → full sync → PIN → open shift → sale → upload accepted
       window.ArabatApp!.db.query(`SELECT kind, status, code, message FROM outbox ORDER BY seq`),
     );
   await expect.poll(outbox, { timeout: 15_000 }).toEqual([
+    { kind: 'sign_in', status: 'accepted', code: null, message: null },
     { kind: 'shift_open', status: 'accepted', code: null, message: null },
     { kind: 'sale', status: 'accepted', code: null, message: null },
   ]);
@@ -159,7 +160,14 @@ test('register → full sync → PIN → open shift → sale → upload accepted
     });
     return (res.body as { results: { status: string }[] }).results.map((r) => r.status);
   });
-  expect(retry).toEqual(['duplicate', 'duplicate']);
+  expect(retry).toEqual(['duplicate', 'duplicate', 'duplicate']);
+
+  // Lock keeps the owner: their PIN only, and no log-out while the branch shift is open.
+  await page.getByTestId('lock').click();
+  await expect(page.getByRole('heading', { name: 'Device Owner' })).toBeVisible();
+  await expect(page.getByTestId('log-out')).toBeDisabled();
+  await typePin(page);
+  await expect(page.getByTestId('catalog')).toBeVisible();
 
   // Refund of this device's sale (the owner needs no second person), then the close.
   await page.getByRole('button', { name: 'Refunds' }).click();
@@ -178,9 +186,22 @@ test('register → full sync → PIN → open shift → sale → upload accepted
     .poll(async () => (await outbox()).map((r) => `${r['kind']}:${r['status']}`), {
       timeout: 15_000,
     })
-    .toEqual(['shift_open:accepted', 'sale:accepted', 'refund:accepted', 'shift_close:accepted']);
+    .toEqual([
+      'sign_in:accepted',
+      'shift_open:accepted',
+      'sale:accepted',
+      'refund:accepted',
+      'shift_close:accepted',
+    ]);
   const shifts = (await (await page.request.get('/api/v1/manager/shifts?pageSize=5')).json()) as {
     shifts: { status: string }[];
   };
   expect(shifts.shifts[0]).toMatchObject({ status: 'closed' });
+  // The device sign-in is the owner's last sign-in; with the shift closed, log-out works.
+  const employees = (await (await page.request.get('/api/v1/manager/employees')).json()) as {
+    employees: { isOwner: boolean; lastLoginAt: string | null }[];
+  };
+  expect(employees.employees.find((e) => e.isOwner)?.lastLoginAt).not.toBeNull();
+  await page.getByTestId('log-out').click();
+  await expect(page.getByRole('heading', { name: 'Who is at the till?' })).toBeVisible();
 });

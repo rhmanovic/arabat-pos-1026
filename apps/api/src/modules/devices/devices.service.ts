@@ -379,6 +379,19 @@ export class DevicesService {
         if (!moving && role === d.role) return;
         let registerId = d.register_id;
         let registerCode = d.register_code;
+        // The branch shift lives on the primary's register (amendment 3): a primary with an
+        // open shift keeps its role until the shift is closed.
+        if (d.role === 'primary' && role !== 'primary') {
+          const { rows: open } = await tx.execute(
+            sql`select 1 from shifts where register_id = ${d.register_id} and status = 'open'`,
+          );
+          if (open.length > 0)
+            throw new AppError(
+              409,
+              'REGISTER_BUSY',
+              'Close the branch shift before changing the primary.',
+            );
+        }
         if (moving) {
           const [target] = (
             await tx.execute(

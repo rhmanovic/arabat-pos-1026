@@ -138,6 +138,7 @@ export class DeviceSyncService {
           heldSaleExpiryHours: Number(s?.['held_sale_expiry_hours'] ?? 24),
         },
         counters: { lastReceiptNumber: str(counter?.['receipt_number']) },
+        ...(await this.branchShift(tx, device)),
         paymentMethods: await this.paymentMethods(tx),
         staff: await this.staff(tx, device, Boolean(merchant!['owner_frozen_at'])),
         categories: await this.categories(tx),
@@ -146,6 +147,48 @@ export class DeviceSyncService {
       await tx.execute(sql`update pos_devices set last_sync_at = now() where id = ${device.id}`);
       return snapshot;
     });
+  }
+
+  /**
+   * The branch shift (ADR-0112 amendment 3): the latest shift on the register of the branch's
+   * primary device, open or closed, and the primary itself. Secondary devices sell into the
+   * open one; the primary learns here when a manager closed its shift online.
+   */
+  private async branchShift(
+    tx: Transaction,
+    device: Device,
+  ): Promise<Pick<DeviceSnapshot, 'branchShift' | 'primaryDevice'>> {
+    const [primary] = (
+      await tx.execute(sql`
+        select id, name, register_id from pos_devices
+        where branch_id = ${device.branchId} and role = 'primary' and revoked_at is null`)
+    ).rows as Row[];
+    if (!primary) return { branchShift: null, primaryDevice: null };
+    const [s] = (
+      await tx.execute(sql`
+        select s.id, s.status, s.register_id, g.code, s.opened_at, s.closed_at, s.membership_id, s.user_id, u.full_name
+        from shifts s join registers g on g.id = s.register_id join users u on u.id = s.user_id
+        where s.register_id = ${String(primary['register_id'])}
+        order by (s.status = 'open') desc, s.opened_at desc limit 1`)
+    ).rows as Row[];
+    return {
+      primaryDevice: { id: String(primary['id']), name: String(primary['name']) },
+      branchShift: s
+        ? {
+            id: String(s['id']),
+            status: s['status'] as 'open' | 'closed',
+            registerId: String(s['register_id']),
+            registerCode: String(s['code']),
+            openedAt: iso(s['opened_at']),
+            closedAt: s['closed_at'] ? iso(s['closed_at']) : null,
+            openedBy: {
+              membershipId: String(s['membership_id']),
+              userId: String(s['user_id']),
+              fullName: String(s['full_name']),
+            },
+          }
+        : null,
+    };
   }
 
   /** The latest change to anything that prices a sale (products, variants, categories). */

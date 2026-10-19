@@ -133,6 +133,12 @@ export const shifts = pgTable(
     countedBreakdown: jsonb(),
     closingNote: text(),
     version: integer().notNull().default(1),
+    /**
+     * The local-first device that opened the shift (ADR-0112 amendment 3), null for browser
+     * shifts. Device shifts are per register: a person may hold one of them besides a browser
+     * shift, so the one-open-per-member rule binds browser shifts only.
+     */
+    deviceId: uuid(),
   },
   (t) => [
     unique('shifts_merchant_id_id_key').on(t.merchantId, t.id),
@@ -153,7 +159,7 @@ export const shifts = pgTable(
       .where(sql`${t.status} = 'open'`),
     uniqueIndex('shifts_one_open_per_member')
       .on(t.membershipId)
-      .where(sql`${t.status} = 'open'`),
+      .where(sql`${t.status} = 'open' and ${t.deviceId} is null`),
     check('shifts_status_valid', sql`${t.status} in ('open', 'closed')`),
     check('shifts_opening_float_valid', sql`${t.openingFloatMinor} >= 0`),
     check(

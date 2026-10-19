@@ -25,7 +25,7 @@ import {
 import { Money } from '@arabat/money';
 import { can, permissionBranchScope } from '@arabat/permissions';
 import { Injectable } from '@nestjs/common';
-import { type SQL, and, asc, eq, sql } from 'drizzle-orm';
+import { type SQL, and, asc, eq, isNull, sql } from 'drizzle-orm';
 import type { z } from 'zod';
 import { DatabaseService, type Transaction } from '../../database/database.service.js';
 import { assertCan } from '../../kernel/access/assert.js';
@@ -385,10 +385,17 @@ export class ShiftsService {
   async currentShift(actor: MerchantActor): Promise<PosShift | null> {
     const branchId = this.posBranch(actor);
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      // Device shifts are the device's own (ADR-0112 amendment 3), never a browser session's.
       const [row] = await tx
         .select()
         .from(shifts)
-        .where(and(eq(shifts.membershipId, actor.membershipId), eq(shifts.status, 'open')));
+        .where(
+          and(
+            eq(shifts.membershipId, actor.membershipId),
+            eq(shifts.status, 'open'),
+            isNull(shifts.deviceId),
+          ),
+        );
       if (!row) return null;
       // An open shift at another branch is not usable from this POS session.
       if (row.branchId !== branchId) return null;
@@ -590,7 +597,13 @@ export class ShiftsService {
     const [row] = await tx
       .select()
       .from(shifts)
-      .where(and(eq(shifts.membershipId, actor.membershipId), eq(shifts.status, 'open')))
+      .where(
+        and(
+          eq(shifts.membershipId, actor.membershipId),
+          eq(shifts.status, 'open'),
+          isNull(shifts.deviceId),
+        ),
+      )
       .for('update');
     if (!row || row.branchId !== actor.boundBranchId)
       throw new AppError(409, 'SHIFT_REQUIRED', 'Open a shift first.');

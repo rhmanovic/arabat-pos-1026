@@ -1,9 +1,11 @@
-import { type StaffMember, attemptPin } from '@arabat/device-core';
+import { type LocalShift, type StaffMember, attemptPin, holds } from '@arabat/device-core';
+import { formatDateTime } from '@arabat/i18n';
 import { Alert, Button, cn } from '@arabat/ui';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDevice } from '../app/device.js';
 import { verifyPin } from '../app/pin.js';
+import { ForceCloseDialog } from './Shift.js';
 import { LanguageButton, SyncLine } from './StatusBar.js';
 
 /** A numeric keypad for PINs (6–12 digits); the digits are never shown. */
@@ -33,6 +35,9 @@ export function PinPad({
   };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Digits typed into a field next to the pad (a counted amount, a note) are not the PIN.
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       if (/^\d$/.test(e.key)) press(e.key);
       else if (e.key === 'Backspace') setPin((p) => p.slice(0, -1));
       else if (e.key === 'Enter' && pin.length >= 6) {
@@ -110,17 +115,44 @@ export function PinPad({
   );
 }
 
-/** Cashier picker and PIN pad: the till is locked until someone signs in locally (ADR-0112 §3). */
+/**
+ * Cashier picker and PIN pad: the till is locked until someone signs in locally (ADR-0112 §3).
+ * Amendment 3: a lock (button or idle) keeps the cashier and asks for their PIN only; while the
+ * primary holds an open branch shift, only the person who opened it can sign in, and a manager
+ * present at the till can close that shift for an absent cashier with their own PIN.
+ */
 export function LockScreen() {
   const { t, i18n } = useTranslation();
-  const { bridge, staff, ctx, signIn, sync, canSell, setRegistered, offline } = useDevice();
+  const {
+    bridge,
+    staff,
+    ctx,
+    signIn,
+    unlock,
+    logOut,
+    cashier,
+    locked,
+    canLogOut,
+    shift,
+    role,
+    sync,
+    canSell,
+    setRegistered,
+    offline,
+  } = useDevice();
   const [picked, setPicked] = useState<StaffMember | null>(null);
-  // The chosen person as the latest sync knows them (a PIN set meanwhile must count).
-  const who = picked ? (staff.find((s) => s.membershipId === picked.membershipId) ?? picked) : null;
-  const setWho = setPicked;
+  // The shift being force-closed, kept until the dialog is dismissed (the close removes `shift`).
+  const [closing, setClosing] = useState<LocalShift | null>(null);
+  // Locked: the same cashier only. Otherwise the chosen person as the latest sync knows them.
+  const chosen = locked && cashier ? cashier : picked;
+  const who = chosen ? (staff.find((s) => s.membershipId === chosen.membershipId) ?? chosen) : null;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const offlineHours = offline.hoursSinceSync === null ? null : Math.floor(offline.hoursSinceSync);
+  // The primary's open branch shift binds the till to its opener.
+  const held = role === 'primary' && shift && shift.origin === 'local' ? shift : null;
+  const holder = held ? staff.find((s) => s.membershipId === held.membershipId) : null;
+  const managers = staff.filter((s) => holds(s, 'registers.manage') && s.pinHash);
 
   const [notice, setNotice] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -149,7 +181,9 @@ export function LockScreen() {
     const outcome = await attemptPin(bridge.db, who, pin, verifyPin);
     setBusy(false);
     if (outcome.ok) {
-      signIn(who);
+      if (locked && cashier && who.membershipId === cashier.membershipId) unlock();
+      else signIn(who);
+      setPicked(null);
       return;
     }
     if (outcome.reason === 'no_pin') setError(t('lock.noPin'));
@@ -165,6 +199,13 @@ export function LockScreen() {
       );
     else setError(t('lock.wrong', { count: outcome.failuresLeft }));
   };
+
+  const escapeHatch =
+    held && managers.length > 0 ? (
+      <Button variant="ghost" onClick={() => setClosing(held)} data-testid="force-close">
+        {t('lock.managerClose')}
+      </Button>
+    ) : null;
 
   return (
     <main className="flex min-h-dvh flex-col bg-console text-console-fg">
@@ -196,25 +237,38 @@ export function LockScreen() {
               })}
             </Alert>
           ) : null}
-          <h1 className="mt-2 text-xl font-semibold">{who ? who.fullName : t('lock.title')}</h1>
+          <h1 className="mt-2 text-xl font-semibold">
+            {who ? who.fullName : locked ? t('lock.lockedTitle') : t('lock.title')}
+          </h1>
+          {held && holder ? (
+            <p className="mt-1 text-sm text-fg-muted" data-testid="held-shift">
+              {t('lock.heldShift', {
+                name: holder.fullName,
+                since: formatDateTime(held.openedAt, i18n.language),
+              })}
+            </p>
+          ) : null}
           {!who ? (
             staff.length === 0 ? (
               <p className="mt-3 text-sm text-fg-muted">{t('lock.noStaff')}</p>
             ) : (
-              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {staff.map((s) => (
-                  <Button
-                    key={s.membershipId}
-                    variant="secondary"
-                    size="touch"
-                    disabled={!canSell}
-                    onClick={() => setWho(s)}
-                    className="h-auto min-h-touch py-3"
-                  >
-                    <bdi>{s.fullName}</bdi>
-                  </Button>
-                ))}
-              </div>
+              <>
+                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {staff.map((s) => (
+                    <Button
+                      key={s.membershipId}
+                      variant="secondary"
+                      size="touch"
+                      disabled={!canSell || (held !== null && s.membershipId !== held.membershipId)}
+                      onClick={() => setPicked(s)}
+                      className="h-auto min-h-touch py-3"
+                    >
+                      <bdi>{s.fullName}</bdi>
+                    </Button>
+                  ))}
+                </div>
+                {escapeHatch ? <div className="mt-3 flex justify-center">{escapeHatch}</div> : null}
+              </>
             )
           ) : (
             <div className="mt-4 flex flex-col items-center gap-3">
@@ -225,16 +279,28 @@ export function LockScreen() {
               ) : null}
               <PinPad onSubmit={(pin) => void submit(pin)} busy={busy} error={error} />
               <div className="flex flex-wrap justify-center gap-2">
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setWho(null);
-                    setError(null);
-                    setNotice(null);
-                  }}
-                >
-                  {t('lock.back')}
-                </Button>
+                {locked ? (
+                  <Button
+                    variant="ghost"
+                    onClick={logOut}
+                    disabled={!canLogOut}
+                    title={canLogOut ? undefined : t('lock.logOutBlocked')}
+                    data-testid="log-out"
+                  >
+                    {t('lock.logOut')}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setPicked(null);
+                      setError(null);
+                      setNotice(null);
+                    }}
+                  >
+                    {t('lock.back')}
+                  </Button>
+                )}
                 <Button
                   variant="secondary"
                   loading={sending}
@@ -243,11 +309,28 @@ export function LockScreen() {
                 >
                   {t('lock.resetPin')}
                 </Button>
+                {escapeHatch}
               </div>
+              {locked && !canLogOut ? (
+                <p className="text-xs text-fg-muted">{t('lock.logOutBlocked')}</p>
+              ) : null}
             </div>
           )}
         </div>
       </div>
+      {closing ? (
+        <ForceCloseDialog
+          open
+          shift={closing}
+          managers={managers}
+          onClose={() => setClosing(null)}
+          onDone={() => {
+            setClosing(null);
+            setPicked(null);
+            logOut();
+          }}
+        />
+      ) : null}
     </main>
   );
 }

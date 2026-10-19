@@ -108,6 +108,23 @@ export async function registerAccount(
   return { ...row, branchId: row.branchId! };
 }
 
+/**
+ * The shift a drawer entry must carry (ledger guard, migration 0033): the register's open
+ * shift, or null when none is open. Device records uploaded after their branch shift closed
+ * ("late", ADR-0112 amendment 3) reach the drawer under the shift open at that moment.
+ */
+export async function drawerEntryShift(
+  tx: Transaction,
+  registerId: string,
+): Promise<string | null> {
+  const [open] = (
+    await tx.execute(
+      sql`select id from shifts where register_id = ${registerId} and status = 'open'`,
+    )
+  ).rows as { id: string }[];
+  return open?.id ?? null;
+}
+
 /** The treasury of a branch. */
 export async function branchTreasury(tx: Transaction, branchId: string): Promise<CustodyAccount> {
   const [row] = await tx

@@ -981,13 +981,34 @@ export const managerAr: ManagerResources = {
     clockAhead: 'الجهاز أرّخ هذا السجل {{at}}، بعد وصوله للخادم ({{received}}). راجع ساعة الجهاز.',
     clockOutsideShift: 'الجهاز أرّخ هذا السجل {{at}}، قبل فتح ورديته. راجع ساعة الجهاز.',
     refusedText: 'لم يُقبل {{record}}: {{message}} ({{code}}). أدخله من النظام إذا حدث فعلًا.',
-    kind: { negative_stock: 'مخزون بالسالب', clock_skew: 'ساعة الجهاز', refused: 'غير مقبول' },
+    kind: {
+      negative_stock: 'مخزون بالسالب',
+      clock_skew: 'ساعة الجهاز',
+      refused: 'غير مقبول',
+      shift_left_open: 'وردية متروكة مفتوحة',
+      late: 'بعد الإغلاق',
+      forced_close: 'أغلقها مدير',
+    },
+    staleShiftText:
+      'فتح {{name}} وردية الفرع على الجهاز بينما ورديته على الصندوق {{register}} ({{where}}، منذ {{since}}) ما زالت مفتوحة. أغلق تلك الوردية.',
+    staleShiftClosedText:
+      'فتح {{name}} وردية الفرع على الجهاز بينما ورديته على الصندوق {{register}} ({{where}}، منذ {{since}}) كانت مفتوحة. أُغلقت الآن.',
+    onDevice: 'على جهاز',
+    inBrowser: 'في المتصفح',
+    closeStaleShift: 'إغلاق الوردية',
+    closeStaleHint:
+      'تُغلق الوردية بلا عدّ؛ يُعدّ الدرج عند فتحها التالي ويُنسب الفرق إلى هذه الوردية.',
+    staleShiftClosed: 'أُغلقت الوردية وسُجّلت المعالجة',
+    lateText:
+      'وصل {{record}} إلى الخادم بعد إغلاق وردية الفرع ({{closedAt}}): قُيّد في تلك الوردية، لكن عدّ الإغلاق لم يشمله.',
+    forcedCloseText: 'أغلق مدير وردية {{name}} على الجهاز ({{note}}). الفرق {{discrepancy}}.',
     record: {
       sale: 'البيع',
       refund: 'المرتجع',
       cash_movement: 'الحركة النقدية',
       shift_open: 'فتح الوردية',
       shift_close: 'إغلاق الوردية',
+      sign_in: 'تسجيل الدخول',
     },
   },
   printers: {

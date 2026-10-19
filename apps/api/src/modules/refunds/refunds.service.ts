@@ -36,7 +36,12 @@ import { addDays, merchantTimezone, todayIn, withinLocalDays } from '../../kerne
 import { AuditService } from '../audit/audit.service.js';
 import { isUniqueViolation } from '../auth/registration.service.js';
 import { StockLedgerService } from '../inventory/stock-ledger.service.js';
-import { type Entry, postEntries, registerAccount } from '../payments/cash-ledger.js';
+import {
+  type Entry,
+  drawerEntryShift,
+  postEntries,
+  registerAccount,
+} from '../payments/cash-ledger.js';
 import { parseAmount } from '../payments/payments.service.js';
 import { ShiftsService } from '../registers/shifts.service.js';
 import { shifts } from '../registers/registers.schema.js';
@@ -365,7 +370,7 @@ export class RefundsService {
     ).rows as { full_name: string }[];
     const [own] = (
       await tx.execute(
-        sql`select id from shifts where membership_id = ${actor.membershipId} and status = 'open'`,
+        sql`select id from shifts where membership_id = ${actor.membershipId} and status = 'open' and device_id is null`,
       )
     ).rows as { id: string }[];
     const refundedMinor = state.lines.reduce((t, l) => t + l.refundedMinor, 0n);
@@ -1078,7 +1083,16 @@ export class RefundsService {
           .from(shifts)
           .where(eq(shifts.id, refund!.shiftId));
         const drawer = await registerAccount(tx, payer!.registerId);
-        await postEntries(tx, [{ ...entry, accountId: drawer.id, shiftId: refund!.shiftId }]);
+        // The drawer entry carries the register's open shift (ledger guard). A device refund
+        // uploaded after the branch shift closed (ADR-0112 amendment 3, "late") leaves the
+        // drawer under whatever shift is open on it now, or none.
+        await postEntries(tx, [
+          {
+            ...entry,
+            accountId: drawer.id,
+            shiftId: await drawerEntryShift(tx, payer!.registerId),
+          },
+        ]);
       } else {
         // Non-cash money always leaves a settlement account (BR-181, FND-506).
         const [orig] = p.originalPaymentId

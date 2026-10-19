@@ -1,4 +1,5 @@
 import {
+  DEVICE_RECORD_KINDS,
   type DeviceRecord,
   type DeviceRecordResult,
   type DeviceUploadResult,
@@ -29,6 +30,7 @@ import { consumptionCosts, stockConsumption } from '../inventory/consumption.js'
 import { StockLedgerService } from '../inventory/stock-ledger.service.js';
 import {
   accountBalance,
+  drawerEntryShift,
   lockAccounts,
   postEntries,
   registerAccount,
@@ -48,6 +50,7 @@ type RefundRecord = Extract<DeviceRecord, { kind: 'refund' }>;
 type CashRecord = Extract<DeviceRecord, { kind: 'cash_movement' }>;
 type OpenRecord = Extract<DeviceRecord, { kind: 'shift_open' }>;
 type CloseRecord = Extract<DeviceRecord, { kind: 'shift_close' }>;
+type SignInRecord = Extract<DeviceRecord, { kind: 'sign_in' }>;
 
 interface ShiftRow {
   id: string;
@@ -56,6 +59,14 @@ interface ShiftRow {
   membershipId: string;
   status: string;
   openedAt: Date;
+  closedAt: Date | null;
+  /** The device that opened it (null: a browser shift, which no device may use). */
+  deviceId: string | null;
+}
+
+interface Flag {
+  kind: string;
+  details: Record<string, unknown>;
 }
 
 /** What an accepted record produced and what managers must look at. */
@@ -63,6 +74,14 @@ interface Outcome {
   result: Record<string, unknown>;
   outsideShift: boolean;
   negativeStock: { variantId: string; balance: string }[];
+  /** Further exceptions for the managers (shift left open, late record, forced close). */
+  flags?: Flag[];
+}
+
+/** The branch shift a record goes into; `late` when it was already closed (amendment 3). */
+interface ShiftUse {
+  shift: ShiftRow;
+  late: boolean;
 }
 
 /**
@@ -180,6 +199,7 @@ export class DeviceIngestService {
             kind: 'negative_stock',
             details: { ...n, saleId: record.id, receiptNumber: done.result['receiptNumber'] },
           });
+        exceptions.push(...(done.flags ?? []));
         for (const e of exceptions)
           await tx.execute(sql`
             insert into device_exceptions (id, merchant_id, branch_id, device_id, record_id, kind, details)
@@ -230,13 +250,20 @@ export class DeviceIngestService {
           occurred_at = excluded.occurred_at, received_at = now(), clock_skew = excluded.clock_skew,
           attempts = device_records.attempts + 1
         where device_records.status = 'refused'`);
+      // A record the device retries with the same answer keeps the manager's "handled" mark; a
+      // new reason reopens the exception.
       await tx.execute(sql`
         insert into device_exceptions (id, merchant_id, branch_id, device_id, record_id, kind, details)
         values (${newId()}, ${device.merchantId}, ${device.branchId}, ${device.id}, ${raw.id}, 'refused',
                 ${JSON.stringify({ recordKind: kind, code, message })}::jsonb)
         on conflict (merchant_id, record_id) where kind = 'refused'
-        do update set details = excluded.details, resolved_at = null, resolved_by_user_id = null,
-          resolution_note = null`);
+        do update set details = excluded.details,
+          resolved_at = case when device_exceptions.details->>'code' = excluded.details->>'code'
+                             then device_exceptions.resolved_at end,
+          resolved_by_user_id = case when device_exceptions.details->>'code' = excluded.details->>'code'
+                             then device_exceptions.resolved_by_user_id end,
+          resolution_note = case when device_exceptions.details->>'code' = excluded.details->>'code'
+                             then device_exceptions.resolution_note end`);
     });
   }
 
@@ -259,6 +286,8 @@ export class DeviceIngestService {
         return this.refund(tx, device, record, occurredAt, hash, ip);
       case 'shift_close':
         return this.closeShift(tx, device, record, occurredAt, ip);
+      case 'sign_in':
+        return this.signIn(tx, device, record, occurredAt, ip);
     }
   }
 
@@ -303,16 +332,25 @@ export class DeviceIngestService {
     };
   }
 
-  /** A shift of this device's register, locked. */
+  /**
+   * A device shift of this branch, locked (ADR-0112 amendment 3): the branch shift is held by
+   * the primary device's register and every device of the branch sells into it, so a shift is
+   * usable by this device when it was opened by a device of the same branch. Browser shifts and
+   * other branches' shifts are `WRONG_DEVICE`.
+   */
   private async deviceShift(tx: Transaction, device: Device, shiftId: string): Promise<ShiftRow> {
     const [row] = (
       await tx.execute(sql`
-        select id, register_id, branch_id, membership_id, status, opened_at from shifts
-        where id = ${shiftId} for update`)
+        select id, register_id, branch_id, membership_id, status, opened_at, closed_at, device_id
+        from shifts where id = ${shiftId} for update`)
     ).rows as Row[];
     if (!row) throw new AppError(409, 'SHIFT_REQUIRED', 'The shift has not been uploaded.');
-    if (row['register_id'] !== device.registerId)
-      throw new AppError(409, 'WRONG_DEVICE', 'This shift belongs to another register.');
+    if (row['device_id'] === null || row['branch_id'] !== device.branchId)
+      throw new AppError(
+        409,
+        'WRONG_DEVICE',
+        'This shift was not opened on a device of this branch.',
+      );
     return {
       id: String(row['id']),
       registerId: String(row['register_id']),
@@ -320,16 +358,78 @@ export class DeviceIngestService {
       membershipId: String(row['membership_id']),
       status: String(row['status']),
       openedAt: new Date(row['opened_at'] as string),
+      closedAt: row['closed_at'] ? new Date(row['closed_at'] as string) : null,
+      deviceId: String(row['device_id']),
     };
   }
 
-  private openShiftOf(tx: Transaction, device: Device, shiftId: string) {
-    return this.deviceShift(tx, device, shiftId).then((s) => {
-      if (s.status !== 'open') throw new AppError(409, 'SHIFT_CLOSED', 'This shift is closed.');
-      return s;
-    });
+  /**
+   * The shift a sale, cash movement or refund goes into. A closed branch shift still takes the
+   * record (a secondary device may upload after the primary counted the drawer): it is
+   * accepted and flagged `late` for the managers instead of being lost.
+   */
+  private async shiftFor(tx: Transaction, device: Device, shiftId: string): Promise<ShiftUse> {
+    const shift = await this.deviceShift(tx, device, shiftId);
+    return { shift, late: shift.status !== 'open' };
   }
 
+  private lateFlag(use: ShiftUse, recordKind: string): Flag[] {
+    return use.late
+      ? [
+          {
+            kind: 'late',
+            details: {
+              shiftId: use.shift.id,
+              closedAt: use.shift.closedAt?.toISOString() ?? null,
+              recordKind,
+            },
+          },
+        ]
+      : [];
+  }
+
+  private assertPrimary(device: Device, what: string) {
+    if (device.role !== 'primary')
+      throw new AppError(
+        409,
+        'NOT_PRIMARY_DEVICE',
+        `Only the branch's primary device ${what}; this device sells into the branch shift.`,
+      );
+  }
+
+  /** A cashier signed in on the device: their last sign-in and the device audit log. */
+  private async signIn(
+    tx: Transaction,
+    device: Device,
+    r: SignInRecord,
+    occurredAt: Date,
+    ip: string,
+  ): Promise<Outcome> {
+    const actor = await this.actorFor(tx, device, r.membershipId, occurredAt);
+    await tx.execute(sql`
+      update users set last_login_at = greatest(coalesce(last_login_at, ${occurredAt.toISOString()}::timestamptz),
+                                                ${occurredAt.toISOString()}::timestamptz)
+      where id = ${actor.userId}`);
+    await this.record(
+      tx,
+      actor,
+      'pos.device_sign_in',
+      'membership',
+      actor.membershipId,
+      ip,
+      device,
+      {
+        occurredAt: occurredAt.toISOString(),
+      },
+    );
+    return { result: { membershipId: actor.membershipId }, outsideShift: false, negativeStock: [] };
+  }
+
+  /**
+   * The branch shift opens on the primary device (amendment 3). Shifts are per register: an
+   * open shift the same person left elsewhere (another register, the browser) does not refuse
+   * this one; it becomes a `shift_left_open` exception with a close action for the managers.
+   */
   private async openShift(
     tx: Transaction,
     device: Device,
@@ -337,10 +437,18 @@ export class DeviceIngestService {
     occurredAt: Date,
     ip: string,
   ): Promise<Outcome> {
+    this.assertPrimary(device, 'opens the branch shift');
     const actor = await this.actorFor(tx, device, r.membershipId, occurredAt);
     const countedMinor = BigInt(r.countedCashMinor);
     const drawer = await registerAccount(tx, device.registerId);
     await lockAccounts(tx, [drawer.id]);
+    const stale = (
+      await tx.execute(sql`
+        select s.id, s.register_id, g.code as register_code, s.branch_id, s.opened_at, s.device_id, u.full_name
+        from shifts s join registers g on g.id = s.register_id join users u on u.id = s.user_id
+        where s.membership_id = ${actor.membershipId} and s.status = 'open' and s.id <> ${r.id}
+        order by s.opened_at`)
+    ).rows as Row[];
     const [register] = (
       await tx.execute(sql`
         select needs_count, discrepancy_tolerance_minor::text as tolerance from registers
@@ -370,10 +478,10 @@ export class DeviceIngestService {
     await tx.execute(sql`
       insert into shifts (id, merchant_id, branch_id, register_id, membership_id, user_id, opening_float_minor,
                           opening_expected_minor, opening_discrepancy_minor, opening_is_initial,
-                          opening_follows_shift_id, opening_note, opened_at)
+                          opening_follows_shift_id, opening_note, opened_at, device_id)
       values (${r.id}, ${device.merchantId}, ${device.branchId}, ${device.registerId}, ${actor.membershipId},
               ${actor.userId}, ${countedMinor}, ${expectedMinor}, ${initial ? null : differenceMinor}, ${initial},
-              ${followsShiftId}, ${r.note}, ${occurredAt.toISOString()}::timestamptz)`);
+              ${followsShiftId}, ${r.note}, ${occurredAt.toISOString()}::timestamptz, ${device.id})`);
     await postEntries(tx, [
       {
         merchantId: device.merchantId,
@@ -395,14 +503,35 @@ export class DeviceIngestService {
       difference: kwd(differenceMinor),
       initialCount: initial,
       followsShiftId,
+      ...(stale.length ? { staleShiftIds: stale.map((s) => String(s['id'])) } : {}),
     });
     return {
       result: { shiftId: r.id, expectedCashMinor: String(expectedMinor) },
       outsideShift: false,
       negativeStock: [],
+      flags: stale.map((s) => ({
+        kind: 'shift_left_open',
+        details: {
+          staleShiftId: String(s['id']),
+          staleRegisterId: String(s['register_id']),
+          staleRegisterCode: String(s['register_code']),
+          staleBranchId: String(s['branch_id']),
+          staleOpenedAt: new Date(s['opened_at'] as string).toISOString(),
+          staleOnDevice: s['device_id'] !== null,
+          membershipId: actor.membershipId,
+          fullName: String(s['full_name']),
+          newShiftId: r.id,
+        },
+      })),
     };
   }
 
+  /**
+   * The primary closes the branch shift against the drawer balance. A manager present at the
+   * till may close an absent cashier's shift with their own PIN (`forced`, `registers.manage`,
+   * note required): recorded as a forced close and listed for review. A secondary device may
+   * still close a shift it opened itself before amendment 3.
+   */
   private async closeShift(
     tx: Transaction,
     device: Device,
@@ -411,15 +540,28 @@ export class DeviceIngestService {
     ip: string,
   ): Promise<Outcome> {
     const actor = await this.actorFor(tx, device, r.membershipId, occurredAt);
-    const shift = await this.openShiftOf(tx, device, r.shiftId);
+    const shift = await this.deviceShift(tx, device, r.shiftId);
+    if (shift.status !== 'open') throw new AppError(409, 'SHIFT_CLOSED', 'This shift is closed.');
+    if (shift.deviceId !== device.id) this.assertPrimary(device, 'closes the branch shift');
+    if (r.forced) {
+      if (!can(actor.access, 'registers.manage', device.branchId))
+        throw new AppError(403, 'FORBIDDEN', 'Closing another person’s shift needs a manager.');
+      if (!r.note) throw new AppError(400, 'REASON_REQUIRED', 'A forced close needs a note.');
+    } else if (shift.membershipId !== actor.membershipId) {
+      throw new AppError(
+        403,
+        'FORBIDDEN',
+        'Only the person who opened the shift closes it; a manager can force-close it.',
+      );
+    }
     const countedMinor = BigInt(r.countedCashMinor);
-    const drawer = await registerAccount(tx, device.registerId);
+    const drawer = await registerAccount(tx, shift.registerId);
     await lockAccounts(tx, [drawer.id]);
     const balanceMinor = await accountBalance(tx, drawer.id);
     const discrepancy = countedMinor - balanceMinor;
     const [register] = (
       await tx.execute(
-        sql`select discrepancy_tolerance_minor::text as tolerance from registers where id = ${device.registerId}`,
+        sql`select discrepancy_tolerance_minor::text as tolerance from registers where id = ${shift.registerId}`,
       )
     ).rows as Row[];
     await postEntries(tx, [
@@ -437,16 +579,35 @@ export class DeviceIngestService {
     ]);
     await tx.execute(sql`
       update shifts set status = 'closed', closed_at = ${occurredAt.toISOString()}::timestamptz,
-        closed_by_user_id = ${actor.userId}, close_type = 'normal', expected_cash_minor = ${balanceMinor},
+        closed_by_user_id = ${actor.userId}, close_type = ${r.forced ? 'forced' : 'normal'},
+        expected_cash_minor = ${balanceMinor},
         counted_cash_minor = ${countedMinor}, discrepancy_minor = ${discrepancy},
         discrepancy_tolerance_minor = ${String(register!['tolerance'])}::bigint, closing_note = ${r.note},
         version = version + 1
       where id = ${shift.id}`);
-    await this.record(tx, actor, 'shift.closed', 'shift', shift.id, ip, device, {
-      expected: kwd(balanceMinor),
-      counted: kwd(countedMinor),
-      discrepancy: kwd(discrepancy),
-    });
+    const absent = r.forced
+      ? ((
+          await tx.execute(sql`
+            select u.full_name from memberships m join users u on u.id = m.user_id where m.id = ${shift.membershipId}`)
+        ).rows[0] as Row | undefined)
+      : undefined;
+    await this.record(
+      tx,
+      actor,
+      r.forced ? 'shift.force_closed' : 'shift.closed',
+      'shift',
+      shift.id,
+      ip,
+      device,
+      {
+        expected: kwd(balanceMinor),
+        counted: kwd(countedMinor),
+        discrepancy: kwd(discrepancy),
+        ...(r.forced
+          ? { forcedAtDevice: true, absentMembershipId: shift.membershipId, note: r.note }
+          : {}),
+      },
+    );
     return {
       result: {
         shiftId: shift.id,
@@ -456,6 +617,22 @@ export class DeviceIngestService {
       },
       outsideShift: occurredAt < shift.openedAt,
       negativeStock: [],
+      flags: r.forced
+        ? [
+            {
+              kind: 'forced_close',
+              details: {
+                shiftId: shift.id,
+                absentMembershipId: shift.membershipId,
+                absentName: absent ? String(absent['full_name']) : null,
+                closedByMembershipId: actor.membershipId,
+                note: r.note,
+                counted: kwd(countedMinor),
+                discrepancy: kwd(discrepancy),
+              },
+            },
+          ]
+        : [],
     };
   }
 
@@ -469,12 +646,14 @@ export class DeviceIngestService {
     occurredAt: Date,
     ip: string,
   ): Promise<Outcome> {
+    this.assertPrimary(device, 'moves drawer cash');
     const actor = await this.actorFor(tx, device, r.membershipId, occurredAt);
-    const shift = await this.openShiftOf(tx, device, r.shiftId);
+    const use = await this.shiftFor(tx, device, r.shiftId);
+    const { shift } = use;
     const amountMinor = BigInt(r.amountMinor);
     if (amountMinor <= 0n)
       throw new AppError(400, 'INVALID_PRICE', 'Amount must be greater than zero.');
-    const drawer = await registerAccount(tx, device.registerId);
+    const drawer = await registerAccount(tx, shift.registerId);
     await lockAccounts(tx, [drawer.id]);
     // Flagged for the manager's review like a browser cash-out above the company limit.
     let limitExceeded = false;
@@ -496,7 +675,7 @@ export class DeviceIngestService {
     await tx.execute(sql`
       insert into cash_movements (id, merchant_id, shift_id, branch_id, register_id, kind, amount_minor, reason,
                                   note, idempotency_key, created_by_user_id, created_at, status, limit_exceeded)
-      values (${r.id}, ${device.merchantId}, ${shift.id}, ${device.branchId}, ${device.registerId}, ${r.direction},
+      values (${r.id}, ${device.merchantId}, ${shift.id}, ${device.branchId}, ${shift.registerId}, ${r.direction},
               ${amountMinor}, 'other', ${r.note}, ${r.id}, ${actor.userId}, ${occurredAt.toISOString()}::timestamptz,
               'posted', ${limitExceeded})`);
     await postEntries(tx, [
@@ -522,6 +701,7 @@ export class DeviceIngestService {
       result: { movementId: r.id, limitExceeded },
       outsideShift: occurredAt < shift.openedAt,
       negativeStock: [],
+      flags: this.lateFlag(use, 'cash_movement'),
     };
   }
 
@@ -541,7 +721,8 @@ export class DeviceIngestService {
     ip: string,
   ): Promise<Outcome> {
     const actor = await this.actorFor(tx, device, r.membershipId, occurredAt);
-    const shift = await this.openShiftOf(tx, device, r.shiftId);
+    const use = await this.shiftFor(tx, device, r.shiftId);
+    const { shift } = use;
     const [codes] = (
       await tx.execute(sql`
         select b.code as branch, g.code as register from branches b, registers g
@@ -840,10 +1021,13 @@ export class DeviceIngestService {
     });
     await tx.insert(saleLines).values(lineRows);
     if (r.payments.length > 0) {
-      // Cash settles into this register's drawer (ADR-0090); other methods into their account.
+      // Cash settles into the branch shift's drawer, the primary's (ADR-0090, amendment 3);
+      // other methods into their account.
       const drawer = r.payments.some((p) => methods.get(p.methodId)!['kind'] === 'cash')
-        ? (await registerAccount(tx, device.registerId)).id
+        ? (await registerAccount(tx, shift.registerId)).id
         : null;
+      // A late sale reaches the drawer under the shift open on it now (ledger guard).
+      const entryShiftId = drawer ? await drawerEntryShift(tx, shift.registerId) : null;
       const accountOf = (methodId: string) => {
         const m = methods.get(methodId)!;
         return m['kind'] === 'cash'
@@ -888,7 +1072,7 @@ export class DeviceIngestService {
             sourceId: p.id,
             description: r.receiptNumber.toUpperCase(),
             createdByUserId: actor.userId,
-            shiftId: cash ? shift.id : null,
+            shiftId: cash ? entryShiftId : null,
           };
           const fee = BigInt(p.feeMinor);
           return [
@@ -939,6 +1123,7 @@ export class DeviceIngestService {
       result: { saleId: r.id, receiptNumber: r.receiptNumber.toUpperCase() },
       outsideShift: occurredAt < shift.openedAt,
       negativeStock,
+      flags: this.lateFlag(use, 'sale'),
     };
   }
 
@@ -954,7 +1139,8 @@ export class DeviceIngestService {
     ip: string,
   ): Promise<Outcome> {
     const actor = await this.actorFor(tx, device, r.membershipId, occurredAt);
-    const shift = await this.openShiftOf(tx, device, r.shiftId);
+    const use = await this.shiftFor(tx, device, r.shiftId);
+    const { shift } = use;
     const [sale] = (await tx.execute(sql`select register_id from sales where id = ${r.saleId}`))
       .rows as Row[];
     if (!sale) throw new AppError(409, 'NOT_FOUND', 'The sale has not been uploaded.');
@@ -980,7 +1166,8 @@ export class DeviceIngestService {
     const done = await this.refunds.recordDeviceRefundInTx(
       tx,
       actor,
-      { id: shift.id, registerId: device.registerId },
+      // Cash paid back leaves the branch shift's drawer (the primary's).
+      { id: shift.id, registerId: shift.registerId },
       {
         refundId: r.id,
         saleId: r.saleId,
@@ -1010,6 +1197,7 @@ export class DeviceIngestService {
       },
       outsideShift: occurredAt < shift.openedAt,
       negativeStock: [],
+      flags: this.lateFlag(use, 'refund'),
     };
   }
 
@@ -1038,7 +1226,7 @@ export class DeviceIngestService {
 
 class ConcurrentUpload extends Error {}
 
-const KINDS = new Set(['shift_open', 'sale', 'cash_movement', 'refund', 'shift_close']);
+const KINDS = new Set<string>(DEVICE_RECORD_KINDS);
 
 function refusal(
   base: { id: string; kind: string },

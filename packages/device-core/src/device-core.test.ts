@@ -17,7 +17,17 @@ import {
   priceCartLines,
 } from './sales.js';
 import { META, getMeta, migrate } from './schema.js';
-import { closeShift, openShift, openShiftOf, recordCashMovement, shiftSummary } from './shifts.js';
+import {
+  closeShift,
+  discardRefusedShift,
+  getShift,
+  openShift,
+  openShiftOf,
+  recordCashMovement,
+  recordSignIn,
+  shiftAcceptance,
+  shiftSummary,
+} from './shifts.js';
 import { applySnapshot, loadContext, loadPaymentMethods, loadStaff } from './snapshot.js';
 import { SyncEngine } from './sync.js';
 import { type FakeBridge, createFakeBridge } from './testing/fake-bridge.js';
@@ -96,6 +106,8 @@ function snapshot(partial: Partial<DeviceSnapshot> = {}): DeviceSnapshot {
       heldSaleExpiryHours: 24,
     },
     counters: { lastReceiptNumber: null },
+    branchShift: null,
+    primaryDevice: { id: U(1), name: 'Till' },
     paymentMethods: [
       {
         id: CASH,
@@ -242,6 +254,7 @@ function fakeServer(snap: DeviceSnapshot) {
   let fail = false;
   let answer: 'revoked' | 'suspended' | null = null;
   let delta: DeviceSnapshot | null = null;
+  let refuseShiftOpen: string | null = null;
   const fetchImpl: typeof fetch = async (url, init) => {
     const u = String(url);
     const problem = (status: number, code: string) =>
@@ -292,6 +305,31 @@ function fakeServer(snap: DeviceSnapshot) {
                 message: 'changed',
                 clockSkew: false,
               };
+        // The cascade of the first real test: a refused shift, then SHIFT_REQUIRED for the rest.
+        if (r.kind === 'shift_open' && refuseShiftOpen)
+          return {
+            id: r.id,
+            kind: r.kind,
+            status: 'refused',
+            result: null,
+            code: refuseShiftOpen,
+            message: 'stale shift elsewhere',
+            clockSkew: false,
+          };
+        if (
+          'shiftId' in r &&
+          !accepted.has(String((r as { shiftId: string }).shiftId)) &&
+          refuseShiftOpen
+        )
+          return {
+            id: r.id,
+            kind: r.kind,
+            status: 'refused',
+            result: null,
+            code: 'SHIFT_REQUIRED',
+            message: 'The shift has not been uploaded.',
+            clockSkew: false,
+          };
         if (r.kind === 'cash_movement' && (r as { note?: string }).note === 'refuse-me')
           return {
             id: r.id,
@@ -326,6 +364,7 @@ function fakeServer(snap: DeviceSnapshot) {
     setFail: (v: boolean) => (fail = v),
     setAnswer: (v: typeof answer) => (answer = v),
     setDelta: (v: DeviceSnapshot | null) => (delta = v),
+    setRefuseShiftOpen: (code: string | null) => (refuseShiftOpen = code),
   };
 }
 
@@ -374,7 +413,7 @@ describe('schema and snapshot', () => {
   it('migrates once, stores a full snapshot and applies deltas per product', async () => {
     const d = await device();
     await migrate(d.db); // idempotent
-    expect(await getMeta(d.db, META.schemaVersion)).toBe('1');
+    expect(await getMeta(d.db, META.schemaVersion)).toBe('2');
     await applySnapshot(d.db, snapshot());
     const ctx = (await loadContext(d.db))!;
     expect(ctx.branch.code).toBe('MAIN');
@@ -501,7 +540,12 @@ describe('PIN', () => {
 describe('selling', () => {
   it('prices, decides rights and writes the sale with a gap-free receipt number and outbox record', async () => {
     const d = await ready();
-    const shift = await openShift(d.db, { cashier: d.sara, countedCashMinor: 5000n, note: null });
+    const shift = await openShift(d.db, {
+      cashier: d.sara,
+      countedCashMinor: 5000n,
+      note: null,
+      role: 'primary',
+    });
     expect((await openShiftOf(d.db))?.id).toBe(shift.id);
     const cart = teaCart('2', { type: 'percent', value: '10' });
     const priced = priceCartLines(cart, d.catalog);
@@ -594,7 +638,12 @@ describe('selling', () => {
 
   it('keeps the receipt series gap-free when a sale fails to write or two sales race', async () => {
     const d = await ready();
-    const shift = await openShift(d.db, { cashier: d.sara, countedCashMinor: 0n, note: null });
+    const shift = await openShift(d.db, {
+      cashier: d.sara,
+      countedCashMinor: 0n,
+      note: null,
+      role: 'primary',
+    });
     const prepared = prepareSale(
       {
         cart: teaCart('1'),
@@ -673,7 +722,12 @@ describe('selling', () => {
 
   it('refuses tenders and prices the server would refuse', () => {
     return ready().then(async (d) => {
-      const shift = await openShift(d.db, { cashier: d.sara, countedCashMinor: 0n, note: null });
+      const shift = await openShift(d.db, {
+        cashier: d.sara,
+        countedCashMinor: 0n,
+        note: null,
+        role: 'primary',
+      });
       const base = {
         cart: teaCart('1'),
         cashier: d.sara,
@@ -754,7 +808,12 @@ describe('selling', () => {
 describe('cash, refunds and shift close', () => {
   it('records pay-outs within the drawer and the limits, refunds own sales with a second person, and closes with a Z summary', async () => {
     const d = await ready();
-    const shift = await openShift(d.db, { cashier: d.sara, countedCashMinor: 1000n, note: null });
+    const shift = await openShift(d.db, {
+      cashier: d.sara,
+      countedCashMinor: 1000n,
+      note: null,
+      role: 'primary',
+    });
     const sale = await commitSale(
       d.db,
       prepareSale(
@@ -780,6 +839,7 @@ describe('cash, refunds and shift close', () => {
         amountMinor: 2000n,
         note: null,
         settings: d.ctx.settings,
+        role: 'primary',
       }),
     ).rejects.toThrow(/INSUFFICIENT|hold/);
     const move = await recordCashMovement(d.db, {
@@ -789,6 +849,7 @@ describe('cash, refunds and shift close', () => {
       amountMinor: 300n,
       note: 'Ice',
       settings: d.ctx.settings,
+      role: 'primary',
     });
     expect(move.limitExceeded).toBe(false);
     // A refund of Sara's own sale needs a second person who may approve.
@@ -822,11 +883,22 @@ describe('cash, refunds and shift close', () => {
     expect(() => prepareRefund({ ...base, refundable: empty, approver: d.omar }, d.ctx)).toThrow(
       /More than was sold/,
     );
+    // Only the opener closes normally; a manager can force-close with a note.
+    await expect(
+      closeShift(d.db, {
+        cashier: d.omar,
+        shift,
+        countedCashMinor: 700n,
+        note: null,
+        role: 'primary',
+      }),
+    ).rejects.toThrow(/opened the shift/);
     const closed = await closeShift(d.db, {
       cashier: d.sara,
       shift,
       countedCashMinor: 700n,
       note: null,
+      role: 'primary',
     });
     expect(closed.summary).toMatchObject({
       salesCount: 1,
@@ -850,36 +922,41 @@ describe('cash, refunds and shift close', () => {
   });
 });
 
-describe('sync engine', () => {
-  async function session(bridge: FakeBridge) {
-    const d = { db: bridge.db };
-    await applySnapshot(d.db, snapshot());
-    const ctx = (await loadContext(d.db))!;
-    const staff = await loadStaff(d.db);
-    const sara = staff.find((s) => s.fullName === 'Sara')!;
-    const catalog = await loadCatalog(d.db);
-    const methods = await loadPaymentMethods(d.db);
-    const shift = await openShift(d.db, { cashier: sara, countedCashMinor: 0n, note: null });
-    const sale = await commitSale(
-      d.db,
-      prepareSale(
-        {
-          cart: teaCart('1'),
-          payments: cash('0.250'),
-          cashier: sara,
-          shift,
-          supervisor: null,
-          zeroTotalReason: null,
-        },
-        ctx,
-        catalog,
-        methods,
-      ),
+async function session(bridge: FakeBridge) {
+  const d = { db: bridge.db };
+  await applySnapshot(d.db, snapshot());
+  const ctx = (await loadContext(d.db))!;
+  const staff = await loadStaff(d.db);
+  const sara = staff.find((s) => s.fullName === 'Sara')!;
+  const catalog = await loadCatalog(d.db);
+  const methods = await loadPaymentMethods(d.db);
+  const shift = await openShift(d.db, {
+    cashier: sara,
+    countedCashMinor: 0n,
+    note: null,
+    role: 'primary',
+  });
+  const sale = await commitSale(
+    d.db,
+    prepareSale(
+      {
+        cart: teaCart('1'),
+        payments: cash('0.250'),
+        cashier: sara,
+        shift,
+        supervisor: null,
+        zeroTotalReason: null,
+      },
       ctx,
-    );
-    return { ctx, sara, shift, sale };
-  }
+      catalog,
+      methods,
+    ),
+    ctx,
+  );
+  return { ctx, sara, shift, sale };
+}
 
+describe('sync engine', () => {
   it('downloads a full snapshot first, then deltas with the stored version', async () => {
     const d = await device();
     const engine = new SyncEngine(d.bridge, d.db, { intervalMs: 60_000 });
@@ -908,6 +985,7 @@ describe('sync engine', () => {
       amountMinor: 100n,
       note: 'refuse-me',
       settings: snapshot().settings,
+      role: 'primary',
     });
     const engine = new SyncEngine(d.bridge, d.db, { intervalMs: 60_000 });
     d.server.setFail(true);
@@ -955,6 +1033,7 @@ describe('sync engine', () => {
       cashier: (await loadStaff(d.db))[2]!,
       countedCashMinor: 0n,
       note: null,
+      role: 'primary',
     });
     const [entry] = await nextBatch(d.db);
     await applyResults(
@@ -988,12 +1067,32 @@ describe('sync engine', () => {
       ],
       'now',
     );
-    expect(await nextBatch(d.db)).toEqual([]);
+    // A refused shift_open is always retried (everything of the shift waits behind it).
+    expect((await nextBatch(d.db)).map((e) => e.id)).toEqual([entry!.id]);
     expect((await listOutbox(d.db))[0]).toMatchObject({
       status: 'refused',
       code: 'TOTALS_MISMATCH',
       attempts: 2,
     });
+    // A refusal of another kind with a terminal code stays refused.
+    await recordSignIn(d.db, (await loadStaff(d.db))[0]!);
+    const [, signIn] = await nextBatch(d.db);
+    await applyResults(
+      d.db,
+      [
+        {
+          id: signIn!.id,
+          kind: 'sign_in',
+          status: 'refused',
+          result: null,
+          code: 'MEMBER_NOT_ALLOWED',
+          message: 'no',
+          clockSkew: false,
+        },
+      ],
+      'now',
+    );
+    expect((await nextBatch(d.db)).map((e) => e.kind)).toEqual(['shift_open']);
   });
 
   it('stops on DEVICE_REVOKED (keeping unsent records, forgetting the token) and on MERCHANT_SUSPENDED', async () => {
@@ -1014,5 +1113,259 @@ describe('sync engine', () => {
     e.server.setAnswer(null);
     await engine2.syncNow();
     expect(engine2.current).toMatchObject({ suspended: false, pending: 0 });
+  });
+});
+
+describe('branch shift (ADR-0112 amendment 3)', () => {
+  it('blocks selling behind a refused shift and re-uploads the refused records unchanged once the shift is taken', async () => {
+    const d = await device();
+    d.server.setRefuseShiftOpen('REGISTER_BUSY');
+    const { ctx, sara, shift } = await session(d.bridge);
+    const catalog = await loadCatalog(d.db);
+    const methods = await loadPaymentMethods(d.db);
+    const engine = new SyncEngine(d.bridge, d.db, { intervalMs: 60_000 });
+    await engine.syncNow();
+    // The cascade: the shift refused, its sale refused SHIFT_REQUIRED.
+    expect((await listOutbox(d.db)).map((o) => [o.kind, o.status, o.code])).toEqual([
+      ['sale', 'refused', 'SHIFT_REQUIRED'],
+      ['shift_open', 'refused', 'REGISTER_BUSY'],
+    ]);
+    expect(await shiftAcceptance(d.db, shift)).toMatchObject({
+      status: 'refused',
+      code: 'REGISTER_BUSY',
+    });
+    // Selling, cash and refunds are blocked at once, with the reason.
+    const prepared = prepareSale(
+      {
+        cart: teaCart('1'),
+        payments: cash('0.250'),
+        cashier: sara,
+        shift,
+        supervisor: null,
+        zeroTotalReason: null,
+      },
+      ctx,
+      catalog,
+      methods,
+    );
+    await expect(commitSale(d.db, prepared, ctx)).rejects.toMatchObject({
+      code: 'SHIFT_NOT_ACCEPTED',
+    });
+    await expect(
+      recordCashMovement(d.db, {
+        cashier: sara,
+        shift,
+        direction: 'cash_in',
+        amountMinor: 100n,
+        note: null,
+        settings: ctx.settings,
+        role: 'primary',
+      }),
+    ).rejects.toMatchObject({ code: 'SHIFT_NOT_ACCEPTED' });
+    // A shift with records cannot be discarded: its records would be lost.
+    await expect(discardRefusedShift(d.db, shift)).rejects.toMatchObject({ code: 'INVALID_STATE' });
+    // Every sync retries the shift (and so the sale behind it) with the same bytes.
+    await engine.syncNow();
+    expect(d.server.uploads).toHaveLength(2);
+    expect(d.server.uploads[1]).toEqual(d.server.uploads[0]);
+    // The cause is fixed on the server: the next retry takes the shift and the sale, unchanged.
+    d.server.setRefuseShiftOpen(null);
+    await engine.syncNow();
+    expect(d.server.uploads[2]).toEqual(d.server.uploads[0]);
+    expect((await listOutbox(d.db)).map((o) => [o.kind, o.status])).toEqual([
+      ['sale', 'accepted'],
+      ['shift_open', 'accepted'],
+    ]);
+    expect((await shiftAcceptance(d.db, shift)).status).toBe('accepted');
+    const sale = await commitSale(d.db, prepared, ctx);
+    expect(sale.receiptNumber).toBe('MAIN-R2-000002');
+    // A refused shift without records can be discarded, so a new one can be opened.
+    const e = await device();
+    e.server.setRefuseShiftOpen('NOT_PRIMARY_DEVICE');
+    await applySnapshot(e.db, snapshot());
+    const staff = await loadStaff(e.db);
+    const empty = await openShift(e.db, {
+      cashier: staff[2]!,
+      countedCashMinor: 0n,
+      note: null,
+      role: 'primary',
+    });
+    await new SyncEngine(e.bridge, e.db).syncNow();
+    expect((await shiftAcceptance(e.db, empty)).status).toBe('refused');
+    await discardRefusedShift(e.db, empty);
+    expect(await openShiftOf(e.db)).toBeNull();
+    expect(await listOutbox(e.db)).toEqual([]);
+  });
+
+  it('a secondary device sells into the primary’s branch shift learned from sync and never opens, closes or moves cash', async () => {
+    const d = await device();
+    const branchShift = {
+      id: U(500),
+      status: 'open' as const,
+      registerId: U(4),
+      registerCode: 'R1',
+      openedAt: '2026-10-18T09:30:00.000Z',
+      closedAt: null,
+      openedBy: { membershipId: U(10), userId: U(11), fullName: 'Sara' },
+    };
+    const secondary = (partial: Partial<DeviceSnapshot> = {}) =>
+      snapshot({
+        device: { ...snapshot().device, role: 'secondary', registerId: U(5), registerCode: 'R3' },
+        register: { ...snapshot().register, id: U(5), code: 'R3' },
+        branchShift,
+        ...partial,
+      });
+    await applySnapshot(d.db, secondary());
+    const ctx = (await loadContext(d.db))!;
+    const staff = await loadStaff(d.db);
+    const omar = staff.find((s) => s.fullName === 'Omar')!;
+    const shift = (await openShiftOf(d.db))!;
+    expect(shift).toMatchObject({ id: U(500), origin: 'branch', membershipId: U(10) });
+    expect(ctx.branchShift).toEqual(branchShift);
+    expect(ctx.primaryDevice).toEqual({ id: U(1), name: 'Till' });
+    expect((await shiftAcceptance(d.db, shift)).status).toBe('branch');
+    await expect(
+      openShift(d.db, { cashier: omar, countedCashMinor: 0n, note: null, role: 'secondary' }),
+    ).rejects.toMatchObject({ code: 'NOT_PRIMARY_DEVICE' });
+    await expect(
+      recordCashMovement(d.db, {
+        cashier: omar,
+        shift,
+        direction: 'cash_in',
+        amountMinor: 100n,
+        note: null,
+        settings: ctx.settings,
+        role: 'secondary',
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_PRIMARY_DEVICE' });
+    await expect(
+      closeShift(d.db, {
+        cashier: omar,
+        shift,
+        countedCashMinor: 0n,
+        note: null,
+        role: 'secondary',
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_PRIMARY_DEVICE' });
+    // Omar sells into Sara's branch shift; the sale carries the branch shift and his own name.
+    const sale = await commitSale(
+      d.db,
+      prepareSale(
+        {
+          cart: teaCart('1'),
+          payments: cash('0.250'),
+          cashier: omar,
+          shift,
+          supervisor: null,
+          zeroTotalReason: null,
+        },
+        ctx,
+        await loadCatalog(d.db),
+        await loadPaymentMethods(d.db),
+      ),
+      ctx,
+    );
+    expect(sale.record).toMatchObject({ shiftId: U(500), membershipId: U(20) });
+    expect(sale.receiptNumber).toBe('MAIN-R3-000001');
+    expect((await listOutbox(d.db)).map((o) => o.kind)).toEqual(['sale']);
+    // The primary closed the branch shift: the next sync closes it here too.
+    await applySnapshot(
+      d.db,
+      secondary({
+        branchShift: { ...branchShift, status: 'closed', closedAt: '2026-10-18T18:00:00.000Z' },
+        full: false,
+        version: 'v2',
+      }),
+    );
+    expect(await openShiftOf(d.db)).toBeNull();
+    expect(await getShift(d.db, U(500))).toMatchObject({
+      status: 'closed',
+      closedBy: 'server',
+      closedAt: '2026-10-18T18:00:00.000Z',
+    });
+    // No branch shift: nothing to sell into.
+    await applySnapshot(d.db, secondary({ branchShift: null, full: false, version: 'v3' }));
+    expect(await openShiftOf(d.db)).toBeNull();
+    // A new branch shift appears: it replaces the old one.
+    await applySnapshot(
+      d.db,
+      secondary({ branchShift: { ...branchShift, id: U(501) }, full: false, version: 'v4' }),
+    );
+    expect((await openShiftOf(d.db))?.id).toBe(U(501));
+  });
+
+  it('closes the primary’s own shift when a manager closed it online, records sign-ins, and lets a manager force-close with a note', async () => {
+    const d = await ready();
+    await recordSignIn(d.db, d.sara);
+    const shift = await openShift(d.db, {
+      cashier: d.sara,
+      countedCashMinor: 0n,
+      note: null,
+      role: 'primary',
+    });
+    expect((await listOutbox(d.db)).map((o) => o.kind)).toEqual(['shift_open', 'sign_in']);
+    // A manager without the right, or without a note, cannot force-close.
+    await expect(
+      closeShift(d.db, {
+        cashier: d.omar,
+        shift,
+        countedCashMinor: 0n,
+        note: 'x',
+        role: 'primary',
+        forced: true,
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    const manager = { ...d.owner, permissions: [...d.owner.permissions, 'registers.manage'] };
+    await expect(
+      closeShift(d.db, {
+        cashier: manager,
+        shift,
+        countedCashMinor: 0n,
+        note: null,
+        role: 'primary',
+        forced: true,
+      }),
+    ).rejects.toMatchObject({ code: 'REASON_REQUIRED' });
+    const closed = await closeShift(d.db, {
+      cashier: manager,
+      shift,
+      countedCashMinor: 0n,
+      note: 'Sara left',
+      role: 'primary',
+      forced: true,
+    });
+    expect(closed.shift).toMatchObject({ status: 'closed', closedBy: 'forced' });
+    const [close] = await listOutbox(d.db);
+    expect(JSON.parse(close!.body)).toMatchObject({
+      kind: 'shift_close',
+      membershipId: d.owner.membershipId,
+      forced: true,
+      note: 'Sara left',
+    });
+    // The primary's next shift, closed by a manager online: the snapshot says so.
+    const again = await openShift(d.db, {
+      cashier: d.sara,
+      countedCashMinor: 0n,
+      note: null,
+      role: 'primary',
+    });
+    await applySnapshot(
+      d.db,
+      snapshot({
+        full: false,
+        version: 'v2',
+        branchShift: {
+          id: again.id,
+          status: 'closed',
+          registerId: U(4),
+          registerCode: 'R2',
+          openedAt: again.openedAt,
+          closedAt: '2026-10-18T20:00:00.000Z',
+          openedBy: { membershipId: U(10), userId: U(11), fullName: 'Sara' },
+        },
+      }),
+    );
+    expect(await openShiftOf(d.db)).toBeNull();
+    expect(await getShift(d.db, again.id)).toMatchObject({ status: 'closed', closedBy: 'server' });
   });
 });

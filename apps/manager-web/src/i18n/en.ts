@@ -1002,13 +1002,35 @@ export const managerEn = {
       'The device dated this {{at}}, before its shift opened. Check the device clock.',
     refusedText:
       '{{record}} not accepted: {{message}} ({{code}}). Enter it online if it really happened.',
-    kind: { negative_stock: 'Negative stock', clock_skew: 'Device clock', refused: 'Not accepted' },
+    kind: {
+      negative_stock: 'Negative stock',
+      clock_skew: 'Device clock',
+      refused: 'Not accepted',
+      shift_left_open: 'Shift left open',
+      late: 'After the close',
+      forced_close: 'Closed by a manager',
+    },
+    staleShiftText:
+      '{{name}} opened the branch shift on the till while their shift on register {{register}} ({{where}}, since {{since}}) was still open. Close that one.',
+    staleShiftClosedText:
+      '{{name}} opened the branch shift on the till while their shift on register {{register}} ({{where}}, since {{since}}) was still open. It is closed now.',
+    onDevice: 'on a device',
+    inBrowser: 'in the browser',
+    closeStaleShift: 'Close the shift',
+    closeStaleHint:
+      'The shift is closed without a count; the drawer is counted at its next opening and the difference is reported against this shift.',
+    staleShiftClosed: 'Shift closed and the exception marked handled',
+    lateText:
+      '{{record}} reached the server after its branch shift was closed ({{closedAt}}): it is booked in that shift, but the closing count did not include it.',
+    forcedCloseText:
+      'A manager closed the shift of {{name}} at the till ({{note}}). Difference {{discrepancy}}.',
     record: {
       sale: 'Sale',
       refund: 'Refund',
       cash_movement: 'Cash movement',
       shift_open: 'Shift opening',
       shift_close: 'Shift closing',
+      sign_in: 'Sign-in',
     },
   },
   printers: {

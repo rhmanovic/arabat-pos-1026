@@ -171,6 +171,25 @@ export const deviceSnapshotSchema = z.object({
   }),
   /** The device's own counters as the server last saw them (if local data was lost, continue above). */
   counters: z.object({ lastReceiptNumber: z.string().nullable() }),
+  /**
+   * The branch shift (ADR-0112 amendment 3): the latest shift of the branch's primary device,
+   * open or closed. Secondary devices sell into it while it is open; the primary learns here
+   * when a manager closed its shift from `/manager`. Null when the branch has no primary or it
+   * never opened a shift.
+   */
+  branchShift: z
+    .object({
+      id: z.uuid(),
+      status: z.enum(['open', 'closed']),
+      registerId: z.uuid(),
+      registerCode: z.string(),
+      openedAt: z.string(),
+      closedAt: z.string().nullable(),
+      openedBy: z.object({ membershipId: z.uuid(), userId: z.uuid(), fullName: z.string() }),
+    })
+    .nullable(),
+  /** The branch's primary device (the till with the cash drawer), if any. */
+  primaryDevice: z.object({ id: z.uuid(), name: z.string() }).nullable(),
   /** Always complete. */
   paymentMethods: z.array(
     z.object({
@@ -392,6 +411,18 @@ export const deviceShiftCloseSchema = z.object({
   shiftId: z.uuid(),
   countedCashMinor: amountMinor,
   note,
+  /**
+   * A manager closed the shift of an absent cashier at the till with their own PIN (ADR-0112
+   * amendment 3): `membershipId` is the manager, who needs `registers.manage` at the branch;
+   * `note` is required. Recorded as a forced close and listed for review.
+   */
+  forced: z.boolean().default(false),
+});
+
+/** A cashier signed in on the device with their PIN (their "last sign-in", audited). */
+export const deviceSignInSchema = z.object({
+  kind: z.literal('sign_in'),
+  ...recordBase,
 });
 
 export const deviceRecordSchema = z.discriminatedUnion('kind', [
@@ -400,7 +431,16 @@ export const deviceRecordSchema = z.discriminatedUnion('kind', [
   deviceSaleSchema,
   deviceRefundSchema,
   deviceShiftCloseSchema,
+  deviceSignInSchema,
 ]);
+export const DEVICE_RECORD_KINDS = [
+  'shift_open',
+  'sale',
+  'cash_movement',
+  'refund',
+  'shift_close',
+  'sign_in',
+] as const;
 export type DeviceRecord = z.infer<typeof deviceRecordSchema>;
 
 /**
@@ -440,7 +480,20 @@ export type DeviceUploadResult = z.infer<typeof deviceUploadResultSchema>;
 
 /* Device exceptions for managers (ADR-0112 §5, gap B). */
 
-export const DEVICE_EXCEPTION_KINDS = ['negative_stock', 'clock_skew', 'refused'] as const;
+/**
+ * `negative_stock`, `clock_skew`, `refused` (ADR-0112 §5, gap B); amendment 3 adds
+ * `shift_left_open` (the person who opened a device shift still had an open shift elsewhere),
+ * `late` (a record attached to a branch shift that was already closed) and `forced_close` (a
+ * manager closed an absent cashier's shift at the till).
+ */
+export const DEVICE_EXCEPTION_KINDS = [
+  'negative_stock',
+  'clock_skew',
+  'refused',
+  'shift_left_open',
+  'late',
+  'forced_close',
+] as const;
 
 export const deviceExceptionQuerySchema = z.object({
   status: z.enum(['open', 'resolved']).default('open'),
@@ -456,7 +509,10 @@ export const deviceExceptionSchema = z.object({
   recordId: z.uuid(),
   recordKind: z.string(),
   /** negative_stock: variantId, productName, balance, receiptNumber; clock_skew: occurredAt,
-   *  receivedAt, outsideShift; refused: code, message. */
+   *  receivedAt, outsideShift; refused: code, message; shift_left_open: staleShiftId,
+   *  staleRegisterId, staleRegisterCode, staleBranchId, staleOpenedAt, staleOnDevice,
+   *  staleShiftClosed, fullName; late: shiftId, closedAt, recordKind; forced_close: shiftId,
+   *  absentMembershipId, absentName, note. */
   details: z.record(z.string(), z.unknown()),
   occurredAt: z.string(),
   receivedAt: z.string(),

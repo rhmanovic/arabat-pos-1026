@@ -74,9 +74,10 @@ async function setup() {
 }
 type Setup = Awaited<ReturnType<typeof setup>>;
 
-async function register(c: Co, branchId: string) {
+/** The first device of a branch is its primary (it holds the branch shift, amendment 3). */
+async function register(c: Co, branchId: string, role: 'primary' | 'secondary' = 'primary') {
   const res = await c.client.request('POST', '/device/register', {
-    body: { email: c.email, password: PASSWORD, deviceName: 'Till', branchId, role: 'secondary' },
+    body: { email: c.email, password: PASSWORD, deviceName: 'Till', branchId, role },
   });
   expect(res.statusCode).toBe(200);
   return res.json() as {
@@ -421,7 +422,7 @@ describe('sync upload', () => {
 
   it('refunds only the device’s own sales and refuses people without POS access', async () => {
     const s = await setup();
-    const other = await register(s.c, s.c.main);
+    const other = await register(s.c, s.c.main, 'secondary');
     const shiftA = newId();
     const theSale = sale(s, shiftA, 1);
     expect(
@@ -429,18 +430,15 @@ describe('sync upload', () => {
         .json()
         .results.map((r: Rec) => r['status']),
     ).toEqual(['accepted', 'accepted']);
-    // The device B shift needs another person (one open shift per person).
     const ownerId = await ownerMembership(s);
-    const shiftB = newId();
     const res = (
       await sync(other.token, 'POST', [
-        { ...openShift(s, shiftB), membershipId: ownerId },
         {
           kind: 'refund',
           id: newId(),
           occurredAt: at(-1),
           membershipId: ownerId,
-          shiftId: shiftB,
+          shiftId: shiftA,
           saleId: theSale['id'],
           lines: [{ position: 0, quantity: '1' }],
           reason: 'changed_mind',
@@ -448,14 +446,13 @@ describe('sync upload', () => {
           payback: [],
           approval: null,
         },
-        // A shift of device A uploaded by device B.
-        { ...sale(s, shiftA, 2), receiptNumber: `MAIN-${other.device.registerCode}-000002` },
+        // A browser shift (none of a device's) cannot take device records.
+        { ...sale(s, shiftA, 2), shiftId: newId() },
       ])
     ).json();
     expect(res.results.map((r: Rec) => [r['status'], r['code']])).toEqual([
-      ['accepted', null],
       ['refused', 'NOT_OWN_SALE'],
-      ['refused', 'WRONG_DEVICE'],
+      ['refused', 'SHIFT_REQUIRED'],
     ]);
     // A person who may not use the POS at this branch.
     const elsewhere = await s.c.hire([{ roleId: s.c.roles.cashier, branchId: s.c.second }], 'pos');
@@ -472,6 +469,236 @@ describe('sync upload', () => {
       await sync(s.token, 'POST', [{ kind: 'sale', id: newId(), occurredAt: 'x' }])
     ).json();
     expect(bad.results[0]).toMatchObject({ status: 'refused', code: 'VALIDATION_FAILED' });
+  });
+
+  it('accepts the device shift although the person left a shift open elsewhere, and lists it for the managers to close', async () => {
+    const s = await setup();
+    // The cashier left a browser shift open on a manual register of the branch.
+    const manual = await s.c.client.request('POST', '/manager/registers', {
+      cookies: s.c.cookies,
+      body: { branchId: s.c.main, code: 'BR', nameEn: 'Browser till' },
+    });
+    expect(manual.statusCode).toBe(201);
+    const cashier = await s.c.hire([{ roleId: s.c.roles.cashier, branchId: s.c.main }], 'pos');
+    const cashierId = (
+      await owner.query(
+        `select m.id from memberships m join users u on u.id = m.user_id where u.email = $1`,
+        [cashier.email],
+      )
+    ).rows[0].id as string;
+    const browserShift = await s.c.client.request('POST', '/pos/shifts', {
+      cookies: cashier.cookies,
+      body: { registerId: manual.json().id, countedCash: '0.000' },
+    });
+    expect(browserShift.statusCode).toBe(201);
+    const stale = browserShift.json().id as string;
+
+    // The device shift is per register: accepted, with the stale one flagged.
+    const shiftId = newId();
+    const res = (
+      await sync(s.token, 'POST', [
+        { ...openShift(s, shiftId), membershipId: cashierId },
+        { ...sale(s, shiftId, 1), membershipId: cashierId },
+      ])
+    ).json();
+    expect(res.results.map((r: Rec) => [r['status'], r['code']])).toEqual([
+      ['accepted', null],
+      ['accepted', null],
+    ]);
+    let list = (
+      await s.c.client.request('GET', '/manager/device-exceptions', { cookies: s.c.cookies })
+    ).json().exceptions as Rec[];
+    expect(list).toEqual([
+      expect.objectContaining({
+        kind: 'shift_left_open',
+        recordId: shiftId,
+        details: expect.objectContaining({
+          staleShiftId: stale,
+          staleRegisterCode: 'BR',
+          staleOnDevice: false,
+          staleShiftClosed: false,
+        }),
+      }),
+    ]);
+    // The browser session still sees its own shift; the device shift is not its.
+    const current = await s.c.client.request('GET', '/pos/shifts/current', {
+      cookies: cashier.cookies,
+    });
+    expect(current.json().shift).toMatchObject({ id: stale });
+    // The manager's action: a forced close of the stale shift, then the exception shows it closed.
+    const shift = (
+      await s.c.client.request('GET', `/manager/shifts/${stale}`, { cookies: s.c.cookies })
+    ).json();
+    const closed = await s.c.client.request('POST', `/manager/shifts/${stale}/force-close`, {
+      cookies: s.c.cookies,
+      body: { note: 'Left open; closed from the device exceptions', version: shift.version },
+    });
+    expect(closed.statusCode).toBe(201);
+    list = (
+      await s.c.client.request('GET', '/manager/device-exceptions', { cookies: s.c.cookies })
+    ).json().exceptions as Rec[];
+    expect((list[0]!['details'] as Rec)['staleShiftClosed']).toBe(true);
+  });
+
+  it('lets secondary devices sell into the primary’s branch shift, flags uploads after its close as late, and keeps the drawer on the primary', async () => {
+    const s = await setup();
+    const second = await register(s.c, s.c.main, 'secondary');
+    const shiftId = newId();
+    expect((await sync(s.token, 'POST', [openShift(s, shiftId)])).json().results[0].status).toBe(
+      'accepted',
+    );
+    // The secondary learns the branch shift from its snapshot.
+    const snap = (await sync(second.token, 'GET')).json();
+    expect(snap.primaryDevice).toEqual({ id: s.device.id, name: 'Till' });
+    expect(snap.branchShift).toMatchObject({
+      id: shiftId,
+      status: 'open',
+      registerCode: s.device.registerCode,
+      openedBy: { membershipId: s.cashierId },
+    });
+    const prefix = `MAIN-${second.device.registerCode}-`;
+    const inTime: Rec = { ...sale(s, shiftId, 1), receiptNumber: `${prefix}000001` };
+    const res = (
+      await sync(second.token, 'POST', [
+        inTime,
+        // A secondary never opens a shift nor moves drawer cash.
+        openShift(s, newId()),
+        {
+          kind: 'cash_movement',
+          id: newId(),
+          occurredAt: at(-15),
+          membershipId: s.cashierId,
+          shiftId,
+          direction: 'cash_in',
+          amountMinor: '100',
+          note: null,
+        },
+      ])
+    ).json();
+    expect(res.results.map((r: Rec) => [r['status'], r['code']])).toEqual([
+      ['accepted', null],
+      ['refused', 'NOT_PRIMARY_DEVICE'],
+      ['refused', 'NOT_PRIMARY_DEVICE'],
+    ]);
+    // Its cash went into the primary's drawer, and the sale keeps its own register.
+    expect(await drawerBalance(s.device.registerId)).toBe('450');
+    expect(await drawerBalance(second.device.registerId)).toBe('0');
+    const row = (
+      await owner.query(`select register_id, shift_id from sales where id = $1`, [inTime['id']])
+    ).rows[0];
+    expect(row).toEqual({ register_id: second.device.registerId, shift_id: shiftId });
+    // A secondary's own shift_open is kept as refused for the managers, retried unchanged later.
+    // The primary closes the branch shift: expected cash counts every device's sales.
+    const close = (
+      await sync(s.token, 'POST', [
+        {
+          kind: 'shift_close',
+          id: newId(),
+          occurredAt: at(-5),
+          membershipId: s.cashierId,
+          shiftId,
+          countedCashMinor: '450',
+          note: null,
+        },
+      ])
+    ).json();
+    expect(close.results[0]).toMatchObject({
+      status: 'accepted',
+      result: { expectedCashMinor: '450', discrepancyMinor: '0', outcome: 'balanced' },
+    });
+    // The secondary was offline: its later upload still attaches to the closed shift, flagged.
+    const late: Rec = { ...sale(s, shiftId, 2), receiptNumber: `${prefix}000002` };
+    const after = (await sync(second.token, 'POST', [late])).json();
+    expect(after.results[0]).toMatchObject({ status: 'accepted', code: null, message: null });
+    const flags = await owner.query(
+      `select kind, details from device_exceptions where record_id = $1`,
+      [late['id']],
+    );
+    expect(flags.rows).toEqual([{ kind: 'late', details: expect.objectContaining({ shiftId }) }]);
+    expect((await sync(second.token, 'GET')).json().branchShift).toMatchObject({
+      id: shiftId,
+      status: 'closed',
+    });
+    // The owner cannot demote a primary whose shift is open.
+    const again = newId();
+    await sync(s.token, 'POST', [openShift(s, again)]);
+    const demote = await s.c.client.request('PUT', `/manager/devices/${s.device.id}`, {
+      cookies: s.c.cookies,
+      body: { role: 'secondary' },
+    });
+    expect(demote.statusCode).toBe(409);
+    expect(demote.json().code).toBe('REGISTER_BUSY');
+  });
+
+  it('records device sign-ins as the last sign-in, and lets a manager force-close an absent cashier’s shift at the till', async () => {
+    const s = await setup();
+    const ownerId = await ownerMembership(s);
+    // Later than the cashier's browser sign-in at hiring, so it becomes the last one.
+    const signIn = { kind: 'sign_in', id: newId(), occurredAt: at(1), membershipId: s.cashierId };
+    const shiftId = newId();
+    const noNote = {
+      kind: 'shift_close',
+      id: newId(),
+      occurredAt: at(-3),
+      membershipId: ownerId,
+      shiftId,
+      countedCashMinor: '450',
+      note: null,
+      forced: true,
+    };
+    const res = (
+      await sync(s.token, 'POST', [
+        signIn,
+        signIn,
+        openShift(s, shiftId),
+        sale(s, shiftId, 1),
+        // Another person closing normally is refused; a forced close needs a note.
+        { ...noNote, id: newId(), forced: false },
+        { ...noNote, membershipId: s.cashierId, id: newId() },
+        noNote,
+        { ...noNote, id: newId(), note: 'Sara went home sick' },
+      ])
+    ).json();
+    expect(res.results.map((r: Rec) => [r['status'], r['code']])).toEqual([
+      ['accepted', null],
+      ['duplicate', null],
+      ['accepted', null],
+      ['accepted', null],
+      ['refused', 'FORBIDDEN'],
+      ['refused', 'FORBIDDEN'],
+      ['refused', 'REASON_REQUIRED'],
+      ['accepted', null],
+    ]);
+    const employees = (
+      await s.c.client.request('GET', '/manager/employees', { cookies: s.c.cookies })
+    ).json().employees as Rec[];
+    const cashier = employees.find((e) => e['membershipId'] === s.cashierId)!;
+    expect(cashier['lastLoginAt']).toBe(signIn['occurredAt']);
+    const audit = await owner.query(
+      `select action, details->>'deviceId' as device from audit_log where target_id = $1 and action = 'pos.device_sign_in'`,
+      [s.cashierId],
+    );
+    expect(audit.rows).toEqual([{ action: 'pos.device_sign_in', device: s.device.id }]);
+    const shift = (
+      await owner.query(`select status, close_type, closing_note from shifts where id = $1`, [
+        shiftId,
+      ])
+    ).rows[0];
+    expect(shift).toEqual({
+      status: 'closed',
+      close_type: 'forced',
+      closing_note: 'Sara went home sick',
+    });
+    const review = await owner.query(
+      `select kind, details from device_exceptions where merchant_id = $1 and kind = 'forced_close'`,
+      [s.c.merchantId],
+    );
+    expect(review.rows).toEqual([
+      {
+        kind: 'forced_close',
+        details: expect.objectContaining({ shiftId, absentMembershipId: s.cashierId }),
+      },
+    ]);
   });
 
   it('answers 401 without a valid device token', async () => {

@@ -5,6 +5,7 @@ import { META, getMeta, setMeta } from './schema.js';
 export type StaffMember = DeviceSnapshot['staff'][number];
 export type DevicePaymentMethod = DeviceSnapshot['paymentMethods'][number];
 export type DeviceSettings = DeviceSnapshot['settings'];
+export type BranchShift = NonNullable<DeviceSnapshot['branchShift']>;
 
 /** The parts of the snapshot every screen needs, as stored locally. */
 export interface LocalContext {
@@ -17,6 +18,9 @@ export interface LocalContext {
   version: string;
   offlineLimitHours: number;
   lastSuccessfulSyncAt: string | null;
+  /** The branch shift as the server last described it (amendment 3). */
+  branchShift: BranchShift | null;
+  primaryDevice: DeviceSnapshot['primaryDevice'];
 }
 
 const b = (v: boolean) => (v ? 1 : 0);
@@ -119,10 +123,13 @@ export function snapshotStatements(
         });
     });
   }
+  s.push(...branchShiftStatements(snap, now));
   // The device's counter never goes below what the server already has from it (a reinstall).
   const prefix = `${snap.branch.code}-${snap.register.code}-`;
   const serverSeq = receiptSequence(snap.counters.lastReceiptNumber, prefix) ?? 0;
   s.push(
+    setMeta(META.branchShift, snap.branchShift ? JSON.stringify(snap.branchShift) : null),
+    setMeta(META.primaryDevice, snap.primaryDevice ? JSON.stringify(snap.primaryDevice) : null),
     setMeta(META.version, snap.version),
     setMeta(META.catalogVersion, snap.catalogVersion),
     setMeta(META.offlineLimitHours, String(snap.offlineLimitHours)),
@@ -135,6 +142,40 @@ export function snapshotStatements(
     setMeta(META.lastSuccessfulSyncAt, now),
   );
   return s;
+}
+
+/**
+ * The branch shift on this device (ADR-0112 amendment 3). A secondary device sells into the
+ * primary's open shift: it is kept as a local `shifts` row of origin 'branch' (so sales can
+ * reference it) and closed here when the server says so. The primary's own shift is closed
+ * here when a manager closed it online (same id, status closed). A close learned from the
+ * server is `closed_by = 'server'`.
+ */
+function branchShiftStatements(snap: DeviceSnapshot, now: string): SqlStatement[] {
+  const bs = snap.branchShift;
+  const closeServer = (
+    where: string,
+    params: (string | null)[],
+    at: string | null,
+  ): SqlStatement => ({
+    sql: `UPDATE shifts SET status = 'closed', closed_at = ?, closed_by = 'server' WHERE status = 'open' AND ${where}`,
+    params: [at ?? now, ...params],
+  });
+  if (snap.device.role === 'secondary') {
+    if (bs && bs.status === 'open')
+      return [
+        closeServer(`id <> ?`, [bs.id], null),
+        {
+          sql: `INSERT OR IGNORE INTO shifts (id, membership_id, user_id, opened_at, opening_cash_minor, status, origin)
+                VALUES (?, ?, ?, ?, '0', 'open', 'branch')`,
+          params: [bs.id, bs.openedBy.membershipId, bs.openedBy.userId, bs.openedAt],
+        },
+      ];
+    return [closeServer(`origin = 'branch'`, [], bs?.closedAt ?? null)];
+  }
+  const out = [closeServer(`origin = 'branch'`, [], null)];
+  if (bs && bs.status === 'closed') out.push(closeServer(`id = ?`, [bs.id], bs.closedAt));
+  return out;
 }
 
 export async function applySnapshot(
@@ -172,6 +213,8 @@ export async function loadContext(db: BridgeDb): Promise<LocalContext | null> {
     version: meta.get(META.version) ?? '',
     offlineLimitHours: Number(meta.get(META.offlineLimitHours) ?? '72'),
     lastSuccessfulSyncAt: meta.get(META.lastSuccessfulSyncAt) ?? null,
+    branchShift: json<BranchShift>(META.branchShift),
+    primaryDevice: json<NonNullable<LocalContext['primaryDevice']>>(META.primaryDevice),
   };
 }
 

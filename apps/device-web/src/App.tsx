@@ -8,7 +8,7 @@ import { LockScreen } from './screens/Lock.js';
 import { RefundsScreen } from './screens/Refunds.js';
 import { RegisterScreen } from './screens/Register.js';
 import { SaleScreen } from './screens/Sale.js';
-import { CloseShiftScreen, OpenShiftScreen } from './screens/Shift.js';
+import { CloseShiftScreen, NoBranchShiftScreen, OpenShiftScreen } from './screens/Shift.js';
 import { LanguageButton } from './screens/StatusBar.js';
 
 function NotInApp() {
@@ -24,15 +24,20 @@ function NotInApp() {
 
 type View = 'sell' | 'refunds' | 'close';
 
-/** One screen at a time, decided by the device's state: register → sign in → shift → sell. */
+/**
+ * One screen at a time, decided by the device's state: register → sign in → shift → sell. A
+ * locked screen asks the same cashier for their PIN again; a secondary device sells into the
+ * primary's branch shift and has no shift screens of its own (ADR-0112 amendment 3).
+ */
 function Screens() {
-  const { registered, cashier, shift, ctx } = useDevice();
+  const { registered, cashier, locked, shift, ctx, role } = useDevice();
   const [view, setView] = useState<View>('sell');
   if (!registered) return <RegisterScreen />;
-  if (!cashier || !ctx) return <LockScreen />;
+  if (!cashier || locked || !ctx) return <LockScreen />;
   // The closing screen stays up with its Z summary after the shift is gone.
-  if (view === 'close') return <CloseShiftScreen onDone={() => setView('sell')} />;
-  if (!shift || shift.membershipId !== cashier.membershipId) return <OpenShiftScreen />;
+  if (view === 'close' && role === 'primary')
+    return <CloseShiftScreen onDone={() => setView('sell')} />;
+  if (!shift) return role === 'primary' ? <OpenShiftScreen /> : <NoBranchShiftScreen />;
   if (view === 'refunds') return <RefundsScreen onBack={() => setView('sell')} />;
   return <SaleScreen onRefunds={() => setView('refunds')} onClose={() => setView('close')} />;
 }
