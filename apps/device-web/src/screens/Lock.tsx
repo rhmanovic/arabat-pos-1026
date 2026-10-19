@@ -114,7 +114,10 @@ export function PinPad({
 export function LockScreen() {
   const { t, i18n } = useTranslation();
   const { bridge, staff, ctx, signIn, sync, canSell, setRegistered, offline } = useDevice();
-  const [who, setWho] = useState<StaffMember | null>(null);
+  const [picked, setPicked] = useState<StaffMember | null>(null);
+  // The chosen person as the latest sync knows them (a PIN set meanwhile must count).
+  const who = picked ? (staff.find((s) => s.membershipId === picked.membershipId) ?? picked) : null;
+  const setWho = setPicked;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const offlineHours = offline.hoursSinceSync === null ? null : Math.floor(offline.hoursSinceSync);

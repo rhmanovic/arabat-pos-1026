@@ -1,7 +1,7 @@
 import { type Page, expect, test } from '@playwright/test';
 import { build } from 'esbuild';
 import { mkdirSync } from 'node:fs';
-import { uniqueEmail, useEnglish } from './helpers';
+import { latestMailText, uniqueEmail, useEnglish } from './helpers';
 
 const BRIDGE_BUNDLE = 'test-results/device-bridge.js';
 const PIN = '482913';
@@ -42,7 +42,7 @@ async function typePin(page: Page) {
 test('register → full sync → PIN → open shift → sale → upload accepted → retry gives duplicate → refund → close shift', async ({
   page,
 }) => {
-  // A company, its owner's PIN and a product (manager side, online).
+  // A company and a product (manager side, online). The PIN is the owner's own business later.
   const email = uniqueEmail('device-owner');
   const password = 'Owner-Pass-2026';
   expect(
@@ -55,17 +55,6 @@ test('register → full sync → PIN → open shift → sale → upload accepted
       })
     ).status(),
   ).toBe(201);
-  const employees = (await (await page.request.get('/api/v1/manager/employees')).json()) as {
-    employees: { membershipId: string; isOwner: boolean }[];
-  };
-  const owner = employees.employees.find((e) => e.isOwner)!;
-  expect(
-    (
-      await page.request.put(`/api/v1/manager/employees/${owner.membershipId}/pin`, {
-        data: { pin: PIN },
-      })
-    ).status(),
-  ).toBe(204);
   const product = await page.request.post('/api/v1/manager/products', {
     data: {
       nameEn: 'Tea',
@@ -91,8 +80,34 @@ test('register → full sync → PIN → open shift → sale → upload accepted
   await page.getByLabel('Device name').fill('E2E till');
   await page.getByRole('button', { name: 'Register' }).click();
 
-  // The first full sync brings the staff list; the owner signs in with the PIN.
+  // The first full sync brings the staff list. The owner has no PIN yet: "Set / reset PIN" on the
+  // till e-mails a link (owner decision 6); the page behind it sets the PIN, nobody else sees it.
   await page.getByRole('button', { name: 'Device Owner' }).click();
+  await page.getByTestId('reset-pin').click();
+  await expect(page.getByText(/a link to choose your PIN is on its way/)).toBeVisible();
+  const mail = await latestMailText(email);
+  const link = /https?:\/\/\S+\/pos\/pin\?token=\S+/.exec(mail)![0];
+  const pinPage = await page.context().newPage();
+  await pinPage.goto(link);
+  await pinPage.getByLabel('PIN', { exact: true }).fill(PIN);
+  await pinPage.getByLabel('Repeat the PIN').fill(PIN);
+  await pinPage.getByRole('button', { name: 'Save PIN' }).click();
+  await expect(pinPage.getByText(/Your PIN is set/)).toBeVisible();
+  await pinPage.close();
+  // The till picks the new hash up at its next sync, then the owner signs in.
+  await page.getByRole('button', { name: 'Sync now' }).click();
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => {
+          const rows = await window.ArabatApp!.db.query(
+            `SELECT pin_hash FROM staff WHERE pin_hash IS NOT NULL`,
+          );
+          return rows.length;
+        }),
+      { timeout: 15_000 },
+    )
+    .toBe(1);
   await typePin(page);
   await page.getByLabel('Counted cash').fill('10.000');
   await page.getByRole('button', { name: 'Open shift' }).click();

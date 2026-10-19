@@ -25,7 +25,7 @@ export const deviceEn = {
     pin: 'PIN',
     enter: 'Enter',
     clear: 'Clear',
-    noPin: 'No PIN yet. Ask a manager to set one, then sync.',
+    noPin: 'No PIN yet. Press “Set / reset PIN” to get a link by e-mail, then sync.',
     wrong: 'Wrong PIN. {{count}} attempts left.',
     locked: 'Locked until {{until}}.',
     noStaff: 'No staff downloaded yet. Connect to the internet to sync.',
