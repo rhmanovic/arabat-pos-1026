@@ -83,6 +83,13 @@ export function SalePage() {
     if (flashTimer.current) clearTimeout(flashTimer.current);
     flashTimer.current = setTimeout(() => setFlash(null), 400);
   };
+  // The highlight timer must not fire after the screen is gone (unmount, test teardown).
+  useEffect(
+    () => () => {
+      if (flashTimer.current) clearTimeout(flashTimer.current);
+    },
+    [],
+  );
   /** "Clear" needs a second tap within a few seconds so one slip cannot wipe the sale. */
   const [confirmClear, setConfirmClear] = useState(false);
   useEffect(() => {
