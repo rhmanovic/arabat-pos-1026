@@ -117,6 +117,25 @@ engineering defaults pending owner confirmation.
   (the main register's first), and cannot sell while none is open. A device shift is never refused because
   the person left a shift open elsewhere; that shift is listed for the managers to close. Records
   that reach the server after the branch shift closed are booked to it and flagged "late".
+- **BR-210** Store address (ADR-0118): one namespace with link pages, checked both ways; the
+  platform's own paths are reserved; a published or paused store's address changes at most
+  once every 24 hours; the former address answers for 90 days (the storefront moves the
+  visitor to the current one) and cannot be taken by anyone else meanwhile.
+- **BR-209** Completing a pay-on-receipt order needs its payment recorded first; an unpaid one
+  is cancelled in place at any step (no refund, nothing to release). Once paid it follows
+  BR-146 and is corrected only by refunding its sale.
+- **BR-208** Recording a pay-on-receipt payment creates the sale at that moment (stock
+  deducted, receipt number, audit, print job). The till's tender rules apply (BR-181): active
+  POS method without a gateway, settlement account for non-cash, reference when the company
+  requires one. Cash goes to the fulfilment branch's treasury; other tenders to their
+  settlement account. The staff member is recorded on the payment.
+- **BR-207** A pay-on-receipt order is `placed` until staff confirm it; staff confirm, record
+  the payment with the tender actually received, and fulfil it. Recording the payment of a
+  still-placed order confirms it.
+- **BR-206** Pay on receipt (owner, 2026-10-20, ADR-0118): a store may take orders without
+  any online payment method; the shopper pays on pickup or delivery. Such an order **holds no
+  stock**: only what is free at checkout can be ordered, and the stock is deducted when the
+  payment is recorded (first come, first served at hand-over).
 - **BR-205** Devices and drawers (owner, 2026-10-19, ADR-0112 amendment 4): registering a device
   never creates a register; every device has a permanent code per branch (`D1`, `D2`, …, never
   reused) and its receipt series `{branch}-{code}-NNNNNN`; binding, unbinding and rebinding are
@@ -543,8 +562,9 @@ Platform and subscriptions (Prompt 17):
 
 Online store (Prompt 16):
 - **BR-140** A store is draft (hidden), published (open for orders) or paused (browse
-  only). Publishing needs a fulfilment branch, pickup or delivery, and at least one
-  online payment method whose gateway is ready.
+  only). Publishing needs a fulfilment branch, pickup or delivery, and a way to pay: payment
+  on receipt allowed (default), or at least one online payment method whose gateway is
+  ready (ADR-0118).
 - **BR-141** Only listed, active products appear online, at their catalog price; stock
   and availability are those of the fulfilment branch. Untracked and recipe items are
   always available.
@@ -555,15 +575,16 @@ Online store (Prompt 16):
 - **BR-143** Online payments go through a gateway; only the sandbox gateway is active.
   Tap, UPayments, Hesabe and Bookeey are not connected until the owner approves them and
   tested credentials exist. The sandbox never moves real money.
-- **BR-144** An unpaid order reserves its stock for the store's reservation time
-  (default 30 minutes). Reserved stock cannot be sold at the POS or transferred.
+- **BR-144** An order paid online reserves its stock for the store's reservation time
+  (default 30 minutes). Reserved stock cannot be sold at the POS or transferred. An order to
+  be paid on receipt reserves nothing (BR-206).
 - **BR-145** When payment is confirmed the order becomes a sale (channel "online") and
   stock is deducted once. Failed, cancelled or expired payments release the stock. A
   payment whose amount differs from the order, or that arrives after the stock was sold,
   is not turned into a sale: the order needs attention.
-- **BR-146** Order flow: paid → preparing → ready (pickup) or out for delivery
-  (delivery) → completed. Only unpaid or needs-attention orders can be cancelled; paid
-  orders are cancelled by refunding their sale.
+- **BR-146** Order flow: paid (gateway) or confirmed (pay on receipt) → preparing → ready
+  (pickup) or out for delivery (delivery) → completed. Only unpaid or needs-attention orders
+  can be cancelled; paid orders are cancelled by refunding their sale.
 - **BR-147** Each gateway notification is processed once (provider event id), only with
   a valid signature, and repeated notifications change nothing.
 - **BR-148** The delivery fee is part of the sale total (its own line); processing fees
@@ -692,7 +713,7 @@ Report metrics (Prompt 14; all exact, in fils, merchant-local days):
 | OQ-026 | Actual processing fees per method (KNET, Visa/Mastercard, payment link, WAMD) and which bank account each settles into. Defaults: no fees; KNET, link and WAMD → bank 1, Visa/Mastercard → bank 2. Cash custody is decided (ADR-0090, ADR-0091). | Payments |
 | OQ-025 | Verify the owner's e-mail at self-registration (blocks squatting someone's address)? Not implemented. | Auth |
 | OQ-022 | Subscription pricing and billing: prices per plan, billing provider, invoices/VAT, what happens automatically when a subscription lapses (grace period, read-only, suspension), and data retention after closing? Implemented: no billing, lapse never blocks, closing keeps data. | Platform |
-| OQ-021 | Online store: which gateway(s) first and the merchant contracts/credentials; delivery zones and fees per area; shopper accounts, coupons, scheduled orders; cash on delivery; automatic gateway refunds? Not implemented. | Online store |
+| OQ-021 | Online store: which gateway(s) first and the merchant contracts/credentials; delivery zones and fees per area; shopper accounts, coupons, scheduled orders; automatic gateway refunds? Phased plan approved (`docs/ONLINE_STORE_PLAN.md`); cash on delivery / pay at pickup implemented (ADR-0118). | Online store |
 | OQ-018 | Supplier invoices, payments and balances (accounts payable) and returns to suppliers: needed, and with which payment terms? Not implemented yet. | Purchasing |
 | OQ-013 | Card payments: manual entry of card amount only, or integrated card terminals (e.g. KNET)? | M4 / later |
 | OQ-027 | First focus region for marketing (e.g. GCC, wider MENA, another market)? Decides first currency/tax/receipt rules and hosting region. | M12 |

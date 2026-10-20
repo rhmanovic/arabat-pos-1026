@@ -1770,3 +1770,50 @@ ADR; supersede it.
   download address is entered by the operator when it exists. No image upload for entries
   (seven built-in icons); add one later if a logo per app is wanted.
 
+
+## ADR-0118 — Online store Phase 1: orders paid on receipt, store address made first-class
+
+- **Status:** Accepted (owner approval of `docs/ONLINE_STORE_PLAN.md`, 2026-10-20)
+- **Context:** The store could only be published with a payment method whose gateway is
+  *ready*; in production no gateway is ready (`PAYMENT_MOCK_ENABLED=false`), so no store could
+  open and no order could be placed. Payment methods were the POS table with an "online" flag.
+  The store address (`online_stores.slug`) existed but had no availability check, broke old
+  links when renamed, and the link-page namespace was checked one way only. The owner asked for
+  a store that works with no payment method at all, and for the address to be a first-class
+  choice. The owner also decided that **unpaid orders hold no stock**.
+- **Decision:**
+  - **Pay on receipt.** `online_stores.pay_on_receipt_enabled` (default on). Checkout accepts
+    `paymentMethodId: null` when it is on: the order is created `placed` with
+    `payment_mode = 'on_receipt'`, **no stock reservation** and no gateway attempt; only what is
+    free at that moment can be ordered (`INSUFFICIENT_STOCK` otherwise). Gateway orders are
+    unchanged (`pending_payment`, reservation, ADR-0079). Flow of a pay-on-receipt order:
+    `placed → confirmed → preparing → ready | out_for_delivery → completed`; cancelled in place
+    at any step while unpaid.
+  - **Recording the payment.** `POST /manager/online/orders/:id/action {action:'mark_paid',
+    paymentMethodId, reference?}` (`online.orders`, branch-scoped). The till's tender rules apply
+    through `pos-core` `checkPayments` (active POS method, no gateway, settlement account and
+    reference for non-cash per the company setting, BR-181). The sale is created **at that
+    moment** through `completeOnlineSaleInTx` (stock deducted, receipt number, fees, audit,
+    print job), the payment row is `verification = 'manual'` with the staff member as actor;
+    **cash settles into the fulfilment branch's treasury** (cash ledger, no register), other
+    tenders into their settlement account. A `placed` order that is paid counts as confirmed.
+    Completing an unpaid pay-on-receipt order is refused (`ORDER_UNPAID`). Paid orders are
+    corrected by refunding the sale (ADR-0077 unchanged).
+  - **Publishing** needs a fulfilment branch, pickup or delivery, and *a way to pay*: pay on
+    receipt on, or a ready gateway (`NO_PAYMENT_OPTION` otherwise). BR-140 amended.
+  - **Store address.** `GET /manager/online/store/slug-availability?slug=` (format, reserved
+    words — list extended with the platform's own paths — taken by any store **or link page**,
+    with up to 3 free suggestions). `saveStore` checks `link_slug_available` (namespace now
+    symmetric). Renaming a non-draft store appends the old address to the append-only
+    `online_store_slug_history` (90 days): `store_merchant(slug)` also resolves it, the
+    storefront redirects to the current address, nobody else can take it meanwhile, and a
+    public store renames at most once per 24 h (`RENAME_LIMIT`). Audit `online.store_renamed`.
+  - **UI.** Manager: the address is the first section of the settings (live check, suggestions,
+    URL preview, copy), a "Allow payment on receipt" switch, orders show "Unpaid", with
+    "Confirm order" and "Record payment" (tender + reference dialog). Storefront: "Pay at pickup
+    / on delivery" option, "Place order" without a gateway, tracking page explains when to pay.
+- **Not in this phase:** separate online payment methods (`channel`, Phase 3), the `/online`
+  console (Phase 2), the hard-coded `KWD` of the storefront (M12).
+- **Consequences:** merchants in production can open a store today. Stock for pay-on-receipt
+  orders is first-come at hand-over; staff see `INSUFFICIENT_STOCK` when recording a payment
+  for goods sold meanwhile (unless negative stock is allowed). Migration 0066.

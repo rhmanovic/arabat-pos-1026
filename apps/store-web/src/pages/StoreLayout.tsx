@@ -2,7 +2,7 @@ import { Alert, Spinner } from '@arabat/ui';
 import { ErrorState, LanguageSwitcher, NotFound } from '@arabat/web-core';
 import { ApiError } from '@arabat/api-client';
 import { useTranslation } from 'react-i18next';
-import { Link, Outlet } from 'react-router';
+import { Link, Navigate, Outlet, useLocation } from 'react-router';
 import { CartProvider, useCart } from '../cart.js';
 import { useLocalName, useSlug, useStorefront } from '../shared.js';
 
@@ -11,6 +11,7 @@ export function StoreLayout() {
   const slug = useSlug();
   const store = useStorefront();
   const { t } = useTranslation();
+  const location = useLocation();
   if (store.isPending)
     return (
       <div className="flex min-h-dvh items-center justify-center text-primary">
@@ -22,6 +23,17 @@ export function StoreLayout() {
       <NotFound />
     ) : (
       <ErrorState error={store.error} onRetry={() => void store.refetch()} fullPage />
+    );
+  // A renamed store still answers on its old address for a while: move to the current one.
+  if (store.data.slug !== slug)
+    return (
+      <Navigate
+        to={{
+          ...location,
+          pathname: location.pathname.replace(/^\/[^/]+/, `/${store.data.slug}`),
+        }}
+        replace
+      />
     );
   return (
     <CartProvider key={slug} slug={slug}>

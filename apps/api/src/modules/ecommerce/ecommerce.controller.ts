@@ -3,6 +3,7 @@ import {
   type OnlineOrder,
   type OnlineStore,
   type PublicOrder,
+  type SlugAvailability,
   type StoreProduct,
   type Storefront,
   mockPaymentOutcomeSchema,
@@ -10,6 +11,7 @@ import {
   onlineOrderListQuerySchema,
   saveListingsSchema,
   saveOnlineStoreSchema,
+  slugAvailabilityQuerySchema,
   storeCheckoutSchema,
 } from '@arabat/contracts';
 import {
@@ -59,6 +61,21 @@ export class OnlineManagerController {
     @Req() req: FastifyRequest,
   ): Promise<OnlineStore> {
     return this.store.saveStore(actor, body, req.ip);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Get('store/slug-availability')
+  slugAvailability(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Query(new ZodPipe(slugAvailabilityQuerySchema)) q: O<typeof slugAvailabilityQuerySchema>,
+  ): Promise<SlugAvailability> {
+    return this.store.slugAvailability(actor, q.slug);
+  }
+
+  @RequirePermission('manager', 'online.orders')
+  @Get('tenders')
+  tenders(@CurrentMerchantActor() actor: MerchantActor) {
+    return this.store.tenders(actor);
   }
 
   @RequirePermission('manager', 'online.manage')

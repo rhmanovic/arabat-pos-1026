@@ -35,6 +35,7 @@ const STORE = {
       provider: 'mock',
     },
   ],
+  payOnReceipt: true,
   categories: [],
 };
 const COFFEE = '0190a000-0000-7000-8000-000000000001';
@@ -108,6 +109,7 @@ const ORDER = {
   deliveryFee: kwd('1.500'),
   total: kwd('4.000'),
   createdAt: '2026-10-12T10:00:00.000Z',
+  paymentMode: 'gateway',
   paidAt: null,
   reservedUntil: '2026-10-12T10:15:00.000Z',
   trackingToken: 'tok123',
@@ -206,6 +208,48 @@ describe('storefront', () => {
       expectedTotal: '4.000',
     });
     expect(localStorage.getItem('arabat.cart.demo')).toBe('[]');
+  });
+
+  it('places an order to pay on delivery without a gateway and shows the tracking page', async () => {
+    localStorage.setItem(
+      'arabat.cart.demo',
+      JSON.stringify([{ variantId: COFFEE_V, productId: COFFEE, quantity: 2 }]),
+    );
+    const user = userEvent.setup();
+    const placed = {
+      ...ORDER,
+      status: 'placed',
+      paymentMode: 'on_receipt',
+      reservedUntil: null,
+      paymentUrl: null,
+      timeline: [{ status: 'placed', at: '2026-10-12T10:00:00.000Z' }],
+    };
+    const { fetch } = renderStore('/demo/checkout', {
+      'GET /store/demo': () => ({ status: 200, body: { ...STORE, paymentMethods: [] } }),
+      'POST /store/demo/checkout': () => ({ status: 201, body: { order: placed } }),
+      'GET /store/demo/orders/tok123': () => ({ status: 200, body: placed }),
+    });
+    await user.click(await screen.findByRole('radio', { name: /Delivery/ }));
+    expect(screen.getByRole('radio', { name: 'Pay on delivery' })).toBeChecked();
+    await user.type(screen.getByLabelText('Full name'), 'Sara');
+    await user.type(screen.getByLabelText('Phone'), '+96550000001');
+    await user.type(screen.getByLabelText('Delivery address'), 'Block 1, Street 2');
+    await user.click(screen.getByRole('button', { name: 'Place order' }));
+    expect(await screen.findByTestId('order-status')).toHaveTextContent('Received');
+    expect(screen.getByText(/pay the driver when your order is delivered/)).toBeInTheDocument();
+    expect(fetch.calls.find((c) => c.method === 'POST')!.body).toMatchObject({
+      paymentMethodId: null,
+      expectedTotal: '4.000',
+    });
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it('moves a visitor of a former store address to the current one', async () => {
+    const { router } = renderStore('/old-name/cart', {
+      'GET /store/old-name': () => ({ status: 200, body: STORE }),
+    });
+    await waitFor(() => expect(router.state.location.pathname).toBe('/demo/cart'));
+    expect(await screen.findByText('Demo Shop')).toBeInTheDocument();
   });
 
   it('renews the idempotency key after a refused checkout', async () => {

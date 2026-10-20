@@ -463,6 +463,13 @@
       "when": 1792443571385,
       "tag": "0065_register_bindings",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1792468595130,
+      "tag": "0066_online_pay_on_receipt",
+      "breakpoints": true
     }
   ]
 }

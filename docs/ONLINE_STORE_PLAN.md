@@ -1,6 +1,7 @@
 # Online Store — Phased Development Plan
 
-Status: **proposed** (2026-10-20, awaiting the owner's approval). Once approved, each phase
+Status: **approved by the owner on 2026-10-20** with one change: unpaid orders reserve **no**
+stock (see Phase 1). Phase 1 is implemented (ADR-0118); Phase 2 is next. Each phase
 is implemented as one or more vertical slices (DB → API → UI → tests → docs), recorded in
 `DECISIONS.md`, `BUSINESS_RULES.md`, `ROUTES.md`, `DATABASE.md`, `PROGRESS.md` and the
 user guide, released to staging after the tests pass (ADR-0088) and to production on the
@@ -52,8 +53,8 @@ a consistent state, and the next phase builds on it without rework.
 
 ## 2. Phases
 
-### Phase 1 — Store works without a payment method + store naming (unblocks production)
-Size: M. Migration 0066. ADR-0118. BR-206…BR-210.
+### Phase 1 — Store works without a payment method + store naming (unblocks production) ✅
+Size: M. Migration 0066. ADR-0118. BR-206…BR-210. **Done 2026-10-20.**
 
 **A. Unpaid orders ("pay when you receive")**
 - `online_orders.payment_method_id` nullable; new `payment_status` (`unpaid` / `paid` /
@@ -63,9 +64,9 @@ Size: M. Migration 0066. ADR-0118. BR-206…BR-210.
   `cancelled` (by the merchant with a reason, or by the shopper from the tracking page while
   still `placed`). `pending_payment → paid` stays for gateway orders.
 - Checkout: when the shopper picks no online method (or none exists) the order is created
-  `placed` with **no gateway attempt**; the stock reservation is held for the store's
-  `unpaid_hold_hours` (new setting, 1–168, default 48) instead of 30 minutes; expiry releases
-  it and cancels the order (`expired`), exactly like an unpaid gateway order today.
+  `placed` with **no gateway attempt** and **no stock reservation** (owner's decision): only
+  what is free at checkout can be ordered; the stock is deducted when the payment is recorded.
+  Stale `placed` orders are cancelled by staff (no automatic expiry).
 - **Recording the payment:** `POST /online/orders/:id/actions {action:'mark_paid', methodId,
   reference?}` (permission `online.orders`, branch-scoped) creates the sale through
   `completeOnlineSaleInTx` with the chosen *POS* tender: cash goes to the fulfilment

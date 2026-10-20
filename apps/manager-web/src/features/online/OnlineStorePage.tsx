@@ -1,10 +1,11 @@
 import type {
   OnlineOrder,
+  OnlineOrderAction,
   OnlineOrderStatus,
   OnlineStore,
   SaveOnlineStore,
 } from '@arabat/contracts';
-import { ONLINE_ORDER_STATUSES } from '@arabat/contracts';
+import { ONLINE_ORDER_STATUSES, RESERVED_STORE_SLUGS, STORE_SLUG_PATTERN } from '@arabat/contracts';
 import {
   Alert,
   Badge,
@@ -21,7 +22,7 @@ import {
 } from '@arabat/ui';
 import { ErrorState, AccessDenied, localizedName, useApi, useNotify } from '@arabat/web-core';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { useBranchContext, useBranchName, useSession } from '../../app/context.js';
@@ -32,13 +33,15 @@ import { Pager } from '../inventory/shared.js';
 
 const key = ['manager', 'online'] as const;
 type Tab = 'orders' | 'settings' | 'products';
-type Action = 'preparing' | 'ready' | 'out_for_delivery' | 'completed' | 'cancel';
+type Action = OnlineOrderAction;
 
 export const ORDER_TONE: Record<
   OnlineOrderStatus,
   'primary' | 'success' | 'warning' | 'danger' | 'neutral'
 > = {
   pending_payment: 'neutral',
+  placed: 'warning',
+  confirmed: 'primary',
   paid: 'primary',
   preparing: 'primary',
   ready: 'success',
@@ -50,9 +53,18 @@ export const ORDER_TONE: Record<
   needs_attention: 'warning',
 };
 
-/** Actions offered for an order; the API re-checks every transition (BR-146). */
-export function nextActions(order: Pick<OnlineOrder, 'status' | 'fulfillment'>): Action[] {
+/**
+ * Actions offered for an order; the API re-checks every transition (BR-146). A pay-on-receipt
+ * order (ADR-0118) can have its payment recorded until it is completed, completes only once
+ * paid, and can be cancelled in place while unpaid.
+ */
+export function nextActions(
+  order: Pick<OnlineOrder, 'status' | 'fulfillment'> &
+    Partial<Pick<OnlineOrder, 'paymentMode' | 'saleId'>>,
+): Action[] {
   const forward: Record<string, Action[]> = {
+    placed: ['confirm'],
+    confirmed: ['preparing', 'ready', 'out_for_delivery', 'completed'],
     paid: ['preparing', 'ready', 'out_for_delivery', 'completed'],
     preparing: ['ready', 'out_for_delivery', 'completed'],
     ready: ['completed'],
@@ -60,12 +72,18 @@ export function nextActions(order: Pick<OnlineOrder, 'status' | 'fulfillment'>):
     pending_payment: ['cancel'],
     needs_attention: ['cancel'],
   };
-  return (forward[order.status] ?? []).filter(
+  const unpaidOnReceipt = order.paymentMode === 'on_receipt' && !order.saleId;
+  const steps = (forward[order.status] ?? []).filter(
     (a) =>
       !(a === 'ready' && order.fulfillment !== 'pickup') &&
-      !(a === 'out_for_delivery' && order.fulfillment !== 'delivery'),
+      !(a === 'out_for_delivery' && order.fulfillment !== 'delivery') &&
+      !(a === 'completed' && unpaidOnReceipt),
   );
+  if (unpaidOnReceipt && order.status !== 'needs_attention') steps.push('mark_paid', 'cancel');
+  return steps;
 }
+
+const PAYABLE_KINDS = ['cash', 'card', 'bank_transfer', 'custom'];
 
 /** Online store (Prompt 16): orders, storefront settings and which products are sold online. */
 export function OnlineStorePage() {
@@ -194,7 +212,12 @@ function OrdersTab() {
             key: 'status',
             header: t('online.status'),
             cell: (o) => (
-              <Badge tone={ORDER_TONE[o.status]}>{t(`online.status_${o.status}`)}</Badge>
+              <span className="flex flex-wrap gap-1">
+                <Badge tone={ORDER_TONE[o.status]}>{t(`online.status_${o.status}`)}</Badge>
+                {o.paymentMode === 'on_receipt' && !o.saleId ? (
+                  <Badge tone="warning">{t('online.unpaid')}</Badge>
+                ) : null}
+              </span>
             ),
           },
           {
@@ -226,9 +249,10 @@ function OrderDialog({ id, onClose }: { id: string; onClose: () => void }) {
   const notify = useNotify();
   const queryClient = useQueryClient();
   const [note, setNote] = useState('');
+  const [paying, setPaying] = useState(false);
   const order = useQuery({ queryKey: [...key, 'order', id], queryFn: () => api.online.order(id) });
   const act = useMutation({
-    mutationFn: (action: Action) =>
+    mutationFn: (action: Exclude<Action, 'mark_paid'>) =>
       api.online.act(id, { action, note: note || null, version: order.data!.version }),
     onSuccess: async () => {
       setNote('');
@@ -260,7 +284,7 @@ function OrderDialog({ id, onClose }: { id: string; onClose: () => void }) {
                 variant={a === 'cancel' ? 'danger' : a === actions[0] ? 'primary' : 'secondary'}
                 loading={act.isPending && act.variables === a}
                 disabled={act.isPending}
-                onClick={() => act.mutate(a)}
+                onClick={() => (a === 'mark_paid' ? setPaying(true) : act.mutate(a))}
               >
                 {t(`online.action_${a}`)}
               </Button>
@@ -269,10 +293,26 @@ function OrderDialog({ id, onClose }: { id: string; onClose: () => void }) {
         ) : undefined
       }
     >
+      {o && paying ? (
+        <PayDialog
+          order={o}
+          note={note}
+          onClose={() => setPaying(false)}
+          onPaid={() => {
+            setPaying(false);
+            setNote('');
+          }}
+        />
+      ) : null}
       {o ? (
         <div className="flex flex-col gap-4 text-sm">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={ORDER_TONE[o.status]}>{t(`online.status_${o.status}`)}</Badge>
+            {o.paymentMode === 'on_receipt' ? (
+              <Badge tone={o.saleId ? 'success' : 'warning'}>
+                {o.saleId ? t('online.paidOnReceipt') : t('online.unpaidOnReceipt')}
+              </Badge>
+            ) : null}
             <span>{t(`online.fulfillment_${o.fulfillment}`)}</span>
             {o.saleId ? (
               <Link className="text-primary hover:underline" to={`/sales/${o.saleId}`}>
@@ -305,7 +345,15 @@ function OrderDialog({ id, onClose }: { id: string; onClose: () => void }) {
               </>
             ) : null}
             <dt className="text-fg-muted">{t('sales.method')}</dt>
-            <dd>{localizedName(o.paymentMethod, i18n.language)}</dd>
+            <dd>
+              {o.paymentMethod ? localizedName(o.paymentMethod, i18n.language) : '—'}
+              {o.paymentReference ? (
+                <>
+                  {' · '}
+                  <span dir="ltr">{o.paymentReference}</span>
+                </>
+              ) : null}
+            </dd>
           </dl>
           <table className="w-full">
             <thead className="text-xs text-fg-muted">
@@ -347,21 +395,23 @@ function OrderDialog({ id, onClose }: { id: string; onClose: () => void }) {
               </tr>
             </tfoot>
           </table>
-          <Section title={t('online.paymentAttempts')}>
-            <ul className="flex flex-col gap-1">
-              {o.payments.map((p) => (
-                <li key={p.id} className="flex flex-wrap justify-between gap-2">
-                  <span>
-                    {p.provider} · <span dir="ltr">{p.providerReference ?? '—'}</span>
-                  </span>
-                  <span>
-                    {t(`online.payment_${p.status}`)} · {money(p.amount)}
-                    {p.failureReason ? ` · ${p.failureReason}` : ''}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </Section>
+          {o.payments.length > 0 ? (
+            <Section title={t('online.paymentAttempts')}>
+              <ul className="flex flex-col gap-1">
+                {o.payments.map((p) => (
+                  <li key={p.id} className="flex flex-wrap justify-between gap-2">
+                    <span>
+                      {p.provider} · <span dir="ltr">{p.providerReference ?? '—'}</span>
+                    </span>
+                    <span>
+                      {t(`online.payment_${p.status}`)} · {money(p.amount)}
+                      {p.failureReason ? ` · ${p.failureReason}` : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          ) : null}
           <Section title={t('online.timeline')}>
             <ol className="flex flex-col gap-1">
               {o.timeline.map((e, i) => (
@@ -379,6 +429,99 @@ function OrderDialog({ id, onClose }: { id: string; onClose: () => void }) {
           ) : null}
         </div>
       ) : null}
+    </Dialog>
+  );
+}
+
+/** Records the money received for a pay-on-receipt order with a POS tender (ADR-0118). */
+function PayDialog({
+  order,
+  note,
+  onClose,
+  onPaid,
+}: {
+  order: OnlineOrder;
+  note: string;
+  onClose: () => void;
+  onPaid: () => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const api = useApi();
+  const notify = useNotify();
+  const queryClient = useQueryClient();
+  const tenders = useQuery({ queryKey: [...key, 'tenders'], queryFn: () => api.online.tenders() });
+  const [methodId, setMethodId] = useState('');
+  const [reference, setReference] = useState('');
+  const list = (tenders.data?.tenders ?? []).filter((m) => PAYABLE_KINDS.includes(m.kind));
+  const chosen = list.find((m) => m.id === (methodId || list[0]?.id));
+  const pay = useMutation({
+    mutationFn: () =>
+      api.online.act(order.id, {
+        action: 'mark_paid',
+        paymentMethodId: chosen!.id,
+        reference: reference || null,
+        note: note || null,
+        version: order.version,
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: key });
+      notify.ok(t('online.paymentRecorded'));
+      onPaid();
+    },
+    onError: notify.fail,
+  });
+  return (
+    <Dialog
+      open
+      onOpenChange={(v) => (!v ? onClose() : undefined)}
+      title={t('online.markPaidTitle', { number: order.number })}
+      description={t('online.markPaidHint', { total: formatAmount(order.total, i18n.language) })}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            loading={pay.isPending}
+            disabled={!chosen || (chosen.requiresReference && !reference.trim())}
+            onClick={() => pay.mutate()}
+          >
+            {t('online.recordPayment')}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        <Field label={t('online.tender')}>
+          {(p) => (
+            <Select {...p} value={chosen?.id ?? ''} onChange={(e) => setMethodId(e.target.value)}>
+              {list.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {localizedName(m, i18n.language)}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        {chosen && chosen.kind !== 'cash' ? (
+          <Field
+            label={t('online.reference')}
+            hint={chosen.requiresReference ? t('online.referenceRequired') : undefined}
+          >
+            {(p) => (
+              <Input
+                {...p}
+                dir="ltr"
+                value={reference}
+                onChange={(e) => setReference(e.target.value)}
+              />
+            )}
+          </Field>
+        ) : null}
+        {chosen?.kind === 'cash' ? (
+          <p className="text-sm text-fg-muted">{t('online.cashToTreasury')}</p>
+        ) : null}
+      </div>
     </Dialog>
   );
 }
@@ -403,7 +546,39 @@ function toForm(s: OnlineStore): SaveOnlineStore {
     deliveryFee: s.deliveryFee.amount,
     minimumOrder: s.minimumOrder.amount,
     reservationMinutes: s.reservationMinutes,
+    payOnReceiptEnabled: s.payOnReceiptEnabled,
     version: s.version,
+  };
+}
+
+/** Live check of a store address while the merchant types (debounced). */
+function useSlugCheck(slug: string, current: string) {
+  const api = useApi();
+  const [debounced, setDebounced] = useState(slug);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(slug), 400);
+    return () => clearTimeout(timer);
+  }, [slug]);
+  const normalized = debounced.trim().toLowerCase();
+  const changed = normalized !== current.toLowerCase();
+  const local: 'invalid' | 'reserved' | null = !STORE_SLUG_PATTERN.test(normalized)
+    ? 'invalid'
+    : RESERVED_STORE_SLUGS.includes(normalized)
+      ? 'reserved'
+      : null;
+  const remote = useQuery({
+    queryKey: [...key, 'slug', normalized],
+    queryFn: () => api.online.slugAvailability(normalized),
+    enabled: changed && local === null,
+    staleTime: 10_000,
+  });
+  if (!changed) return { state: 'unchanged' as const, suggestions: [] as string[] };
+  if (local) return { state: local, suggestions: [] as string[] };
+  if (remote.isPending) return { state: 'checking' as const, suggestions: [] as string[] };
+  if (remote.isError) return { state: 'unknown' as const, suggestions: [] as string[] };
+  return {
+    state: remote.data.available ? ('available' as const) : remote.data.reason!,
+    suggestions: remote.data.suggestions,
   };
 }
 
@@ -442,8 +617,89 @@ function SettingsForm({ store }: { store: OnlineStore }) {
     </Field>
   );
   const ready = store.paymentMethods.filter((m) => m.ready);
+  const slugCheck = useSlugCheck(v.slug, store.slug);
+  const preview = store.url.replace(/[^/]*$/, v.slug.trim().toLowerCase());
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    void navigator.clipboard?.writeText(store.url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+  const slugMessage: Record<typeof slugCheck.state, string | null> = {
+    unchanged: null,
+    checking: t('online.slugChecking'),
+    available: t('online.slugAvailable'),
+    taken: t('online.slugTaken'),
+    reserved: t('online.slugReserved'),
+    invalid: t('online.slugInvalid'),
+    rename_limit: t('online.slugRenameLimit'),
+    unknown: null,
+  };
   return (
     <div className="flex flex-col gap-4">
+      <Section title={t('online.addressSection')} description={t('online.addressHint')}>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            label={t('online.slug')}
+            hint={t('online.slugFormat')}
+            error={
+              ['taken', 'reserved', 'invalid', 'rename_limit'].includes(slugCheck.state)
+                ? (slugMessage[slugCheck.state] ?? undefined)
+                : undefined
+            }
+          >
+            {(p) => (
+              <Input
+                {...p}
+                dir="ltr"
+                autoComplete="off"
+                value={v.slug}
+                onChange={(e) => set({ slug: e.target.value })}
+              />
+            )}
+          </Field>
+          <div className="text-sm">
+            <p className="text-fg-muted">{t('online.address')}</p>
+            <p dir="ltr" className="break-all font-medium" data-testid="store-url-preview">
+              {preview}
+            </p>
+            {slugCheck.state === 'available' || slugCheck.state === 'checking' ? (
+              <p className={slugCheck.state === 'available' ? 'text-success' : 'text-fg-muted'}>
+                {slugMessage[slugCheck.state]}
+              </p>
+            ) : null}
+            {slugCheck.suggestions.length > 0 ? (
+              <p className="mt-1 flex flex-wrap items-center gap-1">
+                <span className="text-fg-muted">{t('online.slugSuggestions')}</span>
+                {slugCheck.suggestions.map((s) => (
+                  <Button key={s} size="sm" variant="secondary" onClick={() => set({ slug: s })}>
+                    <span dir="ltr">{s}</span>
+                  </Button>
+                ))}
+              </p>
+            ) : null}
+          </div>
+          <p className="flex flex-wrap items-center gap-2 text-sm sm:col-span-2">
+            {store.status === 'draft' ? (
+              <span dir="ltr">{store.url}</span>
+            ) : (
+              <a
+                className="text-primary hover:underline"
+                href={store.url}
+                target="_blank"
+                rel="noreferrer"
+                dir="ltr"
+              >
+                {store.url}
+              </a>
+            )}
+            <Button size="sm" variant="secondary" onClick={copy}>
+              {copied ? t('online.copied') : t('online.copyLink')}
+            </Button>
+          </p>
+        </div>
+      </Section>
       <Section title={t('online.statusSection')} description={t('online.statusHint')}>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={t('online.storeStatus')}>
@@ -461,23 +717,6 @@ function SettingsForm({ store }: { store: OnlineStore }) {
               </Select>
             )}
           </Field>
-          {text('slug', t('online.slug'), { dir: 'ltr' })}
-          <p className="text-sm sm:col-span-2">
-            {t('online.address')}:{' '}
-            {store.status === 'draft' ? (
-              <span dir="ltr">{store.url}</span>
-            ) : (
-              <a
-                className="text-primary hover:underline"
-                href={store.url}
-                target="_blank"
-                rel="noreferrer"
-                dir="ltr"
-              >
-                {store.url}
-              </a>
-            )}
-          </p>
         </div>
       </Section>
       <Section title={t('online.branding')}>
@@ -550,11 +789,17 @@ function SettingsForm({ store }: { store: OnlineStore }) {
           {text('minimumOrder', t('online.minimumOrder'), { dir: 'ltr' })}
         </div>
       </Section>
-      <Section title={t('online.paymentsSection')}>
+      <Section title={t('online.paymentsSection')} description={t('online.paymentsHint')}>
+        <Checkbox
+          label={t('online.payOnReceipt')}
+          description={t('online.payOnReceiptHint')}
+          checked={v.payOnReceiptEnabled}
+          onChange={(e) => set({ payOnReceiptEnabled: e.target.checked })}
+        />
         {store.paymentMethods.length === 0 ? (
-          <Alert tone="warning">{t('online.noPaymentMethods')}</Alert>
+          <p className="mt-3 text-sm text-fg-muted">{t('online.noPaymentMethods')}</p>
         ) : (
-          <ul className="flex flex-col gap-1 text-sm">
+          <ul className="mt-3 flex flex-col gap-1 text-sm">
             {store.paymentMethods.map((m) => (
               <li key={m.id} className="flex items-center gap-2">
                 {localizedName(m, i18n.language)} ({m.provider})
@@ -565,8 +810,10 @@ function SettingsForm({ store }: { store: OnlineStore }) {
             ))}
           </ul>
         )}
-        {ready.length === 0 ? (
-          <p className="mt-2 text-sm text-fg-muted">{t('online.publishNeedsGateway')}</p>
+        {!v.payOnReceiptEnabled && ready.length === 0 ? (
+          <Alert tone="warning" className="mt-2">
+            {t('online.noPaymentOption')}
+          </Alert>
         ) : null}
         <p className="mt-2 text-sm">
           <Link className="text-primary hover:underline" to="/payments">

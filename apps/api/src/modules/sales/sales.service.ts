@@ -48,8 +48,7 @@ import { AuditService } from '../audit/audit.service.js';
 import { isUniqueViolation } from '../auth/registration.service.js';
 import { versionConflict } from '../branches/branches.service.js';
 import { StockLedgerService } from '../inventory/stock-ledger.service.js';
-import { postEntries, registerAccount } from '../payments/cash-ledger.js';
-import { financialAccountEntries } from '../payments/payments.schema.js';
+import { branchTreasury, postEntries, registerAccount } from '../payments/cash-ledger.js';
 import { parseAmount } from '../payments/payments.service.js';
 import { ShiftsService } from '../registers/shifts.service.js';
 import { PrintJobsService } from '../printing/print-jobs.service.js';
@@ -847,7 +846,10 @@ export class SalesService {
    * Online store sale (Prompt 16): the paid online order becomes an immutable sale with
    * the same stock consumption, receipt numbering, fee calculation and balance entries as a
    * POS sale, but without register, shift or cashier (`channel = 'online'`). Prices are the
-   * ones the customer saw at checkout. Consumes the order's own stock reservation.
+   * ones the customer saw at checkout. Consumes the order's own stock reservation (gateway
+   * orders). Money confirmed by a gateway settles into the method's account; money collected
+   * by staff on hand-over (ADR-0118) settles cash into the branch treasury and other tenders
+   * into their settlement account.
    */
   async completeOnlineSaleInTx(
     tx: Transaction,
@@ -869,7 +871,15 @@ export class SalesService {
         variantNameAr: string | null;
         sku: string | null;
       }[];
-      payment: { methodId: string; amountMinor: bigint; providerReference: string };
+      payment: {
+        methodId: string;
+        amountMinor: bigint;
+        /** Provider reference (gateway) or the tender reference entered by staff. */
+        reference: string | null;
+        verification: 'gateway' | 'manual';
+        /** Staff member who recorded a manual payment. */
+        collectedByUserId: string | null;
+      };
     },
   ): Promise<{ receiptNumber: string; totalMinor: bigint }> {
     const { saleId, branchId, lines } = args;
@@ -936,11 +946,15 @@ export class SalesService {
       await tx.execute(sql`select * from payment_methods where id = ${args.payment.methodId}`)
     ).rows as Record<string, unknown>[];
     if (!method) throw AppError.notFound('Payment method not found.');
-    const feeMinor = processingFee(priced.totalMinor, {
-      type: method['fee_type'] as FeeType,
-      fixedMinor: BigInt(method['fee_fixed_minor'] as string),
-      percent: method['fee_percent'] as string,
-    });
+    const cash = method['kind'] === 'cash';
+    // A processing fee is charged by a card network, never on cash (FND-412).
+    const feeMinor = cash
+      ? 0n
+      : processingFee(priced.totalMinor, {
+          type: method['fee_type'] as FeeType,
+          fixedMinor: BigInt(method['fee_fixed_minor'] as string),
+          percent: method['fee_percent'] as string,
+        });
     let costMinor: bigint | null = 0n;
     const lineRows = lines.map((l, i) => {
       const lineCost = costs.total[i]!;
@@ -996,7 +1010,10 @@ export class SalesService {
     });
     await tx.insert(saleLines).values(lineRows);
     const paymentId = newId();
-    const accountId = (method['financial_account_id'] as string | null) ?? null;
+    // Cash collected on hand-over is custody of the branch treasury (no register, ADR-0118).
+    const accountId = cash
+      ? (await branchTreasury(tx, branchId)).id
+      : ((method['financial_account_id'] as string | null) ?? null);
     await tx.insert(payments).values({
       id: paymentId,
       merchantId,
@@ -1010,14 +1027,13 @@ export class SalesService {
       amountMinor: priced.totalMinor,
       feeMinor,
       status: 'succeeded',
-      verification: 'gateway',
-      reference: args.payment.providerReference,
+      verification: args.payment.verification,
+      reference: args.payment.reference,
       financialAccountId: accountId,
     });
     if (accountId)
-      await tx.insert(financialAccountEntries).values([
+      await postEntries(tx, [
         {
-          id: newId(),
           merchantId,
           accountId,
           amountMinor: priced.totalMinor,
@@ -1025,27 +1041,27 @@ export class SalesService {
           sourceType: 'payment',
           sourceId: paymentId,
           description: receiptNumber,
-          createdByUserId: null,
+          createdByUserId: args.payment.collectedByUserId,
         },
         ...(feeMinor > 0n
           ? [
               {
-                id: newId(),
                 merchantId,
                 accountId,
                 amountMinor: -feeMinor,
-                entryType: 'fee',
+                entryType: 'fee' as const,
                 sourceType: 'payment',
                 sourceId: paymentId,
                 description: receiptNumber,
-                createdByUserId: null,
+                createdByUserId: args.payment.collectedByUserId,
               },
             ]
           : []),
       ]);
     await this.audit.recordIn(tx, {
       merchantId,
-      actorType: 'system',
+      actorType: args.payment.collectedByUserId ? 'user' : 'system',
+      actorId: args.payment.collectedByUserId,
       action: 'sale.completed_online',
       targetType: 'sale',
       targetId: saleId,
@@ -1053,7 +1069,8 @@ export class SalesService {
         receiptNumber,
         onlineOrder: args.orderNumber,
         total: Money.ofMinor(priced.totalMinor, CURRENCY).toDecimalString(),
-        providerReference: args.payment.providerReference,
+        verification: args.payment.verification,
+        reference: args.payment.reference,
       },
     });
     await this.printJobs.queueAutoInTx(tx, {

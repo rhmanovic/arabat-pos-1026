@@ -36,7 +36,8 @@ type Co = Awaited<ReturnType<typeof createCompany>>;
 type Cookies = Co['cookies'];
 let seq = 0;
 
-async function setup() {
+/** A company with a published store; `gateway: false` leaves it without any online method. */
+async function setup({ gateway = true } = {}) {
   const c = await createCompany(app, db, mailer);
   const req = (
     method: 'GET' | 'POST' | 'PUT' | 'PATCH',
@@ -84,16 +85,18 @@ async function setup() {
     unknown
   >[];
   const card = methods.find((m) => m['kind'] === 'card')!;
-  const online = await ok('PATCH', `/manager/payment-methods/${card['id'] as string}`, {
-    kind: 'card',
-    nameEn: 'Online card (test)',
-    availableOnline: true,
-    gatewayProvider: 'mock',
-    feeType: 'percentage',
-    feePercent: '2',
-    financialAccountId: card['financialAccountId'],
-    version: card['version'],
-  });
+  const online = gateway
+    ? await ok('PATCH', `/manager/payment-methods/${card['id'] as string}`, {
+        kind: 'card',
+        nameEn: 'Online card (test)',
+        availableOnline: true,
+        gatewayProvider: 'mock',
+        feeType: 'percentage',
+        feePercent: '2',
+        financialAccountId: card['financialAccountId'],
+        version: card['version'],
+      })
+    : null;
   const slug = `shop-${Date.now().toString(36)}-${(seq += 1)}`;
   await ok('PUT', '/manager/online/listings', {
     productIds: [teaProduct.id, mug.id],
@@ -121,8 +124,10 @@ async function setup() {
     tea: tea.id as string,
     gift: mug.variants[0].id as string,
     hidden: hidden.variants[0].id as string,
-    method: online.id as string,
+    method: (online?.id as string | undefined) ?? null,
     cash: methods.find((m) => m['kind'] === 'cash')!['id'] as string,
+    card: card['id'] as string,
+    cardAccount: card['financialAccountId'] as string,
   };
 }
 /** Delivers a provider notification signed like the mock gateway (exact bytes). */
@@ -744,5 +749,300 @@ describe('audit regressions (Prompt 18)', () => {
     expect(
       await count(`select count(*) as n from sales where merchant_id = $1`, [s.c.merchantId]),
     ).toBe(5);
+  });
+});
+
+// ---------------------------------------------------------------- pay on receipt, store address (ADR-0118)
+const treasuryOf = async (s: S) => {
+  const o = await s.ok('GET', '/manager/cash/overview');
+  return o.branches.find((b: { branchId: string }) => b.branchId === s.c.main).treasury.balance
+    .amount as string;
+};
+const act = (s: S, id: string, body: Record<string, unknown>) =>
+  s.req('POST', `/manager/online/orders/${id}/action`, body);
+
+describe('pay on receipt (ADR-0118)', () => {
+  it('publishes without a gateway, takes an unpaid order, holds no stock and records cash into the treasury', async () => {
+    const s = await setup({ gateway: false });
+    const front = (await pub(s, 'GET', '')).json();
+    expect(front).toMatchObject({ acceptingOrders: true, paymentMethods: [], payOnReceipt: true });
+
+    // Nothing is reserved for an unpaid order: the store still offers all 5 and the POS may sell them.
+    const placed = await checkout(s, {
+      paymentMethodId: null,
+      fulfillment: 'pickup',
+      deliveryAddress: null,
+      expectedTotal: '2.500',
+    });
+    expect(placed.statusCode, placed.body).toBe(201);
+    const order = placed.json().order;
+    expect(order).toMatchObject({
+      status: 'placed',
+      paymentMode: 'on_receipt',
+      paidAt: null,
+      reservedUntil: null,
+      paymentUrl: null,
+      total: { amount: '2.500' },
+    });
+    expect(
+      await count(`select count(*) as n from stock_reservations where merchant_id = $1`, [
+        s.c.merchantId,
+      ]),
+    ).toBe(0);
+    expect(
+      (await pub(s, 'GET', '/products'))
+        .json()
+        .products.find((p: { nameEn: string }) => p.nameEn === 'Saffron tea').variants[0]
+        .maxQuantity,
+    ).toBe(5);
+    // Only what is free right now can be ordered.
+    expect(
+      (
+        await checkout(s, {
+          paymentMethodId: null,
+          lines: [{ variantId: s.tea, quantity: '6' }],
+          expectedTotal: '8.000',
+        })
+      ).json().code,
+    ).toBe('INSUFFICIENT_STOCK');
+
+    // Staff confirm it; it cannot complete unpaid; a card tender needs its reference.
+    const listed = await s.ok('GET', '/manager/online/orders');
+    expect(listed.counts).toMatchObject({ placed: 1 });
+    let managed = await s.ok('GET', `/manager/online/orders/${listed.orders[0].id}`);
+    expect(managed).toMatchObject({ paymentMethod: null, saleId: null, confirmedAt: null });
+    expect(
+      (await act(s, managed.id, { action: 'preparing', version: managed.version })).json().code,
+    ).toBe('INVALID_STATE');
+    managed = (await act(s, managed.id, { action: 'confirm', version: managed.version })).json();
+    expect(managed).toMatchObject({ status: 'confirmed', confirmedAt: expect.any(String) });
+    expect(
+      (await act(s, managed.id, { action: 'completed', version: managed.version })).json().code,
+    ).toBe('ORDER_UNPAID');
+    expect(
+      (
+        await act(s, managed.id, {
+          action: 'mark_paid',
+          paymentMethodId: s.card,
+          version: managed.version,
+        })
+      ).json().code,
+    ).toBe('REFERENCE_REQUIRED');
+    const tenders = (await s.ok('GET', '/manager/online/tenders')).tenders as {
+      kind: string;
+      requiresReference: boolean;
+    }[];
+    expect(tenders.map((t) => [t.kind, t.requiresReference])).toEqual(
+      expect.arrayContaining([
+        ['cash', false],
+        ['card', true],
+      ]),
+    );
+
+    // Cash on hand-over: the sale exists now, stock is deducted, the treasury holds the cash.
+    expect(await treasuryOf(s)).toBe('0.000');
+    managed = (
+      await act(s, managed.id, {
+        action: 'mark_paid',
+        paymentMethodId: s.cash,
+        version: managed.version,
+      })
+    ).json();
+    expect(managed).toMatchObject({
+      status: 'confirmed',
+      saleId: expect.any(String),
+      receiptNumber: expect.stringMatching(/^MAIN-/),
+      paidAt: expect.any(String),
+      paymentMethod: { nameEn: expect.any(String) },
+    });
+    expect(await onHand(s)).toBe('3.000');
+    expect(await treasuryOf(s)).toBe('2.500');
+    const sale = await owner.query(
+      `select s.channel, s.total_minor::text as total, p.verification, p.method_kind, p.reference, p.shift_id
+       from sales s join payments p on p.sale_id = s.id where s.id = $1`,
+      [managed.saleId],
+    );
+    expect(sale.rows[0]).toMatchObject({
+      channel: 'online',
+      total: '2500',
+      verification: 'manual',
+      method_kind: 'cash',
+      reference: null,
+      shift_id: null,
+    });
+    // Paid: not twice, not cancelled in place; it completes through the usual steps.
+    expect(
+      (
+        await act(s, managed.id, {
+          action: 'mark_paid',
+          paymentMethodId: s.cash,
+          version: managed.version,
+        })
+      ).json().code,
+    ).toBe('INVALID_STATE');
+    expect(
+      (await act(s, managed.id, { action: 'cancel', version: managed.version })).json().code,
+    ).toBe('INVALID_STATE');
+    managed = (await act(s, managed.id, { action: 'ready', version: managed.version })).json();
+    managed = (await act(s, managed.id, { action: 'completed', version: managed.version })).json();
+    expect(managed.status).toBe('completed');
+    expect(
+      (await pub(s, 'GET', `/orders/${order.trackingToken}`))
+        .json()
+        .timeline.map((t: { status: string }) => t.status),
+    ).toEqual(['placed', 'confirmed', 'paid', 'ready', 'completed']);
+    expect(
+      await count(
+        `select count(*) as n from audit_log where merchant_id = $1 and action = 'online.order_mark_paid'`,
+        [s.c.merchantId],
+      ),
+    ).toBe(1);
+  });
+
+  it('settles a card tender with its reference, cancels unpaid orders in place and respects the store switch', async () => {
+    const s = await setup({ gateway: false });
+    const order = (await checkout(s, { paymentMethodId: null })).json().order;
+    const id = (await s.ok('GET', '/manager/online/orders')).orders[0].id as string;
+    let managed = await s.ok('GET', `/manager/online/orders/${id}`);
+    managed = (
+      await act(s, id, {
+        action: 'mark_paid',
+        paymentMethodId: s.card,
+        reference: 'K-778',
+        version: managed.version,
+      })
+    ).json();
+    expect(managed).toMatchObject({ status: 'confirmed', paymentReference: 'K-778' });
+    const paid = await owner.query(
+      `select p.reference, p.financial_account_id, p.verification,
+              (select sum(amount_minor)::text from financial_account_entries e where e.source_id = p.id) as posted
+       from payments p where p.sale_id = $1`,
+      [managed.saleId],
+    );
+    expect(paid.rows[0]).toMatchObject({
+      reference: 'K-778',
+      financial_account_id: s.cardAccount,
+      verification: 'manual',
+      posted: '3000',
+    });
+    expect(await treasuryOf(s)).toBe('0.000');
+    expect((await pub(s, 'GET', `/orders/${order.trackingToken}`)).json()).toMatchObject({
+      status: 'confirmed',
+      paidAt: expect.any(String),
+    });
+
+    // An unpaid order is cancelled in place at any step before completion.
+    await checkout(s, { paymentMethodId: null });
+    const second = (await s.ok('GET', '/manager/online/orders?status=placed')).orders[0];
+    let o2 = (await act(s, second.id, { action: 'confirm', version: second.version })).json();
+    o2 = (await act(s, o2.id, { action: 'preparing', version: o2.version })).json();
+    o2 = (await act(s, o2.id, { action: 'cancel', note: 'No answer', version: o2.version })).json();
+    expect(o2).toMatchObject({ status: 'cancelled', statusNote: 'No answer', saleId: null });
+
+    // Switched off: a store with no gateway cannot be published, and checkout needs a method.
+    const store = await s.ok('GET', '/manager/online/store');
+    const body = {
+      ...store,
+      deliveryFee: store.deliveryFee.amount,
+      minimumOrder: store.minimumOrder.amount,
+      payOnReceiptEnabled: false,
+    };
+    expect((await s.req('PUT', '/manager/online/store', body)).json().code).toBe(
+      'NO_PAYMENT_OPTION',
+    );
+    const withGateway = await setup();
+    const gs = await withGateway.ok('GET', '/manager/online/store');
+    await withGateway.ok('PUT', '/manager/online/store', {
+      ...gs,
+      deliveryFee: gs.deliveryFee.amount,
+      minimumOrder: gs.minimumOrder.amount,
+      payOnReceiptEnabled: false,
+    });
+    expect((await pub(withGateway, 'GET', '')).json().payOnReceipt).toBe(false);
+    expect((await checkout(withGateway, { paymentMethodId: null })).json().code).toBe(
+      'PAYMENT_METHOD_REQUIRED',
+    );
+  });
+});
+
+describe('store address (ADR-0118)', () => {
+  const availability = (s: S, slug: string) =>
+    s.ok('GET', `/manager/online/store/slug-availability?slug=${encodeURIComponent(slug)}`);
+  const saveSlug = async (s: S, slug: string) => {
+    const store = await s.ok('GET', '/manager/online/store');
+    return s.req('PUT', '/manager/online/store', {
+      ...store,
+      deliveryFee: store.deliveryFee.amount,
+      minimumOrder: store.minimumOrder.amount,
+      slug,
+    });
+  };
+
+  it('checks availability across stores and link pages, keeps the old address after a rename and limits renames', async () => {
+    const s = await setup();
+    const other = await setup();
+    expect(await availability(s, s.slug)).toMatchObject({ available: true, reason: null });
+    expect(await availability(s, 'pay')).toMatchObject({ available: false, reason: 'reserved' });
+    expect(await availability(s, 'Bad Name!')).toMatchObject({
+      available: false,
+      reason: 'invalid',
+    });
+    const taken = await availability(other, s.slug);
+    expect(taken).toMatchObject({ available: false, reason: 'taken' });
+    expect(taken.suggestions.length).toBeGreaterThan(0);
+    expect(taken.suggestions).not.toContain(s.slug);
+    // A link page of another business holds its address against stores too.
+    const linkSlug = `links-${s.slug}`;
+    await other.ok('PUT', '/manager/link-page', {
+      slug: linkSlug,
+      status: 'published',
+      titleEn: 'Other',
+      titleAr: null,
+      bioAr: null,
+      bioEn: null,
+      themeColor: '#7c2d12',
+      buttonStyle: 'pill',
+      background: 'light',
+      version: 0,
+    });
+    expect(await availability(s, linkSlug)).toMatchObject({ available: false, reason: 'taken' });
+    expect((await saveSlug(s, linkSlug)).json().code).toBe('DUPLICATE_CODE');
+
+    // Renaming: the old address still opens the store (and tells the current one) for 90 days,
+    // nobody else can take it meanwhile, and a second rename the same day is refused.
+    const renamed = `${s.slug}-new`;
+    expect((await saveSlug(s, renamed)).statusCode).toBe(200);
+    expect((await pub(s, 'GET', '')).json().slug).toBe(renamed);
+    expect((await pub(s, 'GET', '/products')).statusCode).toBe(200);
+    expect((await s.req('GET', `/store/${renamed}`, undefined, undefined)).json().slug).toBe(
+      renamed,
+    );
+    expect(await availability(other, s.slug)).toMatchObject({ available: false, reason: 'taken' });
+    expect((await saveSlug(other, s.slug)).json().code).toBe('DUPLICATE_CODE');
+    expect(await availability(s, `${s.slug}-again`)).toMatchObject({
+      available: false,
+      reason: 'rename_limit',
+    });
+    expect((await saveSlug(s, `${s.slug}-again`)).json().code).toBe('RENAME_LIMIT');
+    // Saving without changing the address is not a rename.
+    expect((await saveSlug(s, renamed)).statusCode).toBe(200);
+    expect(
+      await count(`select count(*) as n from online_store_slug_history where merchant_id = $1`, [
+        s.c.merchantId,
+      ]),
+    ).toBe(1);
+    expect(
+      await count(
+        `select count(*) as n from audit_log where merchant_id = $1 and action = 'online.store_renamed'`,
+        [s.c.merchantId],
+      ),
+    ).toBe(1);
+    // Once the old address expires it is free again and no longer answers.
+    await owner.query(
+      `update online_store_slug_history set expires_at = now() - interval '1 minute' where merchant_id = $1`,
+      [s.c.merchantId],
+    );
+    expect((await pub(s, 'GET', '')).statusCode).toBe(404);
+    expect(await availability(other, s.slug)).toMatchObject({ available: true });
   });
 });

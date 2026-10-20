@@ -283,9 +283,12 @@ export class OnlinePaymentsService implements OnModuleInit, OnModuleDestroy {
             ...delivery,
           ],
           payment: {
-            methodId: order.paymentMethodId,
+            // Gateway orders always carry their method (CHECK online_orders_gateway_fields).
+            methodId: order.paymentMethodId!,
             amountMinor: payment.amountMinor,
-            providerReference: payment.providerReference ?? payment.id,
+            reference: payment.providerReference ?? payment.id,
+            verification: 'gateway',
+            collectedByUserId: null,
           },
         });
       });
@@ -318,7 +321,7 @@ export class OnlinePaymentsService implements OnModuleInit, OnModuleDestroy {
    * The archived service product used for delivery fees on online sales. Its cost is 0 (a
    * service, not goods), so it never makes a period's gross profit "unavailable".
    */
-  private async deliveryLine(tx: Transaction, merchantId: string, feeMinor: bigint) {
+  async deliveryLine(tx: Transaction, merchantId: string, feeMinor: bigint) {
     // Serialised per merchant so two first deliveries do not both create the item.
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`delivery-item:${merchantId}`}))`);
     const [existing] = (

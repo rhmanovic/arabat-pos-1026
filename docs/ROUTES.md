@@ -97,8 +97,9 @@ No session; every call goes to the public store API. Cart kept per store in the 
 | `/store/:slug` | Catalog (search, categories, sold-out badges) |
 | `/store/:slug/products/:productId` | Product details, options, quantity, add to cart |
 | `/store/:slug/cart` | Cart (exact totals, minimum order, sold-out items removed) |
-| `/store/:slug/checkout` | Contact, pickup/delivery, address, payment method, summary |
-| `/store/:slug/orders/:token` | Order tracking (status, history, pay link while unpaid) |
+| `/store/:slug/checkout` | Contact, pickup/delivery, address, payment (gateway method or pay on receipt), summary |
+| `/store/:slug/orders/:token` | Order tracking (status, history, pay link while unpaid; when to pay for pay-on-receipt orders) |
+| `/store/<former slug>/…` | A renamed store's old address redirects to the current one for 90 days (ADR-0118) |
 | `/store/pay/:reference` | Sandbox gateway page (mock adapter only) |
 | `/store/links/:slug` | Link page of a merchant ("link in bio", ADR-0116) |
 
@@ -382,10 +383,10 @@ only staff land on `/pos/kitchen`. Sales list and reports show the service type.
 
 | Method & path | Permission |
 |---|---|
-| `GET/PUT /manager/online/store`, `GET/PUT /manager/online/listings`, `POST /manager/online/reconcile` | merchant-wide `online.manage` |
-| `GET /manager/online/orders?status=`, `GET /manager/online/orders/:id`, `POST /manager/online/orders/:id/action` | `online.orders` (branch of the order) |
+| `GET/PUT /manager/online/store`, `GET /manager/online/store/slug-availability?slug=`, `GET/PUT /manager/online/listings`, `POST /manager/online/reconcile` | merchant-wide `online.manage` |
+| `GET /manager/online/orders?status=`, `GET /manager/online/orders/:id`, `POST /manager/online/orders/:id/action` (`confirm`, `mark_paid` with tender + reference, `preparing`, `ready`, `out_for_delivery`, `completed`, `cancel`), `GET /manager/online/tenders` | `online.orders` (branch of the order) |
 | `GET /store/:slug`, `/products`, `/products/:id`, `/images/:productId/:imageId` | 🔓 published or paused store |
-| `POST /store/:slug/checkout` | 🔓 published store; idempotency key; 30 per 10 min per IP |
+| `POST /store/:slug/checkout` | 🔓 published store; idempotency key; 30 per 10 min per IP; `paymentMethodId: null` = pay on receipt (ADR-0118) |
 | `GET /store/:slug/orders/:token` | 🔓 tracking token |
 | `POST /webhooks/payments/:provider` | 🔓 provider signature (raw body) |
 | `GET/POST /payments/mock/:reference` | 🔓 sandbox only (disabled in production by default) |

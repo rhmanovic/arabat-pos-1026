@@ -252,6 +252,7 @@ import {
   restaurantOrderSchema,
   restaurantSettingsSchema,
   type OnlineOrderListQuery,
+  type OnlineOrderActionInput,
   type SaveOnlineStore,
   type StoreCheckout,
   listingListSchema,
@@ -259,7 +260,9 @@ import {
   onlineOrderListSchema,
   onlineOrderSchema,
   onlineStoreSchema,
+  onlineTenderListSchema,
   publicOrderSchema,
+  slugAvailabilitySchema,
   storeCheckoutResultSchema,
   storeProductListSchema,
   storeProductSchema,
@@ -1091,6 +1094,13 @@ export function createApiClient(options: ApiClientOptions = {}) {
       store: () => request('GET', '/manager/online/store', { schema: onlineStoreSchema }),
       saveStore: (body: SaveOnlineStore) =>
         request('PUT', '/manager/online/store', { body, schema: onlineStoreSchema }),
+      /** Can the merchant take this store address? With free alternatives when not. */
+      slugAvailability: (slug: string) =>
+        request('GET', `/manager/online/store/slug-availability?slug=${encodeURIComponent(slug)}`, {
+          schema: slugAvailabilitySchema,
+        }),
+      /** Tenders staff may record for a pay-on-receipt order. */
+      tenders: () => request('GET', '/manager/online/tenders', { schema: onlineTenderListSchema }),
       listings: () => request('GET', '/manager/online/listings', { schema: listingListSchema }),
       setListings: (body: { productIds: string[]; listed: boolean }) =>
         request('PUT', '/manager/online/listings', { body, schema: listingListSchema }),
@@ -1100,14 +1110,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
         }),
       order: (id: string) =>
         request('GET', `/manager/online/orders/${id}`, { schema: onlineOrderSchema }),
-      act: (
-        id: string,
-        body: {
-          action: 'preparing' | 'ready' | 'out_for_delivery' | 'completed' | 'cancel';
-          note?: string | null;
-          version: number;
-        },
-      ) =>
+      act: (id: string, body: OnlineOrderActionInput) =>
         request('POST', `/manager/online/orders/${id}/action`, { body, schema: onlineOrderSchema }),
       /** Re-checks unpaid orders with their gateway and expires overdue ones. */
       reconcile: () =>
