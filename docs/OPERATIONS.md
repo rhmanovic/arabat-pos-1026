@@ -249,7 +249,7 @@ Created on 2026-10-15 with the owner's approval (cost, go-live, DNS). Project `a
 | Images | Artifact Registry `me-central1-docker.pkg.dev/arabat-511416/arabat/arabat:<commit>` |
 | Buckets | `arabat-prod-uploads` (me-central1), `arabat-prod-db-exports` (europe-west3, 90-day retention **not locked**) |
 | Secrets | `db-admin-url`, `app-owner-password`, `app-runtime-password`, `mfa-encryption-secret`, `smtp-url` (**placeholder** `smtp://localhost:25` until the Cloudflare token) |
-| Service accounts | `arabat-run` (Cloud Run), `arabat-backup` (exports), `arabat-admin` (Owner; used to run the scripts) |
+| Service accounts | `arabat-run` (Cloud Run), `arabat-backup` (exports), `arabat-admin` (Owner; used to run the scripts), `arabat-deployer` (`deploy.sh` only: build, Artifact Registry, Cloud Run, secrets access; no project Viewer, so `builds submit` cannot stream logs and the script is run twice). **Owner's rule (2026-10-20): never delete or revoke a service-account key.** The assistant only signs out of the sandbox (`gcloud auth revoke --all`) and shreds the key file after a release; the keys themselves stay in GCP and in the environment variables |
 | Backups | Cloud SQL backups + PITR; Backup and DR vault `arabat-vault`, plan `arabat-sql-plan` (every 6 hours — the Cloud SQL minimum — kept 90 days; monthly kept 1 year), association `arabat-sql`; workflow `arabat-db-export` with scheduler jobs `arabat-db-export-daily` / `-monthly` |
 | Monitoring | uptime check `arabat-ready`; **no notification channel or alert policies yet** (§9.2 step 8) |
 
