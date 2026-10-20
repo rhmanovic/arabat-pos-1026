@@ -1286,6 +1286,11 @@ recommendation. Frontend + contract only (no migration).
   with the preview at the footer.
 - Verified (cloud sandbox): `pnpm verify` 363 unit/web (56 files), `pnpm test:integration` 308
   (44 files), `pnpm test:e2e` 43.
+- Released (ADR-0122, ADR-0088): staging (Railway, deployment `741c575d`, SUCCESS) and production
+  `fa3eed9ced43` (revision `arabat-web-00047-vx6`, migration job `arabat-migrate-lwlgz`, no new
+  migration); Cloud Build check `ab1e2aeb`: `/api/v1/health/ready` 200 with that version and
+  database ok (3 ms); `live`, `/store/`, `/manager/` and `/online/` 200. Signed out afterwards,
+  `config.env` removed; no key, account or secret deleted.
 
 ### 2026-10-20 — Design preview at true device width (ADR-0128 amendment 1)
 Owner's report: header settings did not show in the preview, and the desktop preview looked like
