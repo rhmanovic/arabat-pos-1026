@@ -10,7 +10,7 @@ import {
 import { Alert, Badge, Button, Dialog, PageHeader, Segmented, cn } from '@arabat/ui';
 import { AccessDenied, ErrorState, useApi, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { type Ref, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { useSession } from '../../app/context.js';
@@ -30,6 +30,65 @@ import { FooterEditor, ThemeEditor } from './ShellEditors.js';
 
 /** The preview frame's name: the storefront shows the draft when it runs inside it. */
 const PREVIEW_FRAME_NAME = 'arabat-design-preview';
+
+/** The width the store is laid out at in each preview: a real desktop and a real phone. */
+const PREVIEW_WIDTH = { desktop: 1280, phone: 390 } as const;
+
+/**
+ * The store at a true device width, scaled down to fit the column. Without it the "desktop"
+ * preview would be as narrow as the column and the store would show its phone layout, hiding
+ * every large-screen header setting.
+ */
+function PreviewFrame({
+  ref,
+  device,
+  name,
+  title,
+  src,
+}: {
+  ref: Ref<HTMLIFrameElement>;
+  device: 'desktop' | 'phone';
+  name: string;
+  title: string;
+  src: string;
+}) {
+  const box = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const measure = () => setSize({ width: el.clientWidth, height: el.clientHeight });
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  const width = PREVIEW_WIDTH[device];
+  const scale = size.width > 0 ? Math.min(1, size.width / width) : 1;
+  const offset = Math.max(0, (size.width - width * scale) / 2);
+  return (
+    <div ref={box} className="relative h-[75dvh] overflow-hidden rounded-lg">
+      <iframe
+        ref={ref}
+        name={name}
+        title={title}
+        src={src}
+        className="absolute top-0 block rounded-lg bg-white"
+        style={{
+          // Physical left: the frame is placed by measured pixels, the same in both directions.
+          left: offset,
+          width,
+          height: size.height > 0 ? size.height / scale : '100%',
+          transform: `scale(${scale})`,
+          transformOrigin: '0 0',
+        }}
+        data-testid="design-preview"
+        data-device={device}
+      />
+    </div>
+  );
+}
 type Tab = 'pages' | 'theme' | 'header' | 'footer';
 
 /**
@@ -275,16 +334,12 @@ function Editor({
           </div>
           {ready ? (
             <div className="rounded-xl border border-border bg-surface-muted p-2 lg:sticky lg:top-20">
-              <iframe
+              <PreviewFrame
                 ref={frame}
+                device={device}
                 name={PREVIEW_FRAME_NAME}
                 title={t('design.livePreview')}
                 src={`/store/${slug}`}
-                className={cn(
-                  'mx-auto block h-[75dvh] rounded-lg bg-white',
-                  device === 'phone' ? 'w-[390px] max-w-full' : 'w-full',
-                )}
-                data-testid="design-preview"
               />
             </div>
           ) : (

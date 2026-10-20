@@ -2230,3 +2230,8 @@ ADR; supersede it.
     show switches, look, phones, side menu, social accounts), all live in the preview.
   - Templates: retail = stacked with search bar, underline navigation and the categories menu;
     restaurant = centred, large logo, pills, WhatsApp shown.
+  - **Preview at true device width** (owner's report, same day: header changes did not show and
+    the desktop preview looked like a phone). The preview frame was as narrow as its column
+    (≈ 600 px), so the store used its phone layout and every large-screen header setting was
+    invisible. The frame now lays the store out at 1280 px (desktop) or 390 px (phone) and is
+    scaled down to fit the column (`PreviewFrame` in `DesignPage.tsx`).

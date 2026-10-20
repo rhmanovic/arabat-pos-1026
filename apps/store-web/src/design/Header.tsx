@@ -311,6 +311,7 @@ export function Header({ tagline, onMenu }: { tagline: string | null; onMenu: ()
             tone,
           )}
           data-testid="store-header"
+          data-layout={layout}
         >
           <div className="px-3 sm:px-4">{row}</div>
           {searchBar || (searchShown && header.mobileSearch) ? (

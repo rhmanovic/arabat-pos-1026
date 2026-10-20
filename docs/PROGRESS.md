@@ -1265,6 +1265,14 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-20 — Design preview at true device width (ADR-0128 amendment 1)
+Owner's report: header settings did not show in the preview, and the desktop preview looked like
+a phone. Cause: the preview frame was only as wide as its column (≈ 600 px), so the store used its
+phone layout and hid every large-screen header setting. The frame now renders the store at 1280 px
+(desktop) or 390 px (phone) and scales it to fit. Checked in Chromium: the frame reports 1280 px,
+and choosing split, floating and centred layouts and the dark colour changes the preview at once.
+Tests: online-web preview test now checks both widths.
+
 ### 2026-10-20 — Store header system v2 (ADR-0128 amendment 1)
 Owner's feedback: the header looked primitive and scattered, its settings were few, and there were
 no different header designs or arrangements. Frontend + contract only (no migration).

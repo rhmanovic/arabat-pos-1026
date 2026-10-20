@@ -948,6 +948,12 @@ describe('online store console', () => {
       const frame = await screen.findByTestId('design-preview');
       expect(frame).toHaveAttribute('name', 'arabat-design-preview');
       expect(frame).toHaveAttribute('src', '/store/demo');
+      // The store is laid out at a true device width (then scaled to fit), so the desktop
+      // preview shows the desktop header rather than the phone one.
+      expect(frame).toHaveStyle({ width: '1280px' });
+      await user.click(screen.getByRole('radio', { name: 'Phone' }));
+      expect(screen.getByTestId('design-preview')).toHaveStyle({ width: '390px' });
+      await user.click(screen.getByRole('radio', { name: 'Desktop' }));
       expect(screen.getByTestId('design-status')).toHaveTextContent('Published');
       // The legacy home page: the store banner, then the product list.
       expect(screen.getByRole('button', { name: 'Edit Banner' })).toBeInTheDocument();
