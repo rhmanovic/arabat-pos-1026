@@ -124,6 +124,13 @@ export class EcommerceService {
         )
       ).rows as Row[];
       const slug = row?.slug ?? `store-${actor.merchantId.slice(0, 8)}`;
+      // Until the merchant chooses otherwise, the main branch fulfils online orders: a store
+      // with one branch publishes without hunting for the field (owner's report, 2026-10-20).
+      const [mainBranch] = (
+        await tx.execute(
+          sql`select id from branches where status = 'active' order by is_main desc, created_at limit 1`,
+        )
+      ).rows as { id: string }[];
       return {
         slug,
         status: (row?.status as OnlineStore['status']) ?? 'draft',
@@ -136,7 +143,7 @@ export class EcommerceService {
         primaryColor: row?.primaryColor ?? '#1e3a8a',
         contactPhone: row?.contactPhone ?? null,
         contactEmail: row?.contactEmail ?? null,
-        fulfillmentBranchId: row?.fulfillmentBranchId ?? null,
+        fulfillmentBranchId: row?.fulfillmentBranchId ?? mainBranch?.id ?? null,
         pickupEnabled: row?.pickupEnabled ?? true,
         deliveryEnabled: row?.deliveryEnabled ?? false,
         deliveryFee: money(row?.deliveryFeeMinor ?? 0n),

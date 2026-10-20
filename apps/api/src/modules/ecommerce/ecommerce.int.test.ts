@@ -965,6 +965,29 @@ describe('pay on receipt (ADR-0118)', () => {
   });
 });
 
+describe('store defaults', () => {
+  it('proposes the main branch as fulfilment branch so a one-branch store publishes at once', async () => {
+    const c = await createCompany(app, db, mailer);
+    const store = (
+      await c.client.request('GET', '/manager/online/store', { cookies: c.cookies })
+    ).json();
+    expect(store).toMatchObject({ status: 'draft', fulfillmentBranchId: c.main });
+    const published = await c.client.request('PUT', '/manager/online/store', {
+      cookies: c.cookies,
+      body: {
+        ...store,
+        slug: `one-${Date.now().toString(36)}`,
+        status: 'published',
+        nameAr: 'بقالة',
+        deliveryFee: store.deliveryFee.amount,
+        minimumOrder: store.minimumOrder.amount,
+      },
+    });
+    expect(published.statusCode, published.body).toBe(200);
+    expect(published.json()).toMatchObject({ status: 'published', fulfillmentBranchId: c.main });
+  });
+});
+
 describe('store address (ADR-0118)', () => {
   const availability = (s: S, slug: string) =>
     s.ok('GET', `/manager/online/store/slug-availability?slug=${encodeURIComponent(slug)}`);
