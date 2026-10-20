@@ -1257,7 +1257,13 @@ deleted). Phase 5 implemented as one slice:
   ROADMAP, plan (Phase 5 ✅ with the differences), ARCHITECTURE, CLAUDE.md, user guide 24 and 05.
 - Verified (cloud sandbox): `pnpm verify` 343 unit/web (56 files), `pnpm test:integration` 303
   (44 files), `pnpm test:e2e` 42.
-- Released: staging (Railway, `main`) and production per ADR-0122 — see the release note below.
+- Released: staging (Railway, `main`, 2026-10-20 09:48 UTC, migration applied) and, under ADR-0122,
+  production 2026-10-20 09:56 UTC: `f58b5618f509` (revision `arabat-web-00041-8sj`, migration job
+  `arabat-migrate-8gfcl` completed: migration 0068 and the reference data applied). Cloud Build
+  check `47804031`: `/api/v1/health/ready` 200 with version `f58b5618f509` and database ok (3 ms);
+  `live`, `/store/`, `/manager/` and `/online/` (title "Arabat Online Store") 200. Signed out
+  afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
+  `--to-revisions=arabat-web-00040-xgz=100`.
 
 ### 2026-10-20 — Online store Phase 4: catalog and merchandising (ADR-0121)
 Owner request ("ابدا خطوه 4"). The catalog, prices and stock stay shared with the POS; the store
