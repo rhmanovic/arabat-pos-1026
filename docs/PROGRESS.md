@@ -1191,6 +1191,10 @@ unpaid orders hold no stock. Phase 1:
   (`online.issue_*`), scrolls to the first refused field, and the main branch is proposed as the
   fulfilment branch (the actual cause: publishing with no branch chosen); manager test +1,
   integration +1. Verified: `pnpm verify` 331, `pnpm test:integration` 297, `pnpm test:e2e` 41.
+  Released to production 2026-10-20 07:03 UTC: `909b203a1b97` (revision `arabat-web-00038-bfj`,
+  migration job `arabat-migrate-hlr24` completed, nothing new to apply); Cloud Build check
+  `ad37f8af`: `/api/v1/health/ready` 200 with version `909b203a1b97`, database ok, `/store/`
+  and `/manager/` 200. Signed out afterwards; no key deleted.
 - Re-released 2026-10-20 06:30 UTC at the owner's request with the latest `main`:
   `b026ea3610e0` (revision `arabat-web-00037-g5s`; migration job `arabat-migrate-x9x2h`
   completed, nothing new to apply). Verified from inside Google Cloud through a Cloud Build
