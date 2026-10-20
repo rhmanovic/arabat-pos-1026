@@ -1279,6 +1279,12 @@ Owner's request: make the store console suit Gen Z. Frontend only (`apps/online-
   light / dark, phone, phone menu, Arabic and English).
 - Verified (cloud sandbox): `pnpm verify` 351 unit/web (56 files), `pnpm test:integration` 306
   (44 files), `pnpm test:e2e` 42.
+- Released (ADR-0122): staging (Railway, `main`, 2026-10-20 15:14 UTC, deployment `5667b169`)
+  and production 2026-10-20: `321fc772d334` (revision `arabat-web-00043-nsn`, migration job
+  `arabat-migrate-xdcsp` completed, no new migration). Cloud Build check `4f35ee7e`:
+  `/api/v1/health/ready` 200 with version `321fc772d334` and database ok (3 ms); `live`,
+  `/store/`, `/manager/` and `/online/` 200. Signed out afterwards, `config.env` removed; no key,
+  account or secret deleted.
 
 ### 2026-10-20 — Online store Phases 6–10: shopper accounts, promotions, frontend-only 8–10 (ADR-0124/0125/0126)
 Owner's directive: Phase 6 without SMS / WhatsApp, Phase 7 complete, Phases 8–10 frontend only,
