@@ -1,6 +1,7 @@
 import { Alert, Spinner } from '@arabat/ui';
 import { ErrorState, LanguageSwitcher, NotFound } from '@arabat/web-core';
 import { ApiError } from '@arabat/api-client';
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, Outlet, useLocation } from 'react-router';
 import { CartProvider, useCart } from '../cart.js';
@@ -48,6 +49,10 @@ function Shell() {
   const cart = useCart();
   const name = useLocalName();
   const { t, i18n } = useTranslation();
+  const storeName = store ? name(store) : '';
+  useEffect(() => {
+    if (storeName) document.title = storeName;
+  }, [storeName]);
   if (!store) return null;
   const ar = i18n.language.startsWith('ar');
   const tagline = ar ? store.taglineAr || store.taglineEn : store.taglineEn || store.taglineAr;
@@ -58,10 +63,32 @@ function Shell() {
     <div className="min-h-dvh bg-bg">
       <header className="border-b border-border bg-surface">
         <div className="h-1" style={{ backgroundColor: store.primaryColor }} />
+        {store.bannerUrl ? (
+          <div className="mx-auto max-w-5xl px-4 pt-4">
+            <img
+              src={store.bannerUrl}
+              alt=""
+              className="aspect-[3/1] w-full rounded-lg object-cover"
+              data-testid="store-banner"
+            />
+          </div>
+        ) : null}
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 p-4">
-          <Link to={`/${slug}`} className="min-w-0">
-            <p className="truncate text-xl font-semibold">{name(store)}</p>
-            {tagline ? <p className="truncate text-sm text-fg-muted">{tagline}</p> : null}
+          <Link to={`/${slug}`} className="flex min-w-0 items-center gap-3">
+            {store.logoUrl ? (
+              <img
+                src={store.logoUrl}
+                alt=""
+                className="size-12 shrink-0 rounded-full border border-border object-cover"
+                data-testid="store-logo"
+              />
+            ) : null}
+            <span className="min-w-0">
+              <span className="block truncate text-xl font-semibold">{name(store)}</span>
+              {tagline ? (
+                <span className="block truncate text-sm text-fg-muted">{tagline}</span>
+              ) : null}
+            </span>
           </Link>
           <nav aria-label={t('brand')} className="flex items-center gap-3">
             <Link to={`/${slug}`} className="text-sm hover:underline">

@@ -40,7 +40,7 @@ let seq = 0;
 async function setup({ gateway = true } = {}) {
   const c = await createCompany(app, db, mailer);
   const req = (
-    method: 'GET' | 'POST' | 'PUT' | 'PATCH',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     path: string,
     body?: unknown,
     cookies: Cookies | undefined = c.cookies,
@@ -50,7 +50,7 @@ async function setup({ gateway = true } = {}) {
       ...(body === undefined ? {} : { body }),
     });
   const ok = async (
-    method: 'GET' | 'POST' | 'PUT' | 'PATCH',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     path: string,
     body?: unknown,
     cookies: Cookies | undefined = c.cookies,
@@ -1067,5 +1067,230 @@ describe('store address (ADR-0118)', () => {
     );
     expect((await pub(s, 'GET', '')).statusCode).toBe(404);
     expect(await availability(other, s.slug)).toMatchObject({ available: true });
+  });
+});
+
+// ---------------------------------------------------------------- merchandising (ADR-0121)
+const png = Buffer.concat([
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  Buffer.alloc(64, 1),
+]);
+function multipart(data: Buffer, filename = 'photo.png', type = 'image/png') {
+  const boundary = '----arabat' + Math.random().toString(16).slice(2);
+  const body = Buffer.concat([
+    Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: ${type}\r\n\r\n`,
+    ),
+    data,
+    Buffer.from(`\r\n--${boundary}--\r\n`),
+  ]);
+  return {
+    body,
+    headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+  };
+}
+const upload = (s: S, path: string, data = png) =>
+  s.c.client.request('POST', path, { cookies: s.c.cookies, ...multipart(data) });
+
+describe('merchandising (ADR-0121)', () => {
+  it('keeps the catalog as the source and lets the store add its own title, order, categories and cap', async () => {
+    const s = await setup({ gateway: false });
+    // Listings carry the catalog name, images and position; new listings go to the end.
+    let listings = (await s.ok('GET', '/manager/online/listings')).products as Record<
+      string,
+      unknown
+    >[];
+    const listed = listings.filter((p) => p['listed']);
+    expect(listed.map((p) => p['nameEn'])).toEqual(['Gift card', 'Saffron tea']);
+    expect(listed.map((p) => p['position'])).toEqual([0, 1]);
+    expect(listed[0]).toMatchObject({
+      featured: false,
+      maxPerOrder: null,
+      onlineCategoryId: null,
+      images: [],
+    });
+
+    // A store category with a picture; a catalog product put in it with the store's own title.
+    const drinks = await s.ok('POST', '/manager/online/categories', {
+      nameAr: 'مشروبات',
+      nameEn: 'Drinks',
+    });
+    expect(drinks).toMatchObject({
+      position: 0,
+      status: 'active',
+      imageUrl: null,
+      productCount: 0,
+    });
+    const withImage = (await upload(s, `/manager/online/categories/${drinks.id}/image`)).json();
+    expect(withImage.imageUrl).toMatch(/\/manager\/online\/categories\/.*\/image\?v=2$/);
+    expect(
+      (await upload(s, `/manager/online/categories/${drinks.id}/image`, Buffer.from('nope')))
+        .statusCode,
+    ).toBe(415);
+    await s.ok('PUT', `/manager/online/listings/${s.teaProduct}`, {
+      titleEn: 'Saffron tea, 50 g tin',
+      titleAr: 'شاي زعفران',
+      descriptionEn: 'Store says: brewed daily',
+      descriptionAr: null,
+      featured: true,
+      maxPerOrder: 2,
+      onlineCategoryId: drinks.id,
+    });
+    expect(
+      (
+        await s.req('PUT', `/manager/online/listings/${s.hidden}`, {
+          titleEn: null,
+          titleAr: null,
+          descriptionEn: null,
+          descriptionAr: null,
+          featured: false,
+          maxPerOrder: null,
+          onlineCategoryId: null,
+        })
+      ).statusCode,
+    ).toBe(404);
+    // Display order: every listed product exactly once.
+    const giftProduct = listed.find((p) => p['nameEn'] === 'Gift card')!['productId'] as string;
+    expect(
+      (await s.req('PUT', '/manager/online/listings/order', { productIds: [s.teaProduct] })).json()
+        .code,
+    ).toBe('VALIDATION_FAILED');
+    listings = (
+      await s.ok('PUT', '/manager/online/listings/order', {
+        productIds: [s.teaProduct, giftProduct],
+      })
+    ).products as Record<string, unknown>[];
+    expect(listings.filter((p) => p['listed']).map((p) => p['nameEn'])).toEqual([
+      'Saffron tea',
+      'Gift card',
+    ]);
+    expect((await s.ok('GET', '/manager/online/categories')).categories[0].productCount).toBe(1);
+
+    // The storefront: the store's title and description win, the category navigation is the
+    // store's own, the category picture is public, featured and position come through, and
+    // the per-order cap bounds the offered quantity (5 on hand, cap 2).
+    const front = (await pub(s, 'GET', '')).json();
+    expect(front).toMatchObject({ categorySource: 'online', logoUrl: null, bannerUrl: null });
+    expect(front.categories).toEqual([
+      expect.objectContaining({
+        id: drinks.id,
+        nameEn: 'Drinks',
+        imageUrl: expect.stringContaining(`/store/${s.slug}/categories/${drinks.id}/image`),
+      }),
+    ]);
+    expect(
+      (
+        await s.req(
+          'GET',
+          front.categories[0].imageUrl.replace('/api/v1', ''),
+          undefined,
+          undefined,
+        )
+      ).statusCode,
+    ).toBe(200);
+    const products = (await pub(s, 'GET', '/products')).json().products;
+    expect(products.map((p: { nameEn: string }) => p.nameEn)).toEqual([
+      'Saffron tea, 50 g tin',
+      'Gift card',
+    ]);
+    expect(products[0]).toMatchObject({
+      nameAr: 'شاي زعفران',
+      descriptionEn: 'Store says: brewed daily',
+      categoryId: drinks.id,
+      featured: true,
+      position: 0,
+      images: [],
+    });
+    expect(products[0].variants[0].maxQuantity).toBe(2);
+    expect(products[1]).toMatchObject({ categoryId: null, featured: false, position: 1 });
+    // Ordering 3 of a capped product is refused.
+    expect(
+      (
+        await checkout(s, {
+          paymentMethodId: null,
+          lines: [{ variantId: s.tea, quantity: '3' }],
+          expectedTotal: '4.250',
+        })
+      ).json().code,
+    ).toBe('INSUFFICIENT_STOCK');
+
+    // Hidden category: the product stays in the store without a category. Deleting it keeps the product.
+    await s.ok('PUT', `/manager/online/categories/${drinks.id}`, {
+      nameAr: 'مشروبات',
+      nameEn: 'Drinks',
+      status: 'hidden',
+      version: 2,
+    });
+    expect((await pub(s, 'GET', '')).json().categories).toEqual([]);
+    expect((await pub(s, 'GET', '/products')).json().products[0].categoryId).toBeNull();
+    const afterDelete = await s.ok('DELETE', `/manager/online/categories/${drinks.id}`);
+    expect(afterDelete.categories).toEqual([]);
+    expect((await pub(s, 'GET', '')).json().categorySource).toBe('pos');
+    expect((await pub(s, 'GET', '/products')).json().products[0].nameEn).toBe(
+      'Saffron tea, 50 g tin',
+    );
+
+    // Logo and banner: uploaded through the console, public on the storefront, removable.
+    const withLogo = (await upload(s, '/manager/online/store/logo')).json();
+    expect(withLogo.logoUrl).toMatch(/\/manager\/online\/store\/logo\?v=/);
+    const banner = (await upload(s, '/manager/online/store/banner')).json();
+    expect(banner.bannerUrl).toMatch(/\/manager\/online\/store\/banner\?v=/);
+    const branded = (await pub(s, 'GET', '')).json();
+    expect(branded.logoUrl).toContain(`/store/${s.slug}/logo?v=`);
+    expect(
+      (await s.req('GET', branded.logoUrl.replace('/api/v1', ''), undefined, undefined)).headers[
+        'content-type'
+      ],
+    ).toBe('image/png');
+    expect(
+      (await s.req('GET', branded.bannerUrl.replace('/api/v1', ''), undefined, undefined))
+        .statusCode,
+    ).toBe(200);
+    await s.ok('DELETE', '/manager/online/store/logo');
+    expect((await pub(s, 'GET', '')).json().logoUrl).toBeNull();
+    expect((await s.req('GET', `/store/${s.slug}/logo`, undefined, undefined)).statusCode).toBe(
+      404,
+    );
+    // Another merchant cannot read this store's category picture through its own console.
+    const other = await setup({ gateway: false });
+    expect(
+      (await other.req('GET', `/manager/online/categories/${drinks.id}/image`)).statusCode,
+    ).toBe(404);
+  });
+
+  it('hides sold-out products when the store says so', async () => {
+    const s = await setup({ gateway: false });
+    const store = await s.ok('GET', '/manager/online/store');
+    expect(store.hideOutOfStock).toBe(false);
+    // Sell the 5 teas at the till; the store then has nothing to offer for tea.
+    const pos = await till(s);
+    expect(
+      (
+        await s.req(
+          'POST',
+          '/pos/sales',
+          {
+            idempotencyKey: newId(),
+            lines: [{ variantId: s.tea, quantity: '5' }],
+            payments: [{ methodId: s.cash, amount: '6.250' }],
+            expectedTotal: '6.250',
+          },
+          pos,
+        )
+      ).statusCode,
+    ).toBe(201);
+    let products = (await pub(s, 'GET', '/products')).json().products;
+    expect(
+      products.find((p: { nameEn: string }) => p.nameEn === 'Saffron tea').variants[0].available,
+    ).toBe(false);
+    await s.ok('PUT', '/manager/online/store', {
+      ...store,
+      deliveryFee: store.deliveryFee.amount,
+      minimumOrder: store.minimumOrder.amount,
+      hideOutOfStock: true,
+    });
+    products = (await pub(s, 'GET', '/products')).json().products;
+    expect(products.map((p: { nameEn: string }) => p.nameEn)).toEqual(['Gift card']);
+    expect((await pub(s, 'GET', `/products/${s.teaProduct}`)).statusCode).toBe(404);
   });
 });

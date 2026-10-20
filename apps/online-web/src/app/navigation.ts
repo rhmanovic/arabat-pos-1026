@@ -17,6 +17,7 @@ export const NAV: NavItem[] = [
   { key: 'dashboard', to: '/', anyOf: ['online.manage', 'online.orders'], section: 'store' },
   { key: 'orders', to: '/orders', anyOf: ['online.orders'], section: 'store' },
   { key: 'products', to: '/products', anyOf: ['online.manage'], section: 'store' },
+  { key: 'categories', to: '/categories', anyOf: ['online.manage'], section: 'store' },
   { key: 'settings', to: '/settings', anyOf: ['online.manage'], section: 'store' },
   { key: 'links', to: linksUrl(), anyOf: ['online.manage'], external: true, section: 'store' },
   {

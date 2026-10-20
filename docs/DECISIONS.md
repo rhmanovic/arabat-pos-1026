@@ -1853,3 +1853,58 @@ ADR; supersede it.
   the manager app stays the POS product's dashboard. Shared data is edited where it lives
   (catalog, customers, payments in `/manager`) and the console links there. E2E `store.spec.ts`
   runs through `/online`.
+
+## ADR-0121 — Online store Phase 4: catalog and merchandising (store titles, order, categories, pictures)
+
+- **Status:** Accepted (owner request "ابدا خطوه 4", 2026-10-20; Phase 4 of
+  `docs/ONLINE_STORE_PLAN.md`)
+- **Context:** The store showed the catalog as it is: catalog names and descriptions, POS
+  categories, one picture, products in catalog order. A merchant could not say what the store
+  shows first, group products the way shoppers browse, or write a store-specific title. The
+  owner's principle from Phase 2 holds: **the catalog, prices and stock stay shared** with the
+  POS; the store only adds how it presents them.
+- **Decision:**
+  - **Listings carry presentation, never price or stock.** `online_listings` gains `title_en /
+    title_ar`, `description_en / description_ar` (plain text, at most 120 / 2000 characters),
+    `position` (store order), `featured`, `max_per_order` (1–20, the storefront's cap is
+    `min(20, max_per_order)`), `online_category_id` and `updated_at`. Empty fields fall back to
+    the catalog's name and description; the price, the variants and the availability always come
+    from the catalog and the fulfilment branch. **No online price override** was built (the plan
+    had listed one): one price per product everywhere, per the owner's decision in ADR-0119.
+    New listings go to the end (`max(position) + 1`); `PUT /manager/online/listings/order`
+    takes the full order of listed products and `PUT /manager/online/listings/:productId`
+    edits one listing. Audit `online.listing_updated`, `online.listings_reordered`.
+  - **Store categories** (`online_categories`): the store's own navigation, independent of the
+    POS categories — name ar/en (one required), `position`, `status` (`active` / `hidden`), a
+    picture (`image_key`, through `FileStorage`), `version` for optimistic locking. A listing
+    may belong to one store category; deleting a category leaves its products listed without
+    one (`on delete set null`). **Source rule:** while the merchant has no store category, the
+    storefront groups by the catalog (POS) categories as before (`categorySource = 'pos'`); the
+    first store category switches the storefront to the store categories
+    (`categorySource = 'online'`), hidden categories and uncategorised products show under no
+    chip. Audit `online.category_*`, `online.categories_reordered`.
+  - **Pictures.** Product pictures stay in the catalog (`product_images`, shared with the POS);
+    the storefront now shows all of them (`images[]`, gallery on the product page). The store
+    gets a **logo** and a **banner** (`online_stores.logo_key / banner_key`) and each category a
+    picture: JPEG / PNG / WebP up to 2 MB (`MAX_STORE_IMAGE_BYTES`), sniffed server-side, stored
+    through `FileStorage` (GCS in production), served publicly with `?v=<version>` and a
+    one-day cache, privately (`no-cache`) to the console. No server-side resizing in this phase.
+  - **Storefront.** Banner and logo in the header, document title = store name (product pages:
+    `title · store`), featured products in a section at the top while nothing is filtered,
+    category chips with pictures, sorting (store order, name, price up / down) next to the
+    search, gallery with thumbnails, a "Share" button (`navigator.share`, else the link is
+    copied). `hide_out_of_stock` (store setting) removes products with nothing available at the
+    fulfilment branch from the public list.
+  - **Console (`/online`).** Products online: listed products in store order with drag and
+    drop (`@dnd-kit`, keyboard and up / down buttons), "Edit" (store title and description,
+    store category, featured, maximum per order, the catalog pictures read-only with a link to
+    the catalog) and "Remove from store"; the not-listed table adds products into a chosen store
+    category. New page **Store categories** (add, edit, picture, hide, order, delete with the
+    count of its products). Settings: **Appearance** section (logo, banner, "Hide out-of-stock
+    products").
+- **Not in this phase:** online price override (dropped), server-side image variants, a
+  trigram search index (the storefront searches the loaded list), SEO meta beyond the title,
+  "notify me" (Phase 6).
+- **Consequences:** merchants curate what the store shows and in which order without touching
+  the catalog; shoppers browse by the store's own categories. Migration 0067. `/manager/online/*`
+  gains 13 routes, the public store API 2 (`/:kind(logo|banner)`, `/categories/:id/image`).

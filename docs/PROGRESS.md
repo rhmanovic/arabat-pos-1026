@@ -1227,10 +1227,42 @@ customers, accounts, permissions).
   with version `2cae4c6d3de1` and database ok; `live`, `/store/`, `/manager/` and `/online/`
   (title "Arabat Online Store") 200. Signed out afterwards; no key deleted.
 
+### 2026-10-20 — Online store Phase 4: catalog and merchandising (ADR-0121)
+Owner request ("ابدا خطوه 4"). The catalog, prices and stock stay shared with the POS; the store
+adds how it presents them.
+- Migration 0067: `online_categories` (name ar/en, position, status, picture, version; RLS),
+  `online_listings` + store title / description, `featured`, `max_per_order`, store category,
+  `updated_at`; `online_stores` + logo, banner, `hide_out_of_stock`. **No online price** (the plan
+  had listed one; dropped under the owner's one-catalog principle of ADR-0119).
+- API (`/manager/online/*`, `online.manage`): edit one listing, order listings, store categories
+  CRUD + order + picture, store logo / banner (multipart ≤ 2 MB, sniffed, `FileStorage`); public
+  store: logo / banner / category pictures (cached a day, `?v=`), `categorySource` (POS categories
+  until the first store category), store titles win, all catalog pictures, featured, position,
+  per-listing cap, sold-out hidden on request. Audit `online.listing_updated`,
+  `online.listings_reordered`, `online.category_*`, `online.categories_reordered`.
+- Console `/online`: Products online = listed products in store order with drag and drop
+  (`@dnd-kit`, keyboard, ▲▼), "Edit" dialog (store title / description, store category,
+  featured, max per order, catalog pictures read-only + link), "Remove from store"; not-listed
+  table adds into a chosen store category. New page Store categories. Settings → Appearance
+  (logo, banner, hide out-of-stock).
+- Storefront: banner + logo, document title, featured section, category chips with pictures,
+  sorting, gallery with thumbnails, share link, cap per listing.
+- Tests: `ecommerce.int.test.ts` +2 (merchandising: listings order / edit / cap, category with
+  picture and 415 on a non-image, storefront overrides and `categorySource` switch, delete →
+  back to POS categories, logo / banner upload / public serving / removal; hide sold-out);
+  `apps/online-web/src/app.test.tsx` +3 (13), `apps/store-web/src/app.test.tsx` +2;
+  `e2e/store.spec.ts` pay-at-pickup flow adds a store category, a store title and featured, and
+  the shopper sees them.
+- Docs: ADR-0121, BR-211…214, ROUTES (console pages, API, storefront), DATABASE (0067),
+  ROADMAP, plan (Phase 4 ✅ with the differences), user guide chapter 24.
+- Verified (cloud sandbox): `pnpm verify` 338 unit/web (56 files), `pnpm test:integration` 299
+  (44 files), `pnpm test:e2e` 41.
+- Released: staging (Railway, `main`, 2026-10-20 ~08:20 UTC). Production waits for the owner's
+  word ("انشر").
+
 ## Next step
-Online store: Phase 3 (separate online payment methods) cancelled by the owner (2026-10-20);
-next is Phase 4 (catalog and merchandising) or Phase 5 (fulfilment: delivery areas, pickup
-branches, notifications, printing), per `docs/ONLINE_STORE_PLAN.md`, on the owner's pick.
+Online store: Phase 4 ✅ (ADR-0121); next is Phase 5 (fulfilment: delivery areas, pickup
+branches, notifications, printing), per `docs/ONLINE_STORE_PLAN.md`, on the owner's word.
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.
 Staging: first platform operator, SMTP; owner decisions OQ-021–025.

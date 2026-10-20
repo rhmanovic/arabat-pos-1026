@@ -1,7 +1,7 @@
 # Online Store — Phased Development Plan
 
 Status: **approved by the owner on 2026-10-20** with one change: unpaid orders reserve **no**
-stock (see Phase 1). Phases 1 (ADR-0118) and 2 (ADR-0119) are implemented. **Phase 3 was cancelled
+stock (see Phase 1). Phases 1 (ADR-0118), 2 (ADR-0119) and 4 (ADR-0121) are implemented. **Phase 3 was cancelled
 by the owner on 2026-10-20**: payment methods stay one shared set (POS methods, with the "available
 online" flag and gateway for the store; pay on receipt needs none). Each phase
 is implemented as one or more vertical slices (DB → API → UI → tests → docs), recorded in
@@ -146,8 +146,14 @@ store as today. The text below is kept for the record only.
 **Done when:** a merchant configures COD, pay-at-pickup and bank transfer in `/online` without
 touching POS methods, and online sales reconcile in the cash and settlement reports.
 
-### Phase 4 — Catalog and merchandising online
-Size: L. Migration 0068. ADR-0121.
+### Phase 4 — Catalog and merchandising online ✅
+Size: L. Migration 0067. ADR-0121. **Done 2026-10-20** — with these differences from the text
+below: **no online price override** (the owner's principle: one catalog, one price, one stock
+for the POS and the store), no server-side image variants and no trigram index (the storefront
+sorts and searches the loaded list), SEO limited to the page title; the rest as planned
+(store titles / descriptions, drag ordering, featured, max per order, store categories with
+pictures, all catalog pictures in a gallery, logo and banner, sorting, share link, hide
+out-of-stock setting). Bulk listing into a category is done from the "not in the store" table.
 
 - `online_listings` gains `title_en/ar`, `description_en/ar` (rich text, sanitised),
   `position` (drag ordering, API), `featured`, `online_price_minor` (optional override,

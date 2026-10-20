@@ -97,6 +97,9 @@ const store = {
   minimumOrder: money('0.000'),
   reservationMinutes: 15,
   payOnReceiptEnabled: true,
+  logoUrl: null,
+  bannerUrl: null,
+  hideOutOfStock: false,
   paymentMethods: [
     { id: 'm1', nameEn: 'Card', nameAr: null, provider: 'mock', ready: true },
     { id: 'm2', nameEn: 'KNET', nameAr: null, provider: 'tap', ready: false },
@@ -125,6 +128,37 @@ const branches = {
   ],
 };
 const emptyOrders = { orders: [], total: 0, page: 1, pageSize: 25, counts: {} };
+const P1 = '0190a000-0000-7000-8000-0000000000a1';
+const P2 = '0190a000-0000-7000-8000-0000000000a2';
+const CATEGORY = {
+  id: '0190a000-0000-7000-8000-0000000000c9',
+  nameEn: 'Drinks',
+  nameAr: 'مشروبات',
+  position: 0,
+  status: 'active',
+  imageUrl: null,
+  productCount: 0,
+  version: 1,
+};
+const listing = (extra: Record<string, unknown>) => ({
+  productId: P1,
+  nameEn: 'Product',
+  nameAr: null,
+  listed: true,
+  variants: 1,
+  price: money('1.250'),
+  position: 0,
+  titleEn: null,
+  titleAr: null,
+  descriptionEn: null,
+  descriptionAr: null,
+  featured: false,
+  maxPerOrder: null,
+  onlineCategoryId: null,
+  posCategory: null,
+  images: [],
+  ...extra,
+});
 
 describe('online order actions', () => {
   it('offers only the steps that fit the fulfilment method', () => {
@@ -412,7 +446,36 @@ describe('online store console', () => {
     ).toBeInTheDocument();
   });
 
-  it('lists selected products in the store', async () => {
+  it('lists selected products in the store, in a chosen store category', async () => {
+    const user = userEvent.setup();
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'online.manage']),
+      routes: {
+        'GET /manager/online/listings': () => ({
+          status: 200,
+          body: { products: [listing({ productId: P1, nameEn: 'Coffee beans', listed: false })] },
+        }),
+        'GET /manager/online/categories': () => ({ status: 200, body: { categories: [CATEGORY] } }),
+        'PUT /manager/online/listings': () => ({ status: 200, body: { products: [] } }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/products', fetch });
+    await user.click(await screen.findByRole('checkbox', { name: 'Coffee beans' }));
+    await user.selectOptions(
+      screen.getByLabelText('Store category for the added products'),
+      CATEGORY.id,
+    );
+    await user.click(screen.getByRole('button', { name: 'List online (1)' }));
+    await waitFor(() =>
+      expect(fetch.calls.find((c) => c.method === 'PUT')?.body).toEqual({
+        productIds: [P1],
+        listed: true,
+        onlineCategoryId: CATEGORY.id,
+      }),
+    );
+  });
+
+  it('reorders the products sold online and edits what the store says about one', async () => {
     const user = userEvent.setup();
     const fetch = fakeApiFetch({
       session: makeSession('manager', ['manager.access', 'online.manage']),
@@ -421,29 +484,70 @@ describe('online store console', () => {
           status: 200,
           body: {
             products: [
-              {
-                productId: 'p1',
-                nameEn: 'Coffee beans',
-                nameAr: null,
-                listed: false,
-                variants: 1,
-                price: money('1.250'),
-              },
+              listing({ productId: P1, nameEn: 'Coffee beans', position: 0, featured: true }),
+              listing({ productId: P2, nameEn: 'Mug', position: 1 }),
             ],
           },
         }),
-        'PUT /manager/online/listings': () => ({ status: 200, body: { products: [] } }),
+        'GET /manager/online/categories': () => ({ status: 200, body: { categories: [CATEGORY] } }),
+        'PUT /manager/online/listings/order': () => ({ status: 200, body: { products: [] } }),
+        [`PUT /manager/online/listings/${P2}`]: () => ({ status: 200, body: { products: [] } }),
       },
     });
     renderApp({ routes, appInterface: 'manager', i18n, path: '/products', fetch });
-    await user.click(await screen.findByRole('checkbox', { name: 'Coffee beans' }));
-    await user.click(screen.getByRole('button', { name: 'List online (1)' }));
+    expect(await screen.findByText('Featured')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Move Mug up' }));
     await waitFor(() =>
-      expect(fetch.calls.find((c) => c.method === 'PUT')?.body).toEqual({
-        productIds: ['p1'],
-        listed: true,
+      expect(fetch.calls.find((c) => c.path.endsWith('/listings/order'))?.body).toEqual({
+        productIds: [P2, P1],
       }),
     );
+    await user.click(screen.getAllByRole('button', { name: 'Edit' })[1]!);
+    const dialog = await screen.findByRole('dialog', { name: 'In the store: Mug' });
+    await user.type(within(dialog).getByLabelText('Store title (English)'), 'Big mug');
+    await user.selectOptions(within(dialog).getByLabelText('Store category'), CATEGORY.id);
+    await user.type(within(dialog).getByLabelText('Maximum per order'), '5');
+    await user.click(within(dialog).getByRole('checkbox', { name: /Featured/ }));
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(fetch.calls.find((c) => c.path.endsWith(`/listings/${P2}`))?.body).toEqual({
+        titleEn: 'Big mug',
+        titleAr: null,
+        descriptionEn: null,
+        descriptionAr: null,
+        featured: true,
+        maxPerOrder: 5,
+        onlineCategoryId: CATEGORY.id,
+      }),
+    );
+  });
+
+  it('creates a store category and uploads its picture', async () => {
+    const user = userEvent.setup();
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'online.manage']),
+      routes: {
+        'GET /manager/online/categories': () => ({ status: 200, body: { categories: [] } }),
+        'POST /manager/online/categories': () => ({ status: 200, body: CATEGORY }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/categories', fetch });
+    await user.click(await screen.findByRole('button', { name: 'Add category' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByLabelText('Name (Arabic)'), 'مشروبات');
+    await user.type(within(dialog).getByLabelText('Name (English)'), 'Drinks');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(fetch.calls.find((c) => c.method === 'POST')?.body).toEqual({
+        nameEn: 'Drinks',
+        nameAr: 'مشروبات',
+        status: 'active',
+      }),
+    );
+    // Saved: the dialog stays open so a picture can be added.
+    expect(
+      await within(dialog).findByRole('button', { name: 'Upload picture' }),
+    ).toBeInTheDocument();
   });
 
   it('defines the same translation keys in Arabic and English', () => {

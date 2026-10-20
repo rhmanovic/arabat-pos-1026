@@ -6,6 +6,7 @@ import {
 } from '@arabat/web-core';
 import type { RouteObject } from 'react-router';
 import { OnlineLayout } from './app/OnlineLayout.js';
+import { CategoriesPage } from './features/categories/CategoriesPage.js';
 import { DashboardPage } from './features/dashboard/DashboardPage.js';
 import { OrdersPage } from './features/orders/OrdersPage.js';
 import { ProductsPage } from './features/products/ProductsPage.js';
@@ -40,6 +41,7 @@ export const routes: RouteObject[] = [
       { index: true, element: <DashboardPage /> },
       { path: 'orders', element: <OrdersPage /> },
       { path: 'products', element: <ProductsPage /> },
+      { path: 'categories', element: <CategoriesPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: '*', element: <NotFound /> },
     ],

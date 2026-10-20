@@ -16,6 +16,12 @@ export const storeAr: typeof storeEn = {
     unavailable: 'نفدت الكمية',
     from: 'ابتداءً من {{price}}',
     search: 'ابحث عن منتج',
+    featured: 'مميّزة',
+    sort: 'الترتيب',
+    sort_default: 'ترتيب المتجر',
+    sort_name: 'الاسم',
+    sort_priceAsc: 'السعر: من الأقل',
+    sort_priceDesc: 'السعر: من الأعلى',
   },
   product: {
     back: 'العودة إلى المنتجات',
@@ -25,6 +31,10 @@ export const storeAr: typeof storeEn = {
     added: 'تمت الإضافة إلى السلة',
     unavailable: 'نفدت الكمية',
     notFound: 'هذا المنتج غير متاح.',
+    gallery: 'الصور',
+    picture: 'الصورة {{n}}',
+    share: 'مشاركة',
+    linkCopied: 'تم نسخ الرابط',
   },
   cart: {
     title: 'سلة المشتريات',

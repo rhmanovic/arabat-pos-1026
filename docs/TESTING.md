@@ -66,6 +66,29 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-20 (online store Phase 4: merchandising, ADR-0121, cloud sandbox run)
+- `ecommerce.int.test.ts` (+2, 12 in the file): new listings go to the end (positions 0, 1) with
+  catalog name, no store title, no cap; a store category is created (position 0, no picture), a
+  PNG is uploaded (`imageUrl …?v=2`) and a non-image is refused (415); a listing takes a store
+  title, description, featured, cap 2 and the category; the order is reversed; the storefront
+  returns the store title, `featured`, `position`, `maxQuantity` 2, `categorySource = 'online'`
+  with the category and its picture URL (served 200 `image/png`, cached a day); deleting the
+  category returns the storefront to `categorySource = 'pos'`; logo and banner upload, public
+  serving and removal (404 afterwards); `hide_out_of_stock` drops the sold-out product from the
+  public list and `/products/:id` while the store lists it again when off.
+- `apps/online-web/src/app.test.tsx` (+3, 13): not-listed products are added into a chosen
+  store category (`PUT listings` with `onlineCategoryId`); listed products render in store order
+  with the "Featured" badge, "Move Mug up" calls `PUT listings/order`, and the "Edit" dialog
+  saves the store title, category, cap 5 and featured (`PUT listings/:productId`); the categories
+  page creates a category (ar + en) then uploads its picture (multipart).
+- `apps/store-web/src/app.test.tsx` (+2, 14): banner, logo, featured section first, store order
+  then price sorting, a category chip with its picture filters the grid, document title; the
+  product page's gallery switches pictures and "Share" copies the product link.
+- `e2e/store.spec.ts` (2): the pay-at-pickup flow creates a store category, gives the listing a
+  store title and featured, and the shopper sees the chip, the featured section and the title.
+- Totals: `pnpm verify` 338 unit/web (56 files), `pnpm test:integration` 299 (44 files),
+  `pnpm test:e2e` 41.
+
 ### Results 2026-10-20 (online store console at /online, ADR-0119, cloud sandbox run)
 - `apps/online-web/src/app.test.tsx` (10): the console's sign-in page; its own navigation with
   the management links shown by permission (reports hidden without `reports.sales`), the

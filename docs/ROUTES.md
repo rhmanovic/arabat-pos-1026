@@ -94,8 +94,8 @@ No session; every call goes to the public store API. Cart kept per store in the 
 
 | Route | Screen |
 |---|---|
-| `/store/:slug` | Catalog (search, categories, sold-out badges) |
-| `/store/:slug/products/:productId` | Product details, options, quantity, add to cart |
+| `/store/:slug` | Catalog: banner and logo, featured products, search, sorting (store order, name, price), store or catalog categories with pictures, sold-out badges (ADR-0121) |
+| `/store/:slug/products/:productId` | Product details, picture gallery, share link, options, quantity (capped per listing), add to cart |
 | `/store/:slug/cart` | Cart (exact totals, minimum order, sold-out items removed) |
 | `/store/:slug/checkout` | Contact, pickup/delivery, address, payment (gateway method or pay on receipt), summary |
 | `/store/:slug/orders/:token` | Order tracking (status, history, pay link while unpaid; when to pay for pay-on-receipt orders) |
@@ -115,8 +115,9 @@ dashboard's "Online store" tile open it (↗); `/manager/online` redirects here.
 | `/online/login`, `/online/forgot-password` | Sign in with the management account | — |
 | `/online/` | Overview: store state and address, order counts (new, awaiting payment, to prepare, in progress, need attention), shared functions | `online.manage` or `online.orders` |
 | `/online/orders` (`?status=`) | Orders list, detail, steps, "Record payment" for pay-on-receipt orders, check pending payments | `online.orders` (branch of the order) |
-| `/online/products` | Which catalog products are sold online | `online.manage` |
-| `/online/settings` | Address (live check), status, branding, fulfilment, payment options | `online.manage` |
+| `/online/products` | Which catalog products are sold online, in store order (drag and drop); per product: store title / description, store category, featured, maximum per order, catalog pictures (read-only); add not-listed products into a store category (ADR-0121) | `online.manage` |
+| `/online/categories` | Store categories: add, edit, picture, hide, order, delete (ADR-0121) | `online.manage` |
+| `/online/settings` | Address (live check), status, branding, appearance (logo, banner, hide out-of-stock products), fulfilment, payment options | `online.manage` |
 | Sidebar "Shared with the POS" | Opens `/manager/products`, `/manager/customers`, `/manager/reports`, `/manager/payments` with their own permissions | — |
 
 ## 2c. `/links` — links-web (link-page editor, ADR-0116 amendment 1)
@@ -400,8 +401,9 @@ only staff land on `/pos/kitchen`. Sales list and reports show the service type.
 | Method & path | Permission |
 |---|---|
 | `GET/PUT /manager/online/store`, `GET /manager/online/store/slug-availability?slug=`, `GET/PUT /manager/online/listings`, `POST /manager/online/reconcile` | merchant-wide `online.manage` |
+| `PUT /manager/online/listings/order` (`{ productIds }`), `PUT /manager/online/listings/:productId` (store title / description, featured, max per order, store category), `GET/POST /manager/online/categories`, `PUT /manager/online/categories/order` (`{ ids }`), `PUT/DELETE /manager/online/categories/:id`, `GET/POST/DELETE /manager/online/categories/:id/image`, `GET/POST/DELETE /manager/online/store/:kind(logo\|banner)` (multipart `file`, JPEG / PNG / WebP ≤ 2 MB; ADR-0121) | merchant-wide `online.manage` |
 | `GET /manager/online/orders?status=`, `GET /manager/online/orders/:id`, `POST /manager/online/orders/:id/action` (`confirm`, `mark_paid` with tender + reference, `preparing`, `ready`, `out_for_delivery`, `completed`, `cancel`), `GET /manager/online/tenders` | `online.orders` (branch of the order) |
-| `GET /store/:slug`, `/products`, `/products/:id`, `/images/:productId/:imageId` | 🔓 published or paused store |
+| `GET /store/:slug` (logo / banner URLs, `categorySource`, categories with pictures), `/products` (store titles, all pictures, featured, position, per-listing cap; sold-out hidden when the store says so), `/products/:id`, `/images/:productId/:imageId`, `/:kind(logo\|banner)`, `/categories/:id/image` (public, cached one day, `?v=`) | 🔓 published or paused store |
 | `POST /store/:slug/checkout` | 🔓 published store; idempotency key; 30 per 10 min per IP; `paymentMethodId: null` = pay on receipt (ADR-0118) |
 | `GET /store/:slug/orders/:token` | 🔓 tracking token |
 | `POST /webhooks/payments/:provider` | 🔓 provider signature (raw body) |

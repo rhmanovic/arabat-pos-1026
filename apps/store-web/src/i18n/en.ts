@@ -14,6 +14,12 @@ export const storeEn = {
     unavailable: 'Sold out',
     from: 'From {{price}}',
     search: 'Search products',
+    featured: 'Featured',
+    sort: 'Sort',
+    sort_default: 'Store order',
+    sort_name: 'Name',
+    sort_priceAsc: 'Price: low to high',
+    sort_priceDesc: 'Price: high to low',
   },
   product: {
     back: 'Back to products',
@@ -23,6 +29,10 @@ export const storeEn = {
     added: 'Added to cart',
     unavailable: 'Sold out',
     notFound: 'This product is not available.',
+    gallery: 'Pictures',
+    picture: 'Picture {{n}}',
+    share: 'Share',
+    linkCopied: 'Link copied',
   },
   cart: {
     title: 'Your cart',

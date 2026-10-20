@@ -59,10 +59,22 @@ export const onlineStores = pgTable(
     reservationMinutes: integer().notNull().default(30),
     /** Orders may be placed without paying online; the money is collected on hand-over (ADR-0118). */
     payOnReceiptEnabled: boolean().notNull().default(true),
+    /** Store logo and banner (ADR-0121); the bytes live in the file storage. */
+    logoKey: text(),
+    logoContentType: text(),
+    bannerKey: text(),
+    bannerContentType: text(),
+    /** Products with nothing available at the fulfilment branch are left out of the storefront. */
+    hideOutOfStock: boolean().notNull().default(false),
     version: integer().notNull().default(1),
     updatedAt: updatedAt(),
   },
   (t) => [
+    check('online_stores_logo_pair', sql`(${t.logoKey} is null) = (${t.logoContentType} is null)`),
+    check(
+      'online_stores_banner_pair',
+      sql`(${t.bannerKey} is null) = (${t.bannerContentType} is null)`,
+    ),
     uniqueIndex('online_stores_slug_key').on(sql`lower(${t.slug})`),
     foreignKey({
       columns: [t.merchantId, t.fulfillmentBranchId],
@@ -99,7 +111,43 @@ export const onlineStoreSlugHistory = pgTable(
   ],
 );
 
-/** Products shown in the online store (presence = listed). */
+/**
+ * The store's own navigation (ADR-0121): categories independent of the POS ones. While a
+ * merchant has none, the storefront groups by the catalog categories.
+ */
+export const onlineCategories = pgTable(
+  'online_categories',
+  {
+    id: id(),
+    merchantId: merchantId().references(() => merchants.id),
+    nameEn: text(),
+    nameAr: text(),
+    position: integer().notNull().default(0),
+    /** active | hidden (kept, not shown). */
+    status: text().notNull().default('active'),
+    imageKey: text(),
+    imageContentType: text(),
+    version: integer().notNull().default(1),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    unique('online_categories_merchant_id_id_key').on(t.merchantId, t.id),
+    index('online_categories_merchant_idx').on(t.merchantId, t.position),
+    check('online_categories_name_present', sql`coalesce(${t.nameEn}, ${t.nameAr}) is not null`),
+    check('online_categories_status_valid', sql`${t.status} in ('active', 'hidden')`),
+    check(
+      'online_categories_image_pair',
+      sql`(${t.imageKey} is null) = (${t.imageContentType} is null)`,
+    ),
+  ],
+);
+
+/**
+ * Products shown in the online store (presence = listed), with what the store says about them
+ * on top of the catalog (ADR-0121): an online title and description, a store category,
+ * featured, a per-order cap and the display order. Prices and stock stay the catalog's.
+ */
 export const onlineListings = pgTable(
   'online_listings',
   {
@@ -108,9 +156,28 @@ export const onlineListings = pgTable(
       .notNull()
       .references(() => products.id),
     position: integer().notNull().default(0),
+    titleEn: text(),
+    titleAr: text(),
+    descriptionEn: text(),
+    descriptionAr: text(),
+    featured: boolean().notNull().default(false),
+    /** Units of one variant per order (1–20); null = the store default (20). */
+    maxPerOrder: integer(),
+    onlineCategoryId: uuid(),
     createdAt: createdAt(),
+    updatedAt: updatedAt(),
   },
-  (t) => [primaryKey({ columns: [t.merchantId, t.productId] })],
+  (t) => [
+    primaryKey({ columns: [t.merchantId, t.productId] }),
+    foreignKey({
+      columns: [t.merchantId, t.onlineCategoryId],
+      foreignColumns: [onlineCategories.merchantId, onlineCategories.id],
+    }).onDelete('set null'),
+    check(
+      'online_listings_max_per_order_valid',
+      sql`${t.maxPerOrder} is null or (${t.maxPerOrder} between 1 and 20)`,
+    ),
+  ],
 );
 
 /**

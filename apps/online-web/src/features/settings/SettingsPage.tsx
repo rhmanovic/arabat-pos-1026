@@ -14,7 +14,7 @@ import {
 } from '@arabat/ui';
 import { AccessDenied, localizedName, useApi, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { managerUrl, useBranches, useSession } from '../../app/context.js';
 import { key } from '../shared.js';
@@ -53,6 +53,7 @@ function toForm(s: OnlineStore): SaveOnlineStore {
     minimumOrder: s.minimumOrder.amount,
     reservationMinutes: s.reservationMinutes,
     payOnReceiptEnabled: s.payOnReceiptEnabled,
+    hideOutOfStock: s.hideOutOfStock,
     version: s.version,
   };
 }
@@ -358,6 +359,19 @@ function SettingsForm({ store }: { store: OnlineStore }) {
           {text('minimumOrder', t('store.minimumOrder'), { dir: 'ltr' })}
         </div>
       </Section>
+      <Section title={t('appearance.title')} description={t('appearance.hint')}>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <ImageField kind="logo" url={store.logoUrl} />
+          <ImageField kind="banner" url={store.bannerUrl} />
+          <Checkbox
+            className="sm:col-span-2"
+            label={t('appearance.hideOutOfStock')}
+            description={t('appearance.hideOutOfStockHint')}
+            checked={v.hideOutOfStock ?? false}
+            onChange={(e) => set({ hideOutOfStock: e.target.checked })}
+          />
+        </div>
+      </Section>
       <Section title={t('store.paymentsSection')} description={t('store.paymentsHint')}>
         <Checkbox
           label={t('store.payOnReceipt')}
@@ -405,6 +419,76 @@ function SettingsForm({ store }: { store: OnlineStore }) {
         <Button loading={save.isPending} onClick={() => save.mutate()}>
           {t('common.save')}
         </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Logo or banner of the store (ADR-0121): shown at once; uploads save on their own. */
+function ImageField({ kind, url }: { kind: 'logo' | 'banner'; url: string | null }) {
+  const { t } = useTranslation();
+  const api = useApi();
+  const notify = useNotify();
+  const queryClient = useQueryClient();
+  const fileInput = useRef<HTMLInputElement>(null);
+  const refresh = () => queryClient.invalidateQueries({ queryKey: key });
+  const upload = useMutation({
+    mutationFn: (file: File) => api.online.uploadStoreImage(kind, file),
+    onSuccess: async () => {
+      notify.ok(t('appearance.imageSaved'));
+      await refresh();
+    },
+    onError: notify.fail,
+  });
+  const remove = useMutation({
+    mutationFn: () => api.online.removeStoreImage(kind),
+    onSuccess: refresh,
+    onError: notify.fail,
+  });
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-sm font-medium">{t(`appearance.${kind}`)}</p>
+      <div
+        className={
+          kind === 'logo'
+            ? 'size-20 overflow-hidden rounded-full border border-border bg-surface-muted'
+            : 'aspect-[3/1] w-full overflow-hidden rounded-md border border-border bg-surface-muted'
+        }
+      >
+        {url ? <img src={url} alt="" className="size-full object-cover" /> : null}
+      </div>
+      <p className="text-xs text-fg-muted">{t(`appearance.${kind}Hint`)}</p>
+      <div className="flex gap-2">
+        <input
+          ref={fileInput}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="sr-only"
+          aria-label={t(`appearance.upload_${kind}`)}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) upload.mutate(file);
+            e.target.value = '';
+          }}
+        />
+        <Button
+          size="sm"
+          variant="secondary"
+          loading={upload.isPending}
+          onClick={() => fileInput.current?.click()}
+        >
+          {t(`appearance.upload_${kind}`)}
+        </Button>
+        {url ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            loading={remove.isPending}
+            onClick={() => remove.mutate()}
+          >
+            {t('appearance.remove')}
+          </Button>
+        ) : null}
       </div>
     </div>
   );

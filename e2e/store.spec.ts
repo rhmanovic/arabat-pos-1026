@@ -62,11 +62,11 @@ test('a shopper buys online with the sandbox gateway; the order, stock and repor
   await page.getByRole('link', { name: 'Products online' }).click();
   await page.getByRole('checkbox', { name: 'Saffron tea' }).check();
   await page.getByRole('button', { name: 'List online (1)' }).click();
-  await expect(page.getByText('Listed', { exact: true })).toBeVisible();
+  await expect(page.getByText('Sold online (1)')).toBeVisible();
   await page.getByRole('link', { name: 'Store settings' }).click();
   await page.getByLabel('Store address').fill(slug);
   await page.getByLabel('Store name (English)').fill('Saffron House');
-  await page.getByLabel('Fulfilment branch').selectOption(main);
+  await page.getByLabel('Fulfilment branch', { exact: true }).selectOption(main);
   await page.getByLabel('Delivery', { exact: true }).check();
   await page.getByLabel('Delivery fee').fill('0.500');
   await page.getByLabel('Status').selectOption('published');
@@ -172,14 +172,31 @@ test('a shopper orders without any gateway and pays at pickup; staff confirm, re
   await page.getByRole('link', { name: 'Products online' }).click();
   await page.getByRole('checkbox', { name: 'Date box' }).check();
   await page.getByRole('button', { name: 'List online (1)' }).click();
-  await expect(page.getByText('Listed', { exact: true })).toBeVisible();
+  await expect(page.getByText('Sold online (1)')).toBeVisible();
+
+  // Merchandising (ADR-0121): a store category, then a store title and "featured" on the listing.
+  await page.getByRole('link', { name: 'Store categories', exact: true }).click();
+  await page.getByRole('button', { name: 'Add category' }).click();
+  await page.getByLabel('Name (English)').fill('Sweets');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByRole('dialog', { name: 'Edit category' })).toBeVisible();
+  await page.getByRole('button', { name: 'Close' }).click();
+  await page.getByRole('link', { name: 'Products online' }).click();
+  await page.getByRole('button', { name: 'Edit' }).click();
+  const edit = page.getByRole('dialog');
+  await edit.getByLabel('Store title (English)').fill('Date box, 500 g');
+  await edit.getByLabel('Store category', { exact: true }).selectOption({ label: 'Sweets' });
+  await edit.getByLabel('Featured').check();
+  await edit.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByText('Date box, 500 g')).toBeVisible();
+
   await page.getByRole('link', { name: 'Store settings' }).click();
   const address = page.getByLabel('Store address');
   await address.fill(slug);
   await expect(page.getByText('Available', { exact: true })).toBeVisible();
   await expect(page.getByTestId('store-url-preview')).toHaveText(new RegExp(`/store/${slug}$`));
   await page.getByLabel('Store name (English)').fill('Date House');
-  await page.getByLabel('Fulfilment branch').selectOption(main);
+  await page.getByLabel('Fulfilment branch', { exact: true }).selectOption(main);
   await expect(page.getByRole('checkbox', { name: 'Allow payment on receipt' })).toBeChecked();
   await page.getByLabel('Status').selectOption('published');
   await page.getByRole('button', { name: 'Save' }).click();
@@ -190,7 +207,14 @@ test('a shopper orders without any gateway and pays at pickup; staff confirm, re
   await shopperContext.addInitScript(() => localStorage.setItem('arabat.language', 'en'));
   const shopper = await shopperContext.newPage();
   await shopper.goto(`/store/${slug}`);
-  await shopper.getByRole('link', { name: /Date box/ }).click();
+  // The store's own category and the featured section, with the store title.
+  await expect(shopper.getByRole('button', { name: 'Sweets' })).toBeVisible();
+  await expect(shopper.getByRole('region', { name: 'Featured' })).toBeVisible();
+  await shopper
+    .getByRole('link', { name: /Date box, 500 g/ })
+    .first()
+    .click();
+  await expect(shopper).toHaveTitle('Date box, 500 g · Date House');
   await shopper.getByLabel('Quantity').selectOption('2');
   await shopper.getByRole('button', { name: 'Add to cart' }).click();
   await shopper.getByRole('link', { name: 'Cart (2)' }).click();

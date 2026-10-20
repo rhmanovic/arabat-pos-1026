@@ -253,10 +253,14 @@ import {
   restaurantSettingsSchema,
   type OnlineOrderListQuery,
   type OnlineOrderActionInput,
+  type SaveListing,
+  type SaveOnlineCategory,
   type SaveOnlineStore,
   type StoreCheckout,
   listingListSchema,
   mockPaymentSchema,
+  onlineCategoryListSchema,
+  onlineCategorySchema,
   onlineOrderListSchema,
   onlineOrderSchema,
   onlineStoreSchema,
@@ -349,6 +353,25 @@ export function createApiClient(options: ApiClientOptions = {}) {
     const parsed = opts.schema.safeParse(data);
     if (!parsed.success) throw new ContractError(path, parsed.error);
     return parsed.data as never;
+  }
+
+  /** Multipart upload of one `file` field; the reply is parsed with the given schema. */
+  async function uploadImage<T extends z.ZodType>(
+    path: string,
+    file: Blob,
+    schema: T,
+  ): Promise<z.output<T>> {
+    const form = new FormData();
+    form.append('file', file);
+    const response = await doFetch(`${baseUrl}${path}`, {
+      method: 'POST',
+      body: form,
+      credentials: 'same-origin',
+    }).catch((error: unknown) => {
+      throw new NetworkError(error);
+    });
+    if (!response.ok) throw await toApiError(response);
+    return schema.parse(await response.json()) as z.output<T>;
   }
 
   return {
@@ -1102,8 +1125,49 @@ export function createApiClient(options: ApiClientOptions = {}) {
       /** Tenders staff may record for a pay-on-receipt order. */
       tenders: () => request('GET', '/manager/online/tenders', { schema: onlineTenderListSchema }),
       listings: () => request('GET', '/manager/online/listings', { schema: listingListSchema }),
-      setListings: (body: { productIds: string[]; listed: boolean }) =>
-        request('PUT', '/manager/online/listings', { body, schema: listingListSchema }),
+      setListings: (body: {
+        productIds: string[];
+        listed: boolean;
+        onlineCategoryId?: string | null;
+      }) => request('PUT', '/manager/online/listings', { body, schema: listingListSchema }),
+      /** The store's own text and options for one listed product (ADR-0121). */
+      saveListing: (productId: string, body: SaveListing) =>
+        request('PUT', `/manager/online/listings/${productId}`, {
+          body,
+          schema: listingListSchema,
+        }),
+      /** Every listed product exactly once, in display order. */
+      orderListings: (productIds: string[]) =>
+        request('PUT', '/manager/online/listings/order', {
+          body: { productIds },
+          schema: listingListSchema,
+        }),
+      categories: () =>
+        request('GET', '/manager/online/categories', { schema: onlineCategoryListSchema }),
+      createCategory: (body: SaveOnlineCategory) =>
+        request('POST', '/manager/online/categories', { body, schema: onlineCategorySchema }),
+      updateCategory: (id: string, body: SaveOnlineCategory) =>
+        request('PUT', `/manager/online/categories/${id}`, { body, schema: onlineCategorySchema }),
+      deleteCategory: (id: string) =>
+        request('DELETE', `/manager/online/categories/${id}`, { schema: onlineCategoryListSchema }),
+      orderCategories: (ids: string[]) =>
+        request('PUT', '/manager/online/categories/order', {
+          body: { ids },
+          schema: onlineCategoryListSchema,
+        }),
+      async uploadCategoryImage(id: string, file: Blob) {
+        return uploadImage(`/manager/online/categories/${id}/image`, file, onlineCategorySchema);
+      },
+      removeCategoryImage: (id: string) =>
+        request('DELETE', `/manager/online/categories/${id}/image`, {
+          schema: onlineCategorySchema,
+        }),
+      /** Store logo or banner (ADR-0121). */
+      async uploadStoreImage(kind: 'logo' | 'banner', file: Blob) {
+        return uploadImage(`/manager/online/store/${kind}`, file, onlineStoreSchema);
+      },
+      removeStoreImage: (kind: 'logo' | 'banner') =>
+        request('DELETE', `/manager/online/store/${kind}`, { schema: onlineStoreSchema }),
       orders: (query: OnlineOrderListQuery = {}) =>
         request('GET', `/manager/online/orders?${toParams(query)}`, {
           schema: onlineOrderListSchema,

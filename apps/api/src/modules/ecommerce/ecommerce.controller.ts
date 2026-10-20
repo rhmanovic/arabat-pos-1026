@@ -1,15 +1,21 @@
 import {
+  MAX_STORE_IMAGE_BYTES,
   type MockPayment,
+  type OnlineCategory,
   type OnlineOrder,
   type OnlineStore,
   type PublicOrder,
   type SlugAvailability,
   type StoreProduct,
   type Storefront,
+  listingOrderSchema,
   mockPaymentOutcomeSchema,
+  onlineCategoryOrderSchema,
   onlineOrderActionSchema,
   onlineOrderListQuerySchema,
+  saveListingSchema,
   saveListingsSchema,
+  saveOnlineCategorySchema,
   saveOnlineStoreSchema,
   slugAvailabilityQuerySchema,
   storeCheckoutSchema,
@@ -17,6 +23,7 @@ import {
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -42,6 +49,39 @@ import { OnlinePaymentsService } from './online-payments.service.js';
 const uuid = new ParseUUIDPipe();
 type O<T extends z.ZodType> = z.output<T>;
 const CHECKOUT_LIMIT = { limit: 30, windowSeconds: 600 };
+
+/** One `file` field of a multipart request, at most `MAX_STORE_IMAGE_BYTES` (ADR-0121). */
+async function readUpload(req: FastifyRequest): Promise<Buffer> {
+  if (!req.isMultipart())
+    throw new AppError(415, 'UNSUPPORTED_MEDIA', 'Send the image as multipart/form-data.');
+  const file = await req.file({ limits: { fileSize: MAX_STORE_IMAGE_BYTES + 1, files: 1 } });
+  if (!file)
+    throw AppError.validation([
+      { path: 'file', code: 'required', message: 'An image file is required.' },
+    ]);
+  const data = await file.toBuffer().catch(() => {
+    throw new AppError(413, 'PAYLOAD_TOO_LARGE', 'Images must be at most 2 MB.');
+  });
+  if (file.file.truncated)
+    throw new AppError(413, 'PAYLOAD_TOO_LARGE', 'Images must be at most 2 MB.');
+  return data;
+}
+
+const sendImage = (
+  reply: FastifyReply,
+  image: { data: Buffer; contentType: string },
+  cache: string,
+) =>
+  reply
+    .header('content-type', image.contentType)
+    .header('cache-control', cache)
+    .header('x-content-type-options', 'nosniff')
+    .send(image.data);
+
+function storeImageKind(kind: string): 'logo' | 'banner' {
+  if (kind !== 'logo' && kind !== 'banner') throw AppError.notFound();
+  return kind;
+}
 
 @Controller('manager/online')
 export class OnlineManagerController {
@@ -91,7 +131,149 @@ export class OnlineManagerController {
     @Body(new ZodPipe(saveListingsSchema)) body: O<typeof saveListingsSchema>,
     @Req() req: FastifyRequest,
   ) {
-    return this.store.setListings(actor, body.productIds, body.listed, req.ip);
+    return this.store.setListings(
+      actor,
+      body.productIds,
+      body.listed,
+      req.ip,
+      body.onlineCategoryId,
+    );
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Put('listings/order')
+  orderListings(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Body(new ZodPipe(listingOrderSchema)) body: O<typeof listingOrderSchema>,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.store.orderListings(actor, body.productIds, req.ip);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Put('listings/:productId')
+  saveListing(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('productId', uuid) productId: string,
+    @Body(new ZodPipe(saveListingSchema)) body: O<typeof saveListingSchema>,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.store.saveListing(actor, productId, body, req.ip);
+  }
+
+  // ---------------------------------------------------------------- categories (ADR-0121)
+  @RequirePermission('manager', 'online.manage')
+  @Get('categories')
+  categories(@CurrentMerchantActor() actor: MerchantActor) {
+    return this.store.categories(actor);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Post('categories')
+  createCategory(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Body(new ZodPipe(saveOnlineCategorySchema)) body: O<typeof saveOnlineCategorySchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<OnlineCategory> {
+    return this.store.createCategory(actor, body, req.ip);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Put('categories/order')
+  orderCategories(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Body(new ZodPipe(onlineCategoryOrderSchema)) body: O<typeof onlineCategoryOrderSchema>,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.store.orderCategories(actor, body.ids, req.ip);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Put('categories/:id')
+  updateCategory(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Body(new ZodPipe(saveOnlineCategorySchema)) body: O<typeof saveOnlineCategorySchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<OnlineCategory> {
+    return this.store.updateCategory(actor, id, body, req.ip);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Delete('categories/:id')
+  deleteCategory(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.store.deleteCategory(actor, id, req.ip);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Get('categories/:id/image')
+  async categoryImage(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Res() reply: FastifyReply,
+  ) {
+    await sendImage(reply, await this.store.categoryImage(actor, id), 'private, no-cache');
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Post('categories/:id/image')
+  @HttpCode(200)
+  async uploadCategoryImage(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Req() req: FastifyRequest,
+  ): Promise<OnlineCategory> {
+    return this.store.setCategoryImage(actor, id, await readUpload(req), req.ip);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Delete('categories/:id/image')
+  removeCategoryImage(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Req() req: FastifyRequest,
+  ): Promise<OnlineCategory> {
+    return this.store.setCategoryImage(actor, id, null, req.ip);
+  }
+
+  // ---------------------------------------------------------------- store images (ADR-0121)
+  @RequirePermission('manager', 'online.manage')
+  @Get('store/:kind(logo|banner)')
+  async storeImage(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('kind') kind: string,
+    @Res() reply: FastifyReply,
+  ) {
+    await sendImage(
+      reply,
+      await this.store.storeImage(actor, storeImageKind(kind)),
+      'private, no-cache',
+    );
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Post('store/:kind(logo|banner)')
+  @HttpCode(200)
+  async uploadStoreImage(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('kind') kind: string,
+    @Req() req: FastifyRequest,
+  ): Promise<OnlineStore> {
+    return this.store.setStoreImage(actor, storeImageKind(kind), await readUpload(req), req.ip);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Delete('store/:kind(logo|banner)')
+  removeStoreImage(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('kind') kind: string,
+    @Req() req: FastifyRequest,
+  ): Promise<OnlineStore> {
+    return this.store.setStoreImage(actor, storeImageKind(kind), null, req.ip);
   }
 
   @RequirePermission('manager', 'online.orders')
@@ -169,12 +351,40 @@ export class StorefrontController {
     @Param('imageId', uuid) imageId: string,
     @Res() reply: FastifyReply,
   ) {
-    const { data, contentType } = await this.store.image(slug, productId, imageId);
-    await reply
-      .header('content-type', contentType)
-      .header('cache-control', 'public, max-age=86400, immutable')
-      .header('x-content-type-options', 'nosniff')
-      .send(data);
+    await sendImage(
+      reply,
+      await this.store.image(slug, productId, imageId),
+      'public, max-age=86400, immutable',
+    );
+  }
+
+  /** Logo and banner (ADR-0121); the `?v=` in their URLs changes with every store update. */
+  @Public()
+  @Get(':kind(logo|banner)')
+  async storeImage(
+    @Param('slug') slug: string,
+    @Param('kind') kind: string,
+    @Res() reply: FastifyReply,
+  ) {
+    await sendImage(
+      reply,
+      await this.store.publicImage(slug, storeImageKind(kind)),
+      'public, max-age=86400',
+    );
+  }
+
+  @Public()
+  @Get('categories/:id/image')
+  async categoryImage(
+    @Param('slug') slug: string,
+    @Param('id', uuid) id: string,
+    @Res() reply: FastifyReply,
+  ) {
+    await sendImage(
+      reply,
+      await this.store.publicImage(slug, { categoryId: id }),
+      'public, max-age=86400',
+    );
   }
 
   @Public()

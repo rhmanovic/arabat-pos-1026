@@ -19,6 +19,8 @@ the code differ, the code wins and the differences are listed here:
 - `apps/online-web` (`/online`) is the online store console (ADR-0119): its own layout and
   navigation over the same manager session and the same `/manager/online/*` API; the POS product
   keeps `/manager`, and the two link to each other. Frontend separation only.
+  Merchandising (ADR-0121): store titles, order (`@dnd-kit` sortable list), featured, store
+  categories with pictures, logo / banner; prices, stock and product pictures stay the catalog's.
 - `apps/landing-web` is the public landing page at `/` (static React page, no session, no API
   calls; ADR-0113). Its text lives in `src/content.ts` (ar/en).
 Related documents: `AUTH.md` (authentication & permissions), `ROUTES.md`

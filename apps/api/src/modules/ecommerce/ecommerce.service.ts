@@ -1,4 +1,6 @@
 import type {
+  Listing,
+  OnlineCategory,
   OnlineOrder,
   OnlineOrderStatus,
   OnlineStore,
@@ -8,10 +10,12 @@ import type {
   Storefront,
   onlineOrderActionSchema,
   onlineOrderListQuerySchema,
+  saveListingSchema,
+  saveOnlineCategorySchema,
   saveOnlineStoreSchema,
   storeCheckoutSchema,
 } from '@arabat/contracts';
-import { RESERVED_STORE_SLUGS, STORE_SLUG_PATTERN } from '@arabat/contracts';
+import { MAX_STORE_IMAGE_BYTES, RESERVED_STORE_SLUGS, STORE_SLUG_PATTERN } from '@arabat/contracts';
 import { type FeeType, Money, formatQuantity, parseQuantity, priceCart } from '@arabat/money';
 import { can, permissionBranchScope } from '@arabat/permissions';
 import { type PosPaymentMethod, checkPayments } from '@arabat/pos-core';
@@ -28,7 +32,7 @@ import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { rules } from '../../kernel/errors/pos-rule.js';
 import { newId } from '../../kernel/ids.js';
-import { FileStorage } from '../../kernel/storage/file-storage.js';
+import { FileStorage, sniffImageType } from '../../kernel/storage/file-storage.js';
 import { AuditService } from '../audit/audit.service.js';
 import { isUniqueViolation } from '../auth/registration.service.js';
 import { versionConflict } from '../branches/branches.service.js';
@@ -38,6 +42,8 @@ import { StockLedgerService } from '../inventory/stock-ledger.service.js';
 import { parseAmount } from '../payments/payments.service.js';
 import { SalesService } from '../sales/sales.service.js';
 import {
+  onlineCategories,
+  onlineListings,
   onlineOrderLines,
   onlineOrders,
   onlinePayments,
@@ -69,6 +75,9 @@ const NEXT: Record<string, OnlineOrderStatus[]> = {
   ready: ['completed'],
   out_for_delivery: ['completed'],
 };
+type StoreImageKind = 'logo' | 'banner';
+const imageUrl = (path: string, version: number) => `/api/v1/${path}?v=${version}`;
+
 /** Statuses of a pay-on-receipt order whose payment can still be recorded (ADR-0118). */
 const PAYABLE: OnlineOrderStatus[] = [
   'placed',
@@ -150,6 +159,9 @@ export class EcommerceService {
         minimumOrder: money(row?.minimumOrderMinor ?? 0n),
         reservationMinutes: row?.reservationMinutes ?? 30,
         payOnReceiptEnabled: row?.payOnReceiptEnabled ?? true,
+        logoUrl: row?.logoKey ? imageUrl('manager/online/store/logo', row.version) : null,
+        bannerUrl: row?.bannerKey ? imageUrl('manager/online/store/banner', row.version) : null,
+        hideOutOfStock: row?.hideOutOfStock ?? false,
         paymentMethods: methods.map((x) => ({
           id: x['id'] as string,
           nameEn: (x['name_en'] as string | null) ?? null,
@@ -198,6 +210,7 @@ export class EcommerceService {
           minimumOrderMinor: parseAmount(input.minimumOrder, 'minimumOrder'),
           reservationMinutes: input.reservationMinutes,
           payOnReceiptEnabled: input.payOnReceiptEnabled,
+          hideOutOfStock: input.hideOutOfStock,
         };
         // A published store must offer some way to pay: on hand-over, or a gateway that works.
         if (
@@ -352,30 +365,412 @@ export class EcommerceService {
     });
   }
 
-  async listings(actor: MerchantActor) {
+  async listings(actor: MerchantActor): Promise<{ products: Listing[] }> {
     this.assertManage(actor);
+    return this.database.withMerchantTx(actor.merchantId, async (tx) => ({
+      products: await this.listingRows(tx),
+    }));
+  }
+
+  /** Every active product with its online attributes; listed ones first, in display order. */
+  private async listingRows(tx: Transaction): Promise<Listing[]> {
+    const rows = (
+      await tx.execute(sql`
+        select p.id, p.name_en, p.name_ar, p.category_id, c.name_en as c_en, c.name_ar as c_ar,
+               l.product_id is not null as listed, coalesce(l.position, 0) as position,
+               l.title_en, l.title_ar, l.description_en, l.description_ar, coalesce(l.featured, false) as featured,
+               l.max_per_order, l.online_category_id,
+               (select count(*)::int from product_variants v where v.product_id = p.id and v.status = 'active') as variants,
+               (select min(v.price_minor)::text from product_variants v where v.product_id = p.id and v.status = 'active') as price,
+               coalesce((select json_agg(i.id order by i.position, i.created_at) from product_images i where i.product_id = p.id), '[]'::json) as images
+        from products p
+        left join online_listings l on l.product_id = p.id
+        left join categories c on c.id = p.category_id
+        where p.status = 'active'
+        order by (l.product_id is null), l.position, coalesce(lower(p.name_en), p.name_ar)`)
+    ).rows as Row[];
+    return rows.map((r) => ({
+      productId: r['id'] as string,
+      nameEn: (r['name_en'] as string | null) ?? null,
+      nameAr: (r['name_ar'] as string | null) ?? null,
+      listed: r['listed'] as boolean,
+      variants: r['variants'] as number,
+      price: r['price'] === null ? null : money(r['price'] as string),
+      position: r['position'] as number,
+      titleEn: (r['title_en'] as string | null) ?? null,
+      titleAr: (r['title_ar'] as string | null) ?? null,
+      descriptionEn: (r['description_en'] as string | null) ?? null,
+      descriptionAr: (r['description_ar'] as string | null) ?? null,
+      featured: r['featured'] as boolean,
+      maxPerOrder: (r['max_per_order'] as number | null) ?? null,
+      onlineCategoryId: (r['online_category_id'] as string | null) ?? null,
+      posCategory: r['category_id']
+        ? {
+            id: r['category_id'] as string,
+            nameEn: (r['c_en'] as string | null) ?? null,
+            nameAr: (r['c_ar'] as string | null) ?? null,
+          }
+        : null,
+      images: (r['images'] as string[]).map((id) => ({
+        id,
+        url: `/api/v1/manager/products/${r['id'] as string}/images/${id}`,
+      })),
+    }));
+  }
+
+  /** The store's own text and options for one listed product (ADR-0121). */
+  async saveListing(
+    actor: MerchantActor,
+    productId: string,
+    input: z.output<typeof saveListingSchema>,
+    ip: string,
+  ) {
+    this.assertManage(actor);
+    await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const [row] = await tx
+        .select({ productId: onlineListings.productId })
+        .from(onlineListings)
+        .where(eq(onlineListings.productId, productId))
+        .for('update');
+      if (!row) throw AppError.notFound('This product is not listed online.');
+      if (input.onlineCategoryId) await this.lockCategory(tx, input.onlineCategoryId);
+      await tx
+        .update(onlineListings)
+        .set({
+          titleEn: input.titleEn,
+          titleAr: input.titleAr,
+          descriptionEn: input.descriptionEn,
+          descriptionAr: input.descriptionAr,
+          featured: input.featured,
+          maxPerOrder: input.maxPerOrder,
+          onlineCategoryId: input.onlineCategoryId,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(onlineListings.productId, productId));
+      await this.record(
+        tx,
+        actor.merchantId,
+        actor.userId,
+        'online.listing_updated',
+        productId,
+        ip,
+        {
+          featured: input.featured,
+          onlineCategoryId: input.onlineCategoryId,
+        },
+      );
+    });
+    return this.listings(actor);
+  }
+
+  /** Display order: every listed product exactly once. */
+  async orderListings(actor: MerchantActor, productIds: string[], ip: string) {
+    this.assertManage(actor);
+    await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const rows = await tx
+        .select({ id: onlineListings.productId })
+        .from(onlineListings)
+        .for('update');
+      const known = new Set(rows.map((r) => r.id));
+      if (
+        new Set(productIds).size !== productIds.length ||
+        productIds.length !== known.size ||
+        productIds.some((i) => !known.has(i))
+      )
+        throw AppError.validation([
+          {
+            path: 'productIds',
+            code: 'invalid',
+            message: 'List every product sold online exactly once.',
+          },
+        ]);
+      for (const [position, productId] of productIds.entries())
+        await tx
+          .update(onlineListings)
+          .set({ position, updatedAt: sql`now()` })
+          .where(eq(onlineListings.productId, productId));
+      await this.record(
+        tx,
+        actor.merchantId,
+        actor.userId,
+        'online.listings_reordered',
+        actor.merchantId,
+        ip,
+        { count: productIds.length },
+      );
+    });
+    return this.listings(actor);
+  }
+
+  // ------------------------------------------------------------ manager: categories (ADR-0121)
+  private categoryView(r: Row): OnlineCategory {
+    return {
+      id: r['id'] as string,
+      nameEn: (r['name_en'] as string | null) ?? null,
+      nameAr: (r['name_ar'] as string | null) ?? null,
+      position: r['position'] as number,
+      status: r['status'] as OnlineCategory['status'],
+      imageUrl: r['image_key']
+        ? imageUrl(`manager/online/categories/${r['id'] as string}/image`, r['version'] as number)
+        : null,
+      productCount: r['product_count'] as number,
+      version: r['version'] as number,
+    };
+  }
+
+  private async categoryRows(tx: Transaction): Promise<OnlineCategory[]> {
+    const rows = (
+      await tx.execute(sql`
+        select c.*, (select count(*)::int from online_listings l where l.online_category_id = c.id) as product_count
+        from online_categories c order by c.position, c.created_at`)
+    ).rows as Row[];
+    return rows.map((r) => this.categoryView(r));
+  }
+
+  private async lockCategory(tx: Transaction, id: string) {
+    const [row] = await tx
+      .select()
+      .from(onlineCategories)
+      .where(eq(onlineCategories.id, id))
+      .for('update');
+    if (!row) throw AppError.notFound('Category not found.');
+    return row;
+  }
+
+  async categories(actor: MerchantActor): Promise<{ categories: OnlineCategory[] }> {
+    this.assertManage(actor);
+    return this.database.withMerchantTx(actor.merchantId, async (tx) => ({
+      categories: await this.categoryRows(tx),
+    }));
+  }
+
+  async createCategory(
+    actor: MerchantActor,
+    input: z.output<typeof saveOnlineCategorySchema>,
+    ip: string,
+  ): Promise<OnlineCategory> {
+    this.assertManage(actor);
+    const id = newId();
+    await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const [last] = (
+        await tx.execute(sql`select coalesce(max(position), -1) + 1 as next from online_categories`)
+      ).rows as { next: number }[];
+      await tx.insert(onlineCategories).values({
+        id,
+        merchantId: actor.merchantId,
+        nameEn: input.nameEn,
+        nameAr: input.nameAr,
+        status: input.status,
+        position: Number(last?.next ?? 0),
+      });
+      await this.record(tx, actor.merchantId, actor.userId, 'online.category_created', id, ip, {
+        nameEn: input.nameEn,
+        nameAr: input.nameAr,
+      });
+    });
+    return this.category(actor, id);
+  }
+
+  async updateCategory(
+    actor: MerchantActor,
+    id: string,
+    input: z.output<typeof saveOnlineCategorySchema>,
+    ip: string,
+  ): Promise<OnlineCategory> {
+    this.assertManage(actor);
+    await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const row = await this.lockCategory(tx, id);
+      if (input.version !== undefined && row.version !== input.version) throw versionConflict();
+      await tx
+        .update(onlineCategories)
+        .set({
+          nameEn: input.nameEn,
+          nameAr: input.nameAr,
+          status: input.status,
+          version: sql`${onlineCategories.version} + 1`,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(onlineCategories.id, id));
+      await this.record(tx, actor.merchantId, actor.userId, 'online.category_updated', id, ip, {
+        nameEn: input.nameEn,
+        nameAr: input.nameAr,
+        status: input.status,
+      });
+    });
+    return this.category(actor, id);
+  }
+
+  /** A store category is navigation, not a record: deleting it leaves its products uncategorised. */
+  async deleteCategory(actor: MerchantActor, id: string, ip: string) {
+    this.assertManage(actor);
+    const imageKey = await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const row = await this.lockCategory(tx, id);
+      await tx
+        .update(onlineListings)
+        .set({ onlineCategoryId: null, updatedAt: sql`now()` })
+        .where(eq(onlineListings.onlineCategoryId, id));
+      await tx.delete(onlineCategories).where(eq(onlineCategories.id, id));
+      await this.record(tx, actor.merchantId, actor.userId, 'online.category_deleted', id, ip, {
+        nameEn: row.nameEn,
+        nameAr: row.nameAr,
+      });
+      return row.imageKey;
+    });
+    if (imageKey) await this.forgetFile(imageKey);
+    return this.categories(actor);
+  }
+
+  async orderCategories(actor: MerchantActor, ids: string[], ip: string) {
+    this.assertManage(actor);
+    await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const rows = await tx
+        .select({ id: onlineCategories.id })
+        .from(onlineCategories)
+        .for('update');
+      const known = new Set(rows.map((r) => r.id));
+      if (
+        new Set(ids).size !== ids.length ||
+        ids.length !== known.size ||
+        ids.some((i) => !known.has(i))
+      )
+        throw AppError.validation([
+          { path: 'ids', code: 'invalid', message: 'List every category exactly once.' },
+        ]);
+      for (const [position, id] of ids.entries())
+        await tx
+          .update(onlineCategories)
+          .set({ position, updatedAt: sql`now()` })
+          .where(eq(onlineCategories.id, id));
+      await this.record(
+        tx,
+        actor.merchantId,
+        actor.userId,
+        'online.categories_reordered',
+        actor.merchantId,
+        ip,
+        { count: ids.length },
+      );
+    });
+    return this.categories(actor);
+  }
+
+  private async category(actor: MerchantActor, id: string): Promise<OnlineCategory> {
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
-      const rows = (
-        await tx.execute(sql`
-          select p.id, p.name_en, p.name_ar, exists (select 1 from online_listings l where l.product_id = p.id) as listed,
-                 (select count(*)::int from product_variants v where v.product_id = p.id and v.status = 'active') as variants,
-                 (select min(v.price_minor)::text from product_variants v where v.product_id = p.id and v.status = 'active') as price
-          from products p where p.status = 'active' order by coalesce(lower(p.name_en), p.name_ar)`)
-      ).rows as Row[];
-      return {
-        products: rows.map((r) => ({
-          productId: r['id'] as string,
-          nameEn: (r['name_en'] as string | null) ?? null,
-          nameAr: (r['name_ar'] as string | null) ?? null,
-          listed: r['listed'] as boolean,
-          variants: r['variants'] as number,
-          price: r['price'] === null ? null : money(r['price'] as string),
-        })),
-      };
+      const found = (await this.categoryRows(tx)).find((c) => c.id === id);
+      if (!found) throw AppError.notFound('Category not found.');
+      return found;
     });
   }
 
-  async setListings(actor: MerchantActor, productIds: string[], listed: boolean, ip: string) {
+  async setCategoryImage(actor: MerchantActor, id: string, data: Buffer | null, ip: string) {
+    this.assertManage(actor);
+    const upload = data
+      ? this.checkImage(data, `${actor.merchantId}/online/categories/${id}`)
+      : null;
+    const previous = await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const row = await this.lockCategory(tx, id);
+      await tx
+        .update(onlineCategories)
+        .set({
+          imageKey: upload?.key ?? null,
+          imageContentType: upload?.contentType ?? null,
+          version: sql`${onlineCategories.version} + 1`,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(onlineCategories.id, id));
+      // Written last inside the transaction: a storage failure rolls the row back.
+      if (upload && data) await this.storage.put(upload.key, data);
+      await this.record(
+        tx,
+        actor.merchantId,
+        actor.userId,
+        upload ? 'online.category_image_set' : 'online.category_image_removed',
+        id,
+        ip,
+        {},
+      );
+      return row.imageKey;
+    });
+    if (previous) await this.forgetFile(previous);
+    return this.category(actor, id);
+  }
+
+  async categoryImage(actor: MerchantActor, id: string) {
+    this.assertManage(actor);
+    return this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const [row] = await tx.select().from(onlineCategories).where(eq(onlineCategories.id, id));
+      return this.readImage(row?.imageKey ?? null, row?.imageContentType ?? null);
+    });
+  }
+
+  // ------------------------------------------------------------ manager: store images (ADR-0121)
+  async setStoreImage(actor: MerchantActor, kind: StoreImageKind, data: Buffer | null, ip: string) {
+    this.assertManage(actor);
+    const upload = data ? this.checkImage(data, `${actor.merchantId}/online/${kind}`) : null;
+    const previous = await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const [row] = await tx.select().from(onlineStores).for('update');
+      if (!row) throw AppError.notFound('Save the store settings first.');
+      await tx.update(onlineStores).set({
+        ...(kind === 'logo'
+          ? { logoKey: upload?.key ?? null, logoContentType: upload?.contentType ?? null }
+          : { bannerKey: upload?.key ?? null, bannerContentType: upload?.contentType ?? null }),
+        version: sql`${onlineStores.version} + 1`,
+        updatedAt: sql`now()`,
+      });
+      if (upload && data) await this.storage.put(upload.key, data);
+      await this.record(
+        tx,
+        actor.merchantId,
+        actor.userId,
+        upload ? `online.store_${kind}_set` : `online.store_${kind}_removed`,
+        actor.merchantId,
+        ip,
+        {},
+      );
+      return kind === 'logo' ? row.logoKey : row.bannerKey;
+    });
+    if (previous) await this.forgetFile(previous);
+    return this.store(actor);
+  }
+
+  async storeImage(actor: MerchantActor, kind: StoreImageKind) {
+    this.assertManage(actor);
+    return this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const [row] = await tx.select().from(onlineStores);
+      return kind === 'logo'
+        ? this.readImage(row?.logoKey ?? null, row?.logoContentType ?? null)
+        : this.readImage(row?.bannerKey ?? null, row?.bannerContentType ?? null);
+    });
+  }
+
+  /** Size and type checks shared by every store image; returns where it will be stored. */
+  private checkImage(data: Buffer, prefix: string) {
+    if (data.length === 0 || data.length > MAX_STORE_IMAGE_BYTES)
+      throw new AppError(413, 'PAYLOAD_TOO_LARGE', 'Images must be at most 2 MB.');
+    const contentType = sniffImageType(data);
+    if (!contentType)
+      throw new AppError(415, 'UNSUPPORTED_MEDIA', 'Only JPEG, PNG and WebP images are accepted.');
+    return { contentType, key: `${prefix}/${newId()}.${contentType.split('/')[1]}` };
+  }
+
+  private async readImage(key: string | null, contentType: string | null) {
+    if (!key || !contentType) throw AppError.notFound('Image not found.');
+    const data = await this.storage.get(key);
+    if (!data) throw AppError.notFound('Image not found.');
+    return { data, contentType };
+  }
+
+  private async forgetFile(key: string) {
+    await this.storage.delete(key).catch(() => undefined);
+  }
+
+  async setListings(
+    actor: MerchantActor,
+    productIds: string[],
+    listed: boolean,
+    ip: string,
+    onlineCategoryId?: string | null,
+  ) {
     this.assertManage(actor);
     await this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const ids = [...new Set(productIds)];
@@ -386,11 +781,18 @@ export class EcommerceService {
       );
       const found = (await tx.execute(sql`select id from products where id in (${list})`)).rows;
       if (found.length !== ids.length) throw AppError.notFound('Product not found.');
-      if (listed)
+      if (onlineCategoryId) await this.lockCategory(tx, onlineCategoryId);
+      if (listed) {
+        // New listings go to the end of the display order.
         await tx.execute(sql`
-          insert into online_listings (merchant_id, product_id)
-          select ${actor.merchantId}, id from products where id in (${list}) on conflict do nothing`);
-      else await tx.execute(sql`delete from online_listings where product_id in (${list})`);
+          insert into online_listings (merchant_id, product_id, position)
+          select ${actor.merchantId}, id, (select coalesce(max(position), -1) from online_listings) + row_number() over (order by coalesce(lower(name_en), name_ar))
+          from products where id in (${list}) on conflict do nothing`);
+        if (onlineCategoryId !== undefined)
+          await tx.execute(sql`
+            update online_listings set online_category_id = ${onlineCategoryId}, updated_at = now()
+            where product_id in (${list})`);
+      } else await tx.execute(sql`delete from online_listings where product_id in (${list})`);
       await this.record(
         tx,
         actor.merchantId,
@@ -427,12 +829,7 @@ export class EcommerceService {
       const methods = (await this.onlineMethods(tx)).filter(
         (m) => this.payments.gateway(m['gateway_provider'] as string).ready,
       );
-      const categories = (
-        await tx.execute(sql`
-          select distinct c.id, c.name_en, c.name_ar from categories c
-          join products p on p.category_id = c.id join online_listings l on l.product_id = p.id
-          where p.status = 'active' order by c.name_en`)
-      ).rows as Row[];
+      const nav = await this.storeCategories(tx, store.slug);
       return {
         slug: store.slug,
         nameEn: store.nameEn,
@@ -456,12 +853,76 @@ export class EcommerceService {
           provider: m['gateway_provider'] as string,
         })),
         payOnReceipt: store.payOnReceiptEnabled,
-        categories: categories.map((c) => ({
+        logoUrl: store.logoKey ? imageUrl(`store/${store.slug}/logo`, store.version) : null,
+        bannerUrl: store.bannerKey ? imageUrl(`store/${store.slug}/banner`, store.version) : null,
+        categorySource: nav.source,
+        categories: nav.categories,
+      };
+    });
+  }
+
+  /**
+   * The storefront's navigation (ADR-0121): the store's own active categories that hold listed
+   * products when the merchant created any, else the catalog categories of the listed products.
+   */
+  private async storeCategories(tx: Transaction, slug: string) {
+    const own = (
+      await tx.execute(sql`
+        select c.id, c.name_en, c.name_ar, c.image_key, c.version from online_categories c
+        where c.status = 'active' and exists (
+          select 1 from online_listings l join products p on p.id = l.product_id
+          where l.online_category_id = c.id and p.status = 'active')
+        order by c.position, c.created_at`)
+    ).rows as Row[];
+    const [any] = (await tx.execute(sql`select 1 from online_categories limit 1`)).rows;
+    if (any) {
+      return {
+        source: 'online' as const,
+        categories: own.map((c) => ({
           id: c['id'] as string,
           nameEn: (c['name_en'] as string | null) ?? null,
           nameAr: (c['name_ar'] as string | null) ?? null,
+          imageUrl: c['image_key']
+            ? imageUrl(
+                `store/${slug}/categories/${c['id'] as string}/image`,
+                c['version'] as number,
+              )
+            : null,
         })),
       };
+    }
+    const pos = (
+      await tx.execute(sql`
+        select distinct c.id, c.name_en, c.name_ar, c.sort_order from categories c
+        join products p on p.category_id = c.id join online_listings l on l.product_id = p.id
+        where p.status = 'active' order by c.sort_order, c.name_en`)
+    ).rows as Row[];
+    return {
+      source: 'pos' as const,
+      categories: pos.map((c) => ({
+        id: c['id'] as string,
+        nameEn: (c['name_en'] as string | null) ?? null,
+        nameAr: (c['name_ar'] as string | null) ?? null,
+        imageUrl: null,
+      })),
+    };
+  }
+
+  /** Public store images: logo, banner and category pictures. */
+  async publicImage(slug: string, kind: StoreImageKind | { categoryId: string }) {
+    const merchantId = await this.merchantOf(slug);
+    return this.database.withMerchantTx(merchantId, async (tx) => {
+      if (typeof kind === 'string') {
+        const store = await this.storeRow(tx);
+        return kind === 'logo'
+          ? this.readImage(store.logoKey, store.logoContentType)
+          : this.readImage(store.bannerKey, store.bannerContentType);
+      }
+      const [row] = await tx
+        .select()
+        .from(onlineCategories)
+        .where(eq(onlineCategories.id, kind.categoryId));
+      return this.readImage(row?.imageKey ?? null, row?.imageContentType ?? null);
     });
   }
 
@@ -471,6 +932,8 @@ export class EcommerceService {
     branchId: string,
     where: SQL,
   ): Promise<StoreProduct[]> {
+    const [ownCategories] = (await tx.execute(sql`select 1 from online_categories limit 1`)).rows;
+    const [store] = await tx.select({ hide: onlineStores.hideOutOfStock }).from(onlineStores);
     const rows = (
       await tx.execute(sql`
         select p.id as product_id, p.name_en, p.name_ar, p.description_en, p.description_ar, p.category_id,
@@ -479,10 +942,14 @@ export class EcommerceService {
                coalesce((select l.on_hand from stock_levels l where l.variant_id = v.id and l.branch_id = ${branchId}), 0)::text as on_hand,
                coalesce((select sum(r.quantity) from stock_reservations r where r.variant_id = v.id and r.branch_id = ${branchId}
                          and r.status = 'active' and r.expires_at > now()), 0)::text as reserved,
-               (select i.id from product_images i where i.product_id = p.id order by i.position limit 1) as image_id,
-               exists (select 1 from recipe_components rc where rc.variant_id = v.id) as has_recipe
+               coalesce((select json_agg(i.id order by i.position, i.created_at) from product_images i where i.product_id = p.id), '[]'::json) as images,
+               exists (select 1 from recipe_components rc where rc.variant_id = v.id) as has_recipe,
+               ol.position, ol.title_en, ol.title_ar, ol.description_en as od_en, ol.description_ar as od_ar,
+               ol.featured, ol.max_per_order, ol.online_category_id,
+               (oc.id is not null and oc.status = 'active') as online_category_shown
         from online_listings ol join products p on p.id = ol.product_id
         join product_variants v on v.product_id = p.id
+        left join online_categories oc on oc.id = ol.online_category_id
         where p.status = 'active' and v.status = 'active'
           and (p.available_in_all_branches or exists (select 1 from product_branch_availability a where a.product_id = p.id and a.branch_id = ${branchId}))
           and ${where}
@@ -494,16 +961,28 @@ export class EcommerceService {
       const tracked = (r['track_inventory'] as boolean) && !(r['has_recipe'] as boolean);
       const free = parseQuantity(r['on_hand'] as string) - parseQuantity(r['reserved'] as string);
       const units = free > 0n ? Number(free / 1000n) : 0;
+      const cap = Math.min(MAX_CART_QTY, (r['max_per_order'] as number | null) ?? MAX_CART_QTY);
+      const images = (r['images'] as string[]).map(
+        (imageId) => `/api/v1/store/${slug}/images/${id}/${imageId}`,
+      );
       const product = out.get(id) ?? {
         productId: id,
-        nameEn: (r['name_en'] as string | null) ?? null,
-        nameAr: (r['name_ar'] as string | null) ?? null,
-        descriptionEn: (r['description_en'] as string | null) ?? null,
-        descriptionAr: (r['description_ar'] as string | null) ?? null,
-        categoryId: (r['category_id'] as string | null) ?? null,
-        imageUrl: r['image_id']
-          ? `/api/v1/store/${slug}/images/${id}/${r['image_id'] as string}`
-          : null,
+        // The store's own title and description win over the catalog's (ADR-0121).
+        nameEn: (r['title_en'] as string | null) || ((r['name_en'] as string | null) ?? null),
+        nameAr: (r['title_ar'] as string | null) || ((r['name_ar'] as string | null) ?? null),
+        descriptionEn:
+          (r['od_en'] as string | null) || ((r['description_en'] as string | null) ?? null),
+        descriptionAr:
+          (r['od_ar'] as string | null) || ((r['description_ar'] as string | null) ?? null),
+        categoryId: ownCategories
+          ? r['online_category_shown']
+            ? ((r['online_category_id'] as string | null) ?? null)
+            : null
+          : ((r['category_id'] as string | null) ?? null),
+        imageUrl: images[0] ?? null,
+        images,
+        featured: r['featured'] as boolean,
+        position: r['position'] as number,
         variants: [],
       };
       product.variants.push({
@@ -513,11 +992,12 @@ export class EcommerceService {
         sku: (r['sku'] as string | null) ?? null,
         price: money(r['price'] as string),
         available: !tracked || units > 0,
-        maxQuantity: tracked ? Math.min(MAX_CART_QTY, units) : MAX_CART_QTY,
+        maxQuantity: tracked ? Math.min(cap, units) : cap,
       });
       out.set(id, product);
     }
-    return [...out.values()];
+    const products = [...out.values()];
+    return store?.hide ? products.filter((p) => p.variants.some((v) => v.available)) : products;
   }
 
   async products(slug: string) {
@@ -1285,7 +1765,13 @@ export class EcommerceService {
       actorType: userId ? 'user' : 'anonymous',
       actorId: userId,
       action,
-      targetType: action.startsWith('online.store') ? 'online_store' : 'online_order',
+      targetType: action.startsWith('online.store')
+        ? 'online_store'
+        : action.startsWith('online.categor')
+          ? 'online_category'
+          : action.startsWith('online.listing') || action.startsWith('online.products_')
+            ? 'online_listing'
+            : 'online_order',
       targetId: id,
       ip,
       details,

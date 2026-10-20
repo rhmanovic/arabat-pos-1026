@@ -117,6 +117,24 @@ engineering defaults pending owner confirmation.
   (the main register's first), and cannot sell while none is open. A device shift is never refused because
   the person left a shift open elsewhere; that shift is listed for the managers to close. Records
   that reach the server after the branch shift closed are booked to it and flagged "late".
+- **BR-214** Store pictures (ADR-0121): the store's logo, banner and category pictures are
+  JPEG, PNG or WebP of at most 2 MB, checked by content, stored through `FileStorage` and
+  served publicly from the storefront; product pictures stay the catalog's and are shared with
+  the POS (the storefront shows all of them).
+- **BR-213** Maximum per order (ADR-0121): a listing may cap one variant at 1–20 units per
+  order; the storefront applies the lower of that cap and the general 20. Products with nothing
+  available at the fulfilment branch are hidden from the public catalog when the store's "Hide
+  out-of-stock products" is on; otherwise they show as sold out as before.
+- **BR-212** Store categories (ADR-0121): a merchant's store categories are its own, with a
+  name (Arabic or English at least), a picture and an order, and may be hidden. Until the first
+  store category exists the storefront groups products by the catalog categories; from then on
+  only by store categories (products without one or in a hidden one are reachable through "All").
+  Deleting a store category keeps its products in the store, without a category.
+- **BR-211** Store presentation (ADR-0121): a listed product may carry a store title and
+  description (Arabic / English) and a position; empty fields fall back to the catalog's. The
+  price, the variants, the pictures and the availability are always the catalog's and the
+  fulfilment branch's — there is no online price (ADR-0119 principle: one catalog, one price).
+  Featured products open the storefront while nothing is filtered; new listings go to the end.
 - **BR-210** Store address (ADR-0118): one namespace with link pages, checked both ways; the
   platform's own paths are reserved; a published or paused store's address changes at most
   once every 24 hours; the former address answers for 90 days (the storefront moves the

@@ -36,6 +36,9 @@ const STORE = {
     },
   ],
   payOnReceipt: true,
+  logoUrl: null,
+  bannerUrl: null,
+  categorySource: 'pos',
   categories: [],
 };
 const COFFEE = '0190a000-0000-7000-8000-000000000001';
@@ -51,6 +54,9 @@ const PRODUCTS = {
       descriptionAr: null,
       categoryId: null,
       imageUrl: null,
+      images: [],
+      featured: false,
+      position: 0,
       variants: [
         {
           variantId: COFFEE_V,
@@ -71,6 +77,9 @@ const PRODUCTS = {
       descriptionAr: null,
       categoryId: null,
       imageUrl: null,
+      images: [],
+      featured: false,
+      position: 1,
       variants: [
         {
           variantId: '0190a000-0000-7000-8000-000000000022',
@@ -152,6 +161,91 @@ describe('storefront', () => {
     const mug = (await screen.findByText('Mug')).closest('a')!;
     expect(within(mug).getByText('Sold out')).toBeInTheDocument();
     expect(screen.getByText('KWD 1.250')).toBeInTheDocument();
+  });
+
+  it('shows the banner, logo, featured products and category pictures, and sorts by price', async () => {
+    const user = userEvent.setup();
+    const CAT = '0190a000-0000-7000-8000-0000000000c9';
+    renderStore('/demo', {
+      'GET /store/demo': () => ({
+        status: 200,
+        body: {
+          ...STORE,
+          logoUrl: '/api/v1/store/demo/logo?v=3',
+          bannerUrl: '/api/v1/store/demo/banner?v=3',
+          categorySource: 'online',
+          categories: [
+            {
+              id: CAT,
+              nameEn: 'Drinks',
+              nameAr: 'مشروبات',
+              imageUrl: '/api/v1/store/demo/categories/x/image?v=1',
+            },
+          ],
+        },
+      }),
+      'GET /store/demo/products': () => ({
+        status: 200,
+        body: {
+          products: [
+            { ...PRODUCTS.products[0]!, featured: true, categoryId: CAT, position: 1 },
+            { ...PRODUCTS.products[1]!, position: 0 },
+          ],
+        },
+      }),
+    });
+    expect(await screen.findByTestId('store-banner')).toHaveAttribute(
+      'src',
+      '/api/v1/store/demo/banner?v=3',
+    );
+    expect(screen.getByTestId('store-logo')).toBeInTheDocument();
+    const featured = await screen.findByRole('region', { name: 'Featured' });
+    expect(within(featured).getByText('Coffee beans')).toBeInTheDocument();
+    expect(within(featured).queryByText('Mug')).toBeNull();
+    // Store order puts the mug (position 0) first in the full grid; price sorting reorders.
+    const grid = () => within(screen.getByTestId('product-grid')).getAllByRole('listitem');
+    expect(grid()[0]).toHaveTextContent('Mug');
+    await user.selectOptions(screen.getByLabelText('Sort'), 'priceAsc');
+    expect(grid()[0]).toHaveTextContent('Coffee beans');
+    // The category chip carries its picture and filters the grid.
+    const chip = screen.getByRole('button', { name: 'Drinks' });
+    expect(chip.querySelector('img')).toHaveAttribute(
+      'src',
+      expect.stringContaining('/categories/'),
+    );
+    await user.click(chip);
+    expect(screen.queryByText('Mug')).toBeNull();
+    expect(document.title).toBe('Demo Shop');
+  });
+
+  it('shows the picture gallery and shares the product link', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText }, share: undefined });
+    renderStore(`/demo/products/${COFFEE}`, {
+      'GET /store/demo/products': () => ({
+        status: 200,
+        body: {
+          products: [
+            {
+              ...PRODUCTS.products[0]!,
+              imageUrl: '/img/1',
+              images: ['/img/1', '/img/2'],
+              descriptionEn: 'Store says: roasted today',
+            },
+          ],
+        },
+      }),
+    });
+    expect(await screen.findByTestId('product-image')).toHaveAttribute('src', '/img/1');
+    await user.click(screen.getByRole('button', { name: 'Picture 2' }));
+    expect(screen.getByTestId('product-image')).toHaveAttribute('src', '/img/2');
+    expect(screen.getByText('Store says: roasted today')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Share' }));
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/demo/products/')),
+    );
+    expect(document.title).toBe('Coffee beans · Demo Shop');
   });
 
   it('adds to the cart, caps the quantity at the offered maximum and prices exactly', async () => {

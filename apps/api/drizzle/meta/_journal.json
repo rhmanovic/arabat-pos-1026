@@ -470,6 +470,13 @@
       "when": 1792468595130,
       "tag": "0066_online_pay_on_receipt",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1792481897385,
+      "tag": "0067_online_merchandising",
+      "breakpoints": true
     }
   ]
 }
