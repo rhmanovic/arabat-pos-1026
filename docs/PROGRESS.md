@@ -1145,6 +1145,15 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
   ingest (unbound card sale accepted into the branch shift, cash refused, nothing to sell into
   → SHIFT_REQUIRED, late upload), printing (bound device only), engine (unbound device), till
   (card-only unbound till), manager (bind dialog), e2e (register → bind → sell `MAIN-D1-…`).
+- Verified: `pnpm verify` (325 unit/web), 293 integration, 40 E2E (local).
+- Released to production 2026-10-20 with the owner's approval: `50d8325b1d9e` (revision
+  `arabat-web-00035-9hp`; migration 0065 applied by the job `arabat-migrate-6rmxw`). The
+  deployer key cannot stream Cloud Build logs (no project Viewer), so `deploy.sh` stops once
+  after `builds submit`; a second run finds the image and continues. Then the owner's test company
+  بقاله سلطان (`01a143fb-…`) was reset with `reset-merchant-data --main-register=الصندوق الرئيسي`
+  (OPERATIONS.md §9.2a): 1 sale / 1 order, 6 shifts, 1 ledger entry, 1 stock movement, 16 device
+  records, 1 device exception, 2 devices and 2 registers deleted; one main, unbound register
+  "الصندوق الرئيسي" created in its branch; products, staff and settings kept.
 
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
