@@ -1284,6 +1284,11 @@ contract only (no migration).
   a section's panels; fixed there: a missing label and the Arabic wording of the day buttons.
 - Verified (cloud sandbox): `pnpm verify` 371 unit/web, `pnpm test:integration` 308 (44 files),
   `pnpm test:e2e` 43.
+- Released (ADR-0122, ADR-0088): staging (Railway, deployment `4c1fe69f`, SUCCESS) and production
+  `7b2a2792cca5` (revision `arabat-web-00048-ks4`, migration job `arabat-migrate-ngckd`, no new
+  migration); Cloud Build check `5f1a459b`: `/api/v1/health/ready` 200 with that version and
+  database ok (3 ms); `live`, `/store/`, `/manager/` and `/online/` 200. Signed out afterwards,
+  `config.env` removed; no key, account or secret deleted.
 
 ### 2026-10-20 — Store footer system v2 (ADR-0128 amendment 2)
 Owner's request: work through the footer completely, with every option, setting and
