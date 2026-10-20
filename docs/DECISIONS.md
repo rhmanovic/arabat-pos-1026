@@ -1817,3 +1817,39 @@ ADR; supersede it.
 - **Consequences:** merchants in production can open a store today. Stock for pay-on-receipt
   orders is first-come at hand-over; staff see `INSUFFICIENT_STOCK` when recording a payment
   for goods sold meanwhile (unless negative stock is allowed). Migration 0066.
+
+## ADR-0119 — The online store has its own console at `/online` (frontend separation only)
+
+- **Status:** Accepted (owner request, 2026-10-20; Phase 2 of `docs/ONLINE_STORE_PLAN.md`)
+- **Context:** The business sells two products on their own or together: the POS (with its
+  management dashboard) and the online store. The store's management lived as one page inside
+  `/manager`, so the two could not be marketed, sold or opened separately. The owner asked for
+  separate management interfaces **without** separating the backend, database, catalog, prices,
+  stock, customers, accounts or permissions: both products keep operating on one system.
+- **Decision:**
+  - A fifth SPA, **`apps/online-web`** (`@arabat/online-web`, base `/online/`, dev port 5178),
+    is the online store console. Like the link-page editor (ADR-0116) it signs in with the
+    **manager session** (same account, cookie and `appInterface="manager"`), so one sign-in
+    serves every product and nothing is duplicated server-side. No new API route, table or
+    permission: it calls the existing `/manager/online/*` endpoints and the shared ones
+    (`/manager/branches`, `/manager/subscription`).
+  - Its own layout: sidebar with the store's pages (Overview, Orders, Products online, Store
+    settings, Link page ↗) and a "Shared with the POS" group that opens the management app's
+    catalog, customers, reports and payment methods (each shown only with its permission); a
+    top bar with "Business management" (one click to `/manager/`) and "Open Point of Sale" (the
+    existing interface switch). Pages are the former manager tabs moved as they are (orders,
+    detail, pay-on-receipt payment, settings with the address check, listings) plus an overview
+    (store state and address, order counts by what needs attention, shared functions).
+  - Access: the console needs `online.manage` or `online.orders` (unchanged permissions; others
+    see a message). When the plan lacks the `ecommerce` feature the console says so and links to
+    the subscription page; the API keeps refusing to publish (`PLAN_FEATURE_UNAVAILABLE`).
+  - The management app hands over: `/manager/online` redirects to `/online/`, the menu entry
+    and the dashboard tile open the console (↗), and the manager's online strings and page are
+    removed. The API serves `/online/*` like the other apps (`serve-web.ts`).
+- **Not changed:** backend, database, catalog, inventory, customers, payment methods, roles and
+  permissions, the POS. Selling "online only" without the POS is a plan decision (a `pos`
+  feature flag) for the platform later; nothing in this change prevents it.
+- **Consequences:** the console is what the online-store product looks like to a customer;
+  the manager app stays the POS product's dashboard. Shared data is edited where it lives
+  (catalog, customers, payments in `/manager`) and the console links there. E2E `store.spec.ts`
+  runs through `/online`.

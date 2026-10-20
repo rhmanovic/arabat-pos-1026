@@ -132,6 +132,7 @@ apps/pos-web        React SPA, basename /pos (POSLayout)
 apps/platform-web   React SPA, basename /platform (PlatformLayout)
 apps/store-web      Public storefront SPA, basename /store (no session; public store API)
 apps/links-web      Link-page editor SPA, basename /links (manager session + online.manage, ADR-0116)
+apps/online-web     Online store console SPA, basename /online (manager session + online.manage / online.orders, ADR-0119)
 apps/landing-web    Public landing page at / (static React, no API; copy in src/content.ts, ADR-0113)
 apps/device-web     Local-first till inside the native Arabat app (ADR-0112): built with base './',
                     published at /device-app/ with manifest.json; talks to the server only through window.ArabatApp

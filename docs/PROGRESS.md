@@ -1203,8 +1203,27 @@ unpaid orders hold no stock. Phase 1:
   working admin key lives in the environment variable `GCP_Admin_KEY_01` (`GCP_ADMIN_KEY_B64`
   holds a key that no longer exists in GCP and is refused with `invalid_grant`).
 
+### 2026-10-20 — Online store Phase 2: its own console at `/online` (ADR-0119)
+Owner request: two products (POS, online store) sold separately or together, each with its own
+management interface, **frontend separation only** (same backend, database, catalog, stock,
+customers, accounts, permissions).
+- New `apps/online-web` (`/online`, dev `:5178`): manager session like the link editor; sidebar
+  (Overview, Orders, Products online, Store settings, Link page ↗; "Shared with the POS": catalog,
+  customers, reports, payment methods ↗ by permission); top bar with "Business management" and
+  "Open Point of Sale"; overview with store state / address and order counts; the former manager
+  tabs moved as pages; access message without `online.*`; plan notice without `ecommerce`.
+- Manager: `/manager/online` redirects to the console; menu entry and dashboard tile open it;
+  the online page and strings are removed. API: `serve-web.ts` serves `/online/*`. No API,
+  database or permission change.
+- Tests: `apps/online-web/src/app.test.tsx` (10: sign-in page, navigation + management links +
+  overview counts, no-permission message, plan notice, orders step, pay-on-receipt payment,
+  address check + refused fields, listings, key parity, actions); manager dashboard test updated;
+  `e2e/store.spec.ts` runs through `/online` (and checks the `/manager/online` hand-over).
+- Verified: see TESTING.md (results after ADR-0119).
+
 ## Next step
-Online store Phase 2 (`/online` console, ADR-0119) per `docs/ONLINE_STORE_PLAN.md`.
+Online store Phase 3 (online payment methods separate from POS tenders, ADR-0120) per
+`docs/ONLINE_STORE_PLAN.md`.
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.
 Staging: first platform operator, SMTP; owner decisions OQ-021–025.

@@ -24,7 +24,7 @@ import { RefundsPage } from './features/refunds/RefundsPage.js';
 import { CustomerDetailPage, CustomersPage } from './features/customers/CustomersPage.js';
 import { ReportsPage } from './features/reports/ReportsPage.js';
 import { RestaurantPage } from './features/restaurant/RestaurantPage.js';
-import { OnlineStorePage } from './features/online/OnlineStorePage.js';
+import { OnlineRedirect } from './features/online/OnlineRedirect.js';
 import { SubscriptionPage } from './features/subscription/SubscriptionPage.js';
 import { PurchaseOrderPage, PurchaseOrdersPage } from './features/purchasing/PurchaseOrdersPage.js';
 import { AccountPage } from './features/account/AccountPage.js';
@@ -113,7 +113,7 @@ export const routes: RouteObject[] = [
       { path: 'reports', element: <ReportsPage /> },
       { path: 'restaurant', element: guard('restaurant.manage', <RestaurantPage />) },
       // Either permission; the page shows only the permitted tabs.
-      { path: 'online', element: <OnlineStorePage /> },
+      { path: 'online', element: <OnlineRedirect /> },
       { path: 'subscription', element: guard('merchant.settings.read', <SubscriptionPage />) },
       { path: 'customers', element: guard('customers.read', <CustomersPage />) },
       { path: 'customers/:customerId', element: guard('customers.read', <CustomerDetailPage />) },

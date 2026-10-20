@@ -541,6 +541,61 @@ importers:
         specifier: ^8.3.4
         version: 8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)
 
+  apps/online-web:
+    dependencies:
+      '@arabat/api-client':
+        specifier: workspace:*
+        version: link:../../packages/api-client
+      '@arabat/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@arabat/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
+      '@arabat/money':
+        specifier: workspace:*
+        version: link:../../packages/money
+      '@arabat/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      '@arabat/web-core':
+        specifier: workspace:*
+        version: link:../../packages/web-core
+      '@tanstack/react-query':
+        specifier: ^5.104.2
+        version: 5.104.2(react@19.3.0)
+      i18next:
+        specifier: ^26.4.3
+        version: 26.4.3(typescript@6.0.3)
+      react:
+        specifier: ^19.3.0
+        version: 19.3.0
+      react-dom:
+        specifier: ^19.3.0
+        version: 19.3.0(react@19.3.0)
+      react-i18next:
+        specifier: ^17.0.16
+        version: 17.0.16(i18next@26.4.3(typescript@6.0.3))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
+      react-router:
+        specifier: ^8.4.0
+        version: 8.4.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      zod:
+        specifier: ^4.6.6
+        version: 4.6.6
+    devDependencies:
+      '@tailwindcss/vite':
+        specifier: ^4.3.3
+        version: 4.3.3(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
+      '@vitejs/plugin-react':
+        specifier: ^6.1.2
+        version: 6.1.2(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
+      tailwindcss:
+        specifier: ^4.3.3
+        version: 4.3.3
+      vite:
+        specifier: ^8.3.4
+        version: 8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)
+
   apps/platform-web:
     dependencies:
       '@arabat/api-client':

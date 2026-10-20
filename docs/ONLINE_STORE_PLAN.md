@@ -1,7 +1,7 @@
 # Online Store — Phased Development Plan
 
 Status: **approved by the owner on 2026-10-20** with one change: unpaid orders reserve **no**
-stock (see Phase 1). Phase 1 is implemented (ADR-0118); Phase 2 is next. Each phase
+stock (see Phase 1). Phases 1 (ADR-0118) and 2 (ADR-0119) are implemented; Phase 3 is next. Each phase
 is implemented as one or more vertical slices (DB → API → UI → tests → docs), recorded in
 `DECISIONS.md`, `BUSINESS_RULES.md`, `ROUTES.md`, `DATABASE.md`, `PROGRESS.md` and the
 user guide, released to staging after the tests pass (ADR-0088) and to production on the
@@ -96,8 +96,9 @@ Size: M. Migration 0066. ADR-0118. BR-206…BR-210. **Done 2026-10-20.**
 methods, receive an order, confirm it, hand it over, record cash, and the cash shows in the
 branch treasury; the address is chosen and checked in the UI.
 
-### Phase 2 — Separate console app `/online`
-Size: L. No migration (unless small). ADR-0119.
+### Phase 2 — Separate console app `/online` ✅
+Size: L. No migration. ADR-0119. **Done 2026-10-20** (frontend separation only, at the owner's
+request: same backend, database, catalog, stock, customers, accounts and permissions).
 
 - New SPA `apps/online-web` (`@arabat/online-web`, base `/online/`, dev port 5178), own
   `OnlineLayout` (sidebar, store switcher-free, RTL/LTR), served by `serve-web.ts` and the

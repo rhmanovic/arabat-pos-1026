@@ -152,7 +152,9 @@ Acceptance criteria:
 Status: implemented with the sandbox gateway (Prompt 16). Live payments blocked by
 provider approval and credentials (OQ-021). The owner approved a ten-phase plan on 2026-10-20
 (`docs/ONLINE_STORE_PLAN.md`): **Phase 1 ✅ (ADR-0118)** — orders paid on receipt without any
-gateway, store address first-class; Phase 2 next (separate `/online` console).
+gateway, store address first-class; **Phase 2 ✅ (ADR-0119)** — the online store console at
+`/online`, separate from the POS management app, over the same backend; Phase 3 next (online
+payment methods separate from POS tenders).
 
 Acceptance criteria:
 1. Channel listings from catalog; online orders enter the orders module.

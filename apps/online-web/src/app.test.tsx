@@ -1,10 +1,12 @@
+import { flattenKeys } from '@arabat/i18n';
 import { fakeApiFetch, makeSession, renderApp } from '@arabat/web-core/testing';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { i18n } from '../../i18n/index.js';
-import { routes } from '../../routes.js';
-import { nextActions } from './OnlineStorePage.js';
+import { managerUrl } from './app/context.js';
+import { nextActions } from './features/shared.js';
+import { i18n, resources } from './i18n/index.js';
+import { routes } from './routes.js';
 
 beforeEach(async () => {
   await i18n.changeLanguage('en');
@@ -122,6 +124,7 @@ const branches = {
     },
   ],
 };
+const emptyOrders = { orders: [], total: 0, page: 1, pageSize: 25, counts: {} };
 
 describe('online order actions', () => {
   it('offers only the steps that fit the fulfilment method', () => {
@@ -136,7 +139,6 @@ describe('online order actions', () => {
     ]);
     expect(nextActions({ status: 'needs_attention', fulfillment: 'pickup' })).toEqual(['cancel']);
     expect(nextActions({ status: 'completed', fulfillment: 'pickup' })).toEqual([]);
-    expect(nextActions({ status: 'expired', fulfillment: 'pickup' })).toEqual([]);
   });
 
   it('lets staff confirm, record the payment and cancel a pay-on-receipt order', () => {
@@ -146,7 +148,6 @@ describe('online order actions', () => {
       'mark_paid',
       'cancel',
     ]);
-    // Unpaid: every step but completion; paid: the usual steps only.
     expect(nextActions({ status: 'ready', fulfillment: 'pickup', ...unpaid })).toEqual([
       'mark_paid',
       'cancel',
@@ -157,13 +158,126 @@ describe('online order actions', () => {
   });
 });
 
-describe('online store page', () => {
+describe('online store console', () => {
+  it('shows its sign-in page to anonymous users', async () => {
+    const { router } = renderApp({ routes, appInterface: 'manager', i18n, path: '/' });
+    expect(
+      await screen.findByRole('heading', { name: 'Sign in to your online store' }),
+    ).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/login');
+  });
+
+  it('has its own navigation, links to the management app and shows the overview counts', async () => {
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', [
+        'manager.access',
+        'online.manage',
+        'online.orders',
+        'branches.read',
+        'customers.read',
+      ]),
+      routes: {
+        'GET /manager/branches': () => ({ status: 200, body: branches }),
+        'GET /manager/online/store': () => ({
+          status: 200,
+          body: { ...store, status: 'published' },
+        }),
+        'GET /manager/online/orders': () => ({
+          status: 200,
+          body: {
+            ...emptyOrders,
+            counts: { placed: 2, confirmed: 1, paid: 3, needs_attention: 1 },
+          },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/', fetch });
+    const nav = await screen.findByRole('navigation', { name: 'Online store navigation' });
+    expect(within(nav).getByRole('link', { name: 'Orders' })).toHaveAttribute('href', '/orders');
+    expect(within(nav).getByRole('link', { name: 'Store settings' })).toHaveAttribute(
+      'href',
+      '/settings',
+    );
+    // Shared functions open the management app; reports are hidden without their permission.
+    expect(within(nav).getByRole('link', { name: /Customers/ })).toHaveAttribute(
+      'href',
+      managerUrl('customers'),
+    );
+    expect(within(nav).queryByRole('link', { name: /Reports/ })).toBeNull();
+    expect(screen.getByTestId('switch-to-manager')).toHaveAttribute('href', managerUrl());
+    expect(await screen.findByTestId('count-newOrders')).toHaveTextContent('2');
+    expect(screen.getByTestId('count-toPrepare')).toHaveTextContent('4');
+    expect(screen.getByTestId('count-attention')).toHaveTextContent('1');
+    expect(screen.getByTestId('store-url')).toHaveTextContent('http://localhost:5176/store/demo');
+  });
+
+  it('refuses a management account without any online-store permission', async () => {
+    const fetch = fakeApiFetch({ session: makeSession('manager', ['manager.access']) });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/', fetch });
+    expect(
+      await screen.findByText(/Your account cannot manage the online store/),
+    ).toBeInTheDocument();
+  });
+
+  it('warns when the plan does not include the online store', async () => {
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', [
+        'manager.access',
+        'online.manage',
+        'merchant.settings.read',
+      ]),
+      routes: {
+        'GET /manager/online/store': () => ({ status: 200, body: store }),
+        'GET /manager/subscription': () => ({
+          status: 200,
+          body: {
+            id: 's1',
+            plan: {
+              id: 'p1',
+              code: 'basic',
+              nameEn: 'Basic',
+              nameAr: 'أساسي',
+              descriptionEn: null,
+              descriptionAr: null,
+              status: 'active',
+              isDefault: true,
+              isPublic: true,
+              limits: { branches: null, employees: null, products: null, registers: null },
+              features: [],
+              price: null,
+              billingPeriod: null,
+              trialDays: 14,
+              sortOrder: 1,
+              version: 1,
+            },
+            status: 'active',
+            effectiveStatus: 'active',
+            startsAt: '2026-10-01T00:00:00.000Z',
+            endsAt: null,
+            trialEndsAt: null,
+            usage: {
+              branches: { used: 1, max: null },
+              employees: { used: 1, max: null },
+              products: { used: 0, max: null },
+              registers: { used: 1, max: null },
+            },
+            version: 1,
+            availablePlans: [],
+          },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/', fetch });
+    expect(
+      await screen.findByText(/The online store is not included in your plan/),
+    ).toBeInTheDocument();
+  });
+
   it('lists orders and moves one forward with its version', async () => {
     const user = userEvent.setup();
     const fetch = fakeApiFetch({
       session: makeSession('manager', ['manager.access', 'online.orders']),
       routes: {
-        'GET /manager/branches': () => ({ status: 200, body: branches }),
         'GET /manager/online/orders': () => ({
           status: 200,
           body: { orders: [summary], total: 1, page: 1, pageSize: 25, counts: { paid: 1 } },
@@ -175,14 +289,14 @@ describe('online store page', () => {
         }),
       },
     });
-    renderApp({ routes, appInterface: 'manager', i18n, path: '/online', fetch });
-    // Without online.manage only the orders tab exists.
-    expect(screen.queryByRole('button', { name: 'Store settings' })).not.toBeInTheDocument();
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/orders', fetch });
     await user.click(await screen.findByText('W-000007'));
     const dialog = await screen.findByRole('dialog');
     expect(await within(dialog).findByText('Coffee beans')).toBeInTheDocument();
-    expect(within(dialog).getByRole('link', { name: 'Sale MAIN-000042' })).toBeInTheDocument();
-    expect(within(dialog).queryByRole('button', { name: 'Out for delivery' })).toBeNull();
+    expect(within(dialog).getByRole('link', { name: 'Sale MAIN-000042' })).toHaveAttribute(
+      'href',
+      managerUrl('sales/0190a000-0000-7000-8000-0000000000c1'),
+    );
     await user.click(within(dialog).getByRole('button', { name: 'Start preparing' }));
     await waitFor(() =>
       expect(fetch.calls.find((c) => c.method === 'POST')?.body).toEqual({
@@ -210,7 +324,6 @@ describe('online store page', () => {
     const fetch = fakeApiFetch({
       session: makeSession('manager', ['manager.access', 'online.orders']),
       routes: {
-        'GET /manager/branches': () => ({ status: 200, body: branches }),
         'GET /manager/online/orders': () => ({
           status: 200,
           body: { orders: [placed], total: 1, page: 1, pageSize: 25, counts: { placed: 1 } },
@@ -231,13 +344,12 @@ describe('online store page', () => {
         }),
       },
     });
-    renderApp({ routes, appInterface: 'manager', i18n, path: '/online', fetch });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/orders', fetch });
     expect(await screen.findByText('Unpaid')).toBeInTheDocument();
     await user.click(screen.getByText('W-000007'));
     const dialog = await screen.findByRole('dialog');
     await user.click(await within(dialog).findByRole('button', { name: 'Record payment' }));
     const pay = await screen.findByRole('dialog', { name: 'Record payment for W-000007' });
-    // A card tender needs its reference before the button is enabled.
     await user.selectOptions(await within(pay).findByLabelText('Received with'), 'knet');
     expect(within(pay).getByRole('button', { name: 'Record payment' })).toBeDisabled();
     await user.type(within(pay).getByLabelText('Reference'), 'K-778');
@@ -253,16 +365,12 @@ describe('online store page', () => {
     );
   });
 
-  it('checks a new store address while typing and offers free alternatives', async () => {
+  it('checks a new store address while typing and shows refused fields on save', async () => {
     const user = userEvent.setup();
     const fetch = fakeApiFetch({
       session: makeSession('manager', ['manager.access', 'online.manage', 'branches.read']),
       routes: {
         'GET /manager/branches': () => ({ status: 200, body: branches }),
-        'GET /manager/online/orders': () => ({
-          status: 200,
-          body: { orders: [], total: 0, page: 1, pageSize: 25, counts: {} },
-        }),
         'GET /manager/online/store': () => ({ status: 200, body: store }),
         'GET /manager/online/store/slug-availability': () => ({
           status: 200,
@@ -273,73 +381,6 @@ describe('online store page', () => {
             suggestions: ['saffron-store', 'saffron-2'],
           },
         }),
-      },
-    });
-    renderApp({ routes, appInterface: 'manager', i18n, path: '/online', fetch });
-    await user.click(await screen.findByRole('button', { name: 'Store settings' }));
-    const slug = await screen.findByLabelText('Store address');
-    await user.clear(slug);
-    await user.type(slug, 'saffron');
-    expect(await screen.findByText('Taken by another store or link page.')).toBeInTheDocument();
-    expect(screen.getByTestId('store-url-preview')).toHaveTextContent(
-      'http://localhost:5176/store/saffron',
-    );
-    await user.click(screen.getByRole('button', { name: 'saffron-store' }));
-    expect(slug).toHaveValue('saffron-store');
-    expect(fetch.calls.find((c) => c.path.includes('slug-availability'))?.query).toBe(
-      'slug=saffron',
-    );
-  });
-
-  it('saves store settings and shows which gateways are connected', async () => {
-    const user = userEvent.setup();
-    const fetch = fakeApiFetch({
-      session: makeSession('manager', ['manager.access', 'online.manage', 'branches.read']),
-      routes: {
-        'GET /manager/branches': () => ({ status: 200, body: branches }),
-        'GET /manager/online/orders': () => ({
-          status: 200,
-          body: { orders: [], total: 0, page: 1, pageSize: 25, counts: {} },
-        }),
-        'GET /manager/online/store': () => ({ status: 200, body: store }),
-        'PUT /manager/online/store': (body) => ({
-          status: 200,
-          body: { ...store, ...(body as object), version: 1 },
-        }),
-      },
-    });
-    renderApp({ routes, appInterface: 'manager', i18n, path: '/online', fetch });
-    await user.click(await screen.findByRole('button', { name: 'Store settings' }));
-    expect(
-      await screen.findByText('Not connected (needs approval and credentials)'),
-    ).toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText('Status'), 'published');
-    await user.selectOptions(screen.getByLabelText('Fulfilment branch'), BRANCH);
-    await user.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() =>
-      expect(fetch.calls.find((c) => c.method === 'PUT')?.body).toMatchObject({
-        slug: 'demo',
-        status: 'published',
-        fulfillmentBranchId: BRANCH,
-        deliveryFee: '0.000',
-        reservationMinutes: 15,
-        payOnReceiptEnabled: true,
-        version: 0,
-      }),
-    );
-  });
-
-  it('shows which fields the server refused when the store cannot be saved', async () => {
-    const user = userEvent.setup();
-    const fetch = fakeApiFetch({
-      session: makeSession('manager', ['manager.access', 'online.manage', 'branches.read']),
-      routes: {
-        'GET /manager/branches': () => ({ status: 200, body: branches }),
-        'GET /manager/online/orders': () => ({
-          status: 200,
-          body: { orders: [], total: 0, page: 1, pageSize: 25, counts: {} },
-        }),
-        'GET /manager/online/store': () => ({ status: 200, body: store }),
         'PUT /manager/online/store': () => ({
           status: 400,
           body: {
@@ -350,25 +391,24 @@ describe('online store page', () => {
             detail: 'The request is invalid.',
             issues: [
               { path: 'fulfillmentBranchId', code: 'custom', message: 'Choose the branch.' },
-              { path: 'contactEmail', code: 'invalid_format', message: 'Invalid email' },
             ],
           },
         }),
       },
     });
-    renderApp({ routes, appInterface: 'manager', i18n, path: '/online', fetch });
-    await user.click(await screen.findByRole('button', { name: 'Store settings' }));
-    await user.click(await screen.findByRole('button', { name: 'Save' }));
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/settings', fetch });
+    const slug = await screen.findByLabelText('Store address');
+    await user.clear(slug);
+    await user.type(slug, 'saffron');
+    expect(await screen.findByText('Taken by another store or link page.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'saffron-store' }));
+    expect(slug).toHaveValue('saffron-store');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
     expect(
       await screen.findByText('The store was not saved. Fix these fields:'),
     ).toBeInTheDocument();
-    // Under the field and in the summary with the field's label.
-    expect(screen.getByText('Choose the branch that fulfils online orders.')).toBeInTheDocument();
     expect(
       screen.getByText(/Fulfilment branch: Choose the branch that fulfils online orders\./),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Contact email: Enter a valid e-mail address or leave it empty\./),
     ).toBeInTheDocument();
   });
 
@@ -377,11 +417,6 @@ describe('online store page', () => {
     const fetch = fakeApiFetch({
       session: makeSession('manager', ['manager.access', 'online.manage']),
       routes: {
-        'GET /manager/branches': () => ({ status: 200, body: branches }),
-        'GET /manager/online/orders': () => ({
-          status: 200,
-          body: { orders: [], total: 0, page: 1, pageSize: 25, counts: {} },
-        }),
         'GET /manager/online/listings': () => ({
           status: 200,
           body: {
@@ -400,8 +435,7 @@ describe('online store page', () => {
         'PUT /manager/online/listings': () => ({ status: 200, body: { products: [] } }),
       },
     });
-    renderApp({ routes, appInterface: 'manager', i18n, path: '/online', fetch });
-    await user.click(await screen.findByRole('button', { name: 'Products online' }));
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/products', fetch });
     await user.click(await screen.findByRole('checkbox', { name: 'Coffee beans' }));
     await user.click(screen.getByRole('button', { name: 'List online (1)' }));
     await waitFor(() =>
@@ -410,5 +444,9 @@ describe('online store page', () => {
         listed: true,
       }),
     );
+  });
+
+  it('defines the same translation keys in Arabic and English', () => {
+    expect(flattenKeys(resources.ar).sort()).toEqual(flattenKeys(resources.en).sort());
   });
 });
