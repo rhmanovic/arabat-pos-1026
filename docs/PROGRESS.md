@@ -1185,6 +1185,10 @@ unpaid orders hold no stock. Phase 1:
   by the job `arabat-migrate-42gwl`; Cloud Run moved traffic after the readiness probe). The
   sandbox cannot reach `www.arabatapp.com` directly (egress policy), so the check is Cloud Run's.
   The sandbox was signed out of `arabat-admin` afterwards; no key was deleted.
+- Follow-up (owner's screenshot, 2026-10-20): saving the store settings answered only the generic
+  "Some fields are invalid" toast. The settings form now shows the server's field problems under
+  each field and in a summary above the Save button, with Arabic / English texts per field
+  (`online.issue_*`); manager test +1 (331 unit/web).
 - Re-released 2026-10-20 06:30 UTC at the owner's request with the latest `main`:
   `b026ea3610e0` (revision `arabat-web-00037-g5s`; migration job `arabat-migrate-x9x2h`
   completed, nothing new to apply). Verified from inside Google Cloud through a Cloud Build

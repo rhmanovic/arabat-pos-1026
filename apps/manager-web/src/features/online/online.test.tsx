@@ -329,6 +329,49 @@ describe('online store page', () => {
     );
   });
 
+  it('shows which fields the server refused when the store cannot be saved', async () => {
+    const user = userEvent.setup();
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'online.manage', 'branches.read']),
+      routes: {
+        'GET /manager/branches': () => ({ status: 200, body: branches }),
+        'GET /manager/online/orders': () => ({
+          status: 200,
+          body: { orders: [], total: 0, page: 1, pageSize: 25, counts: {} },
+        }),
+        'GET /manager/online/store': () => ({ status: 200, body: store }),
+        'PUT /manager/online/store': () => ({
+          status: 400,
+          body: {
+            type: 'urn:arabat:error:validation_failed',
+            title: 'Validation failed',
+            status: 400,
+            code: 'VALIDATION_FAILED',
+            detail: 'The request is invalid.',
+            issues: [
+              { path: 'fulfillmentBranchId', code: 'custom', message: 'Choose the branch.' },
+              { path: 'contactEmail', code: 'invalid_format', message: 'Invalid email' },
+            ],
+          },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/online', fetch });
+    await user.click(await screen.findByRole('button', { name: 'Store settings' }));
+    await user.click(await screen.findByRole('button', { name: 'Save' }));
+    expect(
+      await screen.findByText('The store was not saved. Fix these fields:'),
+    ).toBeInTheDocument();
+    // Under the field and in the summary with the field's label.
+    expect(screen.getByText('Choose the branch that fulfils online orders.')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Fulfilment branch: Choose the branch that fulfils online orders\./),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Contact email: Enter a valid e-mail address or leave it empty\./),
+    ).toBeInTheDocument();
+  });
+
   it('lists selected products in the store', async () => {
     const user = userEvent.setup();
     const fetch = fakeApiFetch({

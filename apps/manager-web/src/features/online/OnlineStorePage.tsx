@@ -5,6 +5,7 @@ import type {
   OnlineStore,
   SaveOnlineStore,
 } from '@arabat/contracts';
+import { ApiError } from '@arabat/api-client';
 import { ONLINE_ORDER_STATUSES, RESERVED_STORE_SLUGS, STORE_SLUG_PATTERN } from '@arabat/contracts';
 import {
   Alert,
@@ -596,16 +597,51 @@ function SettingsForm({ store }: { store: OnlineStore }) {
   const { branches } = useBranchContext();
   const [v, setV] = useState<SaveOnlineStore>(() => toForm(store));
   const set = (patch: Partial<SaveOnlineStore>) => setV((x) => ({ ...x, ...patch }));
+  /** Field problems the server reported on the last save, by field name. */
+  const [issues, setIssues] = useState<Record<string, string>>({});
   const save = useMutation({
-    mutationFn: () => api.online.saveStore(v),
+    mutationFn: () => {
+      setIssues({});
+      return api.online.saveStore(v);
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: key });
       notify.ok(t('common.saved'));
     },
-    onError: notify.fail,
+    onError: (error) => {
+      if (error instanceof ApiError && error.problem.issues?.length)
+        setIssues(
+          Object.fromEntries(
+            error.problem.issues.map((i) => [
+              i.path.split('.')[0] ?? i.path,
+              t(`online.issue_${i.path.split('.')[0] ?? i.path}`, { defaultValue: i.message }),
+            ]),
+          ),
+        );
+      notify.fail(error);
+    },
   });
+  const FIELD_LABELS: Record<string, string> = {
+    slug: t('online.slug'),
+    status: t('online.storeStatus'),
+    nameAr: t('online.nameAr'),
+    nameEn: t('online.nameEn'),
+    taglineAr: t('online.taglineAr'),
+    taglineEn: t('online.taglineEn'),
+    announcementAr: t('online.announcementAr'),
+    announcementEn: t('online.announcementEn'),
+    primaryColor: t('online.color'),
+    contactPhone: t('online.contactPhone'),
+    contactEmail: t('online.contactEmail'),
+    fulfillmentBranchId: t('online.branch'),
+    reservationMinutes: t('online.reservationMinutes'),
+    pickupEnabled: t('online.pickup'),
+    deliveryEnabled: t('online.delivery'),
+    deliveryFee: t('online.deliveryFee'),
+    minimumOrder: t('online.minimumOrder'),
+  };
   const text = (field: keyof SaveOnlineStore, label: string, props: { dir?: 'ltr' } = {}) => (
-    <Field label={label}>
+    <Field label={label} error={issues[field]}>
       {(p) => (
         <Input
           {...p}
@@ -646,7 +682,7 @@ function SettingsForm({ store }: { store: OnlineStore }) {
             error={
               ['taken', 'reserved', 'invalid', 'rename_limit'].includes(slugCheck.state)
                 ? (slugMessage[slugCheck.state] ?? undefined)
-                : undefined
+                : issues['slug']
             }
           >
             {(p) => (
@@ -702,7 +738,7 @@ function SettingsForm({ store }: { store: OnlineStore }) {
       </Section>
       <Section title={t('online.statusSection')} description={t('online.statusHint')}>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={t('online.storeStatus')}>
+          <Field label={t('online.storeStatus')} error={issues['status']}>
             {(p) => (
               <Select
                 {...p}
@@ -744,7 +780,7 @@ function SettingsForm({ store }: { store: OnlineStore }) {
       </Section>
       <Section title={t('online.fulfillmentSection')} description={t('online.fulfillmentHint')}>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={t('online.branch')}>
+          <Field label={t('online.branch')} error={issues['fulfillmentBranchId']}>
             {(p) => (
               <Select
                 {...p}
@@ -762,7 +798,11 @@ function SettingsForm({ store }: { store: OnlineStore }) {
               </Select>
             )}
           </Field>
-          <Field label={t('online.reservationMinutes')} hint={t('online.reservationHint')}>
+          <Field
+            label={t('online.reservationMinutes')}
+            hint={t('online.reservationHint')}
+            error={issues['reservationMinutes']}
+          >
             {(p) => (
               <Input
                 {...p}
@@ -777,6 +817,11 @@ function SettingsForm({ store }: { store: OnlineStore }) {
           </Field>
           <Checkbox
             label={t('online.pickup')}
+            description={
+              issues['pickupEnabled'] ? (
+                <span className="text-danger">{issues['pickupEnabled']}</span>
+              ) : undefined
+            }
             checked={v.pickupEnabled}
             onChange={(e) => set({ pickupEnabled: e.target.checked })}
           />
@@ -821,6 +866,17 @@ function SettingsForm({ store }: { store: OnlineStore }) {
           </Link>
         </p>
       </Section>
+      {Object.keys(issues).length > 0 ? (
+        <Alert tone="danger" title={t('online.fixFields')}>
+          <ul className="list-disc ps-5">
+            {Object.entries(issues).map(([field, message]) => (
+              <li key={field}>
+                {FIELD_LABELS[field] ?? field}: {message}
+              </li>
+            ))}
+          </ul>
+        </Alert>
+      ) : null}
       <div>
         <Button loading={save.isPending} onClick={() => save.mutate()}>
           {t('common.save')}
