@@ -1180,6 +1180,11 @@ unpaid orders hold no stock. Phase 1:
   296 (44 files), `pnpm test:e2e` 41 (Mailpit running).
 - Not done (later phases): separate online payment methods, `/online` console, storefront
   currency (M12).
+- Released to staging (Railway, commit `1466347`, 04:24 UTC) and, with the owner's approval, to
+  production 2026-10-20: `1466347fbc19` (revision `arabat-web-00036-tsd`; migration 0066 applied
+  by the job `arabat-migrate-42gwl`; Cloud Run moved traffic after the readiness probe). The
+  sandbox cannot reach `www.arabatapp.com` directly (egress policy), so the check is Cloud Run's.
+  The sandbox was signed out of `arabat-admin` afterwards; no key was deleted.
 
 ## Next step
 Online store Phase 2 (`/online` console, ADR-0119) per `docs/ONLINE_STORE_PLAN.md`.
