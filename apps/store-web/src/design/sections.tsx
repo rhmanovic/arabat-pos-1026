@@ -20,7 +20,7 @@ import {
   useStoreProducts,
   useStorefront,
 } from '../shared.js';
-import { DesignAnchor } from './Shell.js';
+import { DesignAnchor } from './parts.js';
 import { assetUrl, linkTarget, useCard, useCta, useDesign, useText } from './context.js';
 
 /** One designed page (home, products or categories): its visible sections in order. */
@@ -991,7 +991,8 @@ export function CatalogSection({ s }: { s: SectionOf<'catalog'> }) {
   const { t } = useTranslation();
   const [params] = useSearchParams();
   const [category, setCategory] = useState<string | null>(params.get('category'));
-  const [search, setSearch] = useState('');
+  // The header's search bar opens this page with `?q=`.
+  const [search, setSearch] = useState(params.get('q') ?? '');
   const [sort, setSort] = useState<'default' | 'name' | 'priceAsc' | 'priceDesc'>('default');
   const wantsSearch = params.get('search') === '1';
   useEffect(() => {
@@ -999,7 +1000,13 @@ export function CatalogSection({ s }: { s: SectionOf<'catalog'> }) {
   }, [wantsSearch]);
   // A link to another category of the same page (drawer, footer) changes the filter.
   const fromUrl = params.get('category');
+  const query = params.get('q');
   const [seen, setSeen] = useState(fromUrl);
+  const [seenQuery, setSeenQuery] = useState(query);
+  if (seenQuery !== query) {
+    setSeenQuery(query);
+    setSearch(query ?? '');
+  }
   if (seen !== fromUrl) {
     setSeen(fromUrl);
     setCategory(fromUrl);

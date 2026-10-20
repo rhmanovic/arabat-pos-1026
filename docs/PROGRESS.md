@@ -1265,6 +1265,28 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-20 — Store header system v2 (ADR-0128 amendment 1)
+Owner's feedback: the header looked primitive and scattered, its settings were few, and there were
+no different header designs or arrangements. Frontend + contract only (no migration).
+- Contract: seven header layouts, top bar with up to 3 rotating messages and contact / social,
+  navigation style boxed + position + categories menu (mega / dropdown), menu items with up to 10
+  sub-items or the categories kind, ordered header buttons (cart always shown, each once), cart /
+  search / language styles, colour incl. glass, bottom edge, height, width, hide on scroll, logo
+  size, name switch, phone logo position and search bar, side menu as panel or full screen. Old
+  designs parse unchanged (a hidden search stays hidden). BR-232.
+- Storefront: `design/Header.tsx` (top bar, seven layouts, dropdowns and the categories mega menu,
+  search bar that opens `/products?q=`, ordered buttons, sticky / hide on scroll, phones, side
+  menu with sub-menus and category tiles) and `design/parts.tsx` (icons, social icon links,
+  branch and language buttons); the catalog reads `?q=`.
+- Console: Header tab rebuilt as panels (`features/design/HeaderEditor.tsx`) with a drawn
+  thumbnail per layout, a sub-item editor, sortable header buttons with show switches.
+- Tests: store-web +1 (22), online-web +1 (25). Screens checked in Chromium: all seven layouts on
+  desktop and phone, the categories mega menu, the phone side menu and the editor; fixed there:
+  a centred logo sat low and collided with the search bar, phone buttons hugged the menu button,
+  oversized mega-menu tiles.
+- Verified (cloud sandbox): `pnpm verify` 359 unit/web (56 files), `pnpm test:integration` 308
+  (44 files), `pnpm test:e2e` 43.
+
 ### 2026-10-20 — Storefront design: header, navigation, footer and page sections (ADR-0128)
 Owner's request: the store looked primitive; let the owner design the navigation bar, header,
 footer, side menu and the sections of the home, products and categories pages, for shops and

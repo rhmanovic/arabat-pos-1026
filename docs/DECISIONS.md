@@ -2197,3 +2197,36 @@ ADR; supersede it.
 - **Consequences:** merchants shape their store without code, see every change before shoppers
   do, and shops and restaurants start from a layout made for them; the store stays safe because
   every design passes one schema and links / videos are restricted.
+- **Amendment 1 (2026-10-20) — header system v2.** Owner's feedback: the header looked primitive
+  and scattered, its settings were few and undistinguished for e-commerce merchants, and there
+  were no different header designs or arrangements. BR-232. No migration (the design is jsonb);
+  every stored design still parses (`z.preprocess` carries the old `showSearch: false` into a
+  hidden search button; new fields have defaults).
+  - **Seven layouts** (`header.layout`): classic (logo, menu, buttons), centred (logo in the
+    middle, menu row below), split (menu | logo | buttons), stacked (logo, a large search bar and
+    the buttons, menu row below — for big catalogues), minimal (logo, cart and the menu button),
+    floating (a rounded capsule floating over the page) and bold (a tall brand-coloured band).
+    A centred logo sits over the whole row, so both sides keep their room, and beside it the
+    search stays a button.
+  - **Top bar** (`announcement`): the store's announcement plus up to 3 messages of its own that
+    take turns every 4.5 s, the phone / WhatsApp and the social accounts as icons; brand / dark /
+    soft.
+  - **Navigation:** styles links / underline / pills / boxed / hidden, position start / centre /
+    end, items of two kinds — a link with up to 10 sub-items (a dropdown, opened by hover or the
+    chevron button with `aria-expanded`) or the **categories menu** (a large menu with category
+    pictures, or a simple list: `navbar.menuStyle` mega / dropdown).
+  - **Header buttons** (`header.actions`): search, account, branch, language, WhatsApp and cart
+    in the merchant's order, each shown or hidden; each kind appears once and the cart is always
+    shown (enforced by the schema). Cart pill with total / icon with badge / text; search button
+    or search bar (submits to `/products?q=`, which the catalog reads); language short or full.
+  - **Look:** colour light / brand / dark / glass (blurred), bottom edge none / line / shadow,
+    height compact / regular / tall, contained or full width, sticky, hide while scrolling down.
+    Logo size small / medium / large, store name and tagline switches.
+  - **Phones:** logo at the start or centred, an optional search bar under the header; the side
+    menu opens as a side panel or full screen, with expandable sub-menus, category tiles with
+    pictures, account, branch, language, contact and social icons.
+  - **Console:** the Header tab is a set of panels (layout gallery with a drawn thumbnail of each
+    layout, top bar, logo, navigation with sub-item editor, header buttons with drag / ▲▼ and
+    show switches, look, phones, side menu, social accounts), all live in the preview.
+  - Templates: retail = stacked with search bar, underline navigation and the categories menu;
+    restaurant = centred, large logo, pills, WhatsApp shown.

@@ -1064,6 +1064,79 @@ describe('online store console', () => {
       expect(design.footer.style).toBe('dark');
       expect(design.footer.blocks.map((b) => b.type)).toEqual(['contact', 'social']);
     });
+
+    it('builds the header: layout gallery, top bar messages, sub-menus and ordered header buttons', async () => {
+      const user = userEvent.setup();
+      const fetch = fakeApiFetch({ session: session(), routes: designRoutes() });
+      renderApp({ routes, appInterface: 'manager', i18n, path: '/design', fetch });
+      await user.click(await screen.findByRole('tab', { name: 'Header' }));
+      const layouts = screen.getByRole('radiogroup', { name: 'Layout' });
+      expect(within(layouts).getAllByRole('radio')).toHaveLength(7);
+      await user.click(within(layouts).getByRole('radio', { name: 'Floating capsule' }));
+      expect(within(layouts).getByRole('radio', { name: 'Floating capsule' })).toBeChecked();
+
+      await user.click(screen.getByRole('button', { name: 'Add message' }));
+      await user.type(screen.getByLabelText('Message 1 (English)'), 'Free delivery over 10 KWD');
+
+      await user.click(screen.getByRole('button', { name: 'Add item' }));
+      await user.type(screen.getByLabelText('Label (English)'), 'Shop');
+      await user.click(screen.getByRole('button', { name: 'Add sub-item' }));
+      await user.type(screen.getAllByLabelText('Label (English)')[1]!, 'New in');
+
+      await user.click(screen.getByRole('button', { name: 'Move Search down' }));
+      await user.click(screen.getByRole('checkbox', { name: 'Show Account' }));
+      await user.click(screen.getByRole('checkbox', { name: 'Show WhatsApp' }));
+      await user.click(
+        within(screen.getByRole('radiogroup', { name: 'Cart button' })).getByRole('radio', {
+          name: 'Icon with badge',
+        }),
+      );
+      await user.click(
+        within(screen.getByRole('radiogroup', { name: 'Header colour' })).getByRole('radio', {
+          name: 'Glass',
+        }),
+      );
+      await user.click(
+        screen.getByRole('checkbox', { name: 'Search bar under the header on phones' }),
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Save draft' }));
+      await waitFor(() => expect(fetch.calls.some((c) => c.method === 'PUT')).toBe(true));
+      const design = (fetch.calls.find((c) => c.method === 'PUT')!.body as { design: unknown })
+        .design as {
+        announcement: { messages: { en: string | null }[] };
+        header: {
+          layout: string;
+          background: string;
+          cartStyle: string;
+          mobileSearch: boolean;
+          actions: { type: string; visible: boolean }[];
+        };
+        navbar: { items: { label: { en: string }; children: { label: { en: string } }[] }[] };
+      };
+      expect(design.header.layout).toBe('floating');
+      expect(design.header.background).toBe('glass');
+      expect(design.header.cartStyle).toBe('icon');
+      expect(design.header.mobileSearch).toBe(true);
+      expect(design.announcement.messages).toEqual([{ en: 'Free delivery over 10 KWD', ar: null }]);
+      expect(design.navbar.items).toEqual([
+        expect.objectContaining({
+          label: { en: 'Shop', ar: null },
+          children: [expect.objectContaining({ label: { en: 'New in', ar: null } })],
+        }),
+      ]);
+      expect(design.header.actions.map((a) => a.type)).toEqual([
+        'account',
+        'search',
+        'branch',
+        'language',
+        'whatsapp',
+        'cart',
+      ]);
+      expect(Object.fromEntries(design.header.actions.map((a) => [a.type, a.visible]))).toEqual(
+        expect.objectContaining({ account: false, whatsapp: true, cart: true }),
+      );
+    });
   });
 
   it('defines the same translation keys in Arabic and English', () => {

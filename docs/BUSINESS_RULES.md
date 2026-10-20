@@ -117,6 +117,11 @@ engineering defaults pending owner confirmation.
   (the main register's first), and cannot sell while none is open. A device shift is never refused because
   the person left a shift open elsewhere; that shift is listed for the managers to close. Records
   that reach the server after the branch shift closed are booked to it and flagged "late".
+- **BR-232** Header design (ADR-0128 amendment 1): the merchant picks one of seven header
+  layouts, a top bar with up to 3 rotating messages, the navigation style and position, menu
+  items with up to 10 sub-items or the categories menu, and the order and visibility of the
+  header buttons; the cart button can never be hidden and each button appears once. Older
+  designs keep their choices (a hidden search button stays hidden).
 - **BR-231** Design pictures (ADR-0128): JPEG, PNG or WebP of at most 2 MB, at most 200 per
   store; a picture used by the draft or the published design cannot be deleted.
 - **BR-230** Safe content (ADR-0128): design links go to a store page, a category, a product, or

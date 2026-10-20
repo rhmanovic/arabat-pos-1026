@@ -17,6 +17,10 @@ export const storeEn = {
     closeMenu: 'Close menu',
     menuLabel: 'Store menu',
     quick: 'Quick navigation',
+    submenu: 'Open the {{name}} menu',
+    allCategories: 'All categories',
+    searchStore: 'Search the store',
+    searchPlaceholder: 'What are you looking for?',
   },
   design: {
     previewBadge: 'Preview: what shoppers will see once you publish',

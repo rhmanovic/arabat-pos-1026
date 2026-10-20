@@ -66,6 +66,18 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-20 (store header system v2, ADR-0128 amendment 1, cloud sandbox run)
+- `apps/store-web/src/app.test.tsx` (+1, 22): a split header with a top bar message, an icon cart
+  "Cart (0)", hidden account and branch buttons and a shown WhatsApp link; the About menu opens
+  its sub-item, the Shop item opens the categories mega menu (Drinks, All categories); beside
+  the centred logo the search is a button, and typing in the header search bar opens the
+  products page filtered by the words with the catalog search filled in.
+- `apps/online-web/src/app.test.tsx` (+1, 25): the layout gallery has seven layouts and picks
+  "Floating capsule"; a top bar message, a menu item with a sub-item, the header buttons moved
+  and shown / hidden, the icon cart, the glass colour and the phone search bar are saved.
+- Totals: `pnpm verify` 359 unit/web (56 files), `pnpm test:integration` 308 (44 files),
+  `pnpm test:e2e` 43.
+
 ### Results 2026-10-20 (storefront design, ADR-0128, cloud sandbox run)
 - `ecommerce.int.test.ts` (+2, 23): an untouched store answers the legacy layout to the console
   and shoppers; a design picture is uploaded (a non-image is 415); a draft with header, pills

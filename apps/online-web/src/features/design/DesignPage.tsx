@@ -25,7 +25,8 @@ import {
   sectionOrder,
   useSectionSummary,
 } from './SectionEditor.js';
-import { FooterEditor, HeaderEditor, ThemeEditor } from './ShellEditors.js';
+import { HeaderEditor } from './HeaderEditor.js';
+import { FooterEditor, ThemeEditor } from './ShellEditors.js';
 
 /** The preview frame's name: the storefront shows the draft when it runs inside it. */
 const PREVIEW_FRAME_NAME = 'arabat-design-preview';

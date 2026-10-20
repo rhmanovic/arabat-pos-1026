@@ -266,7 +266,96 @@ export type DesignSection = z.infer<typeof sectionSchema>;
 export type SectionOf<T extends SectionType> = Extract<DesignSection, { type: T }>;
 
 // --------------------------------------------------------------------------- the shell
-const navItemSchema = z.object({ id, label: localized(30), link: designLinkSchema });
+const navChildSchema = z.object({ id, label: localized(30), link: designLinkSchema });
+/**
+ * A navigation item: a link, optionally with a sub-menu, or `categories` (a menu of the store's
+ * categories, shown as a list or a picture mega-menu by `navbar.menuStyle`).
+ */
+const navItemSchema = z.object({
+  id,
+  label: localized(30),
+  link: designLinkSchema,
+  kind: z.enum(['link', 'categories']).default('link'),
+  children: z.array(navChildSchema).max(10).default([]),
+});
+export type NavItem = z.infer<typeof navItemSchema>;
+
+export const HEADER_LAYOUTS = [
+  'classic',
+  'centered',
+  'split',
+  'stacked',
+  'minimal',
+  'floating',
+  'bold',
+] as const;
+export type HeaderLayout = (typeof HEADER_LAYOUTS)[number];
+export const HEADER_ACTIONS = [
+  'search',
+  'account',
+  'branch',
+  'language',
+  'whatsapp',
+  'cart',
+] as const;
+export type HeaderAction = (typeof HEADER_ACTIONS)[number];
+const DEFAULT_ACTIONS: { type: HeaderAction; visible: boolean }[] = [
+  { type: 'search', visible: true },
+  { type: 'account', visible: true },
+  { type: 'branch', visible: true },
+  { type: 'language', visible: true },
+  { type: 'whatsapp', visible: false },
+  { type: 'cart', visible: true },
+];
+
+/** Header items in the merchant's order: each kind once, the cart always shown. */
+const actionsSchema = z
+  .array(z.object({ type: z.enum(HEADER_ACTIONS), visible: z.boolean() }))
+  .max(HEADER_ACTIONS.length * 2)
+  .default(DEFAULT_ACTIONS)
+  .transform((list) => {
+    const seen = new Set<HeaderAction>();
+    const out = list.filter((a) => (seen.has(a.type) ? false : (seen.add(a.type), true)));
+    for (const a of DEFAULT_ACTIONS)
+      if (!seen.has(a.type)) out.push({ ...a, visible: a.type === 'cart' });
+    return out.map((a) => (a.type === 'cart' ? { ...a, visible: true } : a));
+  });
+
+const headerSchema = z.preprocess(
+  (value) => {
+    if (!value || typeof value !== 'object') return value;
+    const h = value as Record<string, unknown>;
+    // Designs saved before the header system v2 (ADR-0128 amendment 1) had `showSearch`.
+    if (h['actions'] === undefined && h['showSearch'] === false)
+      return {
+        ...h,
+        actions: DEFAULT_ACTIONS.map((a) => (a.type === 'search' ? { ...a, visible: false } : a)),
+      };
+    return h;
+  },
+  z.object({
+    layout: z.enum(HEADER_LAYOUTS).default('classic'),
+    background: z.enum(['light', 'brand', 'dark', 'glass']).default('light'),
+    border: z.enum(['none', 'line', 'shadow']).default('line'),
+    height: z.enum(['compact', 'regular', 'tall']).default('regular'),
+    width: z.enum(['contained', 'full']).default('contained'),
+    sticky: z.boolean().default(true),
+    /** Slides away while scrolling down, comes back when scrolling up. */
+    hideOnScroll: z.boolean().default(false),
+    logoSize: z.enum(['small', 'medium', 'large']).default('medium'),
+    showName: z.boolean().default(true),
+    showTagline: z.boolean().default(true),
+    /** Search as an icon, or as a search bar in the header (the search-first layout always shows the bar). */
+    searchStyle: z.enum(['icon', 'bar']).default('icon'),
+    cartStyle: z.enum(['pill', 'icon', 'text']).default('pill'),
+    languageStyle: z.enum(['compact', 'full']).default('compact'),
+    actions: actionsSchema,
+    mobileLayout: z.enum(['start', 'center']).default('start'),
+    /** A search bar under the header on phones. */
+    mobileSearch: z.boolean().default(false),
+  }),
+);
+export type HeaderDesign = z.output<typeof headerSchema>;
 const footerBlockSchema = z.object({
   id,
   type: z.enum(['about', 'links', 'categories', 'contact', 'hours', 'social', 'payments']),
@@ -297,38 +386,33 @@ export const storeDesignSchema = z
         buttons: z.enum(['solid', 'pill']).default('solid'),
       })
       .default({ radius: 'soft', background: 'white', cards: 'bordered', buttons: 'solid' }),
+    /** The top bar: the store's announcement and up to three rotating messages, with shortcuts. */
     announcement: z
-      .object({ style: z.enum(['brand', 'dark', 'soft']).default('brand') })
-      .default({ style: 'brand' }),
-    header: z
       .object({
-        layout: z.enum(['classic', 'centered', 'minimal']).default('classic'),
-        background: z.enum(['light', 'brand', 'dark']).default('light'),
-        sticky: z.boolean().default(true),
-        showTagline: z.boolean().default(true),
-        showSearch: z.boolean().default(true),
+        style: z.enum(['brand', 'dark', 'soft']).default('brand'),
+        messages: z.array(localized(120)).max(3).default([]),
+        showContact: z.boolean().default(false),
+        showSocial: z.boolean().default(false),
       })
-      .default({
-        layout: 'classic',
-        background: 'light',
-        sticky: true,
-        showTagline: true,
-        showSearch: true,
-      }),
+      .prefault({}),
+    header: headerSchema.prefault({}),
     navbar: z
       .object({
-        style: z.enum(['links', 'underline', 'pills', 'hidden']).default('links'),
+        style: z.enum(['links', 'underline', 'pills', 'boxed', 'hidden']).default('links'),
+        align: z.enum(['start', 'center', 'end']).default('center'),
+        menuStyle: z.enum(['dropdown', 'mega']).default('mega'),
         items: z.array(navItemSchema).max(8).default([]),
       })
-      .default({ style: 'links', items: [] }),
+      .prefault({}),
     drawer: z
       .object({
         enabled: z.boolean().default(true),
+        style: z.enum(['side', 'full']).default('side'),
         showCategories: z.boolean().default(true),
         showContact: z.boolean().default(true),
         showSocial: z.boolean().default(true),
       })
-      .default({ enabled: true, showCategories: true, showContact: true, showSocial: true }),
+      .prefault({}),
     footer: z
       .object({
         style: z.enum(['simple', 'columns', 'centered', 'dark']).default('simple'),
@@ -436,6 +520,7 @@ export function templateDesign(template: DesignTemplate): StoreDesign {
       id: 'nav-categories',
       label: l('Categories', 'التصنيفات'),
       link: { kind: 'page', page: 'categories' },
+      kind: 'categories',
     },
   ] as const;
   const footer = {
@@ -452,8 +537,21 @@ export function templateDesign(template: DesignTemplate): StoreDesign {
     return parse({
       template,
       style: { radius: 'round', background: 'tinted', cards: 'shadow', buttons: 'pill' },
-      header: { layout: 'centered', background: 'light', sticky: true, showSearch: false },
-      navbar: { style: 'pills', items: [...nav] },
+      header: {
+        layout: 'centered',
+        background: 'light',
+        border: 'shadow',
+        logoSize: 'large',
+        cartStyle: 'pill',
+        mobileLayout: 'center',
+        actions: [
+          { type: 'whatsapp', visible: true },
+          { type: 'account', visible: true },
+          { type: 'language', visible: true },
+          { type: 'cart', visible: true },
+        ],
+      },
+      navbar: { style: 'pills', align: 'center', items: [...nav] },
       footer: {
         ...footer,
         blocks: [
@@ -495,8 +593,15 @@ export function templateDesign(template: DesignTemplate): StoreDesign {
   return parse({
     template,
     style: { radius: 'soft', background: 'white', cards: 'bordered', buttons: 'solid' },
-    header: { layout: 'classic', background: 'light', sticky: true, showSearch: true },
-    navbar: { style: 'underline', items: [...nav] },
+    header: {
+      layout: 'stacked',
+      background: 'light',
+      border: 'line',
+      searchStyle: 'bar',
+      cartStyle: 'pill',
+      mobileSearch: true,
+    },
+    navbar: { style: 'underline', align: 'start', menuStyle: 'mega', items: [...nav] },
     footer,
     pages: {
       home: [

@@ -19,6 +19,10 @@ export const storeAr: typeof storeEn = {
     closeMenu: 'إغلاق القائمة',
     menuLabel: 'قائمة المتجر',
     quick: 'تنقل سريع',
+    submenu: 'فتح قائمة {{name}}',
+    allCategories: 'كل التصنيفات',
+    searchStore: 'ابحث في المتجر',
+    searchPlaceholder: 'عن ماذا تبحث؟',
   },
   design: {
     previewBadge: 'معاينة: هذا ما سيراه المتسوقون بعد النشر',

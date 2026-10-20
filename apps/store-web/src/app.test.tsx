@@ -730,17 +730,29 @@ describe('storefront', () => {
     const design = templateDesign('retail');
     design.navbar = {
       style: 'pills',
+      align: 'center',
+      menuStyle: 'mega',
       items: [
-        { id: 'n1', label: { en: 'Shop all', ar: null }, link: { kind: 'page', page: 'products' } },
+        {
+          id: 'n1',
+          label: { en: 'Shop all', ar: null },
+          link: { kind: 'page', page: 'products' },
+          kind: 'link',
+          children: [],
+        },
         {
           id: 'n2',
           label: { en: 'Drinks', ar: null },
           link: { kind: 'category', categoryId: DRINKS },
+          kind: 'link',
+          children: [],
         },
         {
           id: 'n3',
           label: { en: 'Blog', ar: null },
           link: { kind: 'url', url: 'https://blog.example.com' },
+          kind: 'link',
+          children: [],
         },
       ],
     };
@@ -817,6 +829,119 @@ describe('storefront', () => {
     expect(
       within(screen.getByTestId('product-grid')).getByText('Coffee beans'),
     ).toBeInTheDocument();
+  });
+
+  it('builds the header from the design: top bar, layout, menus, mega-menu, ordered items and search', async () => {
+    const user = userEvent.setup();
+    const DRINKS = '0190a000-0000-7000-8000-0000000000c1';
+    const design = templateDesign('retail');
+    design.announcement = {
+      style: 'dark',
+      messages: [{ en: 'Free gift wrapping', ar: null }],
+      showContact: true,
+      showSocial: false,
+    };
+    design.social = { ...design.social, whatsapp: '+96550000000' };
+    design.header = {
+      ...design.header,
+      layout: 'split',
+      cartStyle: 'icon',
+      actions: [
+        { type: 'cart', visible: true },
+        { type: 'search', visible: true },
+        { type: 'account', visible: false },
+        { type: 'branch', visible: false },
+        { type: 'language', visible: true },
+        { type: 'whatsapp', visible: true },
+      ],
+      searchStyle: 'bar',
+    };
+    design.navbar = {
+      style: 'boxed',
+      align: 'center',
+      menuStyle: 'mega',
+      items: [
+        {
+          id: 'shop',
+          label: { en: 'Shop', ar: null },
+          link: { kind: 'page', page: 'products' },
+          kind: 'categories',
+          children: [],
+        },
+        {
+          id: 'about',
+          label: { en: 'About', ar: null },
+          link: { kind: 'page', page: 'home' },
+          kind: 'link',
+          children: [
+            {
+              id: 'story',
+              label: { en: 'Our story', ar: null },
+              link: { kind: 'url', url: '/categories' },
+            },
+          ],
+        },
+      ],
+    };
+    renderStore('/demo', {
+      'GET /store/demo': () => ({
+        status: 200,
+        body: {
+          ...STORE,
+          announcementEn: 'Open until midnight',
+          contactPhone: '+96522223333',
+          categories: [{ id: DRINKS, nameEn: 'Drinks', nameAr: null, imageUrl: null }],
+        },
+      }),
+      'GET /store/demo/design': () => ({ status: 200, body: { design } }),
+    });
+    // Top bar: the store's announcement first, then the design's messages; phone and WhatsApp.
+    expect(await screen.findByTestId('announcement')).toHaveTextContent('Open until midnight');
+    expect(
+      within(screen.getByTestId('top-bar')).getByRole('link', { name: '+96522223333' }),
+    ).toHaveAttribute('href', 'tel:+96522223333');
+    const header = screen.getByTestId('store-header');
+    expect(header).toHaveAttribute('data-layout', 'split');
+    // Items in the merchant's order, hidden ones left out; the icon cart keeps its name.
+    expect(within(header).queryByRole('link', { name: 'Sign in' })).toBeNull();
+    expect(within(header).queryByLabelText('Branch')).toBeNull();
+    expect(within(header).getByRole('link', { name: 'Cart (0)' })).toHaveAttribute(
+      'href',
+      '/demo/cart',
+    );
+    expect(within(header).getByRole('link', { name: 'WhatsApp' })).toHaveAttribute(
+      'href',
+      'https://wa.me/96550000000',
+    );
+    expect(within(header).getByRole('button', { name: 'العربية' })).toBeInTheDocument();
+    // A sub-menu opens with its toggle; the categories item opens the mega-menu.
+    await user.click(within(header).getByRole('button', { name: 'Open the About menu' }));
+    expect(within(header).getByRole('link', { name: 'Our story' })).toHaveAttribute(
+      'href',
+      '/demo/categories',
+    );
+    await user.click(within(header).getByRole('button', { name: 'Open the Shop menu' }));
+    const mega = within(header).getByTestId('mega-menu');
+    expect(within(mega).getByRole('link', { name: /Drinks/ })).toHaveAttribute(
+      'href',
+      `/demo/products?category=${DRINKS}`,
+    );
+    expect(within(mega).getByRole('link', { name: 'All categories' })).toHaveAttribute(
+      'href',
+      '/demo/categories',
+    );
+    // Beside the centred logo the search is a button (its bar would cover the logo); the bar
+    // stays under the header on phones. Searching opens the products page filtered by the words.
+    expect(within(header).getByRole('link', { name: 'Search products' })).toHaveAttribute(
+      'href',
+      '/demo/products?search=1',
+    );
+    const search = within(header).getAllByRole('searchbox', { name: 'Search the store' })[0]!;
+    await user.type(search, 'Mug{Enter}');
+    const grid = await screen.findByTestId('product-grid');
+    expect(within(grid).getByText('Mug')).toBeInTheDocument();
+    expect(within(grid).queryByText('Coffee beans')).toBeNull();
+    expect(screen.getByRole('searchbox', { name: 'Search products' })).toHaveValue('Mug');
   });
 
   it('shows a restaurant menu grouped by category and adds a dish with one tap', async () => {
