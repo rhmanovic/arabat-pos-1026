@@ -1257,8 +1257,12 @@ adds how it presents them.
   ROADMAP, plan (Phase 4 ✅ with the differences), user guide chapter 24.
 - Verified (cloud sandbox): `pnpm verify` 338 unit/web (56 files), `pnpm test:integration` 299
   (44 files), `pnpm test:e2e` 41.
-- Released: staging (Railway, `main`, 2026-10-20 ~08:20 UTC). Production waits for the owner's
-  word ("انشر").
+- Released: staging (Railway, `main`, 2026-10-20 08:19 UTC, migration applied) and, with the
+  owner's approval ("انشر"), production 2026-10-20 08:46 UTC: `1ed5ab897326` (revision
+  `arabat-web-00040-xgz`, migration job `arabat-migrate-kprwf` completed: migration 0067 and the
+  reference data applied). Cloud Build check `60926dec`: `/api/v1/health/ready` 200 with version
+  `1ed5ab897326` and database ok (3 ms); `live`, `/store/`, `/manager/` and `/online/` (title
+  "Arabat Online Store") 200. Signed out afterwards; no key deleted.
 
 ## Next step
 Online store: Phase 4 ✅ (ADR-0121); next is Phase 5 (fulfilment: delivery areas, pickup
