@@ -1228,8 +1228,9 @@ customers, accounts, permissions).
   (title "Arabat Online Store") 200. Signed out afterwards; no key deleted.
 
 ## Next step
-Online store Phase 3 (online payment methods separate from POS tenders, ADR-0120) per
-`docs/ONLINE_STORE_PLAN.md`.
+Online store: Phase 3 (separate online payment methods) cancelled by the owner (2026-10-20);
+next is Phase 4 (catalog and merchandising) or Phase 5 (fulfilment: delivery areas, pickup
+branches, notifications, printing), per `docs/ONLINE_STORE_PLAN.md`, on the owner's pick.
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.
 Staging: first platform operator, SMTP; owner decisions OQ-021–025.

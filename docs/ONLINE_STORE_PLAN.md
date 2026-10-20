@@ -1,7 +1,9 @@
 # Online Store — Phased Development Plan
 
 Status: **approved by the owner on 2026-10-20** with one change: unpaid orders reserve **no**
-stock (see Phase 1). Phases 1 (ADR-0118) and 2 (ADR-0119) are implemented; Phase 3 is next. Each phase
+stock (see Phase 1). Phases 1 (ADR-0118) and 2 (ADR-0119) are implemented. **Phase 3 was cancelled
+by the owner on 2026-10-20**: payment methods stay one shared set (POS methods, with the "available
+online" flag and gateway for the store; pay on receipt needs none). Each phase
 is implemented as one or more vertical slices (DB → API → UI → tests → docs), recorded in
 `DECISIONS.md`, `BUSINESS_RULES.md`, `ROUTES.md`, `DATABASE.md`, `PROGRESS.md` and the
 user guide, released to staging after the tests pass (ADR-0088) and to production on the
@@ -119,8 +121,9 @@ request: same backend, database, catalog, stock, customers, accounts and permiss
 **Done when:** every online-store task is done in `/online` and nothing online remains in
 `/manager` except the entry link and the sales/report views.
 
-### Phase 3 — Online payment methods (separate from POS)
-Size: M. Migration 0067. ADR-0120. BR-211…BR-215.
+### Phase 3 — Online payment methods (separate from POS) ✗ cancelled
+**Cancelled by the owner (2026-10-20).** Payment methods remain shared between the POS and the
+store as today. The text below is kept for the record only.
 
 - `payment_methods.channel text not null default 'pos'` (`pos` | `online`), CHECK that
   `available_in_pos` / `available_online` are consistent, then both flags are retired
@@ -257,7 +260,7 @@ Size: M. No migration beyond events.
 |---|---|
 | 1 | Real merchants can use the store in production today (no gateway needed), with their own address. |
 | 2 | Room for all the settings that follow; the manager app stays clean. |
-| 3 | Clean separation of POS and online tenders; bank transfer and COD as proper methods. |
+| 3 | Cancelled (owner): tenders stay shared. |
 | 4 | Stores with large catalogs become presentable. |
 | 5 | Multi-branch delivery/pickup operations; staff workflow (print, POS hand-over). |
 | 6–7 | Repeat business and promotions. |
