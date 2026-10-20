@@ -23,6 +23,8 @@ const summary = {
   deliveryFee: money('0.000'),
   total: money('2.500'),
   createdAt: '2026-10-12T08:00:00.000Z',
+  paymentMode: 'gateway',
+  confirmedAt: null,
   paidAt: '2026-10-12T08:01:00.000Z',
   reservedUntil: '2026-10-12T08:15:00.000Z',
   trackingToken: 'tok',
@@ -36,6 +38,7 @@ const summary = {
   saleId: '0190a000-0000-7000-8000-0000000000c1',
   receiptNumber: 'MAIN-000042',
   paymentMethod: { nameEn: 'Card', nameAr: 'بطاقة', provider: 'mock' },
+  paymentReference: null,
   statusNote: null,
   version: 2,
 };
@@ -91,6 +94,7 @@ const store = {
   deliveryFee: money('0.000'),
   minimumOrder: money('0.000'),
   reservationMinutes: 15,
+  payOnReceiptEnabled: true,
   paymentMethods: [
     { id: 'm1', nameEn: 'Card', nameAr: null, provider: 'mock', ready: true },
     { id: 'm2', nameEn: 'KNET', nameAr: null, provider: 'tap', ready: false },
@@ -134,6 +138,23 @@ describe('online order actions', () => {
     expect(nextActions({ status: 'completed', fulfillment: 'pickup' })).toEqual([]);
     expect(nextActions({ status: 'expired', fulfillment: 'pickup' })).toEqual([]);
   });
+
+  it('lets staff confirm, record the payment and cancel a pay-on-receipt order', () => {
+    const unpaid = { paymentMode: 'on_receipt' as const, saleId: null };
+    expect(nextActions({ status: 'placed', fulfillment: 'pickup', ...unpaid })).toEqual([
+      'confirm',
+      'mark_paid',
+      'cancel',
+    ]);
+    // Unpaid: every step but completion; paid: the usual steps only.
+    expect(nextActions({ status: 'ready', fulfillment: 'pickup', ...unpaid })).toEqual([
+      'mark_paid',
+      'cancel',
+    ]);
+    expect(
+      nextActions({ status: 'confirmed', fulfillment: 'delivery', ...unpaid, saleId: 's1' }),
+    ).toEqual(['preparing', 'out_for_delivery', 'completed']);
+  });
 });
 
 describe('online store page', () => {
@@ -172,6 +193,104 @@ describe('online store page', () => {
     );
   });
 
+  it('records the payment of a pay-on-receipt order with a till tender', async () => {
+    const user = userEvent.setup();
+    const placed = {
+      ...detail,
+      status: 'placed',
+      paymentMode: 'on_receipt',
+      paidAt: null,
+      reservedUntil: null,
+      saleId: null,
+      receiptNumber: null,
+      paymentMethod: null,
+      payments: [],
+      timeline: [{ status: 'placed', at: '2026-10-12T08:00:00.000Z' }],
+    };
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'online.orders']),
+      routes: {
+        'GET /manager/branches': () => ({ status: 200, body: branches }),
+        'GET /manager/online/orders': () => ({
+          status: 200,
+          body: { orders: [placed], total: 1, page: 1, pageSize: 25, counts: { placed: 1 } },
+        }),
+        [`GET /manager/online/orders/${ORDER_ID}`]: () => ({ status: 200, body: placed }),
+        'GET /manager/online/tenders': () => ({
+          status: 200,
+          body: {
+            tenders: [
+              { id: 'cash', nameEn: 'Cash', nameAr: 'نقد', kind: 'cash', requiresReference: false },
+              { id: 'knet', nameEn: 'KNET', nameAr: null, kind: 'card', requiresReference: true },
+            ],
+          },
+        }),
+        [`POST /manager/online/orders/${ORDER_ID}/action`]: () => ({
+          status: 200,
+          body: { ...placed, status: 'confirmed', saleId: 's1', receiptNumber: 'MAIN-000043' },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/online', fetch });
+    expect(await screen.findByText('Unpaid')).toBeInTheDocument();
+    await user.click(screen.getByText('W-000007'));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(await within(dialog).findByRole('button', { name: 'Record payment' }));
+    const pay = await screen.findByRole('dialog', { name: 'Record payment for W-000007' });
+    // A card tender needs its reference before the button is enabled.
+    await user.selectOptions(await within(pay).findByLabelText('Received with'), 'knet');
+    expect(within(pay).getByRole('button', { name: 'Record payment' })).toBeDisabled();
+    await user.type(within(pay).getByLabelText('Reference'), 'K-778');
+    await user.click(within(pay).getByRole('button', { name: 'Record payment' }));
+    await waitFor(() =>
+      expect(fetch.calls.find((c) => c.method === 'POST')?.body).toEqual({
+        action: 'mark_paid',
+        paymentMethodId: 'knet',
+        reference: 'K-778',
+        note: null,
+        version: 2,
+      }),
+    );
+  });
+
+  it('checks a new store address while typing and offers free alternatives', async () => {
+    const user = userEvent.setup();
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'online.manage', 'branches.read']),
+      routes: {
+        'GET /manager/branches': () => ({ status: 200, body: branches }),
+        'GET /manager/online/orders': () => ({
+          status: 200,
+          body: { orders: [], total: 0, page: 1, pageSize: 25, counts: {} },
+        }),
+        'GET /manager/online/store': () => ({ status: 200, body: store }),
+        'GET /manager/online/store/slug-availability': () => ({
+          status: 200,
+          body: {
+            slug: 'saffron',
+            available: false,
+            reason: 'taken',
+            suggestions: ['saffron-store', 'saffron-2'],
+          },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/online', fetch });
+    await user.click(await screen.findByRole('button', { name: 'Store settings' }));
+    const slug = await screen.findByLabelText('Store address');
+    await user.clear(slug);
+    await user.type(slug, 'saffron');
+    expect(await screen.findByText('Taken by another store or link page.')).toBeInTheDocument();
+    expect(screen.getByTestId('store-url-preview')).toHaveTextContent(
+      'http://localhost:5176/store/saffron',
+    );
+    await user.click(screen.getByRole('button', { name: 'saffron-store' }));
+    expect(slug).toHaveValue('saffron-store');
+    expect(fetch.calls.find((c) => c.path.includes('slug-availability'))?.query).toBe(
+      'slug=saffron',
+    );
+  });
+
   it('saves store settings and shows which gateways are connected', async () => {
     const user = userEvent.setup();
     const fetch = fakeApiFetch({
@@ -204,6 +323,7 @@ describe('online store page', () => {
         fulfillmentBranchId: BRANCH,
         deliveryFee: '0.000',
         reservationMinutes: 15,
+        payOnReceiptEnabled: true,
         version: 0,
       }),
     );

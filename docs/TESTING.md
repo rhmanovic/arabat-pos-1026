@@ -66,6 +66,39 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-20 (online store Phase 1: pay on receipt, store address, ADR-0118, cloud sandbox run)
+- `ecommerce.int.test.ts` (+3, 9 in the file): a store without any gateway publishes and takes an
+  unpaid pickup order (`placed`, no reservation row, the store still offers all 5, ordering 6 is
+  `INSUFFICIENT_STOCK`); `preparing` before confirmation and `completed` while unpaid are refused
+  (`INVALID_STATE`, `ORDER_UNPAID`); a card tender without reference is `REFERENCE_REQUIRED`;
+  `/manager/online/tenders` marks cash / card; recording cash creates the online sale (`manual`,
+  no shift), deducts the stock and puts 2.500 into the branch treasury; paying twice or cancelling
+  a paid order is refused; the public timeline reads placed → confirmed → paid → ready →
+  completed; audit `online.order_mark_paid`. A card tender with its reference settles 3.000 into
+  the card's account and nothing into the treasury; an unpaid order is cancelled in place after
+  `preparing`; with pay on receipt off and no gateway publishing is `NO_PAYMENT_OPTION`, and a
+  checkout without a method is `PAYMENT_METHOD_REQUIRED`. Addresses: own slug available,
+  reserved words, invalid format, another store's slug taken with suggestions, another
+  business's link page taken (`DUPLICATE_CODE` on save), rename keeps the old address answering
+  (storefront reports the current slug), blocks others, limits a second rename
+  (`rename_limit` / `RENAME_LIMIT`), saving the same slug is not a rename, one history row and
+  one `online.store_renamed` audit entry; an expired former address is free again and answers 404.
+- Manager `online.test.tsx` (+2, 7): `nextActions` for pay-on-receipt orders (confirm / record
+  payment / cancel, no completion while unpaid); the "Record payment" dialog sends `mark_paid`
+  with the tender and reference (button disabled until a card reference is typed); typing a new
+  address calls the availability endpoint, shows "Taken…", the URL preview and a clickable
+  suggestion.
+- Storefront `app.test.tsx` (+2, 12): checkout with no gateway defaults to "Pay on delivery",
+  sends `paymentMethodId: null` and lands on the tracking page ("Received", pay-the-driver
+  text); a visitor of a former address is moved to the current one.
+- `e2e/store.spec.ts` (+1, 2): owner publishes without touching payment methods (address
+  check "Available", URL preview), shopper orders 2 to pay at pickup ("Received", stock
+  unchanged), staff confirm, record the cash (sale link, stock 4 → 2), ready, completed;
+  treasury 4.000; online sales list shows the sale.
+- Totals: `pnpm verify` 330 unit/web in 56 files ✅, `pnpm test:integration` 296 in 44 files ✅,
+  `pnpm test:e2e` 41 ✅ (the first run had 8 failures only because Mailpit was not up; all pass
+  with `docker compose up -d mailpit`).
+
 ### Results 2026-10-20 (registers vs devices, ADR-0112 amendment 4, cloud sandbox run)
 
 `pnpm verify` green (325 unit/web tests: device engine with an unbound device, till card-only

@@ -3,6 +3,7 @@ import type {
   OnlineOrderStatus,
   OnlineStore,
   PublicOrder,
+  SlugAvailability,
   StoreProduct,
   Storefront,
   onlineOrderActionSchema,
@@ -10,8 +11,10 @@ import type {
   saveOnlineStoreSchema,
   storeCheckoutSchema,
 } from '@arabat/contracts';
-import { Money, formatQuantity, parseQuantity, priceCart } from '@arabat/money';
+import { RESERVED_STORE_SLUGS, STORE_SLUG_PATTERN } from '@arabat/contracts';
+import { type FeeType, Money, formatQuantity, parseQuantity, priceCart } from '@arabat/money';
 import { can, permissionBranchScope } from '@arabat/permissions';
+import { type PosPaymentMethod, checkPayments } from '@arabat/pos-core';
 import { Inject, Injectable } from '@nestjs/common';
 import { type SQL, eq, sql } from 'drizzle-orm';
 import { createHash, randomBytes } from 'node:crypto';
@@ -23,6 +26,7 @@ import { nextDocumentNumber } from '../../database/schema/sequences.schema.js';
 import { assertCan } from '../../kernel/access/assert.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
+import { rules } from '../../kernel/errors/pos-rule.js';
 import { newId } from '../../kernel/ids.js';
 import { FileStorage } from '../../kernel/storage/file-storage.js';
 import { AuditService } from '../audit/audit.service.js';
@@ -37,6 +41,7 @@ import {
   onlineOrderLines,
   onlineOrders,
   onlinePayments,
+  onlineStoreSlugHistory,
   onlineStores,
 } from './ecommerce.schema.js';
 import { OnlinePaymentsService, historyEntry } from './online-payments.service.js';
@@ -50,14 +55,28 @@ const MAX_CART_QTY = 20;
 
 const STORE_CLOSED = () =>
   new AppError(409, 'STORE_CLOSED', 'This store is not taking orders right now.');
+/** A former store address keeps answering for this long (ADR-0118). */
+const SLUG_HISTORY_DAYS = 90;
+/** A public store address can be changed at most once in this many hours. */
+const SLUG_RENAME_HOURS = 24;
 
-/** Allowed manager transitions of a paid order (BR-145). */
+/** Allowed manager transitions (BR-146): paid gateway orders and confirmed pay-on-receipt orders. */
 const NEXT: Record<string, OnlineOrderStatus[]> = {
+  placed: ['confirmed'],
+  confirmed: ['preparing', 'ready', 'out_for_delivery', 'completed'],
   paid: ['preparing', 'ready', 'out_for_delivery', 'completed'],
   preparing: ['ready', 'out_for_delivery', 'completed'],
   ready: ['completed'],
   out_for_delivery: ['completed'],
 };
+/** Statuses of a pay-on-receipt order whose payment can still be recorded (ADR-0118). */
+const PAYABLE: OnlineOrderStatus[] = [
+  'placed',
+  'confirmed',
+  'preparing',
+  'ready',
+  'out_for_delivery',
+];
 
 /**
  * The online store (Prompt 16): manager configuration, the public storefront and checkout,
@@ -123,6 +142,7 @@ export class EcommerceService {
         deliveryFee: money(row?.deliveryFeeMinor ?? 0n),
         minimumOrder: money(row?.minimumOrderMinor ?? 0n),
         reservationMinutes: row?.reservationMinutes ?? 30,
+        payOnReceiptEnabled: row?.payOnReceiptEnabled ?? true,
         paymentMethods: methods.map((x) => ({
           id: x['id'] as string,
           nameEn: (x['name_en'] as string | null) ?? null,
@@ -170,23 +190,55 @@ export class EcommerceService {
           deliveryFeeMinor: parseAmount(input.deliveryFee, 'deliveryFee'),
           minimumOrderMinor: parseAmount(input.minimumOrder, 'minimumOrder'),
           reservationMinutes: input.reservationMinutes,
+          payOnReceiptEnabled: input.payOnReceiptEnabled,
         };
+        // A published store must offer some way to pay: on hand-over, or a gateway that works.
         if (
           input.status === 'published' &&
+          !input.payOnReceiptEnabled &&
           (await this.onlineMethods(tx)).every(
             (m) => !this.payments.gateway(m['gateway_provider'] as string).ready,
           )
         )
           throw new AppError(
             409,
-            'GATEWAY_NOT_CONFIGURED',
-            'Enable at least one online payment method that can take payments.',
+            'NO_PAYMENT_OPTION',
+            'Allow payment on receipt, or enable an online payment method that can take payments.',
           );
+        // One address namespace with link pages and recently renamed stores (ADR-0118).
+        if (!(await this.slugFree(tx, input.slug, actor.merchantId))) throw slugTaken();
+        const renamed = row !== undefined && row.slug.toLowerCase() !== input.slug;
+        if (renamed && row.status !== 'draft') {
+          // A public address changes at most once a day and keeps answering for 90 days.
+          if (await this.renamedRecently(tx, actor.merchantId))
+            throw new AppError(
+              409,
+              'RENAME_LIMIT',
+              `The store address can be changed once every ${SLUG_RENAME_HOURS} hours.`,
+              [{ path: 'slug', code: 'rename_limit', message: 'Changed too recently.' }],
+            );
+          await tx.insert(onlineStoreSlugHistory).values({
+            id: newId(),
+            merchantId: actor.merchantId,
+            slug: row.slug,
+            expiresAt: sql`now() + make_interval(days => ${SLUG_HISTORY_DAYS})`,
+          });
+        }
         if (row)
           await tx
             .update(onlineStores)
             .set({ ...values, version: sql`${onlineStores.version} + 1`, updatedAt: sql`now()` });
         else await tx.insert(onlineStores).values({ merchantId: actor.merchantId, ...values });
+        if (renamed)
+          await this.record(
+            tx,
+            actor.merchantId,
+            actor.userId,
+            'online.store_renamed',
+            actor.merchantId,
+            ip,
+            { from: row.slug, to: input.slug },
+          );
         await this.record(
           tx,
           actor.merchantId,
@@ -198,13 +250,99 @@ export class EcommerceService {
         );
       });
     } catch (error) {
-      if (isUniqueViolation(error, 'online_stores_slug_key'))
-        throw new AppError(409, 'DUPLICATE_CODE', 'Another store already uses this address.', [
-          { path: 'slug', code: 'duplicate', message: 'Another store already uses this address.' },
-        ]);
+      if (isUniqueViolation(error, 'online_stores_slug_key')) throw slugTaken();
       throw error;
     }
     return this.store(actor);
+  }
+
+  private async slugFree(tx: Transaction, slug: string, merchantId: string) {
+    const [row] = (await tx.execute(sql`select link_slug_available(${slug}, ${merchantId}) as ok`))
+      .rows as { ok: boolean }[];
+    return row?.ok === true;
+  }
+
+  private async renamedRecently(tx: Transaction, merchantId: string) {
+    const [row] = (
+      await tx.execute(sql`
+        select 1 from online_store_slug_history where merchant_id = ${merchantId}
+          and replaced_at > now() - make_interval(hours => ${SLUG_RENAME_HOURS}) limit 1`)
+    ).rows;
+    return row !== undefined;
+  }
+
+  /**
+   * Whether the merchant may take a store address, with free alternatives when not: the
+   * format, the reserved words, other stores and link pages, and the daily rename limit of a
+   * public store (ADR-0118).
+   */
+  async slugAvailability(actor: MerchantActor, raw: string): Promise<SlugAvailability> {
+    this.assertManage(actor);
+    const slug = raw.trim().toLowerCase();
+    return this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const [row] = await tx.select().from(onlineStores);
+      const current = row?.slug.toLowerCase() ?? null;
+      const free = async (candidate: string) =>
+        STORE_SLUG_PATTERN.test(candidate) &&
+        !RESERVED_STORE_SLUGS.includes(candidate) &&
+        (await this.slugFree(tx, candidate, actor.merchantId));
+      let reason: SlugAvailability['reason'] = null;
+      if (!STORE_SLUG_PATTERN.test(slug)) reason = 'invalid';
+      else if (RESERVED_STORE_SLUGS.includes(slug)) reason = 'reserved';
+      else if (!(await this.slugFree(tx, slug, actor.merchantId))) reason = 'taken';
+      else if (
+        current !== null &&
+        slug !== current &&
+        row?.status !== 'draft' &&
+        (await this.renamedRecently(tx, actor.merchantId))
+      )
+        reason = 'rename_limit';
+      const suggestions: string[] = [];
+      if (reason !== null && reason !== 'rename_limit') {
+        const base =
+          slug
+            .normalize('NFKD')
+            .replace(/[^a-z0-9-]+/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-|-$/g, '')
+            .slice(0, 30) || 'store';
+        const candidates = [
+          base.length >= 2 ? base : `${base}-store`,
+          `${base}-store`,
+          `${base}-shop`,
+          `${base}-kw`,
+          ...[2, 3, 4, 5, 6, 7, 8, 9].map((n) => `${base}-${n}`),
+        ];
+        for (const candidate of candidates) {
+          if (suggestions.length === 3) break;
+          if (candidate !== slug && !suggestions.includes(candidate) && (await free(candidate)))
+            suggestions.push(candidate);
+        }
+      }
+      return { slug, available: reason === null, reason, suggestions };
+    });
+  }
+
+  /** Tenders staff may record for a pay-on-receipt order: active POS methods without a gateway. */
+  async tenders(actor: MerchantActor) {
+    this.orderScope(actor);
+    return this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const rows = (
+        await tx.execute(sql`
+          select id, name_en, name_ar, kind from payment_methods
+          where status = 'active' and available_in_pos and gateway_provider is null order by sort_order, name_en`)
+      ).rows as Row[];
+      const settings = await this.sales.getSettingsInTx(tx, actor.merchantId);
+      return {
+        tenders: rows.map((r) => ({
+          id: r['id'] as string,
+          nameEn: (r['name_en'] as string | null) ?? null,
+          nameAr: (r['name_ar'] as string | null) ?? null,
+          kind: r['kind'] as string,
+          requiresReference: r['kind'] !== 'cash' && settings.requireTenderReference,
+        })),
+      };
+    });
   }
 
   async listings(actor: MerchantActor) {
@@ -310,6 +448,7 @@ export class EcommerceService {
           nameAr: (m['name_ar'] as string | null) ?? null,
           provider: m['gateway_provider'] as string,
         })),
+        payOnReceipt: store.payOnReceiptEnabled,
         categories: categories.map((c) => ({
           id: c['id'] as string,
           nameEn: (c['name_en'] as string | null) ?? null,
@@ -416,9 +555,11 @@ export class EcommerceService {
 
   /**
    * Places an online order: validated against the listing, priced by the shared pricing
-   * engine at the fulfilment branch, stock reserved for `reservationMinutes`, then a
-   * payment attempt is started at the gateway. Retries with the same key return the same
-   * order (BR-141, BR-142).
+   * engine at the fulfilment branch. With an online payment method the stock is reserved for
+   * `reservationMinutes` and a payment attempt is started at the gateway; without one (pay on
+   * receipt, ADR-0118) the order is `placed` for the merchant to confirm, nothing is reserved
+   * and the sale is created when staff record the payment. Retries with the same key return
+   * the same order (BR-141, BR-142).
    */
   async checkout(
     slug: string,
@@ -450,7 +591,7 @@ export class EcommerceService {
     const orderId = newId();
     const paymentId = newId();
     const token = randomBytes(16).toString('hex');
-    let provider = '';
+    let provider: string | null = null;
     let amountMinor = 0n;
     try {
       await this.database.withMerchantTx(merchantId, async (tx) => {
@@ -458,22 +599,32 @@ export class EcommerceService {
         if (store.status !== 'published') throw STORE_CLOSED();
         if (input.fulfillment === 'pickup' && !store.pickupEnabled) throw STORE_CLOSED();
         if (input.fulfillment === 'delivery' && !store.deliveryEnabled) throw STORE_CLOSED();
-        const [method] = (await this.onlineMethods(tx)).filter(
-          (m) => m['id'] === input.paymentMethodId,
-        );
-        if (!method)
-          throw new AppError(
-            409,
-            'PAYMENT_METHOD_UNAVAILABLE',
-            'This payment method is not available online.',
+        if (input.paymentMethodId === null) {
+          if (!store.payOnReceiptEnabled)
+            throw new AppError(
+              409,
+              'PAYMENT_METHOD_REQUIRED',
+              'This store needs the order to be paid online.',
+            );
+        } else {
+          const [method] = (await this.onlineMethods(tx)).filter(
+            (m) => m['id'] === input.paymentMethodId,
           );
-        provider = method['gateway_provider'] as string;
-        if (!this.payments.gateway(provider).ready)
-          throw new AppError(
-            409,
-            'GATEWAY_NOT_CONFIGURED',
-            'This payment method cannot take payments yet.',
-          );
+          if (!method)
+            throw new AppError(
+              409,
+              'PAYMENT_METHOD_UNAVAILABLE',
+              'This payment method is not available online.',
+            );
+          provider = method['gateway_provider'] as string;
+          if (!this.payments.gateway(provider).ready)
+            throw new AppError(
+              409,
+              'GATEWAY_NOT_CONFIGURED',
+              'This payment method cannot take payments yet.',
+            );
+        }
+        const onReceipt = provider === null;
         const branchId = store.fulfillmentBranchId;
         const listed = await this.storeProducts(
           tx,
@@ -557,12 +708,28 @@ export class EcommerceService {
           phone: input.customer.phone,
           email: input.customer.email,
         });
-        const reservedUntil = new Date(Date.now() + store.reservationMinutes * 60_000);
+        if (onReceipt) {
+          // Nothing is held for an unpaid order (owner's decision, ADR-0118): only what is
+          // free right now can be ordered, and the stock is deducted when the payment is recorded.
+          const short = lines.findIndex(
+            (l) => l.quantityMilli > BigInt(variants.get(l.variantId)!.v.maxQuantity) * 1000n,
+          );
+          if (short >= 0)
+            throw new AppError(409, 'INSUFFICIENT_STOCK', 'Not enough stock for this order.', [
+              { path: `lines.${short}.quantity`, code: 'insufficient', message: 'Not enough.' },
+            ]);
+        }
+        const reservedUntil = onReceipt
+          ? null
+          : new Date(Date.now() + store.reservationMinutes * 60_000);
+        const initial = onReceipt ? 'placed' : 'pending_payment';
         await tx.insert(onlineOrders).values({
           id: orderId,
           merchantId,
           number,
           branchId,
+          status: initial,
+          paymentMode: onReceipt ? 'on_receipt' : 'gateway',
           fulfillment: input.fulfillment,
           customerName: input.customer.name,
           customerPhone: input.customer.phone,
@@ -578,7 +745,7 @@ export class EcommerceService {
           idempotencyKey: input.idempotencyKey,
           requestHash,
           reservedUntil,
-          history: sql`jsonb_build_array(jsonb_build_object('status', 'pending_payment', 'at', now()))`,
+          history: sql`jsonb_build_array(jsonb_build_object('status', ${initial}::text, 'at', now()))`,
         });
         await tx.insert(onlineOrderLines).values(
           lines.map((l, position) => ({
@@ -597,30 +764,33 @@ export class EcommerceService {
             lineTotalMinor: priced.lines[position]!.netMinor,
           })),
         );
-        // Hold the stock (recipe items hold their ingredients) until the reservation ends.
-        const consumption = await stockConsumption(
-          tx,
-          lines.map((l) => ({
-            variantId: l.variantId,
-            quantityMilli: l.quantityMilli,
-            modifierIds: [],
-          })),
-        );
-        await this.ledger.reserve(
-          tx,
-          { merchantId, branchId, onlineOrderId: orderId, expiresAt: reservedUntil },
-          consumption,
-        );
-        await tx.insert(onlinePayments).values({
-          id: paymentId,
-          merchantId,
-          onlineOrderId: orderId,
-          provider,
-          amountMinor: total,
-        });
+        if (provider !== null && reservedUntil !== null) {
+          // Hold the stock (recipe items hold their ingredients) until the reservation ends.
+          const consumption = await stockConsumption(
+            tx,
+            lines.map((l) => ({
+              variantId: l.variantId,
+              quantityMilli: l.quantityMilli,
+              modifierIds: [],
+            })),
+          );
+          await this.ledger.reserve(
+            tx,
+            { merchantId, branchId, onlineOrderId: orderId, expiresAt: reservedUntil },
+            consumption,
+          );
+          await tx.insert(onlinePayments).values({
+            id: paymentId,
+            merchantId,
+            onlineOrderId: orderId,
+            provider,
+            amountMinor: total,
+          });
+        }
         await this.record(tx, merchantId, null, 'online.order_placed', orderId, ip, {
           number,
           total: Money.ofMinor(total, CURRENCY).toDecimalString(),
+          paymentMode: onReceipt ? 'on_receipt' : 'gateway',
         });
       });
     } catch (error) {
@@ -644,6 +814,7 @@ export class EcommerceService {
       throw error;
     }
 
+    if (provider === null) return this.track(slug, token);
     // Start the payment at the gateway (outside the database transaction).
     try {
       const started = await this.payments.gateway(provider).initiate({
@@ -720,6 +891,7 @@ export class EcommerceService {
       deliveryFee: o.deliveryFee,
       total: o.total,
       createdAt: o.createdAt,
+      paymentMode: o.paymentMode,
       paidAt: o.paidAt,
       reservedUntil: o.reservedUntil,
       trackingToken: o.trackingToken,
@@ -732,8 +904,8 @@ export class EcommerceService {
   private async orderIn(tx: Transaction, id: string): Promise<OnlineOrder> {
     const [o] = (
       await tx.execute(sql`
-        select o.*, s.receipt_number, pm.name_en as pm_en, pm.name_ar as pm_ar, pm.gateway_provider
-        from online_orders o left join sales s on s.id = o.sale_id join payment_methods pm on pm.id = o.payment_method_id
+        select o.*, s.receipt_number, pm.id as pm_id, pm.name_en as pm_en, pm.name_ar as pm_ar, pm.gateway_provider
+        from online_orders o left join sales s on s.id = o.sale_id left join payment_methods pm on pm.id = o.payment_method_id
         where o.id = ${id}`)
     ).rows as Row[];
     if (!o) throw AppError.notFound('Order not found.');
@@ -779,19 +951,24 @@ export class EcommerceService {
       deliveryFee: money(o['delivery_fee_minor'] as string),
       total: money(o['total_minor'] as string),
       createdAt: iso(o['created_at'])!,
+      paymentMode: o['payment_mode'] as 'gateway',
+      confirmedAt: iso(o['confirmed_at']),
       paidAt: iso(o['paid_at']),
-      reservedUntil: iso(o['reserved_until'])!,
+      reservedUntil: iso(o['reserved_until']),
       trackingToken: o['tracking_token'] as string,
       paymentUrl: o['status'] === 'pending_payment' ? (open?.redirectUrl ?? null) : null,
       timeline: (o['history'] as { status: OnlineOrderStatus; at: string }[]).map((h) => ({
         status: h.status,
         at: new Date(h.at).toISOString(),
       })),
-      paymentMethod: {
-        nameEn: (o['pm_en'] as string | null) ?? null,
-        nameAr: (o['pm_ar'] as string | null) ?? null,
-        provider: (o['gateway_provider'] as string | null) ?? '',
-      },
+      paymentMethod: o['pm_id']
+        ? {
+            nameEn: (o['pm_en'] as string | null) ?? null,
+            nameAr: (o['pm_ar'] as string | null) ?? null,
+            provider: (o['gateway_provider'] as string | null) ?? '',
+          }
+        : null,
+      paymentReference: (o['payment_reference'] as string | null) ?? null,
       payments: attempts.map((a) => ({
         id: a.id,
         provider: a.provider,
@@ -880,9 +1057,16 @@ export class EcommerceService {
       if (!order) throw AppError.notFound('Order not found.');
       assertCan(actor, 'online.orders', order.branchId);
       if (order.version !== input.version) throw versionConflict();
+      const details: Row = {};
       if (input.action === 'cancel') {
-        // Unpaid orders release their stock; paid ones are refunded through a refund of the sale.
-        if (!['pending_payment', 'needs_attention'].includes(order.status))
+        // Unpaid orders are cancelled in place (gateway orders release their stock); paid
+        // ones are corrected by refunding their sale.
+        const cancellable = order.saleId
+          ? false
+          : order.paymentMode === 'on_receipt'
+            ? [...PAYABLE, 'needs_attention'].includes(order.status)
+            : ['pending_payment', 'needs_attention'].includes(order.status);
+        if (!cancellable)
           throw new AppError(
             409,
             'INVALID_STATE',
@@ -893,17 +1077,28 @@ export class EcommerceService {
         );
         await this.payments.setStatus(tx, id, 'cancelled', input.note);
         await this.payments.release(tx, id);
+      } else if (input.action === 'mark_paid') {
+        Object.assign(details, await this.recordPayment(tx, actor, order, input));
       } else {
-        if (!(NEXT[order.status] ?? []).includes(input.action))
+        const next: OnlineOrderStatus = input.action === 'confirm' ? 'confirmed' : input.action;
+        if (!(NEXT[order.status] ?? []).includes(next))
           throw new AppError(409, 'INVALID_STATE', 'This step is not possible for the order now.');
-        if (input.action === 'ready' && order.fulfillment !== 'pickup')
+        if (next === 'ready' && order.fulfillment !== 'pickup')
           throw new AppError(409, 'INVALID_STATE', 'Delivery orders go out for delivery.');
-        if (input.action === 'out_for_delivery' && order.fulfillment !== 'delivery')
+        if (next === 'out_for_delivery' && order.fulfillment !== 'delivery')
           throw new AppError(409, 'INVALID_STATE', 'Pickup orders are made ready.');
+        // Handing over means the money was received: a pay-on-receipt order completes only paid.
+        if (next === 'completed' && !order.saleId)
+          throw new AppError(
+            409,
+            'ORDER_UNPAID',
+            'Record the payment before completing the order.',
+          );
         await tx.execute(sql`
-          update online_orders set status = ${input.action}, status_note = ${input.note}, updated_at = now(), version = version + 1,
-                 completed_at = case when ${input.action} = 'completed' then now() else completed_at end,
-                 history = ${historyEntry(input.action)}
+          update online_orders set status = ${next}, status_note = ${input.note}, updated_at = now(), version = version + 1,
+                 confirmed_at = case when ${next} = 'confirmed' then now() else confirmed_at end,
+                 completed_at = case when ${next} = 'completed' then now() else completed_at end,
+                 history = ${historyEntry(next)}
           where id = ${id}`);
       }
       await this.record(
@@ -913,10 +1108,109 @@ export class EcommerceService {
         `online.order_${input.action}`,
         id,
         ip,
-        {},
+        details,
       );
     });
     return this.getOrder(actor, id);
+  }
+
+  /**
+   * Staff record the money received for a pay-on-receipt order (ADR-0118): the tender rules
+   * of the till apply (active POS method, no gateway, settlement account and reference for
+   * non-cash, BR-181), the order becomes a sale now (stock deducted, receipt number, cash into
+   * the branch treasury), and a still-placed order counts as confirmed.
+   */
+  private async recordPayment(
+    tx: Transaction,
+    actor: MerchantActor,
+    order: typeof onlineOrders.$inferSelect,
+    input: z.output<typeof onlineOrderActionSchema>,
+  ): Promise<Row> {
+    if (order.paymentMode !== 'on_receipt')
+      throw new AppError(409, 'INVALID_STATE', 'Online payments are confirmed by the gateway.');
+    if (order.saleId || !PAYABLE.includes(order.status as OnlineOrderStatus))
+      throw new AppError(409, 'INVALID_STATE', 'This order cannot be paid now.');
+    const methodId = input.paymentMethodId!;
+    const [m] = (await tx.execute(sql`select * from payment_methods where id = ${methodId}`))
+      .rows as Row[];
+    if (!m) throw AppError.notFound('Payment method not found.');
+    const method: PosPaymentMethod = {
+      id: m['id'] as string,
+      kind: m['kind'] as string,
+      status: m['status'] as string,
+      availableInPos: Boolean(m['available_in_pos']),
+      gatewayProvider: (m['gateway_provider'] as string | null) ?? null,
+      financialAccountId: (m['financial_account_id'] as string | null) ?? null,
+      nameEn: (m['name_en'] as string | null) ?? null,
+      nameAr: (m['name_ar'] as string | null) ?? null,
+      feeType: m['fee_type'] as FeeType,
+      feeFixedMinor: BigInt(m['fee_fixed_minor'] as string),
+      feePercent: m['fee_percent'] as string,
+    };
+    const settings = await this.sales.getSettingsInTx(tx, actor.merchantId);
+    const [tender] = rules(() =>
+      checkPayments(
+        [
+          {
+            methodId,
+            amount: Money.ofMinor(order.totalMinor, CURRENCY).toDecimalString(),
+            tendered: null,
+            reference: input.reference,
+          },
+        ],
+        new Map([[methodId, method]]),
+        order.totalMinor,
+        settings.requireTenderReference,
+      ),
+    );
+    const lines = await tx
+      .select()
+      .from(onlineOrderLines)
+      .where(eq(onlineOrderLines.orderId, order.id))
+      .orderBy(onlineOrderLines.position);
+    const saleId = newId();
+    const delivery =
+      order.deliveryFeeMinor > 0n
+        ? await this.payments.deliveryLine(tx, actor.merchantId, order.deliveryFeeMinor)
+        : [];
+    const { receiptNumber } = await this.sales.completeOnlineSaleInTx(tx, actor.merchantId, {
+      saleId,
+      branchId: order.branchId,
+      onlineOrderId: order.id,
+      orderNumber: order.number,
+      customerId: order.customerId,
+      lines: [
+        ...lines.map((l) => ({
+          variantId: l.variantId,
+          productId: l.productId,
+          quantityMilli: parseQuantity(l.quantity),
+          unitPriceMinor: l.unitPriceMinor,
+          nameEn: l.nameEn,
+          nameAr: l.nameAr,
+          variantNameEn: l.variantNameEn,
+          variantNameAr: l.variantNameAr,
+          sku: l.sku,
+        })),
+        ...delivery,
+      ],
+      payment: {
+        methodId,
+        amountMinor: order.totalMinor,
+        reference: tender!.reference,
+        verification: 'manual',
+        collectedByUserId: actor.userId,
+      },
+    });
+    const confirmNow = order.status === 'placed';
+    await tx.execute(sql`
+      update online_orders set sale_id = ${saleId}, paid_at = now(), payment_method_id = ${methodId},
+             payment_reference = ${tender!.reference}, collected_by_user_id = ${actor.userId},
+             status = case when ${confirmNow} then 'confirmed' else status end,
+             confirmed_at = case when ${confirmNow} then now() else confirmed_at end,
+             status_note = ${input.note}, updated_at = now(), version = version + 1,
+             history = ${historyEntry('paid')}
+      where id = ${order.id}`);
+    return { saleId, receiptNumber, methodId, reference: tender!.reference, kind: method.kind };
   }
 
   async reconcileNow(actor: MerchantActor) {
@@ -984,10 +1278,15 @@ export class EcommerceService {
       actorType: userId ? 'user' : 'anonymous',
       actorId: userId,
       action,
-      targetType: 'online_order',
+      targetType: action.startsWith('online.store') ? 'online_store' : 'online_order',
       targetId: id,
       ip,
       details,
     });
   }
 }
+
+const slugTaken = () =>
+  new AppError(409, 'DUPLICATE_CODE', 'Another store or link page already uses this address.', [
+    { path: 'slug', code: 'duplicate', message: 'This address is taken.' },
+  ]);

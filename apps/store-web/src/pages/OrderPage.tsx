@@ -10,6 +10,8 @@ import { useLocalName, useMoney, useSlug } from '../shared.js';
 
 const TONE: Record<OnlineOrderStatus, 'success' | 'warning' | 'danger' | 'neutral'> = {
   pending_payment: 'warning',
+  placed: 'warning',
+  confirmed: 'success',
   paid: 'success',
   preparing: 'success',
   ready: 'success',
@@ -54,12 +56,20 @@ export function OrderPage() {
           {t('order.refresh')}
         </Button>
       </div>
-      {o.status === 'pending_payment' && o.paymentUrl ? (
+      {o.status === 'pending_payment' && o.paymentUrl && o.reservedUntil ? (
         <Alert tone="warning">
           <p>{t('order.payBy', { time: formatDateTime(o.reservedUntil, i18n.language) })}</p>
           <Button className="mt-2" onClick={() => window.location.assign(o.paymentUrl!)}>
             {t('order.payNow')}
           </Button>
+        </Alert>
+      ) : null}
+      {o.paymentMode === 'on_receipt' &&
+      !o.paidAt &&
+      !['cancelled', 'expired'].includes(o.status) ? (
+        <Alert>
+          {o.status === 'placed' ? `${t('order.awaitingConfirmation')} ` : ''}
+          {t(`order.payOnReceipt_${o.fulfillment}`)}
         </Alert>
       ) : null}
       <section className="rounded-lg border border-border bg-surface p-4">

@@ -1155,7 +1155,34 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
   records, 1 device exception, 2 devices and 2 registers deleted; one main, unbound register
   "الصندوق الرئيسي" created in its branch; products, staff and settings kept.
 
+### 2026-10-20 — Online store Phase 1: pay on receipt, store address (ADR-0118)
+The owner approved the ten-phase online-store plan (`docs/ONLINE_STORE_PLAN.md`) and decided that
+unpaid orders hold no stock. Phase 1:
+- Migration 0066: `online_orders.payment_mode`, nullable method / reservation, `confirmed_at`,
+  `payment_reference`, `collected_by_user_id`, statuses `placed` / `confirmed`;
+  `online_stores.pay_on_receipt_enabled`; `online_store_slug_history`; `store_merchant` and
+  `link_slug_available` know former addresses.
+- API: publishing no longer needs a ready gateway (a way to pay: on receipt or a gateway,
+  `NO_PAYMENT_OPTION`); checkout with `paymentMethodId: null` places an unpaid order without a
+  reservation; actions `confirm` and `mark_paid` (till tender rules via `pos-core`, sale created
+  on recording, cash into the branch treasury, non-cash into the settlement account with its
+  reference), `completed` refused unpaid (`ORDER_UNPAID`), unpaid orders cancelled in place;
+  `GET …/store/slug-availability` with suggestions; rename history, 24-hour limit, link-page
+  namespace both ways; `GET /manager/online/tenders`.
+- Manager: address section first (live check, suggestions, URL preview, copy), "Allow payment
+  on receipt", unpaid badge, "Confirm order", "Record payment" dialog. Storefront: "Pay at
+  pickup / on delivery", "Place order", tracking text, redirect from a former address.
+- Tests: `ecommerce.int.test.ts` +3 (unpaid order holds no stock, cash → treasury, card needs
+  its reference and settles into its account, cancel in place, store switch, availability /
+  link-page namespace / rename history / rename limit / expiry), manager online page +2,
+  storefront +2, `e2e/store.spec.ts` +1 (pay at pickup end to end).
+- Verified (cloud sandbox, 2026-10-20): `pnpm verify` 330 unit/web (56 files), `pnpm test:integration`
+  296 (44 files), `pnpm test:e2e` 41 (Mailpit running).
+- Not done (later phases): separate online payment methods, `/online` console, storefront
+  currency (M12).
+
 ## Next step
+Online store Phase 2 (`/online` console, ADR-0119) per `docs/ONLINE_STORE_PLAN.md`.
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.
 Staging: first platform operator, SMTP; owner decisions OQ-021–025.

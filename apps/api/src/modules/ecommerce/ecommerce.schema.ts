@@ -55,8 +55,10 @@ export const onlineStores = pgTable(
     minimumOrderMinor: minor()
       .notNull()
       .default(sql`0`),
-    /** Minutes an unpaid order keeps its stock reserved. */
+    /** Minutes an unpaid gateway order keeps its stock reserved. */
     reservationMinutes: integer().notNull().default(30),
+    /** Orders may be placed without paying online; the money is collected on hand-over (ADR-0118). */
+    payOnReceiptEnabled: boolean().notNull().default(true),
     version: integer().notNull().default(1),
     updatedAt: updatedAt(),
   },
@@ -77,6 +79,26 @@ export const onlineStores = pgTable(
   ],
 );
 
+/**
+ * Former store addresses (ADR-0118): a renamed store keeps answering on its old address until
+ * `expires_at`, and nobody else can take it meanwhile. Append-only.
+ */
+export const onlineStoreSlugHistory = pgTable(
+  'online_store_slug_history',
+  {
+    id: id(),
+    merchantId: merchantId().references(() => merchants.id),
+    slug: text().notNull(),
+    replacedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp({ withTimezone: true }).notNull(),
+  },
+  (t) => [
+    index('online_store_slug_history_slug_idx').on(sql`lower(${t.slug})`),
+    index('online_store_slug_history_merchant_idx').on(t.merchantId, t.replacedAt),
+    check('online_store_slug_history_slug_valid', sql`${t.slug} ~ '^[a-z0-9][a-z0-9-]{1,40}$'`),
+  ],
+);
+
 /** Products shown in the online store (presence = listed). */
 export const onlineListings = pgTable(
   'online_listings',
@@ -93,9 +115,11 @@ export const onlineListings = pgTable(
 
 /**
  * Online order: customer intent until paid; the sale created on payment is the financial
- * document (ADR-0077). Status: pending_payment → paid → preparing → ready |
+ * document (ADR-0077). Gateway orders: pending_payment → paid → preparing → ready |
  * out_for_delivery → completed; or expired / payment_failed / cancelled; needs_attention
- * when a late payment can no longer be fulfilled.
+ * when a late payment can no longer be fulfilled. Pay-on-receipt orders (ADR-0118, no
+ * reservation, no gateway attempt): placed → confirmed → preparing → ready | out_for_delivery
+ * → completed; the payment is recorded by staff at any point before completion.
  */
 export const onlineOrders = pgTable(
   'online_orders',
@@ -116,13 +140,21 @@ export const onlineOrders = pgTable(
     subtotalMinor: minor().notNull(),
     deliveryFeeMinor: minor().notNull(),
     totalMinor: minor().notNull(),
-    paymentMethodId: uuid().notNull(),
+    /** gateway: paid online before fulfilment · on_receipt: collected on hand-over. */
+    paymentMode: text().notNull().default('gateway'),
+    /** Gateway orders: chosen at checkout. Pay-on-receipt orders: the tender recorded by staff. */
+    paymentMethodId: uuid(),
+    /** Reference of a non-cash tender recorded by staff (pay on receipt). */
+    paymentReference: text(),
+    collectedByUserId: uuid(),
     /** Unguessable token for the customer's tracking page. */
     trackingToken: text().notNull(),
     idempotencyKey: uuid().notNull(),
     requestHash: text().notNull(),
-    reservedUntil: timestamp({ withTimezone: true }).notNull(),
+    /** Gateway orders only: when the stock reservation ends. */
+    reservedUntil: timestamp({ withTimezone: true }),
     saleId: uuid(),
+    confirmedAt: timestamp({ withTimezone: true }),
     paidAt: timestamp({ withTimezone: true }),
     completedAt: timestamp({ withTimezone: true }),
     cancelledAt: timestamp({ withTimezone: true }),
@@ -144,8 +176,13 @@ export const onlineOrders = pgTable(
     }),
     check(
       'online_orders_status_valid',
-      sql`${t.status} in ('pending_payment', 'paid', 'preparing', 'ready', 'out_for_delivery', 'completed',
-                          'expired', 'payment_failed', 'cancelled', 'needs_attention')`,
+      sql`${t.status} in ('pending_payment', 'placed', 'confirmed', 'paid', 'preparing', 'ready', 'out_for_delivery',
+                          'completed', 'expired', 'payment_failed', 'cancelled', 'needs_attention')`,
+    ),
+    check('online_orders_payment_mode_valid', sql`${t.paymentMode} in ('gateway', 'on_receipt')`),
+    check(
+      'online_orders_gateway_fields',
+      sql`${t.paymentMode} <> 'gateway' or (${t.paymentMethodId} is not null and ${t.reservedUntil} is not null)`,
     ),
     check('online_orders_fulfillment_valid', sql`${t.fulfillment} in ('pickup', 'delivery')`),
     check(

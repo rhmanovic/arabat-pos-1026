@@ -16,6 +16,8 @@ const named = { nameEn: z.string().nullable(), nameAr: z.string().nullable() };
 export const STORE_STATUSES = ['draft', 'published', 'paused'] as const;
 export const ONLINE_ORDER_STATUSES = [
   'pending_payment',
+  'placed',
+  'confirmed',
   'paid',
   'preparing',
   'ready',
@@ -28,6 +30,9 @@ export const ONLINE_ORDER_STATUSES = [
 ] as const;
 export type OnlineOrderStatus = (typeof ONLINE_ORDER_STATUSES)[number];
 export const FULFILLMENTS = ['pickup', 'delivery'] as const;
+/** gateway: paid online before fulfilment · on_receipt: collected on hand-over (ADR-0118). */
+export const PAYMENT_MODES = ['gateway', 'on_receipt'] as const;
+export type OnlinePaymentMode = (typeof PAYMENT_MODES)[number];
 export const GATEWAY_STATUSES = [
   'initiated',
   'succeeded',
@@ -37,8 +42,33 @@ export const GATEWAY_STATUSES = [
 ] as const;
 
 // ---------------------------------------------------------------- manager: store settings
-/** Paths of the storefront app that cannot be store addresses (`/store/pay/...`, `/store/links/...`). */
-export const RESERVED_STORE_SLUGS: readonly string[] = ['pay', 'links', 'assets', 'api', 'admin'];
+/**
+ * Store addresses that cannot be chosen: paths of the storefront app (`/store/pay/...`,
+ * `/store/links/...`), the platform's own apps and words kept for later use.
+ */
+export const RESERVED_STORE_SLUGS: readonly string[] = [
+  'pay',
+  'links',
+  'assets',
+  'api',
+  'admin',
+  'store',
+  'manager',
+  'pos',
+  'platform',
+  'device',
+  'online',
+  'start',
+  'pricing',
+  'www',
+  'mail',
+  'app',
+  'apps',
+  'help',
+  'support',
+  'arabat',
+];
+export const STORE_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{1,40}$/;
 export const onlineStoreSchema = z.object({
   slug: z.string(),
   status: z.enum(STORE_STATUSES),
@@ -57,6 +87,8 @@ export const onlineStoreSchema = z.object({
   deliveryFee: moneySchema,
   minimumOrder: moneySchema,
   reservationMinutes: z.number().int(),
+  /** Shoppers may order without paying online and pay on hand-over (ADR-0118). */
+  payOnReceiptEnabled: z.boolean(),
   /** Payment methods available online (`availableOnline` and a gateway provider). */
   paymentMethods: z.array(
     z.object({
@@ -77,7 +109,7 @@ export const saveOnlineStoreSchema = z
       .string()
       .trim()
       .toLowerCase()
-      .regex(/^[a-z0-9][a-z0-9-]{1,40}$/, {
+      .regex(STORE_SLUG_PATTERN, {
         error: 'Letters, digits and dashes (2–41 characters).',
       })
       .refine((slug) => !RESERVED_STORE_SLUGS.includes(slug), {
@@ -103,6 +135,7 @@ export const saveOnlineStoreSchema = z
     deliveryFee: moneyAmountSchema,
     minimumOrder: moneyAmountSchema,
     reservationMinutes: z.number().int().min(5).max(1440),
+    payOnReceiptEnabled: z.boolean().default(true),
     version: z.number().int().nonnegative(),
   })
   .refine((s) => Boolean(s.nameAr || s.nameEn), {
@@ -118,6 +151,33 @@ export const saveOnlineStoreSchema = z
     path: ['pickupEnabled'],
   });
 export type SaveOnlineStore = z.input<typeof saveOnlineStoreSchema>;
+
+/** `GET /manager/online/slug-availability?slug=`: can this merchant take the address? */
+export const slugAvailabilityQuerySchema = z.object({
+  slug: z.string().trim().toLowerCase().max(80),
+});
+export const slugAvailabilitySchema = z.object({
+  slug: z.string(),
+  available: z.boolean(),
+  /** Why not: invalid format, reserved word, taken by another store or link page, or renamed too recently. */
+  reason: z.enum(['invalid', 'reserved', 'taken', 'rename_limit']).nullable(),
+  /** Free alternatives when the address is not available. */
+  suggestions: z.array(z.string()),
+});
+export type SlugAvailability = z.infer<typeof slugAvailabilitySchema>;
+
+/** Tenders staff may record for a pay-on-receipt order (active POS methods without a gateway). */
+export const onlineTenderListSchema = z.object({
+  tenders: z.array(
+    z.object({
+      id: z.string(),
+      ...named,
+      kind: z.string(),
+      /** Non-cash tenders need a reference when the company requires one (BR-181). */
+      requiresReference: z.boolean(),
+    }),
+  ),
+});
 
 export const listingSchema = z.object({
   productId: z.string(),
@@ -156,8 +216,10 @@ export const publicOrderSchema = z.object({
   deliveryFee: moneySchema,
   total: moneySchema,
   createdAt: z.string(),
+  paymentMode: z.enum(PAYMENT_MODES),
   paidAt: z.string().nullable(),
-  reservedUntil: z.string(),
+  /** Gateway orders only: when the stock reservation ends. */
+  reservedUntil: z.string().nullable(),
   trackingToken: z.string(),
   /** Where to send the customer to pay (while pending payment). */
   paymentUrl: z.string().nullable(),
@@ -175,7 +237,11 @@ export const onlineOrderSchema = publicOrderSchema.extend({
   customerId: z.string().nullable(),
   saleId: z.string().nullable(),
   receiptNumber: z.string().nullable(),
-  paymentMethod: z.object(named).extend({ provider: z.string() }),
+  confirmedAt: z.string().nullable(),
+  /** Null for a pay-on-receipt order whose payment is not recorded yet. */
+  paymentMethod: z.object(named).extend({ provider: z.string() }).nullable(),
+  /** Reference of the tender recorded by staff (pay on receipt). */
+  paymentReference: z.string().nullable(),
   payments: z.array(
     z.object({
       id: z.string(),
@@ -205,11 +271,31 @@ export const onlineOrderListQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
 });
 export type OnlineOrderListQuery = z.input<typeof onlineOrderListQuerySchema>;
-export const onlineOrderActionSchema = z.object({
-  action: z.enum(['preparing', 'ready', 'out_for_delivery', 'completed', 'cancel']),
-  note: text(300),
-  version: z.number().int().positive(),
-});
+export const ONLINE_ORDER_ACTIONS = [
+  'confirm',
+  'mark_paid',
+  'preparing',
+  'ready',
+  'out_for_delivery',
+  'completed',
+  'cancel',
+] as const;
+export type OnlineOrderAction = (typeof ONLINE_ORDER_ACTIONS)[number];
+export const onlineOrderActionSchema = z
+  .object({
+    action: z.enum(ONLINE_ORDER_ACTIONS),
+    note: text(300),
+    /** `mark_paid`: the tender the money was received with. */
+    paymentMethodId: z.uuid().nullish(),
+    /** `mark_paid`: reference of a non-cash tender. */
+    reference: text(80),
+    version: z.number().int().positive(),
+  })
+  .refine((a) => a.action !== 'mark_paid' || Boolean(a.paymentMethodId), {
+    error: 'Choose the payment method.',
+    path: ['paymentMethodId'],
+  });
+export type OnlineOrderActionInput = z.input<typeof onlineOrderActionSchema>;
 
 // ---------------------------------------------------------------- storefront (public)
 export const storefrontSchema = z.object({
@@ -229,6 +315,8 @@ export const storefrontSchema = z.object({
   deliveryFee: moneySchema,
   minimumOrder: moneySchema,
   paymentMethods: z.array(z.object({ id: z.string(), ...named, provider: z.string() })),
+  /** Orders may be placed without paying online (collected on pickup / delivery). */
+  payOnReceipt: z.boolean(),
   categories: z.array(z.object({ id: z.string(), ...named })),
 });
 export type Storefront = z.infer<typeof storefrontSchema>;
@@ -275,7 +363,11 @@ export const storeCheckoutSchema = z
     }),
     deliveryAddress: text(300),
     note: text(300),
-    paymentMethodId: z.uuid(),
+    /** An online method, or null to pay on receipt (when the store allows it). */
+    paymentMethodId: z
+      .uuid()
+      .nullish()
+      .transform((v) => v ?? null),
     /** The total the customer saw; refused if prices changed. */
     expectedTotal: moneyAmountSchema,
   })
