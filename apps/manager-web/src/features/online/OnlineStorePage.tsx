@@ -609,15 +609,23 @@ function SettingsForm({ store }: { store: OnlineStore }) {
       notify.ok(t('common.saved'));
     },
     onError: (error) => {
-      if (error instanceof ApiError && error.problem.issues?.length)
+      if (error instanceof ApiError && error.problem.issues?.length) {
+        const fields = error.problem.issues.map((i) => i.path.split('.')[0] ?? i.path);
         setIssues(
           Object.fromEntries(
-            error.problem.issues.map((i) => [
-              i.path.split('.')[0] ?? i.path,
-              t(`online.issue_${i.path.split('.')[0] ?? i.path}`, { defaultValue: i.message }),
+            error.problem.issues.map((i, n) => [
+              fields[n]!,
+              t(`online.issue_${fields[n]!}`, { defaultValue: i.message }),
             ]),
           ),
         );
+        // On a phone the refused field may be far from the Save button: bring it into view.
+        setTimeout(() => {
+          document
+            .querySelector(`[data-field="${fields[0]!}"]`)
+            ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 0);
+      }
       notify.fail(error);
     },
   });
@@ -641,16 +649,18 @@ function SettingsForm({ store }: { store: OnlineStore }) {
     minimumOrder: t('online.minimumOrder'),
   };
   const text = (field: keyof SaveOnlineStore, label: string, props: { dir?: 'ltr' } = {}) => (
-    <Field label={label} error={issues[field]}>
-      {(p) => (
-        <Input
-          {...p}
-          {...props}
-          value={(v[field] as string | null | undefined) ?? ''}
-          onChange={(e) => set({ [field]: e.target.value } as Partial<SaveOnlineStore>)}
-        />
-      )}
-    </Field>
+    <div data-field={field}>
+      <Field label={label} error={issues[field]}>
+        {(p) => (
+          <Input
+            {...p}
+            {...props}
+            value={(v[field] as string | null | undefined) ?? ''}
+            onChange={(e) => set({ [field]: e.target.value } as Partial<SaveOnlineStore>)}
+          />
+        )}
+      </Field>
+    </div>
   );
   const ready = store.paymentMethods.filter((m) => m.ready);
   const slugCheck = useSlugCheck(v.slug, store.slug);
@@ -676,25 +686,27 @@ function SettingsForm({ store }: { store: OnlineStore }) {
     <div className="flex flex-col gap-4">
       <Section title={t('online.addressSection')} description={t('online.addressHint')}>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field
-            label={t('online.slug')}
-            hint={t('online.slugFormat')}
-            error={
-              ['taken', 'reserved', 'invalid', 'rename_limit'].includes(slugCheck.state)
-                ? (slugMessage[slugCheck.state] ?? undefined)
-                : issues['slug']
-            }
-          >
-            {(p) => (
-              <Input
-                {...p}
-                dir="ltr"
-                autoComplete="off"
-                value={v.slug}
-                onChange={(e) => set({ slug: e.target.value })}
-              />
-            )}
-          </Field>
+          <div data-field="slug">
+            <Field
+              label={t('online.slug')}
+              hint={t('online.slugFormat')}
+              error={
+                ['taken', 'reserved', 'invalid', 'rename_limit'].includes(slugCheck.state)
+                  ? (slugMessage[slugCheck.state] ?? undefined)
+                  : issues['slug']
+              }
+            >
+              {(p) => (
+                <Input
+                  {...p}
+                  dir="ltr"
+                  autoComplete="off"
+                  value={v.slug}
+                  onChange={(e) => set({ slug: e.target.value })}
+                />
+              )}
+            </Field>
+          </div>
           <div className="text-sm">
             <p className="text-fg-muted">{t('online.address')}</p>
             <p dir="ltr" className="break-all font-medium" data-testid="store-url-preview">
@@ -738,21 +750,23 @@ function SettingsForm({ store }: { store: OnlineStore }) {
       </Section>
       <Section title={t('online.statusSection')} description={t('online.statusHint')}>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={t('online.storeStatus')} error={issues['status']}>
-            {(p) => (
-              <Select
-                {...p}
-                value={v.status}
-                onChange={(e) => set({ status: e.target.value as SaveOnlineStore['status'] })}
-              >
-                {(['draft', 'published', 'paused'] as const).map((s) => (
-                  <option key={s} value={s}>
-                    {t(`online.store_${s}`)}
-                  </option>
-                ))}
-              </Select>
-            )}
-          </Field>
+          <div data-field="status">
+            <Field label={t('online.storeStatus')} error={issues['status']}>
+              {(p) => (
+                <Select
+                  {...p}
+                  value={v.status}
+                  onChange={(e) => set({ status: e.target.value as SaveOnlineStore['status'] })}
+                >
+                  {(['draft', 'published', 'paused'] as const).map((s) => (
+                    <option key={s} value={s}>
+                      {t(`online.store_${s}`)}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+          </div>
         </div>
       </Section>
       <Section title={t('online.branding')}>
@@ -780,42 +794,47 @@ function SettingsForm({ store }: { store: OnlineStore }) {
       </Section>
       <Section title={t('online.fulfillmentSection')} description={t('online.fulfillmentHint')}>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={t('online.branch')} error={issues['fulfillmentBranchId']}>
-            {(p) => (
-              <Select
-                {...p}
-                value={v.fulfillmentBranchId ?? ''}
-                onChange={(e) => set({ fulfillmentBranchId: e.target.value || null })}
-              >
-                <option value="">—</option>
-                {branches
-                  .filter((b) => b.status === 'active')
-                  .map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {localizedName(b, i18n.language)}
-                    </option>
-                  ))}
-              </Select>
-            )}
-          </Field>
-          <Field
-            label={t('online.reservationMinutes')}
-            hint={t('online.reservationHint')}
-            error={issues['reservationMinutes']}
-          >
-            {(p) => (
-              <Input
-                {...p}
-                type="number"
-                min={5}
-                max={1440}
-                dir="ltr"
-                value={String(v.reservationMinutes)}
-                onChange={(e) => set({ reservationMinutes: Number(e.target.value) })}
-              />
-            )}
-          </Field>
+          <div data-field="fulfillmentBranchId">
+            <Field label={t('online.branch')} error={issues['fulfillmentBranchId']}>
+              {(p) => (
+                <Select
+                  {...p}
+                  value={v.fulfillmentBranchId ?? ''}
+                  onChange={(e) => set({ fulfillmentBranchId: e.target.value || null })}
+                >
+                  <option value="">—</option>
+                  {branches
+                    .filter((b) => b.status === 'active')
+                    .map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {localizedName(b, i18n.language)}
+                      </option>
+                    ))}
+                </Select>
+              )}
+            </Field>
+          </div>
+          <div data-field="reservationMinutes">
+            <Field
+              label={t('online.reservationMinutes')}
+              hint={t('online.reservationHint')}
+              error={issues['reservationMinutes']}
+            >
+              {(p) => (
+                <Input
+                  {...p}
+                  type="number"
+                  min={5}
+                  max={1440}
+                  dir="ltr"
+                  value={String(v.reservationMinutes)}
+                  onChange={(e) => set({ reservationMinutes: Number(e.target.value) })}
+                />
+              )}
+            </Field>
+          </div>
           <Checkbox
+            data-field="pickupEnabled"
             label={t('online.pickup')}
             description={
               issues['pickupEnabled'] ? (
