@@ -1288,6 +1288,13 @@ restaurants alike.
   phone, side menu.
 - Verified (cloud sandbox): `pnpm verify` 357 unit/web (56 files), `pnpm test:integration` 308
   (44 files), `pnpm test:e2e` 43.
+- Released (ADR-0122): production 2026-10-20: `59c95a9f752d` (revision `arabat-web-00044-l8k`,
+  migration job `arabat-migrate-tq96t` completed: migration 0070 applied). Cloud Build check
+  `55e5d427`: `/api/v1/health/ready` 200 with version `59c95a9f752d` and database ok (3 ms);
+  `live`, `/store/`, `/manager/` and `/online/` 200. Signed out afterwards, `config.env` removed; no
+  key, account or secret deleted. **Staging not updated:** Railway answered "Deploys have been
+  paused temporarily" (a pause on Railway's side) on three attempts; staging still runs
+  `321fc772d334` and is to be redeployed from `main` once Railway resumes.
 
 ### 2026-10-20 — Online store console redesign for young merchants (ADR-0127)
 Owner's request: make the store console suit Gen Z. Frontend only (`apps/online-web`).
