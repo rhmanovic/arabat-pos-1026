@@ -1,6 +1,8 @@
 import type { OnlineOrder, OnlineOrderAction, OnlineOrderStatus } from '@arabat/contracts';
 import { formatMoney } from '@arabat/i18n';
 import { Money } from '@arabat/money';
+import { useApi } from '@arabat/web-core';
+import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 
 /** Query key prefix of everything the console loads. */
@@ -113,3 +115,17 @@ export function nextActions(
 }
 
 export const PAYABLE_KINDS = ['cash', 'card', 'bank_transfer', 'custom'];
+
+/**
+ * The latest orders with the counts per status, shared by the overview and the navigation
+ * badges (one request, refreshed every 30 seconds).
+ */
+export function useOrderOverview(enabled: boolean) {
+  const api = useApi();
+  return useQuery({
+    queryKey: [...key, 'orders', { page: 1, pageSize: 5 }],
+    queryFn: () => api.online.orders({ page: 1, pageSize: 5 }),
+    enabled,
+    refetchInterval: 30_000,
+  });
+}

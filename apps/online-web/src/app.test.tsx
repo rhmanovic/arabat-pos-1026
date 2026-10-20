@@ -2,7 +2,7 @@ import { flattenKeys } from '@arabat/i18n';
 import { fakeApiFetch, makeSession, renderApp } from '@arabat/web-core/testing';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { managerUrl } from './app/context.js';
 import { nextActions } from './features/shared.js';
 import { i18n, resources } from './i18n/index.js';
@@ -10,6 +10,10 @@ import { routes } from './routes.js';
 
 beforeEach(async () => {
   await i18n.changeLanguage('en');
+});
+afterEach(() => {
+  localStorage.clear();
+  delete document.documentElement.dataset['theme'];
 });
 
 const money = (amount: string) => ({ amount, currency: 'KWD' });
@@ -807,6 +811,98 @@ describe('online store console', () => {
     expect(screen.getAllByText(store.url).length).toBeGreaterThan(0);
     expect(screen.getByRole('checkbox', { name: /Let shoppers create accounts/ })).toBeChecked();
     expect(fetch.calls.every((c) => c.method === 'GET')).toBe(true);
+  });
+
+  it('shows the launch steps of a draft store and shares its link on WhatsApp (ADR-0127)', async () => {
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'online.manage', 'online.orders']),
+      routes: {
+        'GET /manager/online/store': () => ({ status: 200, body: store }),
+        'GET /manager/online/listings': () => ({
+          status: 200,
+          body: { products: [listing({ listed: true })] },
+        }),
+        'GET /manager/online/orders': () => ({
+          status: 200,
+          body: { orders: [summary], total: 1, page: 1, pageSize: 5, counts: { placed: 2 } },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/', fetch });
+    expect(await screen.findByRole('heading', { name: 'Online store' })).toBeInTheDocument();
+    const steps = await screen.findByTestId('launch-checklist');
+    // Name, products and pay on receipt are done; branch, logo and publishing are left.
+    expect(await within(steps).findByText('3 of 6 steps done')).toBeInTheDocument();
+    expect(within(steps).getByRole('img', { name: '50%' })).toBeInTheDocument();
+    expect(within(steps).getByRole('link', { name: /Pick the fulfilment branch/ })).toHaveAttribute(
+      'href',
+      '/settings',
+    );
+    expect(screen.getByRole('link', { name: 'WhatsApp' })).toHaveAttribute(
+      'href',
+      `https://wa.me/?text=${encodeURIComponent(`Demo ${store.url}`)}`,
+    );
+    // The latest orders, and the waiting count on the orders link of both navigations.
+    expect(await screen.findByText('Sara')).toBeInTheDocument();
+    const tabs = screen.getByRole('navigation', { name: 'Quick navigation' });
+    expect(within(tabs).getByRole('link', { name: 'Orders' })).toHaveTextContent('2');
+  });
+
+  it('switches between light, dark and the device theme and remembers it', async () => {
+    const user = userEvent.setup();
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'online.orders']),
+      routes: { 'GET /manager/online/orders': () => ({ status: 200, body: emptyOrders }) },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/', fetch });
+    const theme = await screen.findByRole('group', { name: 'Appearance' });
+    await user.click(within(theme).getByRole('button', { name: 'Dark' }));
+    expect(document.documentElement.dataset['theme']).toBe('dark');
+    expect(localStorage.getItem('arabat.online.theme')).toBe('dark');
+    expect(within(theme).getByRole('button', { name: 'Dark' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await user.click(within(theme).getByRole('button', { name: 'Auto' }));
+    expect(document.documentElement.dataset['theme']).toBeUndefined();
+    expect(localStorage.getItem('arabat.online.theme')).toBeNull();
+  });
+
+  it('filters the orders with status chips that carry their counts', async () => {
+    const user = userEvent.setup();
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'online.orders']),
+      routes: {
+        'GET /manager/online/orders': () => ({
+          status: 200,
+          body: {
+            orders: [summary],
+            total: 1,
+            page: 1,
+            pageSize: 25,
+            counts: { paid: 1, placed: 2 },
+          },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/orders', fetch });
+    const chips = await screen.findByRole('group', { name: 'Status' });
+    expect(await within(chips).findByRole('button', { name: /All statuses\s*3/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    // Only statuses with orders get a chip.
+    expect(within(chips).queryByRole('button', { name: /Cancelled/ })).toBeNull();
+    await user.click(
+      within(chips).getByRole('button', { name: /New \(awaiting confirmation\)\s*2/ }),
+    );
+    await waitFor(() =>
+      expect(
+        fetch.calls.some(
+          (c) => c.path === '/manager/online/orders' && c.query.includes('status=placed'),
+        ),
+      ).toBe(true),
+    );
   });
 
   it('defines the same translation keys in Arabic and English', () => {

@@ -5,6 +5,9 @@ import { createRoot } from 'react-dom/client';
 import { RouterProvider, createBrowserRouter } from 'react-router';
 import { i18n } from './i18n/index.js';
 import { routes } from './routes.js';
+import { applyTheme } from './app/theme.js';
+
+applyTheme();
 
 const router = createBrowserRouter(routes, { basename: '/online' });
 

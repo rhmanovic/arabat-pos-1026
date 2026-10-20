@@ -1,6 +1,7 @@
 /*
  * Arabat design tokens (Tailwind CSS v4 theme). Each app imports this file after
- * `@import "tailwindcss"` and may extend it, but never redefine the semantic colors.
+ * `@import "tailwindcss"` and may extend it, but never redefine the semantic colors (the one
+ * exception is the online store console, which has its own palette and dark mode, ADR-0127).
  * Colors are semantic (surface, primary, danger, ...) so apps keep a consistent look while
  * having their own layouts. Dark mode is defined for the platform console and later apps.
  */

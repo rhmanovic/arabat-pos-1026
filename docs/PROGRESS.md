@@ -1265,6 +1265,21 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-20 — Online store console redesign for young merchants (ADR-0127)
+Owner's request: make the store console suit Gen Z. Frontend only (`apps/online-web`).
+- Own palette (violet / pink, softer radii) and a dark mode (light / dark / device, remembered),
+  scoped to the console's stylesheet; contrast checked at 4.5 : 1 or better in both modes.
+- Shell: icon sidebar with a gradient active item and a waiting-orders badge, greeting top bar,
+  floating bottom tab bar on phones (Home, Orders, Products, Promotions, More).
+- Overview: gradient store card with copy link, share sheet and WhatsApp share; launch checklist
+  with a progress ring; emoji order tiles; latest five orders; shortcuts. Orders: status chips
+  with counts instead of a dropdown.
+- Tests: `apps/online-web/src/app.test.tsx` +3 (21): launch steps, share link and the badge in the
+  tab bar; theme switch and its memory; status chips. Screens checked in a real browser (desktop
+  light / dark, phone, phone menu, Arabic and English).
+- Verified (cloud sandbox): `pnpm verify` 351 unit/web (56 files), `pnpm test:integration` 306
+  (44 files), `pnpm test:e2e` 42.
+
 ### 2026-10-20 — Online store Phases 6–10: shopper accounts, promotions, frontend-only 8–10 (ADR-0124/0125/0126)
 Owner's directive: Phase 6 without SMS / WhatsApp, Phase 7 complete, Phases 8–10 frontend only,
 one release at the end.

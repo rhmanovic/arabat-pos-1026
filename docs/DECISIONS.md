@@ -2106,3 +2106,38 @@ ADR; supersede it.
   storage and no tracker; product links carry metadata and the storefront installs as an app.
   The backend parts of Phases 8–10 (real gateway, host-based store resolution, event stream,
   bot SSR) remain open in `docs/ONLINE_STORE_PLAN.md` for the owner's go-ahead.
+
+## ADR-0127 — Online store console: its own look for young merchants (palette, dark mode, phone-first shell)
+- **Status:** Accepted (2026-10-20). Owner's request: "واجهة ادارة المتجر حسنها ui/ux عشان تناسب جيل
+  زي" (make the store console suit Gen Z). Frontend only, `apps/online-web`; no API or database
+  change.
+- **Context:** The console reused the sober management look (navy, small radii, text-only
+  sidebar, a dropdown filter, an overview of grey cards). The merchants who run an online store
+  are often young and work from a phone; they expect a bold look, dark mode, thumb-reachable
+  navigation, visual progress and one-tap sharing.
+- **Decision:**
+  - **Own palette, scoped to this app.** `apps/online-web/src/styles.css` redefines the shared
+    tokens (the one exception to the rule in `packages/ui/src/theme.css`): violet primary, pink
+    accent, mint success, softer radii (0.5 / 0.75 / 1.125 / 1.5 rem), a violet → pink brand
+    gradient (`.vibe-gradient`), lift-on-hover cards and a page entrance that stop under
+    reduced motion. Every other app keeps the Arabat palette. All text pairs were checked at
+    4.5 : 1 or better in both modes.
+  - **Dark mode:** light, dark or the device's choice (`prefers-color-scheme`), switched in the
+    sidebar, kept per browser (`localStorage arabat.online.theme`, guarded) and applied as
+    `<html data-theme>` before the first render.
+  - **Shell:** sidebar items with icons (inline SVG set, no new dependency) and a gradient active
+    pill; a waiting-orders badge (new + needs attention) on Orders; a greeting top bar (morning /
+    afternoon / evening with the first name); on phones a floating bottom tab bar (Home, Orders,
+    Products, Promotions, More = the full menu). The waiting count is one shared query
+    (`useOrderOverview`, 30 s).
+  - **Overview:** a gradient hero with the store name, status, address, "Open store" (or "Set up
+    your store"), copy link, the device's share sheet when available and a WhatsApp share link;
+    a launch checklist with a progress ring (name, listed products, fulfilment branch, a way to
+    pay, logo or banner, published), replaced by a "store is live" note when complete; order
+    tiles with emoji (scrollable on phones); the latest five orders; one-tap shortcuts.
+  - **Orders:** the status dropdown became chips with counts (only statuses that have orders,
+    plus the chosen one), scrollable on phones.
+  - **Copy:** shorter, friendlier Arabic and English for the overview and navigation.
+- **Consequences:** the console feels like a modern app on a phone without changing what it
+  does; labels used by tests and the e2e suite were kept ("Online store" stays the page heading).
+  Other console pages inherit the palette, radii and dark mode through the tokens.

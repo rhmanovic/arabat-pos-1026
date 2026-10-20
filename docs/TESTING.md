@@ -66,6 +66,17 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-20 (online store console redesign, ADR-0127, cloud sandbox run)
+- `apps/online-web/src/app.test.tsx` (+3, 21): a draft store shows "3 of 6 steps done" with a 50 %
+  ring and links each open step to its page, the WhatsApp share link carries the name and
+  address, the latest orders list the customer and the tab bar's Orders shows the waiting
+  count; the theme switch sets and clears `data-theme` and the stored choice; status chips show
+  only statuses with orders and filter the list with `status=`.
+- Manual check in Chromium (Playwright screenshots): overview in light and dark (desktop, RTL),
+  phone layout with the tab bar and the menu, orders chips in dark mode, device dark in English.
+- Totals: `pnpm verify` 351 unit/web (56 files), `pnpm test:integration` 306 (44 files),
+  `pnpm test:e2e` 42.
+
 ### Results 2026-10-20 (online store Phases 6–10, ADR-0124/0125/0126, cloud sandbox run)
 - `ecommerce.int.test.ts` (+3, 19 in the file): shopper accounts (registering on the till's
   customer by phone fills its e-mail; `EMAIL_TAKEN` / `PHONE_TAKEN`; wrong password 401; `me`

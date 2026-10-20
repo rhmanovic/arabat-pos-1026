@@ -12,6 +12,7 @@ import {
   Section,
   Select,
   Textarea,
+  cn,
 } from '@arabat/ui';
 import { AccessDenied, ErrorState, localizedName, useApi, useNotify } from '@arabat/web-core';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -77,20 +78,44 @@ function OrdersTab() {
   const counts = list.data?.counts ?? {};
   return (
     <div className="flex flex-col gap-4">
+      <div
+        role="group"
+        aria-label={t('store.status')}
+        className="vibe-scroll -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0"
+      >
+        {(['', ...ONLINE_ORDER_STATUSES] as const)
+          .filter((s) => s === '' || s === status || (counts[s] ?? 0) > 0)
+          .map((s) => {
+            const n =
+              s === '' ? Object.values(counts).reduce((a, b) => a + b, 0) : (counts[s] ?? 0);
+            const active = status === s;
+            return (
+              <button
+                key={s || 'all'}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setStatus(s)}
+                className={cn(
+                  'inline-flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors',
+                  active
+                    ? 'vibe-gradient border-transparent'
+                    : 'border-border bg-surface text-fg hover:border-border-strong',
+                )}
+              >
+                {s === '' ? t('store.allStatuses') : t(`store.status_${s}`)}
+                <span
+                  className={cn(
+                    'rounded-full px-1.5 text-xs tabular-nums',
+                    active ? 'bg-white/25' : 'bg-surface-muted text-fg-muted',
+                  )}
+                >
+                  {n}
+                </span>
+              </button>
+            );
+          })}
+      </div>
       <div className="flex flex-wrap items-center gap-3">
-        <Select
-          className="w-56"
-          aria-label={t('store.status')}
-          value={status}
-          onChange={(e) => setStatus(e.target.value as OnlineOrderStatus | '')}
-        >
-          <option value="">{t('store.allStatuses')}</option>
-          {ONLINE_ORDER_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {t(`store.status_${s}`)} ({counts[s] ?? 0})
-            </option>
-          ))}
-        </Select>
         {(counts['needs_attention'] ?? 0) > 0 ? (
           <Badge tone="warning">
             {t('store.attentionCount', { count: counts['needs_attention'] })}
@@ -99,6 +124,7 @@ function OrdersTab() {
         {can('online.manage') ? (
           <Button
             variant="secondary"
+            size="sm"
             loading={reconcile.isPending}
             onClick={() => reconcile.mutate()}
           >
