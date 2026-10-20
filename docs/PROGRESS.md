@@ -1221,6 +1221,11 @@ customers, accounts, permissions).
   `e2e/store.spec.ts` runs through `/online` (and checks the `/manager/online` hand-over).
 - Verified (cloud sandbox): `pnpm verify` 334 unit/web (56 files), `pnpm test:integration` 297
   (44 files), `pnpm test:e2e` 41.
+- Released: staging (Railway, `2cae4c6`, 07:22 UTC) and, with the owner's approval, production
+  2026-10-20 07:26 UTC: `2cae4c6d3de1` (revision `arabat-web-00039-p9w`, migration job
+  `arabat-migrate-c87m8` completed, nothing to apply). Cloud Build check `09f1f604`: `ready` 200
+  with version `2cae4c6d3de1` and database ok; `live`, `/store/`, `/manager/` and `/online/`
+  (title "Arabat Online Store") 200. Signed out afterwards; no key deleted.
 
 ## Next step
 Online store Phase 3 (online payment methods separate from POS tenders, ADR-0120) per
