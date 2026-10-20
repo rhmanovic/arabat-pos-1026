@@ -1188,7 +1188,9 @@ unpaid orders hold no stock. Phase 1:
 - Follow-up (owner's screenshot, 2026-10-20): saving the store settings answered only the generic
   "Some fields are invalid" toast. The settings form now shows the server's field problems under
   each field and in a summary above the Save button, with Arabic / English texts per field
-  (`online.issue_*`); manager test +1 (331 unit/web).
+  (`online.issue_*`), scrolls to the first refused field, and the main branch is proposed as the
+  fulfilment branch (the actual cause: publishing with no branch chosen); manager test +1,
+  integration +1. Verified: `pnpm verify` 331, `pnpm test:integration` 297, `pnpm test:e2e` 41.
 - Re-released 2026-10-20 06:30 UTC at the owner's request with the latest `main`:
   `b026ea3610e0` (revision `arabat-web-00037-g5s`; migration job `arabat-migrate-x9x2h`
   completed, nothing new to apply). Verified from inside Google Cloud through a Cloud Build
