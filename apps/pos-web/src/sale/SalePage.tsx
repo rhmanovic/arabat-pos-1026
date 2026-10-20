@@ -20,6 +20,7 @@ import {
   RecentSalesDialog,
   SuspendDialog,
 } from './dialogs.js';
+import { OnlineOrdersDialog } from './OnlineOrdersDialog.js';
 
 export const catalogKey = ['pos', 'catalog'] as const;
 export const availabilityKey = ['pos', 'availability'] as const;
@@ -97,9 +98,9 @@ export function SalePage() {
     const id = setTimeout(() => setConfirmClear(false), 3000);
     return () => clearTimeout(id);
   }, [confirmClear]);
-  const [dialog, setDialog] = useState<'pay' | 'discount' | 'suspend' | 'held' | 'recent' | null>(
-    null,
-  );
+  const [dialog, setDialog] = useState<
+    'pay' | 'discount' | 'suspend' | 'held' | 'recent' | 'online' | null
+  >(null);
   const [receiptId, setReceiptId] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -162,6 +163,7 @@ export function SalePage() {
   const stripActions: StripAction[] = [
     { key: 'recent', label: t('sale.recent'), onSelect: () => setDialog('recent') },
     { key: 'held', label: t('sale.heldSales'), onSelect: () => setDialog('held') },
+    { key: 'online', label: t('sale.onlineOrders'), onSelect: () => setDialog('online') },
     ...(restaurant && hasPermission('restaurant.orders')
       ? [{ key: 'tables', label: t('restaurant.tables'), to: '/tables' }]
       : []),
@@ -544,6 +546,15 @@ export function SalePage() {
       {dialog === 'discount' ? <OrderDiscountDialog onClose={() => setDialog(null)} /> : null}
       {dialog === 'suspend' ? <SuspendDialog onClose={() => setDialog(null)} /> : null}
       {dialog === 'held' ? <HeldSalesDialog onClose={() => setDialog(null)} /> : null}
+      {dialog === 'online' ? (
+        <OnlineOrdersDialog
+          onClose={() => setDialog(null)}
+          onCompleted={(saleId) => {
+            setDialog(null);
+            setReceiptId(saleId);
+          }}
+        />
+      ) : null}
       {dialog === 'recent' ? (
         <RecentSalesDialog
           onClose={() => setDialog(null)}

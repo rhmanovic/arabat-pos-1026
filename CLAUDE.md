@@ -66,8 +66,10 @@ approval from the product owner and a new entry in `docs/DECISIONS.md`.
     stock movements, refunds).
 13. **Never deploy, activate live payments, or incur paid costs** without the
     owner's explicit approval.
-    Exception (ADR-0088): the owner gave standing approval to publish to **staging**
-    once tests pass.
+    Exceptions: ADR-0088 — standing approval to publish to **staging** once tests pass;
+    ADR-0122 (2026-10-20) — standing approval to release `main` to **production** after
+    `pnpm verify`, `pnpm test:integration` and `pnpm test:e2e` pass (owner's procedure, no key
+    ever deleted; live payments and new paid costs still need explicit approval).
 
 ## 4. Engineering standards
 
@@ -252,4 +254,8 @@ module (`/platform/offer`); the pricing page's form opens a trial account throug
 Free-trial funnel `/start` and `/platform/trials` (`trials` module, ADR-0115): the account opens at once (no e-mail
 code in this phase, amendment 1), through `RegistrationService.createAccount`; every trial number is an operator setting.
 The landing navbar's "Our apps" dropdown reads `site_apps` (`site` module, `/platform/site-apps`, ADR-0117).
+Online store (`docs/ONLINE_STORE_PLAN.md`): pay on receipt and store address (ADR-0118), the `/online` console
+(ADR-0119), merchandising (ADR-0121), fulfilment (ADR-0123: delivery areas, serving branches, hours / slots, order
+e-mails after commit, packing slips, till hand-over through `/pos/online-orders`). Composite FKs must never carry
+`on delete set null` (it nulls `merchant_id`); reference the parent `id` alone.
 See `docs/PROGRESS.md` for the current state and `docs/ROADMAP.md` for next steps.

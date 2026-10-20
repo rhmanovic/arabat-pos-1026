@@ -114,10 +114,12 @@ dashboard's "Online store" tile open it (↗); `/manager/online` redirects here.
 |---|---|---|
 | `/online/login`, `/online/forgot-password` | Sign in with the management account | — |
 | `/online/` | Overview: store state and address, order counts (new, awaiting payment, to prepare, in progress, need attention), shared functions | `online.manage` or `online.orders` |
-| `/online/orders` (`?status=`) | Orders list, detail, steps, "Record payment" for pay-on-receipt orders, check pending payments | `online.orders` (branch of the order) |
+| `/online/orders` (`?status=`) | Orders list (branch, requested time), detail (area, pickup branch), steps, "Record payment" for pay-on-receipt orders, check pending payments | `online.orders` (branch of the order) |
 | `/online/products` | Which catalog products are sold online, in store order (drag and drop); per product: store title / description, store category, featured, maximum per order, catalog pictures (read-only); add not-listed products into a store category (ADR-0121) | `online.manage` |
 | `/online/categories` | Store categories: add, edit, picture, hide, order, delete (ADR-0121) | `online.manage` |
-| `/online/settings` | Address (live check), status, branding, appearance (logo, banner, hide out-of-stock products), fulfilment, payment options | `online.manage` |
+| `/online/delivery-areas` | Delivery areas: Kuwait pick-list, fee, minimum, free-delivery threshold, estimated time, serving branch, order, active (ADR-0123) | `online.manage` |
+| `/online/branches` | Branches serving the store: pickup / delivery, preparation time, own hours, order (ADR-0123) | `online.manage` |
+| `/online/settings` | Address (live check), status, branding, "e-mail me about new orders", appearance (logo, banner, hide out-of-stock products), fulfilment, opening hours and time slots, payment options | `online.manage` |
 | Sidebar "Shared with the POS" | Opens `/manager/products`, `/manager/customers`, `/manager/reports`, `/manager/payments` with their own permissions | — |
 
 ## 2c. `/links` — links-web (link-page editor, ADR-0116 amendment 1)
@@ -256,6 +258,7 @@ cash in/out, close with optional note/coin count, closing result).
 | `GET /pos/sales/recent`, `GET /pos/sales/:id/receipt`, `GET /pos/sales/settings`, `GET /pos/sales/lookup?receipt=` (any receipt of the branch, read-only) | POS `sales.create` (session branch only) |
 | `POST /pos/sales/:id/print` (logged, numbered copy sent to the print agent), `POST /pos/cart-events` (cleared cart / removed line above the threshold) | POS `sales.create`, own open shift |
 | `POST /pos/orders` (hold; expires after the company limit), `GET /pos/orders/suspended`, `POST /pos/orders/:id/cancel` | POS `sales.create` |
+| `GET /pos/online-orders` (open pickup orders of the till's branch), `POST /pos/online-orders/:id/pay` (idempotency key, POS tenders, `expectedTotal`, `version`: sale in the own shift, order completed), `POST /pos/online-orders/:id/complete` (paid order handed over; ADR-0123) | POS `sales.create`, own open shift for `pay` |
 | `GET /manager/sales?branchId=&q=&from=&to=&flag=` (`flag`: zero_total, above_limit, price_override, supervised), `GET /manager/sales/:id`, `GET …/:id/receipt` | `sales.read` (branch-scoped) |
 | `GET/PUT /manager/sales-settings` | `merchant.settings.read` / `merchant.settings.update` |
 
@@ -402,9 +405,10 @@ only staff land on `/pos/kitchen`. Sales list and reports show the service type.
 |---|---|
 | `GET/PUT /manager/online/store`, `GET /manager/online/store/slug-availability?slug=`, `GET/PUT /manager/online/listings`, `POST /manager/online/reconcile` | merchant-wide `online.manage` |
 | `PUT /manager/online/listings/order` (`{ productIds }`), `PUT /manager/online/listings/:productId` (store title / description, featured, max per order, store category), `GET/POST /manager/online/categories`, `PUT /manager/online/categories/order` (`{ ids }`), `PUT/DELETE /manager/online/categories/:id`, `GET/POST/DELETE /manager/online/categories/:id/image`, `GET/POST/DELETE /manager/online/store/:kind(logo\|banner)` (multipart `file`, JPEG / PNG / WebP ≤ 2 MB; ADR-0121) | merchant-wide `online.manage` |
+| `GET/POST /manager/online/delivery-areas`, `PUT /manager/online/delivery-areas/order` (`{ ids }`), `PUT/DELETE /manager/online/delivery-areas/:id`, `GET /manager/online/branches`, `PUT /manager/online/branches/order` (`{ branchIds }`), `PUT/DELETE /manager/online/branches/:branchId` (ADR-0123) | merchant-wide `online.manage` |
 | `GET /manager/online/orders?status=`, `GET /manager/online/orders/:id`, `POST /manager/online/orders/:id/action` (`confirm`, `mark_paid` with tender + reference, `preparing`, `ready`, `out_for_delivery`, `completed`, `cancel`), `GET /manager/online/tenders` | `online.orders` (branch of the order) |
-| `GET /store/:slug` (logo / banner URLs, `categorySource`, categories with pictures), `/products` (store titles, all pictures, featured, position, per-listing cap; sold-out hidden when the store says so), `/products/:id`, `/images/:productId/:imageId`, `/:kind(logo\|banner)`, `/categories/:id/image` (public, cached one day, `?v=`) | 🔓 published or paused store |
-| `POST /store/:slug/checkout` | 🔓 published store; idempotency key; 30 per 10 min per IP; `paymentMethodId: null` = pay on receipt (ADR-0118) |
+| `GET /store/:slug` (logo / banner URLs, `categorySource`, categories with pictures, `branches` with `openNow`, `defaultBranchId`, `deliveryAreas`, `scheduling`, `timezone`), `/products?branch=` (store titles, all pictures, featured, position, per-listing cap; stock and prices of the chosen branch; sold-out hidden when the store says so), `/products/:id?branch=`, `/slots?branch=&fulfillment=` (next 7 days, availability; ADR-0123), `/images/:productId/:imageId`, `/:kind(logo\|banner)`, `/categories/:id/image` (public, cached one day, `?v=`) | 🔓 published or paused store |
+| `POST /store/:slug/checkout` | 🔓 published store; idempotency key; 30 per 10 min per IP; `paymentMethodId: null` = pay on receipt (ADR-0118); `branchId` (pickup), `deliveryAreaId` (required with areas), `scheduledFor` (an offered slot or null; `SLOT_FULL`, `OUTSIDE_HOURS`; ADR-0123) |
 | `GET /store/:slug/orders/:token` | 🔓 tracking token |
 | `POST /webhooks/payments/:provider` | 🔓 provider signature (raw body) |
 | `GET/POST /payments/mock/:reference` | 🔓 sandbox only (disabled in production by default) |

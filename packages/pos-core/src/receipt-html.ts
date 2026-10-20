@@ -100,6 +100,9 @@ section { border-top: 1px dashed #000; margin-top: 1.5mm; padding-top: 1.5mm; }
  * The receipt as one self-contained HTML document (ADR-0111): inline style, no external
  * resources, UTF-8, right to left, 72 mm wide, black only, for an 80 mm thermal printer.
  */
+/** Building blocks shared with the other printed documents (order slip, ADR-0123). */
+export const receiptHtmlParts = { escape, kwd, dateTime, row, block, section, STYLE, FULFILLMENT };
+
 export function renderReceiptHtml(data: ReceiptData, printedAt: Date, copyNumber = 0): string {
   const header = [
     `<p class="company" dir="auto">${escape(data.merchantName ?? '')}</p>`,

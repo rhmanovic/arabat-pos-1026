@@ -156,7 +156,8 @@ gateway, store address first-class; **Phase 2 ✅ (ADR-0119)** — the online st
 `/online`, separate from the POS management app, over the same backend; Phase 3 (separate online
 payment methods) cancelled by the owner on 2026-10-20; **Phase 4 ✅ (ADR-0121)** — store
 titles, order, featured, store categories with pictures, logo / banner, gallery, sorting (no online
-price: one catalog price); next: Phase 5 (delivery areas, pickup branches, notifications, printing).
+price: one catalog price); **Phase 5 ✅ (ADR-0123)** — delivery areas, serving branches, hours and
+time slots, order e-mails, packing slips, till hand-over; next: Phase 6 (customer accounts).
 
 Acceptance criteria:
 1. Channel listings from catalog; online orders enter the orders module.

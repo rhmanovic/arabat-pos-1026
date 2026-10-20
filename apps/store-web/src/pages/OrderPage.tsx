@@ -105,6 +105,23 @@ export function OrderPage() {
         </dl>
         <p className="mt-2 text-sm text-fg-muted">
           {t(`order.${o.fulfillment}`)} · {o.customerName}
+          {o.deliveryArea || o.deliveryAreaName
+            ? ` · ${(o.deliveryArea && name(o.deliveryArea)) || o.deliveryAreaName}`
+            : ''}
+        </p>
+        {o.fulfillment === 'pickup' ? (
+          <p className="text-sm text-fg-muted" data-testid="order-branch">
+            {t('order.pickupAt', {
+              branch: [name(o.branch), o.branch.address, o.branch.phone]
+                .filter(Boolean)
+                .join(' — '),
+            })}
+          </p>
+        ) : null}
+        <p className="text-sm text-fg-muted" data-testid="order-wanted">
+          {o.scheduledFor
+            ? t('order.wanted', { time: formatDateTime(o.scheduledFor, i18n.language) })
+            : t('order.asap')}
         </p>
       </section>
       <section className="rounded-lg border border-border bg-surface p-4">

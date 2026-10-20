@@ -8,6 +8,8 @@ import type { RouteObject } from 'react-router';
 import { OnlineLayout } from './app/OnlineLayout.js';
 import { CategoriesPage } from './features/categories/CategoriesPage.js';
 import { DashboardPage } from './features/dashboard/DashboardPage.js';
+import { BranchesPage } from './features/fulfilment/BranchesPage.js';
+import { DeliveryAreasPage } from './features/fulfilment/DeliveryAreasPage.js';
 import { OrdersPage } from './features/orders/OrdersPage.js';
 import { ProductsPage } from './features/products/ProductsPage.js';
 import { SettingsPage } from './features/settings/SettingsPage.js';
@@ -42,6 +44,8 @@ export const routes: RouteObject[] = [
       { path: 'orders', element: <OrdersPage /> },
       { path: 'products', element: <ProductsPage /> },
       { path: 'categories', element: <CategoriesPage /> },
+      { path: 'delivery-areas', element: <DeliveryAreasPage /> },
+      { path: 'branches', element: <BranchesPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: '*', element: <NotFound /> },
     ],

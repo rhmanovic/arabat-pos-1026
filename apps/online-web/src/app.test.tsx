@@ -30,6 +30,11 @@ const summary = {
   paidAt: '2026-10-12T08:01:00.000Z',
   reservedUntil: '2026-10-12T08:15:00.000Z',
   trackingToken: 'tok',
+  scheduledFor: null,
+  deliveryAreaName: null,
+  deliveryArea: null,
+  deliveryAreaId: null,
+  branch: { nameEn: 'Main branch', nameAr: null, address: null, phone: null },
   paymentUrl: null,
   branchId: BRANCH,
   customerPhone: '+96550000001',
@@ -100,6 +105,11 @@ const store = {
   logoUrl: null,
   bannerUrl: null,
   hideOutOfStock: false,
+  hours: null,
+  schedulingEnabled: false,
+  slotMinutes: 30,
+  slotCapacity: null,
+  notifyEmail: true,
   paymentMethods: [
     { id: 'm1', nameEn: 'Card', nameAr: null, provider: 'mock', ready: true },
     { id: 'm2', nameEn: 'KNET', nameAr: null, provider: 'tap', ready: false },
@@ -548,6 +558,123 @@ describe('online store console', () => {
     expect(
       await within(dialog).findByRole('button', { name: 'Upload picture' }),
     ).toBeInTheDocument();
+  });
+
+  it('adds a delivery area from the Kuwait list with its fee and free-delivery threshold', async () => {
+    const user = userEvent.setup();
+    const area = {
+      id: '0190a000-0000-7000-8000-0000000000e1',
+      nameEn: 'Salmiya',
+      nameAr: 'السالمية',
+      fee: { amount: '1.000', currency: 'KWD' },
+      minimumOrder: { amount: '0.000', currency: 'KWD' },
+      freeDeliveryFrom: { amount: '10.000', currency: 'KWD' },
+      estimatedMinutes: 45,
+      branchId: null,
+      position: 0,
+      active: true,
+      version: 1,
+    };
+    let created = false;
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'online.manage', 'branches.read']),
+      routes: {
+        'GET /manager/online/delivery-areas': () => ({
+          status: 200,
+          body: { areas: created ? [area] : [] },
+        }),
+        'POST /manager/online/delivery-areas': () => {
+          created = true;
+          return { status: 201, body: area };
+        },
+        'GET /manager/branches': () => ({ status: 200, body: { branches: [] } }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/delivery-areas', fetch });
+    await user.click(await screen.findByRole('button', { name: 'Add area' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.selectOptions(
+      within(dialog).getByLabelText('Pick from the Kuwait list'),
+      'Salmiya|السالمية',
+    );
+    expect(within(dialog).getByLabelText('Name (English)')).toHaveValue('Salmiya');
+    expect(within(dialog).getByLabelText('Name (Arabic)')).toHaveValue('السالمية');
+    await user.clear(within(dialog).getByLabelText('Delivery fee (KWD)'));
+    await user.type(within(dialog).getByLabelText('Delivery fee (KWD)'), '1.000');
+    await user.type(within(dialog).getByLabelText('Free delivery from (KWD)'), '10.000');
+    await user.type(within(dialog).getByLabelText('Estimated time (minutes)'), '45');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(fetch.calls.find((c) => c.method === 'POST')?.body).toEqual({
+        nameEn: 'Salmiya',
+        nameAr: 'السالمية',
+        fee: '1.000',
+        minimumOrder: '0.000',
+        freeDeliveryFrom: '10.000',
+        estimatedMinutes: 45,
+        branchId: null,
+        active: true,
+      }),
+    );
+    expect(await screen.findByText('Salmiya')).toBeInTheDocument();
+    expect(screen.getByText(/free from KWD 10.000/)).toBeInTheDocument();
+  });
+
+  it('adds a branch to the store with pickup, preparation time and its own hours', async () => {
+    const user = userEvent.setup();
+    const mall = {
+      ...branches.branches[0]!,
+      id: '0190a000-0000-7000-8000-0000000000b2',
+      code: 'MALL',
+      nameEn: 'Mall',
+      nameAr: null,
+      isMain: false,
+    };
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'online.manage', 'branches.read']),
+      routes: {
+        'GET /manager/branches': () => ({
+          status: 200,
+          body: { branches: [...branches.branches, mall] },
+        }),
+        'GET /manager/online/branches': () => ({ status: 200, body: { branches: [] } }),
+        'PUT /manager/online/branches/0190a000-0000-7000-8000-0000000000b2': () => ({
+          status: 200,
+          body: {
+            branchId: mall.id,
+            nameEn: 'Mall',
+            nameAr: null,
+            address: null,
+            phone: null,
+            pickupEnabled: true,
+            deliveryEnabled: false,
+            preparationMinutes: 45,
+            hours: null,
+            position: 0,
+            active: true,
+            version: 1,
+          },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/branches', fetch });
+    expect(await screen.findByText(/fulfilment branch of the settings serves/)).toBeInTheDocument();
+    await user.click(screen.getAllByRole('button', { name: 'Add to the store' })[1]!);
+    const dialog = await screen.findByRole('dialog');
+    await user.clear(within(dialog).getByLabelText('Preparation time (minutes)'));
+    await user.type(within(dialog).getByLabelText('Preparation time (minutes)'), '45');
+    // Own hours: Friday closed, the other days 09:00–22:00 by default.
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Store hours' }));
+    await user.click(within(dialog).getAllByRole('checkbox', { name: 'Closed' })[4]!);
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(fetch.calls.find((c) => c.method === 'PUT')?.body).toMatchObject({
+        pickupEnabled: true,
+        deliveryEnabled: false,
+        preparationMinutes: 45,
+        hours: { mon: [{ open: '09:00', close: '22:00' }], fri: [] },
+      }),
+    );
   });
 
   it('defines the same translation keys in Arabic and English', () => {

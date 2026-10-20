@@ -388,11 +388,14 @@ export const sales = pgTable(
     index('sales_customer_idx').on(t.merchantId, t.customerId, t.createdAt),
     index('sales_restaurant_order_idx').on(t.merchantId, t.restaurantOrderId),
     unique('sales_online_order_key').on(t.merchantId, t.onlineOrderId),
+    // An online sale carries a shift when the cashier took the money at the till (ADR-0123).
     check(
       'sales_channel_valid',
       sql`(${t.channel} = 'pos' and ${t.orderId} is not null and ${t.registerId} is not null and ${t.shiftId} is not null
            and ${t.membershipId} is not null and ${t.userId} is not null and ${t.onlineOrderId} is null)
-          or (${t.channel} = 'online' and ${t.onlineOrderId} is not null and ${t.shiftId} is null)`,
+          or (${t.channel} = 'online' and ${t.onlineOrderId} is not null and ${t.orderId} is null
+              and ((${t.shiftId} is null and ${t.registerId} is null)
+                   or (${t.shiftId} is not null and ${t.registerId} is not null and ${t.userId} is not null)))`,
     ),
     check(
       'sales_service_type_valid',

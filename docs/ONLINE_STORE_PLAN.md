@@ -1,7 +1,7 @@
 # Online Store — Phased Development Plan
 
 Status: **approved by the owner on 2026-10-20** with one change: unpaid orders reserve **no**
-stock (see Phase 1). Phases 1 (ADR-0118), 2 (ADR-0119) and 4 (ADR-0121) are implemented. **Phase 3 was cancelled
+stock (see Phase 1). Phases 1 (ADR-0118), 2 (ADR-0119), 4 (ADR-0121) and 5 (ADR-0123) are implemented. **Phase 3 was cancelled
 by the owner on 2026-10-20**: payment methods stay one shared set (POS methods, with the "available
 online" flag and gateway for the store; pay on receipt needs none). Each phase
 is implemented as one or more vertical slices (DB → API → UI → tests → docs), recorded in
@@ -173,8 +173,14 @@ out-of-stock setting). Bulk listing into a category is done from the "not in the
 **Done when:** a merchant with 500 products can curate what the store shows, in which order,
 with online descriptions and prices, and shoppers can browse by category and search.
 
-### Phase 5 — Fulfilment: delivery areas, pickup branches, notifications, printing
-Size: L. Migration 0069. ADR-0122. BR-216…BR-222.
+### Phase 5 — Fulfilment: delivery areas, pickup branches, notifications, printing ✅
+Size: L. Migration 0068. ADR-0123. BR-215…BR-220. **Done 2026-10-20** — differences from the text
+below: notifications are **e-mail only** (shopper and store); no SMS / WhatsApp provider was
+connected (paid service, needs the owner's approval) and in-console push stays the overview
+counts; hours live on the store with a per-branch override (no per-area windows); the Kuwait
+areas are a pick-list in the console, not seeded rows. Everything else as planned, including
+the POS hand-over (sale in the cashier's shift, cash into the drawer).
+
 
 - **Delivery areas** `online_delivery_areas` (merchant, name ar/en, governorate/area list for
   Kuwait seeded, fee, minimum order, free-delivery threshold, estimated time, active). Checkout

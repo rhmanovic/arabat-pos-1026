@@ -271,6 +271,16 @@ import {
   storeProductListSchema,
   storeProductSchema,
   storefrontSchema,
+  storeSlotListSchema,
+  onlineDeliveryAreaSchema,
+  onlineDeliveryAreaListSchema,
+  type SaveOnlineDeliveryArea,
+  onlineStoreBranchSchema,
+  onlineStoreBranchListSchema,
+  type SaveOnlineStoreBranch,
+  posOnlineOrderSchema,
+  posOnlineOrderListSchema,
+  type PosOnlineOrderPay,
   type ChangeSubscription,
   type CreateMerchant,
   type PlatformAuditQuery,
@@ -1181,6 +1191,55 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('POST', '/manager/online/reconcile', {
           schema: z.object({ checked: z.number(), paid: z.number(), expired: z.number() }),
         }),
+      // Delivery areas and serving branches (ADR-0123).
+      deliveryAreas: () =>
+        request('GET', '/manager/online/delivery-areas', { schema: onlineDeliveryAreaListSchema }),
+      createDeliveryArea: (body: SaveOnlineDeliveryArea) =>
+        request('POST', '/manager/online/delivery-areas', {
+          body,
+          schema: onlineDeliveryAreaSchema,
+        }),
+      updateDeliveryArea: (id: string, body: SaveOnlineDeliveryArea) =>
+        request('PUT', `/manager/online/delivery-areas/${id}`, {
+          body,
+          schema: onlineDeliveryAreaSchema,
+        }),
+      deleteDeliveryArea: (id: string) =>
+        request('DELETE', `/manager/online/delivery-areas/${id}`, {
+          schema: onlineDeliveryAreaListSchema,
+        }),
+      orderDeliveryAreas: (ids: string[]) =>
+        request('PUT', '/manager/online/delivery-areas/order', {
+          body: { ids },
+          schema: onlineDeliveryAreaListSchema,
+        }),
+      storeBranches: () =>
+        request('GET', '/manager/online/branches', { schema: onlineStoreBranchListSchema }),
+      saveStoreBranch: (branchId: string, body: SaveOnlineStoreBranch) =>
+        request('PUT', `/manager/online/branches/${branchId}`, {
+          body,
+          schema: onlineStoreBranchSchema,
+        }),
+      removeStoreBranch: (branchId: string) =>
+        request('DELETE', `/manager/online/branches/${branchId}`, {
+          schema: onlineStoreBranchListSchema,
+        }),
+      orderStoreBranches: (branchIds: string[]) =>
+        request('PUT', '/manager/online/branches/order', {
+          body: { branchIds },
+          schema: onlineStoreBranchListSchema,
+        }),
+    },
+    /** Online orders handed over at the till (ADR-0123). */
+    posOnline: {
+      orders: () => request('GET', '/pos/online-orders', { schema: posOnlineOrderListSchema }),
+      pay: (id: string, body: PosOnlineOrderPay) =>
+        request('POST', `/pos/online-orders/${id}/pay`, { body, schema: saleSchema }),
+      complete: (id: string, version: number) =>
+        request('POST', `/pos/online-orders/${id}/complete`, {
+          body: { version },
+          schema: posOnlineOrderSchema,
+        }),
     },
     /** Link page ("link in bio", ADR-0116). */
     linkPage: {
@@ -1228,10 +1287,25 @@ export function createApiClient(options: ApiClientOptions = {}) {
     store: {
       info: (slug: string) =>
         request('GET', `/store/${encodeURIComponent(slug)}`, { schema: storefrontSchema }),
-      products: (slug: string) =>
-        request('GET', `/store/${encodeURIComponent(slug)}/products`, {
-          schema: storeProductListSchema,
-        }),
+      products: (slug: string, branchId?: string | null) =>
+        request(
+          'GET',
+          `/store/${encodeURIComponent(slug)}/products${branchId ? `?branch=${branchId}` : ''}`,
+          { schema: storeProductListSchema },
+        ),
+      /** Time slots a shopper may pick for the next days (ADR-0123). */
+      slots: (
+        slug: string,
+        query: { branch?: string | null; fulfillment: 'pickup' | 'delivery' },
+      ) =>
+        request(
+          'GET',
+          `/store/${encodeURIComponent(slug)}/slots?${toParams({
+            fulfillment: query.fulfillment,
+            ...(query.branch ? { branch: query.branch } : {}),
+          })}`,
+          { schema: storeSlotListSchema },
+        ),
       product: (slug: string, productId: string) =>
         request('GET', `/store/${encodeURIComponent(slug)}/products/${productId}`, {
           schema: storeProductSchema,

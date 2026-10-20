@@ -16,7 +16,9 @@ import { AccessDenied, localizedName, useApi, useNotify } from '@arabat/web-core
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
 import { managerUrl, useBranches, useSession } from '../../app/context.js';
+import { HoursEditor } from '../fulfilment/HoursEditor.js';
 import { key } from '../shared.js';
 
 /** Store address, status, branding, fulfilment and payment options. */
@@ -54,6 +56,11 @@ function toForm(s: OnlineStore): SaveOnlineStore {
     reservationMinutes: s.reservationMinutes,
     payOnReceiptEnabled: s.payOnReceiptEnabled,
     hideOutOfStock: s.hideOutOfStock,
+    hours: s.hours,
+    schedulingEnabled: s.schedulingEnabled,
+    slotMinutes: s.slotMinutes,
+    slotCapacity: s.slotCapacity,
+    notifyEmail: s.notifyEmail,
     version: s.version,
   };
 }
@@ -153,6 +160,9 @@ function SettingsForm({ store }: { store: OnlineStore }) {
     deliveryEnabled: t('store.delivery'),
     deliveryFee: t('store.deliveryFee'),
     minimumOrder: t('store.minimumOrder'),
+    slotMinutes: t('store.slotMinutes'),
+    slotCapacity: t('store.slotCapacity'),
+    hours: t('hours.title'),
   };
   const text = (field: keyof SaveOnlineStore, label: string, props: { dir?: 'ltr' } = {}) => (
     <div data-field={field}>
@@ -296,6 +306,13 @@ function SettingsForm({ store }: { store: OnlineStore }) {
           </Field>
           {text('contactPhone', t('store.contactPhone'), { dir: 'ltr' })}
           {text('contactEmail', t('store.contactEmail'), { dir: 'ltr' })}
+          <Checkbox
+            className="sm:col-span-2"
+            label={t('store.notifyEmail')}
+            description={t('store.notifyEmailHint')}
+            checked={v.notifyEmail ?? true}
+            onChange={(e) => set({ notifyEmail: e.target.checked })}
+          />
         </div>
       </Section>
       <Section title={t('store.fulfillmentSection')} description={t('store.fulfillmentHint')}>
@@ -357,6 +374,74 @@ function SettingsForm({ store }: { store: OnlineStore }) {
           />
           {text('deliveryFee', t('store.deliveryFee'), { dir: 'ltr' })}
           {text('minimumOrder', t('store.minimumOrder'), { dir: 'ltr' })}
+          <p className="text-sm text-fg-muted sm:col-span-2">
+            {t('store.fulfilmentLinks')}{' '}
+            <Link className="text-primary hover:underline" to="/delivery-areas">
+              {t('nav.areas')}
+            </Link>
+            {' · '}
+            <Link className="text-primary hover:underline" to="/branches">
+              {t('nav.branches')}
+            </Link>
+          </p>
+        </div>
+      </Section>
+      <Section title={t('hours.title')} description={t('hours.hint')}>
+        <div className="flex flex-col gap-4">
+          <div data-field="hours">
+            <HoursEditor
+              value={v.hours ?? null}
+              onChange={(hours) => set({ hours })}
+              alwaysLabel={t('hours.always')}
+            />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Checkbox
+              className="sm:col-span-3"
+              label={t('store.scheduling')}
+              description={t('store.schedulingHint')}
+              checked={v.schedulingEnabled ?? false}
+              onChange={(e) => set({ schedulingEnabled: e.target.checked })}
+            />
+            <div data-field="slotMinutes">
+              <Field label={t('store.slotMinutes')} error={issues['slotMinutes']}>
+                {(p) => (
+                  <Select
+                    {...p}
+                    value={String(v.slotMinutes ?? 30)}
+                    onChange={(e) => set({ slotMinutes: Number(e.target.value) })}
+                  >
+                    {[15, 30, 45, 60, 90, 120].map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
+            </div>
+            <div data-field="slotCapacity">
+              <Field
+                label={t('store.slotCapacity')}
+                hint={t('store.slotCapacityHint')}
+                error={issues['slotCapacity']}
+              >
+                {(p) => (
+                  <Input
+                    {...p}
+                    type="number"
+                    min={1}
+                    max={1000}
+                    dir="ltr"
+                    value={v.slotCapacity ?? ''}
+                    onChange={(e) =>
+                      set({ slotCapacity: e.target.value === '' ? null : Number(e.target.value) })
+                    }
+                  />
+                )}
+              </Field>
+            </div>
+          </div>
         </div>
       </Section>
       <Section title={t('appearance.title')} description={t('appearance.hint')}>

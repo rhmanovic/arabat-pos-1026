@@ -66,6 +66,8 @@ export const printJobs = pgTable(
     /** The branch's primary device when it claimed the job instead of a print agent (Plan A). */
     deviceId: uuid(),
     saleId: uuid(),
+    /** An online order document (packing slip) printed before any sale exists (ADR-0123). */
+    onlineOrderId: uuid(),
     kind: text().notNull(),
     status: text().notNull().default('pending'),
     html: text().notNull(),
@@ -92,7 +94,8 @@ export const printJobs = pgTable(
     check('print_jobs_one_claimer', sql`${t.agentId} is null or ${t.deviceId} is null`),
     index('print_jobs_queue_idx').on(t.merchantId, t.status, t.createdAt),
     index('print_jobs_sale_idx').on(t.merchantId, t.saleId),
-    check('print_jobs_kind_valid', sql`${t.kind} in ('auto', 'reprint')`),
+    index('print_jobs_online_order_idx').on(t.merchantId, t.onlineOrderId),
+    check('print_jobs_kind_valid', sql`${t.kind} in ('auto', 'reprint', 'online_order')`),
     check(
       'print_jobs_status_valid',
       sql`${t.status} in ('pending', 'printing', 'printed', 'failed')`,

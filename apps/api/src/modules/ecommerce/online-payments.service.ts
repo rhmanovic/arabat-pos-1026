@@ -13,7 +13,9 @@ import { DatabaseService, type Transaction } from '../../database/database.servi
 import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
 import { AuditService } from '../audit/audit.service.js';
+import { PrintJobsService } from '../printing/print-jobs.service.js';
 import { SalesService } from '../sales/sales.service.js';
+import { OrderNotificationsService } from './order-notifications.service.js';
 import { onlineOrderLines, onlineOrders, onlinePayments } from './ecommerce.schema.js';
 import {
   GATEWAY_PROVIDERS,
@@ -47,6 +49,8 @@ export class OnlinePaymentsService implements OnModuleInit, OnModuleDestroy {
     private readonly database: DatabaseService,
     private readonly audit: AuditService,
     private readonly sales: SalesService,
+    private readonly printJobs: PrintJobsService,
+    private readonly notifications: OrderNotificationsService,
     @Inject(ENV) private readonly env: Env,
   ) {
     for (const p of GATEWAY_PROVIDERS) this.gateways.set(p, new UnconfiguredGateway(p));
@@ -103,30 +107,37 @@ export class OnlinePaymentsService implements OnModuleInit, OnModuleDestroy {
     ).rows as { m: string | null }[];
     if (!found?.m) throw AppError.notFound('Unknown payment reference.');
     const merchantId = found.m;
-    return this.database.withMerchantTx(merchantId, async (tx) => {
-      const [payment] = await tx
-        .select()
-        .from(onlinePayments)
-        .where(
-          sql`${onlinePayments.provider} = ${provider} and ${onlinePayments.providerReference} = ${event.providerReference}`,
-        )
-        .for('update');
-      // The payment row lock serialises deliveries of the same event; the unique index is the
-      // backstop. Events are append-only, so the outcome is known before the row is written.
-      const [seen] = (
-        await tx.execute(
-          sql`select 1 from payment_events where provider = ${provider} and event_id = ${event.eventId}`,
-        )
-      ).rows;
-      if (seen) return { duplicate: true, outcome: 'duplicate' };
-      if (!payment) throw AppError.notFound('Unknown payment reference.');
-      const outcome = await this.applyResult(tx, merchantId, payment.id, event);
-      await tx.execute(sql`
+    return this.database
+      .withMerchantTx(merchantId, async (tx) => {
+        const [payment] = await tx
+          .select()
+          .from(onlinePayments)
+          .where(
+            sql`${onlinePayments.provider} = ${provider} and ${onlinePayments.providerReference} = ${event.providerReference}`,
+          )
+          .for('update');
+        // The payment row lock serialises deliveries of the same event; the unique index is the
+        // backstop. Events are append-only, so the outcome is known before the row is written.
+        const [seen] = (
+          await tx.execute(
+            sql`select 1 from payment_events where provider = ${provider} and event_id = ${event.eventId}`,
+          )
+        ).rows;
+        if (seen) return { duplicate: true, outcome: 'duplicate' };
+        if (!payment) throw AppError.notFound('Unknown payment reference.');
+        const outcome = await this.applyResult(tx, merchantId, payment.id, event);
+        await tx.execute(sql`
         insert into payment_events (id, merchant_id, provider, event_id, online_payment_id, status, amount_minor, payload, outcome)
         values (${newId()}, ${merchantId}, ${provider}, ${event.eventId}, ${payment.id}, ${event.status},
                 ${event.amountMinor.toString()}, ${JSON.stringify(event.payload)}::jsonb, ${outcome})`);
-      return { duplicate: false, outcome };
-    });
+        return { duplicate: false, outcome, orderId: payment.onlineOrderId };
+      })
+      .then((result) => {
+        // After the commit: the shopper and the store hear about the payment (ADR-0123).
+        if (result.outcome === 'paid' && result.orderId)
+          this.notifications.notify(merchantId, result.orderId, 'paid');
+        return { duplicate: result.duplicate, outcome: result.outcome };
+      });
   }
 
   /**
@@ -314,6 +325,13 @@ export class OnlinePaymentsService implements OnModuleInit, OnModuleDestroy {
       update stock_reservations set status = 'consumed', released_at = now()
       where online_order_id = ${order.id} and status = 'active'`);
     await this.record(tx, merchantId, 'online.order_paid', order.id, { paymentId, saleId });
+    // The branch gets its packing slip the moment the order is paid for (ADR-0123).
+    await this.printJobs.queueOnlineOrderInTx(tx, {
+      merchantId,
+      branchId: order.branchId,
+      onlineOrderId: order.id,
+      userId: null,
+    });
     return 'paid';
   }
 

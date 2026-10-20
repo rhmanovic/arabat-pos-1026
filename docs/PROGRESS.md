@@ -1227,6 +1227,38 @@ customers, accounts, permissions).
   with version `2cae4c6d3de1` and database ok; `live`, `/store/`, `/manager/` and `/online/`
   (title "Arabat Online Store") 200. Signed out afterwards; no key deleted.
 
+### 2026-10-20 — Online store Phase 5: fulfilment (ADR-0123) and standing production approval (ADR-0122)
+Owner: "كمل افحص وانشر انا عطيك كل الصلاحيات الي ان تنشر لبيئه الانتاج" → ADR-0122 (standing approval
+to release `main` to production after the three test suites pass; procedure unchanged, no key ever
+deleted). Phase 5 implemented as one slice:
+- Migration 0068: `online_delivery_areas`, `online_store_branches`, store hours / scheduling /
+  `notify_email`, order `delivery_area_id` + name snapshot + `scheduled_for` + `pos_idempotency_key`,
+  `print_jobs.online_order_id` + kind `online_order`, `sales_channel_valid` allows an online sale
+  with a shift; the composite `set null` FKs replaced by single-column ones (a composite `set
+  null` nulls `merchant_id`; found by the new delete test).
+- API: delivery areas and serving branches CRUD + order (`FulfilmentService`), storefront
+  `branches` / `deliveryAreas` / `scheduling` / `timezone`, `?branch=` products, `/slots`,
+  checkout with `branchId` / `deliveryAreaId` / `scheduledFor` (`SLOT_FULL`, `OUTSIDE_HOURS`),
+  orders carry area, slot and branch; `OrderNotificationsService` (bilingual e-mails after
+  commit, shopper + store); packing slip `renderOrderSlipHtml` (pos-core) queued on confirm /
+  gateway paid; `PosHandoverService` + `/pos/online-orders` (list, pay with the shift's tenders,
+  complete); `completeOnlineSaleInTx` till mode (register, shift, drawer cash, change).
+- Console: Delivery areas (Kuwait pick-list) and Branches pages, hours editor + scheduling and
+  "e-mail me" in the settings, orders show branch / requested time / area. POS: "Online orders"
+  strip action with the payment dialog. Storefront: branch picker, area select (fee, free
+  threshold), "When?" with slots, closed-now notice, tracking page with pickup address and time.
+- Tests: `ecommerce.int.test.ts` +4 (areas: fee / minimum / free / snapshot after delete;
+  branches: per-branch stock, closed hours, slots and capacity; e-mails to shopper and store and
+  the printed slip; till hand-over with cash + card, replay, drawer figures, paid order hand-over);
+  `apps/online-web` +2 (areas, branches), `apps/store-web` +2 (area + slot, branch picker),
+  `apps/pos-web` +1 (hand-over); `e2e/store.spec.ts` +1 (area in the console, shopper picks it,
+  pickup order handed over at the till: receipt, online sale in the shift, stock).
+- Docs: ADR-0122, ADR-0123, BR-215…220, ROUTES (console, API, storefront, POS), DATABASE (0068),
+  ROADMAP, plan (Phase 5 ✅ with the differences), ARCHITECTURE, CLAUDE.md, user guide 24 and 05.
+- Verified (cloud sandbox): `pnpm verify` 343 unit/web (56 files), `pnpm test:integration` 303
+  (44 files), `pnpm test:e2e` 42.
+- Released: staging (Railway, `main`) and production per ADR-0122 — see the release note below.
+
 ### 2026-10-20 — Online store Phase 4: catalog and merchandising (ADR-0121)
 Owner request ("ابدا خطوه 4"). The catalog, prices and stock stay shared with the POS; the store
 adds how it presents them.
@@ -1265,8 +1297,9 @@ adds how it presents them.
   "Arabat Online Store") 200. Signed out afterwards; no key deleted.
 
 ## Next step
-Online store: Phase 4 ✅ (ADR-0121); next is Phase 5 (fulfilment: delivery areas, pickup
-branches, notifications, printing), per `docs/ONLINE_STORE_PLAN.md`, on the owner's word.
+Online store: Phase 5 ✅ (ADR-0123); next is Phase 6 (customer accounts), then 7 (promotions), per
+`docs/ONLINE_STORE_PLAN.md`; production releases follow ADR-0122. SMS / WhatsApp notifications
+wait for a provider the owner approves.
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.
 Staging: first platform operator, SMTP; owner decisions OQ-021–025.

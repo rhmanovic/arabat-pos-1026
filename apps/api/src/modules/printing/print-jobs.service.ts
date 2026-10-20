@@ -21,7 +21,12 @@ import { generateToken, hashToken } from '../../kernel/crypto/tokens.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
 import { AuditService } from '../audit/audit.service.js';
-import { loadReceiptData, renderReceiptHtml } from './receipt-html.js';
+import {
+  loadOrderSlipData,
+  loadReceiptData,
+  renderOrderSlipHtml,
+  renderReceiptHtml,
+} from './receipt-html.js';
 
 /** PostgreSQL channels: delivered to every API instance after the writing transaction commits. */
 export const PRINT_JOBS_CHANNEL = 'print_jobs';
@@ -74,6 +79,43 @@ export class PrintJobsService {
     } catch (error) {
       this.logger.error(
         `Receipt print job for sale ${args.saleId} skipped: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  /**
+   * Queues the packing slip of an online order at its branch (ADR-0123) when the branch has a
+   * printer; the order need not be a sale yet. Never fails the caller.
+   */
+  async queueOnlineOrderInTx(
+    tx: Transaction,
+    args: { merchantId: string; branchId: string; onlineOrderId: string; userId: string | null },
+  ): Promise<void> {
+    try {
+      await tx.transaction(async (sp) => {
+        const [row] = (
+          await sp.execute(sql`
+            select (exists (select 1 from print_agents where merchant_id = ${args.merchantId}
+                            and (branch_id is null or branch_id = ${args.branchId}))
+                    or exists (select 1 from pos_devices where merchant_id = ${args.merchantId}
+                            and branch_id = ${args.branchId} and register_id is not null
+                            and revoked_at is null)) as has_agent`)
+        ).rows as { has_agent: boolean }[];
+        if (!row?.has_agent) return;
+        const id = newId();
+        const html = renderOrderSlipHtml(
+          await loadOrderSlipData(sp, args.onlineOrderId),
+          new Date(),
+        );
+        await sp.execute(sql`
+          insert into print_jobs (id, merchant_id, branch_id, online_order_id, kind, html, created_by_user_id)
+          values (${id}, ${args.merchantId}, ${args.branchId}, ${args.onlineOrderId}, 'online_order', ${html}, ${args.userId})`);
+        const notice: PrintJobNotice = { id, merchantId: args.merchantId, branchId: args.branchId };
+        await sp.execute(sql`select pg_notify(${PRINT_JOBS_CHANNEL}, ${JSON.stringify(notice)})`);
+      });
+    } catch (error) {
+      this.logger.error(
+        `Order slip print job for online order ${args.onlineOrderId} skipped: ${(error as Error).message}`,
       );
     }
   }

@@ -66,10 +66,24 @@ export const onlineStores = pgTable(
     bannerContentType: text(),
     /** Products with nothing available at the fulfilment branch are left out of the storefront. */
     hideOutOfStock: boolean().notNull().default(false),
+    /**
+     * Opening hours (ADR-0123): { mon: [{ open: 'HH:MM', close: 'HH:MM' }], …, sun: [] }; null =
+     * always open. A branch row may override them.
+     */
+    hours: jsonb(),
+    /** Shoppers may pick a time slot instead of "as soon as possible". */
+    schedulingEnabled: boolean().notNull().default(false),
+    slotMinutes: integer().notNull().default(30),
+    /** Orders accepted per slot and branch; null = unlimited. */
+    slotCapacity: integer(),
+    /** E-mail the store's contact address about new orders. */
+    notifyEmail: boolean().notNull().default(true),
     version: integer().notNull().default(1),
     updatedAt: updatedAt(),
   },
   (t) => [
+    check('online_stores_slot_valid', sql`${t.slotMinutes} between 15 and 240`),
+    check('online_stores_capacity_valid', sql`${t.slotCapacity} is null or ${t.slotCapacity} >= 1`),
     check('online_stores_logo_pair', sql`(${t.logoKey} is null) = (${t.logoContentType} is null)`),
     check(
       'online_stores_banner_pair',
@@ -163,20 +177,101 @@ export const onlineListings = pgTable(
     featured: boolean().notNull().default(false),
     /** Units of one variant per order (1–20); null = the store default (20). */
     maxPerOrder: integer(),
-    onlineCategoryId: uuid(),
+    /** Single-column FK: a composite `set null` would also null `merchant_id` (ADR-0123). */
+    onlineCategoryId: uuid().references(() => onlineCategories.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
     primaryKey({ columns: [t.merchantId, t.productId] }),
-    foreignKey({
-      columns: [t.merchantId, t.onlineCategoryId],
-      foreignColumns: [onlineCategories.merchantId, onlineCategories.id],
-    }).onDelete('set null'),
     check(
       'online_listings_max_per_order_valid',
       sql`${t.maxPerOrder} is null or (${t.maxPerOrder} between 1 and 20)`,
     ),
+  ],
+);
+
+/**
+ * Delivery areas (ADR-0123): the shopper picks one at checkout; its fee and minimum apply, and
+ * orders above `free_delivery_from_minor` are delivered free. The serving branch defaults to
+ * the store's fulfilment branch. While a merchant has none, the flat store fee applies.
+ */
+export const onlineDeliveryAreas = pgTable(
+  'online_delivery_areas',
+  {
+    id: id(),
+    merchantId: merchantId().references(() => merchants.id),
+    nameEn: text(),
+    nameAr: text(),
+    feeMinor: minor()
+      .notNull()
+      .default(sql`0`),
+    minimumOrderMinor: minor()
+      .notNull()
+      .default(sql`0`),
+    freeDeliveryFromMinor: minor(),
+    estimatedMinutes: integer(),
+    branchId: uuid(),
+    position: integer().notNull().default(0),
+    active: boolean().notNull().default(true),
+    version: integer().notNull().default(1),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    unique('online_delivery_areas_merchant_id_id_key').on(t.merchantId, t.id),
+    index('online_delivery_areas_merchant_idx').on(t.merchantId, t.position),
+    foreignKey({
+      columns: [t.merchantId, t.branchId],
+      foreignColumns: [branches.merchantId, branches.id],
+    }),
+    check(
+      'online_delivery_areas_name_present',
+      sql`coalesce(${t.nameEn}, ${t.nameAr}) is not null`,
+    ),
+    check(
+      'online_delivery_areas_money_valid',
+      sql`${t.feeMinor} >= 0 and ${t.minimumOrderMinor} >= 0 and (${t.freeDeliveryFromMinor} is null or ${t.freeDeliveryFromMinor} >= 0)`,
+    ),
+    check(
+      'online_delivery_areas_minutes_valid',
+      sql`${t.estimatedMinutes} is null or (${t.estimatedMinutes} between 1 and 1440)`,
+    ),
+  ],
+);
+
+/**
+ * Branches that serve the store (ADR-0123): pickup and / or delivery, with their preparation
+ * time and, optionally, their own hours. While a merchant has none, the store's single
+ * fulfilment branch serves everything, as before.
+ */
+export const onlineStoreBranches = pgTable(
+  'online_store_branches',
+  {
+    merchantId: merchantId().references(() => merchants.id),
+    branchId: uuid().notNull(),
+    pickupEnabled: boolean().notNull().default(true),
+    deliveryEnabled: boolean().notNull().default(false),
+    preparationMinutes: integer().notNull().default(30),
+    /** Same shape as `online_stores.hours`; null = the store's hours. */
+    hours: jsonb(),
+    position: integer().notNull().default(0),
+    active: boolean().notNull().default(true),
+    version: integer().notNull().default(1),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.merchantId, t.branchId] }),
+    foreignKey({
+      columns: [t.merchantId, t.branchId],
+      foreignColumns: [branches.merchantId, branches.id],
+    }),
+    check(
+      'online_store_branches_preparation_valid',
+      sql`${t.preparationMinutes} between 0 and 1440`,
+    ),
+    check('online_store_branches_fulfilment', sql`${t.pickupEnabled} or ${t.deliveryEnabled}`),
   ],
 );
 
@@ -201,6 +296,13 @@ export const onlineOrders = pgTable(
     customerPhone: text().notNull(),
     customerEmail: text(),
     deliveryAddress: text(),
+    /** The delivery area chosen at checkout (ADR-0123) and its name then; single-column FK. */
+    deliveryAreaId: uuid().references(() => onlineDeliveryAreas.id, { onDelete: 'set null' }),
+    deliveryAreaName: text(),
+    /** Requested slot start; null = as soon as possible. */
+    scheduledFor: timestamp({ withTimezone: true }),
+    /** Idempotency key of the till payment that settled the order (POS hand-over, ADR-0123). */
+    posIdempotencyKey: uuid(),
     note: text(),
     customerId: uuid(),
     currency: char({ length: 3 }).notNull().default('KWD'),
@@ -241,6 +343,9 @@ export const onlineOrders = pgTable(
       columns: [t.merchantId, t.branchId],
       foreignColumns: [branches.merchantId, branches.id],
     }),
+    index('online_orders_schedule_idx')
+      .on(t.merchantId, t.branchId, t.scheduledFor)
+      .where(sql`${t.scheduledFor} is not null`),
     check(
       'online_orders_status_valid',
       sql`${t.status} in ('pending_payment', 'placed', 'confirmed', 'paid', 'preparing', 'ready', 'out_for_delivery',

@@ -6,7 +6,9 @@ import type {
   OnlineStore,
   PublicOrder,
   SlugAvailability,
+  StoreHours,
   StoreProduct,
+  StoreSlotList,
   Storefront,
   onlineOrderActionSchema,
   onlineOrderListQuerySchema,
@@ -51,6 +53,11 @@ import {
   onlineStores,
 } from './ecommerce.schema.js';
 import { OnlinePaymentsService, historyEntry } from './online-payments.service.js';
+import { FulfilmentService, type ServingBranch } from './fulfilment.service.js';
+import { type OrderEvent, OrderNotificationsService } from './order-notifications.service.js';
+import { PrintJobsService } from '../printing/print-jobs.service.js';
+import { isOpenAt, slotsFrom } from './store-hours.js';
+import { merchantTimezone } from '../../kernel/time/period.js';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
 
 type Row = Record<string, unknown>;
@@ -102,6 +109,9 @@ export class EcommerceService {
     private readonly payments: OnlinePaymentsService,
     private readonly subscriptions: SubscriptionsService,
     private readonly storage: FileStorage,
+    private readonly fulfilment: FulfilmentService,
+    private readonly notifications: OrderNotificationsService,
+    private readonly printJobs: PrintJobsService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -162,6 +172,11 @@ export class EcommerceService {
         logoUrl: row?.logoKey ? imageUrl('manager/online/store/logo', row.version) : null,
         bannerUrl: row?.bannerKey ? imageUrl('manager/online/store/banner', row.version) : null,
         hideOutOfStock: row?.hideOutOfStock ?? false,
+        hours: (row?.hours as StoreHours) ?? null,
+        schedulingEnabled: row?.schedulingEnabled ?? false,
+        slotMinutes: row?.slotMinutes ?? 30,
+        slotCapacity: row?.slotCapacity ?? null,
+        notifyEmail: row?.notifyEmail ?? true,
         paymentMethods: methods.map((x) => ({
           id: x['id'] as string,
           nameEn: (x['name_en'] as string | null) ?? null,
@@ -211,6 +226,11 @@ export class EcommerceService {
           reservationMinutes: input.reservationMinutes,
           payOnReceiptEnabled: input.payOnReceiptEnabled,
           hideOutOfStock: input.hideOutOfStock,
+          hours: input.hours,
+          schedulingEnabled: input.schedulingEnabled,
+          slotMinutes: input.slotMinutes,
+          slotCapacity: input.slotCapacity,
+          notifyEmail: input.notifyEmail,
         };
         // A published store must offer some way to pay: on hand-over, or a gateway that works.
         if (
@@ -830,6 +850,10 @@ export class EcommerceService {
         (m) => this.payments.gateway(m['gateway_provider'] as string).ready,
       );
       const nav = await this.storeCategories(tx, store.slug);
+      const tz = await merchantTimezone(tx, merchantId);
+      const now = new Date();
+      const branches = await this.fulfilment.servingBranches(tx, store);
+      const areas = await this.fulfilment.servingAreas(tx, this.defaultBranch(branches, store).id);
       return {
         slug: store.slug,
         nameEn: store.nameEn,
@@ -857,6 +881,89 @@ export class EcommerceService {
         bannerUrl: store.bannerKey ? imageUrl(`store/${store.slug}/banner`, store.version) : null,
         categorySource: nav.source,
         categories: nav.categories,
+        branches: branches.map((b) => ({
+          id: b.id,
+          nameEn: b.nameEn,
+          nameAr: b.nameAr,
+          address: b.address,
+          phone: b.phone,
+          pickupEnabled: b.pickupEnabled,
+          deliveryEnabled: b.deliveryEnabled,
+          preparationMinutes: b.preparationMinutes,
+          hours: b.hours,
+          openNow: isOpenAt(b.hours, tz, now),
+        })),
+        defaultBranchId: this.defaultBranch(branches, store).id,
+        deliveryAreas: areas.map((a) => ({
+          id: a.id,
+          nameEn: a.nameEn,
+          nameAr: a.nameAr,
+          fee: money(a.feeMinor),
+          minimumOrder: money(a.minimumOrderMinor),
+          freeDeliveryFrom:
+            a.freeDeliveryFromMinor === null ? null : money(a.freeDeliveryFromMinor),
+          estimatedMinutes: a.estimatedMinutes,
+          branchId: a.branchId,
+        })),
+        scheduling: { enabled: store.schedulingEnabled, slotMinutes: store.slotMinutes },
+        timezone: tz,
+      };
+    });
+  }
+
+  /** The store's fulfilment branch when it serves the store, else the first serving branch. */
+  private defaultBranch(
+    branches: ServingBranch[],
+    store: { fulfillmentBranchId: string },
+  ): ServingBranch {
+    const found = branches.find((b) => b.id === store.fulfillmentBranchId) ?? branches[0];
+    if (!found) throw AppError.notFound('Store not found.');
+    return found;
+  }
+
+  /** The branch a shopper asked for (`?branch=`), when it serves the store, else the default. */
+  private async browsingBranch(
+    tx: Transaction,
+    store: typeof onlineStores.$inferSelect & { fulfillmentBranchId: string },
+    branchId: string | null,
+  ): Promise<ServingBranch> {
+    const branches = await this.fulfilment.servingBranches(tx, store);
+    return (
+      (branchId ? branches.find((b) => b.id === branchId) : undefined) ??
+      this.defaultBranch(branches, store)
+    );
+  }
+
+  /** Time slots a shopper may pick at a branch (ADR-0123), with their remaining capacity. */
+  async slots(
+    slug: string,
+    query: { branch: string | null; fulfillment: 'pickup' | 'delivery' },
+  ): Promise<StoreSlotList> {
+    const merchantId = await this.merchantOf(slug);
+    return this.database.withMerchantTx(merchantId, async (tx) => {
+      const store = await this.storeRow(tx);
+      if (!store.schedulingEnabled) return { slots: [] };
+      const branch = await this.browsingBranch(tx, store, query.branch);
+      const tz = await merchantTimezone(tx, merchantId);
+      const slots = slotsFrom(branch.hours, tz, {
+        slotMinutes: store.slotMinutes,
+        preparationMinutes: branch.preparationMinutes,
+        now: new Date(),
+      });
+      const first = slots[0];
+      const last = slots[slots.length - 1];
+      const load =
+        first && last && store.slotCapacity !== null
+          ? await this.fulfilment.slotLoad(tx, branch.id, first.start, last.end)
+          : new Map<string, number>();
+      return {
+        slots: slots.map((s) => ({
+          start: s.start.toISOString(),
+          end: s.end.toISOString(),
+          available:
+            store.slotCapacity === null ||
+            (load.get(s.start.toISOString()) ?? 0) < store.slotCapacity,
+        })),
       };
     });
   }
@@ -1000,26 +1107,25 @@ export class EcommerceService {
     return store?.hide ? products.filter((p) => p.variants.some((v) => v.available)) : products;
   }
 
-  async products(slug: string) {
+  async products(slug: string, branchId: string | null = null) {
     const merchantId = await this.merchantOf(slug);
     return this.database.withMerchantTx(merchantId, async (tx) => {
       const store = await this.storeRow(tx);
-      return {
-        products: await this.storeProducts(tx, store.slug, store.fulfillmentBranchId, sql`true`),
-      };
+      const branch = await this.browsingBranch(tx, store, branchId);
+      return { products: await this.storeProducts(tx, store.slug, branch.id, sql`true`) };
     });
   }
 
-  async product(slug: string, productId: string): Promise<StoreProduct> {
+  async product(
+    slug: string,
+    productId: string,
+    branchId: string | null = null,
+  ): Promise<StoreProduct> {
     const merchantId = await this.merchantOf(slug);
     return this.database.withMerchantTx(merchantId, async (tx) => {
       const store = await this.storeRow(tx);
-      const [p] = await this.storeProducts(
-        tx,
-        store.slug,
-        store.fulfillmentBranchId,
-        sql`p.id = ${productId}`,
-      );
+      const branch = await this.browsingBranch(tx, store, branchId);
+      const [p] = await this.storeProducts(tx, store.slug, branch.id, sql`p.id = ${productId}`);
       if (!p) throw AppError.notFound('Product not found.');
       return p;
     });
@@ -1112,7 +1218,69 @@ export class EcommerceService {
             );
         }
         const onReceipt = provider === null;
-        const branchId = store.fulfillmentBranchId;
+        // Which branch prepares the order (ADR-0123): the pickup branch the shopper chose, or
+        // the branch serving the delivery area; the store's own flat fee without areas.
+        const branches = await this.fulfilment.servingBranches(tx, store);
+        const areas = await this.fulfilment.servingAreas(
+          tx,
+          this.defaultBranch(branches, store).id,
+        );
+        const issue = (path: string, code: string, message: string) =>
+          AppError.validation([{ path, code, message }]);
+        let area: (typeof areas)[number] | null = null;
+        let branch: ServingBranch;
+        if (input.fulfillment === 'delivery') {
+          if (areas.length > 0) {
+            area = areas.find((a) => a.id === input.deliveryAreaId) ?? null;
+            if (!area) throw issue('deliveryAreaId', 'required', 'Choose the delivery area.');
+            branch =
+              branches.find((b) => b.id === area!.branchId) ?? this.defaultBranch(branches, store);
+          } else {
+            branch =
+              (input.branchId ? branches.find((b) => b.id === input.branchId) : undefined) ??
+              this.defaultBranch(branches, store);
+          }
+          if (!branch.deliveryEnabled && areas.length === 0) throw STORE_CLOSED();
+        } else {
+          branch =
+            (input.branchId ? branches.find((b) => b.id === input.branchId) : undefined) ??
+            (branches.length === 1 ? branches[0]! : this.defaultBranch(branches, store));
+          if (input.branchId && branch.id !== input.branchId)
+            throw issue('branchId', 'invalid', 'This branch does not serve the store.');
+          if (!branch.pickupEnabled)
+            throw issue('branchId', 'invalid', 'This branch does not offer pickup.');
+        }
+        const tz = await merchantTimezone(tx, merchantId);
+        const now = new Date();
+        let scheduledFor: Date | null = null;
+        if (input.scheduledFor !== null) {
+          if (!store.schedulingEnabled)
+            throw issue('scheduledFor', 'invalid', 'This store does not take scheduled orders.');
+          const wanted = new Date(input.scheduledFor).toISOString();
+          const slot = slotsFrom(branch.hours, tz, {
+            slotMinutes: store.slotMinutes,
+            preparationMinutes: branch.preparationMinutes,
+            now,
+          }).find((x) => x.start.toISOString() === wanted);
+          if (!slot) throw issue('scheduledFor', 'invalid', 'Choose one of the offered times.');
+          if (store.slotCapacity !== null) {
+            const load = await this.fulfilment.slotLoad(tx, branch.id, slot.start, slot.end);
+            if ((load.get(wanted) ?? 0) >= store.slotCapacity)
+              throw new AppError(409, 'SLOT_FULL', 'This time is fully booked. Choose another.', [
+                { path: 'scheduledFor', code: 'full', message: 'Fully booked.' },
+              ]);
+          }
+          scheduledFor = slot.start;
+        } else if (!isOpenAt(branch.hours, tz, now)) {
+          throw new AppError(
+            409,
+            'OUTSIDE_HOURS',
+            store.schedulingEnabled
+              ? 'The store is closed right now; choose a time.'
+              : 'The store is closed right now.',
+          );
+        }
+        const branchId = branch.id;
         const listed = await this.storeProducts(
           tx,
           store.slug,
@@ -1174,12 +1342,24 @@ export class EcommerceService {
           })),
           null,
         );
-        const deliveryFee = input.fulfillment === 'delivery' ? store.deliveryFeeMinor : 0n;
-        if (priced.totalMinor < store.minimumOrderMinor)
+        const deliveryFee =
+          input.fulfillment !== 'delivery'
+            ? 0n
+            : area === null
+              ? store.deliveryFeeMinor
+              : area.freeDeliveryFromMinor !== null &&
+                  priced.totalMinor >= area.freeDeliveryFromMinor
+                ? 0n
+                : area.feeMinor;
+        const minimum =
+          area !== null && area.minimumOrderMinor > store.minimumOrderMinor
+            ? area.minimumOrderMinor
+            : store.minimumOrderMinor;
+        if (priced.totalMinor < minimum)
           throw new AppError(
             409,
             'MINIMUM_ORDER',
-            `The minimum order is ${Money.ofMinor(store.minimumOrderMinor, CURRENCY).toDecimalString()} KWD.`,
+            `The minimum order is ${Money.ofMinor(minimum, CURRENCY).toDecimalString()} KWD.`,
           );
         const total = priced.totalMinor + deliveryFee;
         if (total !== parseAmount(input.expectedTotal, 'expectedTotal'))
@@ -1222,6 +1402,9 @@ export class EcommerceService {
           customerPhone: input.customer.phone,
           customerEmail: input.customer.email,
           deliveryAddress: input.fulfillment === 'delivery' ? input.deliveryAddress : null,
+          deliveryAreaId: area?.id ?? null,
+          deliveryAreaName: area ? (area.nameAr ?? area.nameEn) : null,
+          scheduledFor,
           note: input.note,
           customerId,
           subtotalMinor: priced.totalMinor,
@@ -1278,6 +1461,9 @@ export class EcommerceService {
           number,
           total: Money.ofMinor(total, CURRENCY).toDecimalString(),
           paymentMode: onReceipt ? 'on_receipt' : 'gateway',
+          branchId,
+          deliveryArea: area ? (area.nameAr ?? area.nameEn) : null,
+          scheduledFor: scheduledFor?.toISOString() ?? null,
         });
       });
     } catch (error) {
@@ -1301,7 +1487,10 @@ export class EcommerceService {
       throw error;
     }
 
-    if (provider === null) return this.track(slug, token);
+    if (provider === null) {
+      this.notifications.notify(merchantId, orderId, 'placed');
+      return this.track(slug, token);
+    }
     // Start the payment at the gateway (outside the database transaction).
     try {
       const started = await this.payments.gateway(provider).initiate({
@@ -1383,6 +1572,10 @@ export class EcommerceService {
       reservedUntil: o.reservedUntil,
       trackingToken: o.trackingToken,
       paymentUrl: o.paymentUrl,
+      scheduledFor: o.scheduledFor,
+      deliveryAreaName: o.deliveryAreaName,
+      deliveryArea: o.deliveryArea,
+      branch: o.branch,
       timeline: o.timeline,
     };
   }
@@ -1391,8 +1584,11 @@ export class EcommerceService {
   private async orderIn(tx: Transaction, id: string): Promise<OnlineOrder> {
     const [o] = (
       await tx.execute(sql`
-        select o.*, s.receipt_number, pm.id as pm_id, pm.name_en as pm_en, pm.name_ar as pm_ar, pm.gateway_provider
+        select o.*, s.receipt_number, pm.id as pm_id, pm.name_en as pm_en, pm.name_ar as pm_ar, pm.gateway_provider,
+               b.name_en as b_en, b.name_ar as b_ar, b.address as b_address, b.phone as b_phone,
+               da.name_en as da_en, da.name_ar as da_ar
         from online_orders o left join sales s on s.id = o.sale_id left join payment_methods pm on pm.id = o.payment_method_id
+        join branches b on b.id = o.branch_id left join online_delivery_areas da on da.id = o.delivery_area_id
         where o.id = ${id}`)
     ).rows as Row[];
     if (!o) throw AppError.notFound('Order not found.');
@@ -1417,6 +1613,22 @@ export class EcommerceService {
       customerPhone: o['customer_phone'] as string,
       customerEmail: (o['customer_email'] as string | null) ?? null,
       deliveryAddress: (o['delivery_address'] as string | null) ?? null,
+      deliveryAreaId: (o['delivery_area_id'] as string | null) ?? null,
+      deliveryAreaName: (o['delivery_area_name'] as string | null) ?? null,
+      deliveryArea:
+        o['da_en'] || o['da_ar']
+          ? {
+              nameEn: (o['da_en'] as string | null) ?? null,
+              nameAr: (o['da_ar'] as string | null) ?? null,
+            }
+          : null,
+      scheduledFor: iso(o['scheduled_for']),
+      branch: {
+        nameEn: (o['b_en'] as string | null) ?? null,
+        nameAr: (o['b_ar'] as string | null) ?? null,
+        address: (o['b_address'] as string | null) ?? null,
+        phone: (o['b_phone'] as string | null) ?? null,
+      },
       note: (o['note'] as string | null) ?? null,
       customerId: (o['customer_id'] as string | null) ?? null,
       saleId: (o['sale_id'] as string | null) ?? null,
@@ -1587,6 +1799,14 @@ export class EcommerceService {
                  completed_at = case when ${next} = 'completed' then now() else completed_at end,
                  history = ${historyEntry(next)}
           where id = ${id}`);
+        // A confirmed order prints at its branch (ADR-0123).
+        if (next === 'confirmed')
+          await this.printJobs.queueOnlineOrderInTx(tx, {
+            merchantId: actor.merchantId,
+            branchId: order.branchId,
+            onlineOrderId: id,
+            userId: actor.userId,
+          });
       }
       await this.record(
         tx,
@@ -1598,6 +1818,15 @@ export class EcommerceService {
         details,
       );
     });
+    const event: OrderEvent =
+      input.action === 'confirm'
+        ? 'confirmed'
+        : input.action === 'mark_paid'
+          ? 'paid'
+          : input.action === 'cancel'
+            ? 'cancelled'
+            : input.action;
+    this.notifications.notify(actor.merchantId, id, event);
     return this.getOrder(actor, id);
   }
 
@@ -1697,6 +1926,13 @@ export class EcommerceService {
              status_note = ${input.note}, updated_at = now(), version = version + 1,
              history = ${historyEntry('paid')}
       where id = ${order.id}`);
+    if (confirmNow)
+      await this.printJobs.queueOnlineOrderInTx(tx, {
+        merchantId: actor.merchantId,
+        branchId: order.branchId,
+        onlineOrderId: order.id,
+        userId: actor.userId,
+      });
     return { saleId, receiptNumber, methodId, reference: tender!.reference, kind: method.kind };
   }
 

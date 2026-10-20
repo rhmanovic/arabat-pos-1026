@@ -2,24 +2,36 @@ import {
   MAX_STORE_IMAGE_BYTES,
   type MockPayment,
   type OnlineCategory,
+  type OnlineDeliveryArea,
   type OnlineOrder,
   type OnlineStore,
+  type OnlineStoreBranch,
+  type PosOnlineOrder,
   type PublicOrder,
+  type Sale,
   type SlugAvailability,
   type StoreProduct,
+  type StoreSlotList,
   type Storefront,
   listingOrderSchema,
   mockPaymentOutcomeSchema,
   onlineCategoryOrderSchema,
+  onlineDeliveryAreaOrderSchema,
   onlineOrderActionSchema,
   onlineOrderListQuerySchema,
+  onlineStoreBranchOrderSchema,
+  posOnlineOrderCompleteSchema,
+  posOnlineOrderPaySchema,
   saveListingSchema,
   saveListingsSchema,
   saveOnlineCategorySchema,
+  saveOnlineDeliveryAreaSchema,
+  saveOnlineStoreBranchSchema,
   saveOnlineStoreSchema,
   slugAvailabilityQuerySchema,
   storeCheckoutSchema,
 } from '@arabat/contracts';
+import { z } from 'zod';
 import {
   Body,
   Controller,
@@ -36,7 +48,6 @@ import {
   Res,
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { z } from 'zod';
 import { Public, RequirePermission } from '../../kernel/access/access.decorators.js';
 import { CurrentMerchantActor } from '../../kernel/access/current-actor.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
@@ -44,11 +55,22 @@ import { AppError } from '../../kernel/errors/app-error.js';
 import { ZodPipe } from '../../kernel/validation/zod.pipe.js';
 import { RateLimiterService } from '../auth/rate-limiter.service.js';
 import { EcommerceService } from './ecommerce.service.js';
+import { FulfilmentService } from './fulfilment.service.js';
+import { PosHandoverService } from './pos-handover.service.js';
 import { OnlinePaymentsService } from './online-payments.service.js';
 
 const uuid = new ParseUUIDPipe();
 type O<T extends z.ZodType> = z.output<T>;
 const CHECKOUT_LIMIT = { limit: 30, windowSeconds: 600 };
+const branchQuerySchema = z.object({
+  branch: z
+    .uuid()
+    .optional()
+    .transform((v) => v ?? null),
+});
+const slotsQuerySchema = branchQuerySchema.extend({
+  fulfillment: z.enum(['pickup', 'delivery']).default('pickup'),
+});
 
 /** One `file` field of a multipart request, at most `MAX_STORE_IMAGE_BYTES` (ADR-0121). */
 async function readUpload(req: FastifyRequest): Promise<Buffer> {
@@ -85,7 +107,10 @@ function storeImageKind(kind: string): 'logo' | 'banner' {
 
 @Controller('manager/online')
 export class OnlineManagerController {
-  constructor(private readonly store: EcommerceService) {}
+  constructor(
+    private readonly store: EcommerceService,
+    private readonly fulfilment: FulfilmentService,
+  ) {}
 
   @RequirePermission('manager', 'online.manage')
   @Get('store')
@@ -276,6 +301,95 @@ export class OnlineManagerController {
     return this.store.setStoreImage(actor, storeImageKind(kind), null, req.ip);
   }
 
+  // ---------------------------------------------------------------- fulfilment (ADR-0123)
+  @RequirePermission('manager', 'online.manage')
+  @Get('delivery-areas')
+  deliveryAreas(
+    @CurrentMerchantActor() actor: MerchantActor,
+  ): Promise<{ areas: OnlineDeliveryArea[] }> {
+    return this.fulfilment.areas(actor);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Post('delivery-areas')
+  createDeliveryArea(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Body(new ZodPipe(saveOnlineDeliveryAreaSchema)) body: O<typeof saveOnlineDeliveryAreaSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<OnlineDeliveryArea> {
+    return this.fulfilment.createArea(actor, body, req.ip);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Put('delivery-areas/order')
+  orderDeliveryAreas(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Body(new ZodPipe(onlineDeliveryAreaOrderSchema)) body: O<typeof onlineDeliveryAreaOrderSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<{ areas: OnlineDeliveryArea[] }> {
+    return this.fulfilment.orderAreas(actor, body.ids, req.ip);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Put('delivery-areas/:id')
+  updateDeliveryArea(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Body(new ZodPipe(saveOnlineDeliveryAreaSchema)) body: O<typeof saveOnlineDeliveryAreaSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<OnlineDeliveryArea> {
+    return this.fulfilment.updateArea(actor, id, body, req.ip);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Delete('delivery-areas/:id')
+  deleteDeliveryArea(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Req() req: FastifyRequest,
+  ): Promise<{ areas: OnlineDeliveryArea[] }> {
+    return this.fulfilment.deleteArea(actor, id, req.ip);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Get('branches')
+  storeBranches(
+    @CurrentMerchantActor() actor: MerchantActor,
+  ): Promise<{ branches: OnlineStoreBranch[] }> {
+    return this.fulfilment.storeBranches(actor);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Put('branches/order')
+  orderStoreBranches(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Body(new ZodPipe(onlineStoreBranchOrderSchema)) body: O<typeof onlineStoreBranchOrderSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<{ branches: OnlineStoreBranch[] }> {
+    return this.fulfilment.orderStoreBranches(actor, body.branchIds, req.ip);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Put('branches/:branchId')
+  saveStoreBranch(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('branchId', uuid) branchId: string,
+    @Body(new ZodPipe(saveOnlineStoreBranchSchema)) body: O<typeof saveOnlineStoreBranchSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<OnlineStoreBranch> {
+    return this.fulfilment.saveStoreBranch(actor, branchId, body, req.ip);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Delete('branches/:branchId')
+  removeStoreBranch(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('branchId', uuid) branchId: string,
+    @Req() req: FastifyRequest,
+  ): Promise<{ branches: OnlineStoreBranch[] }> {
+    return this.fulfilment.removeStoreBranch(actor, branchId, req.ip);
+  }
+
   @RequirePermission('manager', 'online.orders')
   @Get('orders')
   orders(
@@ -330,8 +444,11 @@ export class StorefrontController {
 
   @Public()
   @Get('products')
-  products(@Param('slug') slug: string): Promise<{ products: StoreProduct[] }> {
-    return this.store.products(slug);
+  products(
+    @Param('slug') slug: string,
+    @Query(new ZodPipe(branchQuerySchema)) query: O<typeof branchQuerySchema>,
+  ): Promise<{ products: StoreProduct[] }> {
+    return this.store.products(slug, query.branch);
   }
 
   @Public()
@@ -339,8 +456,19 @@ export class StorefrontController {
   product(
     @Param('slug') slug: string,
     @Param('productId', uuid) productId: string,
+    @Query(new ZodPipe(branchQuerySchema)) query: O<typeof branchQuerySchema>,
   ): Promise<StoreProduct> {
-    return this.store.product(slug, productId);
+    return this.store.product(slug, productId, query.branch);
+  }
+
+  /** Time slots a shopper may pick (ADR-0123); empty when the store does not schedule. */
+  @Public()
+  @Get('slots')
+  slots(
+    @Param('slug') slug: string,
+    @Query(new ZodPipe(slotsQuerySchema)) query: O<typeof slotsQuerySchema>,
+  ): Promise<StoreSlotList> {
+    return this.store.slots(slug, query);
   }
 
   @Public()
@@ -438,5 +566,39 @@ export class PaymentsGatewayController {
     @Body(new ZodPipe(mockPaymentOutcomeSchema)) body: O<typeof mockPaymentOutcomeSchema>,
   ): Promise<MockPayment> {
     return this.store.mockComplete(reference, body.outcome);
+  }
+}
+
+/** Online orders handed over at the till (ADR-0123): the cashier's bound branch, open shift. */
+@Controller('pos/online-orders')
+export class PosOnlineOrdersController {
+  constructor(private readonly handover: PosHandoverService) {}
+
+  @RequirePermission('pos', 'sales.create')
+  @Get()
+  list(@CurrentMerchantActor() actor: MerchantActor): Promise<{ orders: PosOnlineOrder[] }> {
+    return this.handover.list(actor);
+  }
+
+  @RequirePermission('pos', 'sales.create')
+  @Post(':id/pay')
+  pay(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Body(new ZodPipe(posOnlineOrderPaySchema)) body: O<typeof posOnlineOrderPaySchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<Sale> {
+    return this.handover.pay(actor, id, body, req.ip);
+  }
+
+  @RequirePermission('pos', 'sales.create')
+  @Post(':id/complete')
+  complete(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Body(new ZodPipe(posOnlineOrderCompleteSchema)) body: O<typeof posOnlineOrderCompleteSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<PosOnlineOrder> {
+    return this.handover.complete(actor, id, body, req.ip);
   }
 }

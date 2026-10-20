@@ -6,6 +6,7 @@ import { newId } from '../../kernel/ids.js';
 import { DbFixtures, createCompany } from '../../testing/auth-fixtures.js';
 import { prepareIntegrationDatabase } from '../../testing/integration-db.js';
 import { InMemoryMailer, createTestApp, testEnv } from '../../testing/test-app.js';
+import { OrderNotificationsService } from './order-notifications.service.js';
 
 let app: NestFastifyApplication;
 let owner: pg.Pool;
@@ -1292,5 +1293,427 @@ describe('merchandising (ADR-0121)', () => {
     products = (await pub(s, 'GET', '/products')).json().products;
     expect(products.map((p: { nameEn: string }) => p.nameEn)).toEqual(['Gift card']);
     expect((await pub(s, 'GET', `/products/${s.teaProduct}`)).statusCode).toBe(404);
+  });
+});
+
+describe('fulfilment (ADR-0123)', () => {
+  const drain = () => app.get(OrderNotificationsService).drain();
+
+  it('picks the delivery area at checkout, charges its fee and minimum, and offers free delivery', async () => {
+    const s = await setup({ gateway: false });
+    // No area yet: the flat store fee applies as before.
+    expect((await pub(s, 'GET', '')).json()).toMatchObject({
+      deliveryAreas: [],
+      defaultBranchId: s.c.main,
+      scheduling: { enabled: false, slotMinutes: 30 },
+    });
+    const salmiya = await s.ok('POST', '/manager/online/delivery-areas', {
+      nameAr: 'السالمية',
+      nameEn: 'Salmiya',
+      fee: '1.000',
+      minimumOrder: '2.000',
+      freeDeliveryFrom: '10.000',
+      estimatedMinutes: 45,
+    });
+    expect(salmiya).toMatchObject({ position: 0, active: true, branchId: null, version: 1 });
+    const hawally = await s.ok('POST', '/manager/online/delivery-areas', {
+      nameEn: 'Hawally',
+      fee: '0.750',
+      branchId: s.c.second,
+    });
+    // Inactive areas and areas served by an inactive branch are not offered.
+    await s.ok('PUT', `/manager/online/delivery-areas/${hawally.id}`, {
+      nameEn: 'Hawally',
+      fee: '0.750',
+      branchId: s.c.second,
+      active: false,
+      version: hawally.version,
+    });
+    const front = (await pub(s, 'GET', '')).json();
+    expect(front.deliveryAreas).toEqual([
+      expect.objectContaining({
+        id: salmiya.id,
+        nameEn: 'Salmiya',
+        fee: { amount: '1.000', currency: 'KWD' },
+        freeDeliveryFrom: { amount: '10.000', currency: 'KWD' },
+        estimatedMinutes: 45,
+        branchId: s.c.main,
+      }),
+    ]);
+    // Delivery without an area is refused; the area's fee replaces the flat one.
+    const noArea = await checkout(s, { paymentMethodId: null, expectedTotal: '3.000' });
+    expect(noArea.statusCode).toBe(400);
+    expect(noArea.json().issues[0]).toMatchObject({ path: 'deliveryAreaId', code: 'required' });
+    const below = await checkout(s, {
+      paymentMethodId: null,
+      deliveryAreaId: salmiya.id,
+      lines: [{ variantId: s.tea, quantity: '1' }],
+      expectedTotal: '2.250',
+    });
+    expect(below.json().code).toBe('MINIMUM_ORDER');
+    const order = (
+      await checkout(s, {
+        paymentMethodId: null,
+        deliveryAreaId: salmiya.id,
+        expectedTotal: '3.500',
+      })
+    ).json().order;
+    expect(order).toMatchObject({
+      deliveryFee: { amount: '1.000', currency: 'KWD' },
+      total: { amount: '3.500', currency: 'KWD' },
+      deliveryAreaName: 'السالمية',
+      scheduledFor: null,
+      branch: { nameEn: 'Main branch' },
+    });
+    // At or above the threshold the delivery is free.
+    const big = (
+      await checkout(s, {
+        paymentMethodId: null,
+        deliveryAreaId: salmiya.id,
+        lines: [{ variantId: s.gift, quantity: '2' }],
+        expectedTotal: '10.000',
+      })
+    ).json().order;
+    expect(big.deliveryFee.amount).toBe('0.000');
+    const manager = await s.ok('GET', `/manager/online/orders?status=placed`);
+    expect(manager.orders.map((o: { deliveryAreaId: string | null }) => o.deliveryAreaId)).toEqual([
+      salmiya.id,
+      salmiya.id,
+    ]);
+    // Deleting the area keeps the orders (their snapshot) and returns to the flat fee.
+    expect(
+      (await s.ok('DELETE', `/manager/online/delivery-areas/${salmiya.id}`)).areas,
+    ).toHaveLength(1);
+    expect(
+      (await s.ok('GET', `/manager/online/orders/${manager.orders[0].id}`)).deliveryAreaName,
+    ).toBe('السالمية');
+    await s.ok('PUT', `/manager/online/delivery-areas/order`, { ids: [hawally.id] });
+    expect((await checkout(s, { paymentMethodId: null, expectedTotal: '3.000' })).statusCode).toBe(
+      201,
+    );
+    await drain();
+  });
+
+  it('serves pickup from several branches with their own stock and hours, and books time slots', async () => {
+    const s = await setup({ gateway: false });
+    // The second branch gets stock of the tea and joins the store; the main one keeps serving.
+    await s.ok('POST', '/manager/inventory/adjustments', {
+      branchId: s.c.second,
+      kind: 'opening',
+      reason: 'opening',
+      lines: [{ variantId: s.tea, quantity: '1', unitCost: '0.400' }],
+    });
+    const always = { mon: [], tue: [], wed: [], thu: [], fri: [], sat: [], sun: [] };
+    const open = Object.fromEntries(
+      Object.keys(always).map((d) => [d, [{ open: '00:00', close: '24:00' }]]),
+    );
+    await s.ok('PUT', `/manager/online/branches/${s.c.main}`, {
+      pickupEnabled: true,
+      deliveryEnabled: true,
+    });
+    const second = await s.ok('PUT', `/manager/online/branches/${s.c.second}`, {
+      pickupEnabled: true,
+      deliveryEnabled: false,
+      preparationMinutes: 60,
+      hours: open,
+    });
+    expect(second).toMatchObject({ nameEn: 'Second', position: 1, hours: open, version: 1 });
+    // Both branches hold stock of the tea, but the gift card is sold everywhere and the tea
+    // has one unit at the second branch only.
+    const front = (await pub(s, 'GET', '')).json();
+    expect(front.branches.map((b: { id: string; openNow: boolean }) => [b.id, b.openNow])).toEqual([
+      [s.c.main, true],
+      [s.c.second, true],
+    ]);
+    const atSecond = (await pub(s, 'GET', `/products?branch=${s.c.second}`)).json().products;
+    expect(
+      atSecond.find((p: { productId: string }) => p.productId === s.teaProduct).variants[0],
+    ).toMatchObject({
+      available: true,
+      maxQuantity: 1,
+    });
+    // Ordering two at the second branch fails on its stock; one succeeds and is prepared there.
+    const tooMany = await checkout(s, {
+      paymentMethodId: null,
+      fulfillment: 'pickup',
+      branchId: s.c.second,
+      deliveryAddress: null,
+      expectedTotal: '2.500',
+    });
+    expect(tooMany.json().code).toBe('INSUFFICIENT_STOCK');
+    const order = (
+      await checkout(s, {
+        paymentMethodId: null,
+        fulfillment: 'pickup',
+        branchId: s.c.second,
+        deliveryAddress: null,
+        lines: [{ variantId: s.tea, quantity: '1' }],
+        expectedTotal: '1.250',
+      })
+    ).json().order;
+    expect(order.branch).toMatchObject({ nameEn: 'Second' });
+    expect((await s.ok('GET', `/manager/online/orders?status=placed`)).orders[0].branchId).toBe(
+      s.c.second,
+    );
+    // A branch closed today refuses orders now, unless a slot is chosen.
+    await s.ok('PUT', `/manager/online/branches/${s.c.second}`, {
+      pickupEnabled: true,
+      deliveryEnabled: false,
+      preparationMinutes: 60,
+      hours: always,
+      version: second.version,
+    });
+    const closed = await checkout(s, {
+      paymentMethodId: null,
+      fulfillment: 'pickup',
+      branchId: s.c.second,
+      deliveryAddress: null,
+      lines: [{ variantId: s.gift, quantity: '1' }],
+      expectedTotal: '5.000',
+    });
+    expect(closed.json().code).toBe('OUTSIDE_HOURS');
+    expect((await pub(s, 'GET', `/slots?branch=${s.c.main}`)).json().slots).toEqual([]);
+    // Scheduling on: the main branch (always open) offers 30-minute slots, one order per slot.
+    const store = await s.ok('GET', '/manager/online/store');
+    await s.ok('PUT', '/manager/online/store', {
+      ...store,
+      deliveryFee: store.deliveryFee.amount,
+      minimumOrder: store.minimumOrder.amount,
+      schedulingEnabled: true,
+      slotMinutes: 30,
+      slotCapacity: 1,
+    });
+    const slots = (await pub(s, 'GET', `/slots?branch=${s.c.main}`)).json().slots as {
+      start: string;
+      end: string;
+      available: boolean;
+    }[];
+    expect(slots.length).toBeGreaterThan(40);
+    expect(new Date(slots[0]!.end).getTime() - new Date(slots[0]!.start).getTime()).toBe(
+      30 * 60_000,
+    );
+    expect(slots.every((x) => x.available)).toBe(true);
+    const pick = slots[3]!;
+    const scheduled = (
+      await checkout(s, {
+        paymentMethodId: null,
+        fulfillment: 'pickup',
+        deliveryAddress: null,
+        scheduledFor: pick.start,
+        lines: [{ variantId: s.gift, quantity: '1' }],
+        expectedTotal: '5.000',
+      })
+    ).json().order;
+    expect(scheduled.scheduledFor).toBe(pick.start);
+    expect((await pub(s, 'GET', `/slots?branch=${s.c.main}`)).json().slots[3]).toMatchObject({
+      start: pick.start,
+      available: false,
+    });
+    const full = await checkout(s, {
+      paymentMethodId: null,
+      fulfillment: 'pickup',
+      deliveryAddress: null,
+      scheduledFor: pick.start,
+      lines: [{ variantId: s.gift, quantity: '1' }],
+      expectedTotal: '5.000',
+    });
+    expect(full.json().code).toBe('SLOT_FULL');
+    const odd = await checkout(s, {
+      paymentMethodId: null,
+      fulfillment: 'pickup',
+      deliveryAddress: null,
+      scheduledFor: new Date(new Date(pick.start).getTime() + 7 * 60_000).toISOString(),
+      lines: [{ variantId: s.gift, quantity: '1' }],
+      expectedTotal: '5.000',
+    });
+    expect(odd.statusCode).toBe(400);
+    await drain();
+  });
+
+  it('e-mails the shopper and the store, and prints the packing slip when the order is confirmed', async () => {
+    const s = await setup({ gateway: false });
+    const store = await s.ok('GET', '/manager/online/store');
+    await s.ok('PUT', '/manager/online/store', {
+      ...store,
+      deliveryFee: store.deliveryFee.amount,
+      minimumOrder: store.minimumOrder.amount,
+      contactEmail: 'shop@example.com',
+    });
+    const agent = await s.ok('POST', '/manager/print-agents', {
+      name: 'Kitchen',
+      branchId: s.c.main,
+    });
+    expect(agent.token).toBeTruthy();
+    const before = mailer.outbox.length;
+    const order = (await checkout(s, { paymentMethodId: null, expectedTotal: '3.000' })).json()
+      .order;
+    await drain();
+    const sent = mailer.outbox.slice(before);
+    expect(sent.map((m) => [m.to, m.subject])).toEqual([
+      ['mariam@example.com', `استلمنا طلبك ${order.number} | Order ${order.number} received`],
+      ['shop@example.com', `طلب جديد ${order.number} | New order ${order.number}`],
+    ]);
+    expect(sent[0]!.text).toContain(`/store/${s.slug}/orders/${order.trackingToken}`);
+    expect(sent[0]!.text).toContain('Block 3, Street 10, Salmiya');
+    expect(sent[1]!.text).toContain('/online/orders');
+    // Nothing printed yet: the slip goes to the branch when the order is confirmed.
+    const [{ id }] = (await s.ok('GET', '/manager/online/orders?status=placed')).orders;
+    expect(
+      await count('select count(*)::int as n from print_jobs where online_order_id = $1', [id]),
+    ).toBe(0);
+    await s.ok('POST', `/manager/online/orders/${id}/action`, { action: 'confirm', version: 1 });
+    const jobs = (
+      await owner.query('select kind, sale_id, html from print_jobs where online_order_id = $1', [
+        id,
+      ])
+    ).rows as { kind: string; sale_id: string | null; html: string }[];
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({ kind: 'online_order', sale_id: null });
+    expect(jobs[0]!.html).toContain(order.number);
+    expect(jobs[0]!.html).toContain('Block 3, Street 10, Salmiya');
+    expect(jobs[0]!.html).toContain('يُحصّل عند التسليم');
+    await drain();
+    expect(mailer.outbox.at(-1)).toMatchObject({
+      to: 'mariam@example.com',
+      subject: `تم تأكيد طلبك ${order.number} | Order ${order.number} confirmed`,
+    });
+    // The agent sees the slip as a pending job (no sale behind it).
+    const pending = (
+      await s.c.client.request('GET', '/print-agent/jobs/pending', {
+        headers: { authorization: `Bearer ${agent.token}` },
+      })
+    ).json();
+    expect(pending.jobs ?? pending).toEqual(
+      expect.arrayContaining([expect.objectContaining({ orderUuid: null })]),
+    );
+    // Later steps notify too; the final one when completed after payment.
+    await s.ok('POST', `/manager/online/orders/${id}/action`, {
+      action: 'out_for_delivery',
+      version: 2,
+    });
+    await drain();
+    expect(mailer.outbox.at(-1)!.subject).toContain(`Order ${order.number} is on its way`);
+  });
+
+  it('hands a pickup order over at the till: paid with the shift tenders, cash into the drawer', async () => {
+    const s = await setup({ gateway: false });
+    const order = (
+      await checkout(s, {
+        paymentMethodId: null,
+        fulfillment: 'pickup',
+        deliveryAddress: null,
+        expectedTotal: '2.500',
+      })
+    ).json().order;
+    const cashier = await till(s);
+    const list = (await s.ok('GET', '/pos/online-orders', undefined, cashier)).orders;
+    expect(list).toEqual([
+      expect.objectContaining({
+        number: order.number,
+        status: 'placed',
+        paid: false,
+        total: { amount: '2.500', currency: 'KWD' },
+        lines: [expect.objectContaining({ nameEn: 'Saffron tea', quantity: '2.000' })],
+        version: 1,
+      }),
+    ]);
+    const id = list[0].id as string;
+    // A wrong total is refused; the right one with cash and change creates the sale.
+    expect(
+      (
+        await s.req(
+          'POST',
+          `/pos/online-orders/${id}/pay`,
+          {
+            idempotencyKey: newId(),
+            payments: [{ methodId: s.cash, amount: '2.000', tendered: null, reference: null }],
+            expectedTotal: '2.000',
+            version: 1,
+          },
+          cashier,
+        )
+      ).json().code,
+    ).toBe('TOTAL_CHANGED');
+    const key = newId();
+    const body = {
+      idempotencyKey: key,
+      payments: [
+        { methodId: s.cash, amount: '1.500', tendered: '2.000', reference: null },
+        { methodId: s.card, amount: '1.000', tendered: null, reference: 'A1' },
+      ],
+      expectedTotal: '2.500',
+      version: 1,
+    };
+    const sale = await s.ok('POST', `/pos/online-orders/${id}/pay`, body, cashier);
+    expect(sale).toMatchObject({
+      channel: 'online',
+      total: { amount: '2.500', currency: 'KWD' },
+      change: { amount: '0.500', currency: 'KWD' },
+    });
+    expect(sale.shiftId).toBeTruthy();
+    // Retrying the same request returns the same sale; a new key is refused (already paid).
+    expect((await s.ok('POST', `/pos/online-orders/${id}/pay`, body, cashier)).id).toBe(sale.id);
+    expect(
+      (
+        await s.req(
+          'POST',
+          `/pos/online-orders/${id}/pay`,
+          { ...body, idempotencyKey: newId() },
+          cashier,
+        )
+      ).statusCode,
+    ).toBe(409);
+    const done = await s.ok('GET', `/manager/online/orders/${id}`);
+    expect(done).toMatchObject({
+      status: 'completed',
+      saleId: sale.id,
+      receiptNumber: sale.receiptNumber,
+    });
+    expect(await onHand(s)).toBe('3.000');
+    // The drawer holds the opening float plus the cash net of change; the card went to its account.
+    const current = (await s.ok('GET', '/pos/shifts/current', undefined, cashier)).shift;
+    expect(current.expectedCash ?? current.expected?.amount ?? current).toBeDefined();
+    const [row] = (
+      await owner.query(
+        `select sum(case when p.method_kind = 'cash' then p.amount_minor else 0 end)::text as cash,
+                sum(case when p.method_kind = 'card' then p.amount_minor else 0 end)::text as card
+         from payments p where p.sale_id = $1 and p.shift_id is not null`,
+        [sale.id],
+      )
+    ).rows as { cash: string; card: string }[];
+    expect(row).toEqual({ cash: '1500', card: '1000' });
+    expect((await s.ok('GET', '/pos/online-orders', undefined, cashier)).orders).toEqual([]);
+    // A paid (gateway or console) order is handed over without a payment.
+    const second = (
+      await checkout(s, {
+        paymentMethodId: null,
+        fulfillment: 'pickup',
+        deliveryAddress: null,
+        lines: [{ variantId: s.gift, quantity: '1' }],
+        expectedTotal: '5.000',
+      })
+    ).json().order;
+    const [placed] = (await s.ok('GET', '/manager/online/orders?status=placed')).orders;
+    expect(placed.number).toBe(second.number);
+    await s.ok('POST', `/manager/online/orders/${placed.id}/action`, {
+      action: 'mark_paid',
+      paymentMethodId: s.cash,
+      version: 1,
+    });
+    const [waiting] = (await s.ok('GET', '/pos/online-orders', undefined, cashier)).orders;
+    expect(waiting).toMatchObject({ id: placed.id, paid: true, status: 'confirmed' });
+    expect(
+      (
+        await s.req('POST', `/pos/online-orders/${placed.id}/complete`, { version: 1 }, cashier)
+      ).json().code,
+    ).toBe('VERSION_CONFLICT');
+    const handed = await s.ok(
+      'POST',
+      `/pos/online-orders/${placed.id}/complete`,
+      { version: waiting.version },
+      cashier,
+    );
+    expect(handed.status).toBe('completed');
+    await drain();
   });
 });

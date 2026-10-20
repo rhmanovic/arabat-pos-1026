@@ -197,6 +197,8 @@ export const commonEn = {
     PAYMENT_METHOD_REQUIRED: 'This store needs the order to be paid online.',
     ORDER_UNPAID: 'Record the payment before completing the order.',
     RENAME_LIMIT: 'The store address can be changed once a day.',
+    SLOT_FULL: 'This time is fully booked. Choose another.',
+    OUTSIDE_HOURS: 'The store is closed right now.',
     PAYMENT_SIGNATURE_INVALID: 'The payment notification could not be verified.',
     MINIMUM_ORDER: 'The order is below the store’s minimum.',
     LINK_LIMIT_REACHED: 'A link page holds at most 50 links.',

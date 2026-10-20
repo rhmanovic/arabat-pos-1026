@@ -1,11 +1,17 @@
-import { Alert, Spinner } from '@arabat/ui';
+import { Alert, Select, Spinner } from '@arabat/ui';
 import { ErrorState, LanguageSwitcher, NotFound } from '@arabat/web-core';
 import { ApiError } from '@arabat/api-client';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, Outlet, useLocation } from 'react-router';
 import { CartProvider, useCart } from '../cart.js';
-import { useLocalName, useSlug, useStorefront } from '../shared.js';
+import {
+  BranchChoiceProvider,
+  useBranchChoice,
+  useLocalName,
+  useSlug,
+  useStorefront,
+} from '../shared.js';
 
 /** Public storefront shell: store branding, cart link, language switch. */
 export function StoreLayout() {
@@ -37,9 +43,11 @@ export function StoreLayout() {
       />
     );
   return (
-    <CartProvider key={slug} slug={slug}>
-      <Shell />
-    </CartProvider>
+    <BranchChoiceProvider key={slug} slug={slug}>
+      <CartProvider slug={slug}>
+        <Shell />
+      </CartProvider>
+    </BranchChoiceProvider>
   );
 }
 
@@ -48,6 +56,7 @@ function Shell() {
   const { data: store } = useStorefront();
   const cart = useCart();
   const name = useLocalName();
+  const { branchId, setBranchId } = useBranchChoice();
   const { t, i18n } = useTranslation();
   const storeName = store ? name(store) : '';
   useEffect(() => {
@@ -91,6 +100,22 @@ function Shell() {
             </span>
           </Link>
           <nav aria-label={t('brand')} className="flex items-center gap-3">
+            {store.branches.filter((b) => b.pickupEnabled).length > 1 ? (
+              <Select
+                aria-label={t('nav.branch')}
+                className="w-40"
+                value={branchId ?? ''}
+                onChange={(e) => setBranchId(e.target.value || null)}
+              >
+                {store.branches
+                  .filter((b) => b.pickupEnabled)
+                  .map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {name(b)}
+                    </option>
+                  ))}
+              </Select>
+            ) : null}
             <Link to={`/${slug}`} className="text-sm hover:underline">
               {t('nav.catalog')}
             </Link>

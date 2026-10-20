@@ -1908,3 +1908,88 @@ ADR; supersede it.
 - **Consequences:** merchants curate what the store shows and in which order without touching
   the catalog; shoppers browse by the store's own categories. Migration 0067. `/manager/online/*`
   gains 13 routes, the public store API 2 (`/:kind(logo|banner)`, `/categories/:id/image`).
+
+## ADR-0122 — Standing approval for production releases
+
+- **Date:** 2026-10-20 · **Status:** Accepted (owner, in conversation: "كمل افحص وانشر انا عطيك كل
+  الصلاحيات الي ان تنشر لبيئه الانتاج")
+- **Context:** Until now every production release waited for the owner's explicit "انشر"
+  (CLAUDE.md §3.13; ADR-0088 covered staging only). The owner asked the assistant to keep
+  testing and releasing without that per-release approval.
+- **Decision:** The owner grants **standing approval to release `main` to production**
+  (`infra/gcp/deploy.sh`, Cloud Run `arabat-web` in `arabat-511416`) once `pnpm verify`,
+  `pnpm test:integration` and `pnpm test:e2e` pass and staging has built the same commit. The
+  owner's release procedure stays as it is (clean `main` equal to `origin/main`; sign in with
+  the admin key through process substitution, never written to disk or printed; deploy with a
+  log; verify from inside Google Cloud through the Cloud Build curl step; `gcloud auth revoke
+  --all` and remove `infra/gcp/config.env` afterwards; record the release in `PROGRESS.md`;
+  report commit, revision, migration result and health version in Arabic; copy any error as it
+  is). Unchanged: **no key, account or secret is ever deleted in Google Cloud**, live payments
+  and new paid costs (SMS providers, gateways, larger instances) still need the owner's explicit
+  approval, and a failed verification means a rollback to the previous revision, reported at once.
+- **Consequences:** phases of `docs/ONLINE_STORE_PLAN.md` reach production in the session that
+  finishes them. The release log in `PROGRESS.md` is the owner's record of what went live.
+
+## ADR-0123 — Online store Phase 5: fulfilment (delivery areas, serving branches, hours and slots, notifications, printing, till hand-over)
+
+- **Status:** Accepted (owner's standing instruction "كمل افحص وانشر", 2026-10-20; Phase 5 of
+  `docs/ONLINE_STORE_PLAN.md`)
+- **Context:** A store served every order from one branch, charged one flat delivery fee, took
+  orders at any hour, told nobody about them, printed nothing until a sale existed, and a pickup
+  order paid at the till had to be settled from the console (cash into the treasury, outside the
+  cashier's shift). Shops with several branches and delivery by area could not run on it.
+- **Decision:**
+  - **Delivery areas** (`online_delivery_areas`): name ar/en, fee, minimum order, optional
+    free-delivery threshold, estimated minutes, serving branch (null = the store's fulfilment
+    branch), order, active. While a store has none, the flat store fee applies as before; with
+    any, the shopper must pick one at checkout (`deliveryAreaId`), the area's fee applies (0 at
+    or above its threshold), the minimum is the higher of the area's and the store's, and the
+    order keeps the area id (FK `on delete set null`, single column) and a name snapshot. The
+    console offers Kuwait's governorates and areas as a pick-list (`kuwait-areas.ts`).
+  - **Serving branches** (`online_store_branches`): pickup / delivery flags, preparation
+    minutes, optional own hours, order, active. Without rows the single fulfilment branch serves
+    everything (unchanged). With rows, the storefront lists the pickup branches (header picker,
+    kept per store in the browser), `GET /store/:slug/products?branch=` prices and checks stock
+    at that branch, checkout carries `branchId` for pickup, and a delivery order is prepared by
+    the area's serving branch. Orders record `branch_id` as before.
+  - **Hours and slots.** `online_stores.hours` (per weekday, null = always open) with a branch
+    override; `scheduling_enabled`, `slot_minutes` (15–240), `slot_capacity` (per branch and
+    slot, null = unlimited). `GET /store/:slug/slots?branch=&fulfillment=` lists the next 7 days'
+    slots (`store-hours.ts`, pure) after the branch's preparation time, with availability;
+    checkout takes `scheduledFor` (one of the offered starts; `SLOT_FULL` when booked out) or
+    null = as soon as possible, refused with `OUTSIDE_HOURS` while the branch is closed. Times
+    are computed in the merchant's time zone (BR-184). Orders keep `scheduled_for`.
+  - **Notifications** (`OrderNotificationsService`): bilingual e-mails through the existing
+    `Mailer` after the transaction committed (background, `drain()` in tests): to the shopper
+    on placed / confirmed / paid / ready / out for delivery / completed / cancelled with the
+    tracking link, pickup address or delivery area, requested time and what is still to pay;
+    to the store's contact e-mail (`notify_email`, default on) for a new pay-on-receipt order
+    or a gateway-paid one, linking to `/online/orders`. **No SMS / WhatsApp provider** was
+    connected (a paid service needs the owner's approval, CLAUDE.md §3.13); the e-mail path is
+    the adapter point. In-console "push" stays the overview counts.
+  - **Printing.** A packing slip (`renderOrderSlipHtml` in `pos-core`, receipt style: order
+    number, requested time, customer, area / address, items with quantities, what to collect)
+    is queued at the order's branch when the order is confirmed (console or auto-confirm on
+    recording the payment) or paid at the gateway, through `PrintJobsService.queueOnlineOrderInTx`
+    (`print_jobs.kind = 'online_order'`, `online_order_id`, no sale). Agents claim it like a
+    receipt (`orderUuid` null).
+  - **Till hand-over** (`PosHandoverService`, `/pos/online-orders`): the cashier sees the
+    branch's open pickup orders, takes the money of an unpaid pay-on-receipt one with the POS
+    tenders in the own open shift (several tenders, change; BR-181 rules) and hands it over in
+    one step, or hands over a paid one. `completeOnlineSaleInTx` gained a `till` mode: the sale
+    is `channel = 'online'` **with** register, shift and user, cash into the register drawer,
+    receipt printed; `sales_channel_valid` now allows an online sale with a shift. Retries
+    replay by `pos_idempotency_key`. The order completes at once (`completed`).
+  - **Console** `/online`: pages Delivery areas and Branches (sortable, dialogs), settings
+    gained Opening hours, scheduling (slot length, orders per slot) and "E-mail me about new
+    orders"; order list / detail show branch, requested time and area. **POS**: strip action
+    "Online orders" (list, take payment and hand over, hand over). **Storefront**: branch
+    picker, area select with fee and free-delivery note, "When?" (as soon as possible / a time
+    slot), closed-now notice, tracking page with pickup address and requested time.
+- **Not in this phase:** SMS / WhatsApp sending (adapter point only), bank-transfer receipts
+  (Phase 3 cancelled), per-area delivery windows, courier assignment.
+- **Consequences:** multi-branch shops run pickup per branch and delivery by area; customers
+  are informed by e-mail; orders print before any sale exists; cashiers never leave the till
+  for an online pickup. Migration 0068 also fixes the composite `set null` foreign keys (a
+  composite `on delete set null` would have nulled `merchant_id`): `online_listings.online_category_id`
+  and `online_orders.delivery_area_id` reference the parent's `id` only.

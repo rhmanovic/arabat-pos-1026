@@ -147,6 +147,13 @@ function OrdersTab() {
             cell: (o) => branchName(o.branchId) ?? '—',
           },
           {
+            key: 'wanted',
+            header: t('store.wanted'),
+            hideBelow: 'lg',
+            cell: (o) =>
+              o.scheduledFor ? formatDateTime(o.scheduledFor, i18n.language) : t('store.asap'),
+          },
+          {
             key: 'status',
             header: t('store.status'),
             cell: (o) => (
@@ -275,6 +282,21 @@ function OrderDialog({ id, onClose }: { id: string; onClose: () => void }) {
               {o.customerName} · <span dir="ltr">{o.customerPhone}</span>
               {o.customerEmail ? ` · ${o.customerEmail}` : ''}
             </dd>
+            <dt className="text-fg-muted">{t('inventory.branch')}</dt>
+            <dd>{localizedName(o.branch, i18n.language) || '—'}</dd>
+            <dt className="text-fg-muted">{t('store.wanted')}</dt>
+            <dd>
+              {o.scheduledFor ? formatDateTime(o.scheduledFor, i18n.language) : t('store.asap')}
+            </dd>
+            {o.deliveryArea || o.deliveryAreaName ? (
+              <>
+                <dt className="text-fg-muted">{t('store.deliveryArea')}</dt>
+                <dd>
+                  {(o.deliveryArea && localizedName(o.deliveryArea, i18n.language)) ||
+                    o.deliveryAreaName}
+                </dd>
+              </>
+            ) : null}
             {o.deliveryAddress ? (
               <>
                 <dt className="text-fg-muted">{t('store.address')}</dt>

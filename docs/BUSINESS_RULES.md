@@ -117,6 +117,30 @@ engineering defaults pending owner confirmation.
   (the main register's first), and cannot sell while none is open. A device shift is never refused because
   the person left a shift open elsewhere; that shift is listed for the managers to close. Records
   that reach the server after the branch shift closed are booked to it and flagged "late".
+- **BR-220** Till hand-over (ADR-0123): a cashier hands over the branch's pickup orders at the
+  POS; an unpaid pay-on-receipt order is paid there with the till's tenders in the cashier's
+  own open shift (same tender rules as a sale, change on cash, cash into the register drawer)
+  and completes at once; a paid order is handed over without a payment. The sale is an online
+  sale in that shift. Delivery orders are settled from the console.
+- **BR-219** Order slip (ADR-0123): a confirmed online order (or one paid at the gateway)
+  prints at its branch through the branch's printer as a packing slip, before any sale exists.
+- **BR-218** Order e-mails (ADR-0123): the shopper who left an e-mail is told when the order is
+  received, confirmed, paid, ready, out for delivery, completed or cancelled, with the tracking
+  link; the store's contact address is told about new orders that need it unless the merchant
+  turned it off. No SMS or WhatsApp is sent without a provider the owner approved.
+- **BR-217** Hours and time slots (ADR-0123): a store (or a branch) may set opening hours per
+  weekday; outside them an immediate order is refused. With scheduling on, the shopper may
+  pick a slot of the store's length within the next 7 days' hours, no earlier than the branch's
+  preparation time from now; a slot holds at most the store's capacity per branch. Times
+  follow the merchant's time zone.
+- **BR-216** Serving branches (ADR-0123): a store may be served by several branches, each for
+  pickup and / or delivery; the shopper picks the pickup branch and the store shows that
+  branch's stock and prices; a delivery order goes to the area's branch. Without configured
+  branches the fulfilment branch serves everything.
+- **BR-215** Delivery areas (ADR-0123): a store with delivery areas makes the shopper pick one;
+  its fee applies (free at or above the area's threshold) and the minimum order is the higher
+  of the area's and the store's. Without areas the flat store fee applies. The order keeps the
+  area's name even if the area is deleted later.
 - **BR-214** Store pictures (ADR-0121): the store's logo, banner and category pictures are
   JPEG, PNG or WebP of at most 2 MB, checked by content, stored through `FileStorage` and
   served publicly from the storefront; product pictures stay the catalog's and are shared with

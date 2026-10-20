@@ -6,6 +6,7 @@ export * from './sale.js';
 export * from './payments.js';
 export * from './receipt.js';
 export * from './receipt-html.js';
+export * from './order-slip-html.js';
 export * from './overrides.js';
 export * from './shifts.js';
 export * from './refunds.js';

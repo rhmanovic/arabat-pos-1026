@@ -1,12 +1,20 @@
 import { ApiError } from '@arabat/api-client';
-import { Alert, Button, Field, Input, Spinner, Textarea } from '@arabat/ui';
+import { formatDateTime } from '@arabat/i18n';
+import { Alert, Button, Field, Input, Select, Spinner, Textarea } from '@arabat/ui';
 import { useApi, useErrorMessage } from '@arabat/web-core';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navigate, useNavigate } from 'react-router';
 import { priceLines, useCart } from '../cart.js';
-import { useLocalName, useMoney, useSlug, useStoreProducts, useStorefront } from '../shared.js';
+import {
+  useBranchChoice,
+  useLocalName,
+  useMoney,
+  useSlug,
+  useStoreProducts,
+  useStorefront,
+} from '../shared.js';
 
 const newKey = () => globalThis.crypto.randomUUID();
 
@@ -36,11 +44,16 @@ export function CheckoutPage() {
     email: '',
     fulfillment: null as 'pickup' | 'delivery' | null,
     deliveryAddress: '',
+    /** Delivery area (ADR-0123); required when the store defines areas. */
+    areaId: null as string | null,
+    /** Requested slot start, or null for "as soon as possible". */
+    scheduledFor: null as string | null,
     note: '',
     /** A gateway method id, `ON_RECEIPT`, or null until chosen. */
     payment: null as string | null,
   });
   const [touched, setTouched] = useState(false);
+  const { branch: pickupBranch, setBranchId } = useBranchChoice();
 
   const checkout = useMutation({
     mutationFn: (body: Parameters<typeof api.store.checkout>[1]) => api.store.checkout(slug, body),
@@ -66,29 +79,46 @@ export function CheckoutPage() {
   const payment =
     form.payment ?? store.paymentMethods[0]?.id ?? (store.payOnReceipt ? ON_RECEIPT : null);
   const payOnReceipt = payment === ON_RECEIPT;
+  const area =
+    fulfillment === 'delivery'
+      ? (store.deliveryAreas.find((a) => a.id === form.areaId) ?? null)
+      : null;
   const { priced, subtotal, deliveryFee, total } = priceLines(
     cart.lines,
     products.data.products,
     store,
     fulfillment,
+    store.deliveryAreas.length > 0 ? area : undefined,
   );
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
   const missing = {
     name: !form.name.trim(),
     phone: form.phone.trim().length < 6,
     address: fulfillment === 'delivery' && !form.deliveryAddress.trim(),
+    area: fulfillment === 'delivery' && store.deliveryAreas.length > 0 && area === null,
   };
+  // The branch that prepares the order: the pickup branch, or the one serving the area.
+  const branch =
+    fulfillment === 'delivery'
+      ? (store.branches.find((b) => b.id === area?.branchId) ?? pickupBranch)
+      : pickupBranch;
+  const pickupBranches = store.branches.filter((b) => b.pickupEnabled);
+  const closedNow = branch !== null && !branch.openNow;
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     setTouched(true);
     if (missing.name || missing.phone || missing.address || !payment) return;
+    if (missing.area) return;
     checkout.mutate({
       idempotencyKey: key,
       lines: priced.map((l) => ({ variantId: l.variantId, quantity: String(l.quantity) })),
       fulfillment,
       customer: { name: form.name, phone: form.phone, email: form.email || null },
       deliveryAddress: fulfillment === 'delivery' ? form.deliveryAddress : null,
+      branchId: fulfillment === 'pickup' ? (pickupBranch?.id ?? null) : null,
+      deliveryAreaId: area?.id ?? null,
+      scheduledFor: form.scheduledFor,
       note: form.note || null,
       paymentMethodId: payOnReceipt ? null : payment,
       expectedTotal: total.toDecimalString(),
@@ -146,10 +176,29 @@ export function CheckoutPage() {
                 name="fulfillment"
                 className="accent-primary"
                 checked={fulfillment === 'pickup'}
-                onChange={() => set({ fulfillment: 'pickup' })}
+                onChange={() => set({ fulfillment: 'pickup', scheduledFor: null })}
               />
               {t('checkout.pickup')}
             </label>
+          ) : null}
+          {fulfillment === 'pickup' && pickupBranches.length > 1 ? (
+            <Field label={t('checkout.branch')}>
+              {(p) => (
+                <Select
+                  {...p}
+                  value={pickupBranch?.id ?? ''}
+                  onChange={(e) => setBranchId(e.target.value || null)}
+                >
+                  {pickupBranches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {[name(b), b.address].filter(Boolean).join(' — ')}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+          ) : fulfillment === 'pickup' && branch?.address ? (
+            <p className="text-sm text-fg-muted">{[name(branch), branch.address].join(' — ')}</p>
           ) : null}
           {store.deliveryEnabled ? (
             <label className="flex items-center gap-2">
@@ -158,10 +207,37 @@ export function CheckoutPage() {
                 name="fulfillment"
                 className="accent-primary"
                 checked={fulfillment === 'delivery'}
-                onChange={() => set({ fulfillment: 'delivery' })}
+                onChange={() => set({ fulfillment: 'delivery', scheduledFor: null })}
               />
-              {t('checkout.delivery')} ({money(store.deliveryFee)})
+              {t('checkout.delivery')}
+              {store.deliveryAreas.length === 0 ? ` (${money(store.deliveryFee)})` : ''}
             </label>
+          ) : null}
+          {fulfillment === 'delivery' && store.deliveryAreas.length > 0 ? (
+            <Field label={t('checkout.area')} error={required(missing.area)}>
+              {(p) => (
+                <Select
+                  {...p}
+                  value={form.areaId ?? ''}
+                  onChange={(e) => set({ areaId: e.target.value || null, scheduledFor: null })}
+                >
+                  <option value="">{t('checkout.chooseArea')}</option>
+                  {store.deliveryAreas.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {name(a)} — {money(a.fee)}
+                      {a.estimatedMinutes
+                        ? ` · ${t('checkout.minutes', { count: a.estimatedMinutes })}`
+                        : ''}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+          ) : null}
+          {area?.freeDeliveryFrom ? (
+            <p className="text-sm text-fg-muted">
+              {t('checkout.freeFrom', { amount: money(area.freeDeliveryFrom) })}
+            </p>
           ) : null}
           {fulfillment === 'delivery' ? (
             <Field label={t('checkout.address')} error={required(missing.address)}>
@@ -181,6 +257,21 @@ export function CheckoutPage() {
             )}
           </Field>
         </fieldset>
+        {store.scheduling.enabled || closedNow ? (
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-2 font-semibold">{t('checkout.when')}</legend>
+            {closedNow ? <Alert tone="warning">{t('checkout.closedNow')}</Alert> : null}
+            {store.scheduling.enabled ? (
+              <SlotPicker
+                branchId={branch?.id ?? null}
+                fulfillment={fulfillment}
+                value={form.scheduledFor}
+                onChange={(scheduledFor) => set({ scheduledFor })}
+                asapAllowed={!closedNow}
+              />
+            ) : null}
+          </fieldset>
+        ) : null}
         <fieldset className="flex flex-col gap-2">
           <legend className="mb-2 font-semibold">{t('checkout.payment')}</legend>
           {store.paymentMethods.length === 0 && !store.payOnReceipt ? (
@@ -249,12 +340,85 @@ export function CheckoutPage() {
         <Button
           type="submit"
           size="lg"
-          disabled={checkout.isPending || !store.acceptingOrders || !payment}
+          disabled={
+            checkout.isPending ||
+            !store.acceptingOrders ||
+            !payment ||
+            (closedNow && form.scheduledFor === null)
+          }
         >
           {payOnReceipt ? t('checkout.submitOnReceipt') : t('checkout.submit')}
         </Button>
         {!payOnReceipt ? <p className="text-xs text-fg-muted">{t('checkout.reserved')}</p> : null}
       </aside>
     </form>
+  );
+}
+
+/** "As soon as possible" or one of the branch's time slots for the next days (ADR-0123). */
+function SlotPicker({
+  branchId,
+  fulfillment,
+  value,
+  onChange,
+  asapAllowed,
+}: {
+  branchId: string | null;
+  fulfillment: 'pickup' | 'delivery';
+  value: string | null;
+  onChange: (value: string | null) => void;
+  asapAllowed: boolean;
+}) {
+  const api = useApi();
+  const slug = useSlug();
+  const { t, i18n } = useTranslation();
+  const slots = useQuery({
+    queryKey: ['store', slug, 'slots', branchId, fulfillment],
+    queryFn: () => api.store.slots(slug, { branch: branchId, fulfillment }),
+    staleTime: 60_000,
+  });
+  const open = slots.data?.slots.filter((s) => s.available) ?? [];
+  return (
+    <div className="flex flex-col gap-2">
+      {asapAllowed ? (
+        <label className="flex items-center gap-2">
+          <input
+            type="radio"
+            name="when"
+            className="accent-primary"
+            checked={value === null}
+            onChange={() => onChange(null)}
+          />
+          {t('checkout.asap')}
+        </label>
+      ) : null}
+      <label className="flex items-center gap-2">
+        <input
+          type="radio"
+          name="when"
+          className="accent-primary"
+          checked={value !== null}
+          disabled={open.length === 0}
+          onChange={() => onChange(open[0]?.start ?? null)}
+        />
+        {t('checkout.schedule')}
+      </label>
+      {value !== null ? (
+        <Field label={t('checkout.slot')}>
+          {(p) => (
+            <Select {...p} value={value} onChange={(e) => onChange(e.target.value)}>
+              {open.map((s) => (
+                <option key={s.start} value={s.start}>
+                  {formatDateTime(s.start, i18n.language)}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+      ) : null}
+      {slots.isSuccess && open.length === 0 ? (
+        <p className="text-sm text-fg-muted">{t('checkout.noSlots')}</p>
+      ) : null}
+    </div>
   );
 }

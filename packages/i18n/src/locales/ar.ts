@@ -187,6 +187,8 @@ export const commonAr: CommonResources = {
     PAYMENT_METHOD_REQUIRED: 'هذا المتجر يتطلب دفع الطلب إلكترونيًا.',
     ORDER_UNPAID: 'سجّل الدفع قبل إكمال الطلب.',
     RENAME_LIMIT: 'يمكن تغيير عنوان المتجر مرة واحدة في اليوم.',
+    SLOT_FULL: 'هذا الموعد مكتمل الحجز. اختر موعدًا آخر.',
+    OUTSIDE_HOURS: 'المتجر مغلق الآن.',
     PAYMENT_SIGNATURE_INVALID: 'تعذّر التحقق من إشعار الدفع.',
     MINIMUM_ORDER: 'قيمة الطلب أقل من الحد الأدنى للمتجر.',
     LINK_LIMIT_REACHED: 'صفحة الروابط تتسع لخمسين رابطًا كحد أقصى.',

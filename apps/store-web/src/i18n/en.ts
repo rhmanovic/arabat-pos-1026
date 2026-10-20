@@ -2,7 +2,7 @@
 export const storeEn = {
   brand: 'Online store',
   links: { empty: 'No links yet.' },
-  nav: { catalog: 'Products', cart: 'Cart', cartCount: 'Cart ({{count}})' },
+  nav: { catalog: 'Products', cart: 'Cart', cartCount: 'Cart ({{count}})', branch: 'Branch' },
   home: {
     title: 'Online store',
     description: 'Open the store link your merchant shared with you.',
@@ -63,6 +63,17 @@ export const storeEn = {
     payOnReceipt_delivery: 'Pay on delivery',
     payOnReceiptHint:
       'You pay when you receive your order. The store confirms it first; nothing is charged now.',
+    branch: 'Pickup branch',
+    area: 'Delivery area',
+    chooseArea: 'Choose your area',
+    minutes: 'about {{count}} min',
+    freeFrom: 'Free delivery for orders of {{amount}} or more.',
+    when: 'When?',
+    asap: 'As soon as possible',
+    schedule: 'Choose a time',
+    slot: 'Time',
+    noSlots: 'No times are available in the next days.',
+    closedNow: 'The store is closed right now. You can schedule your order for later.',
     summary: 'Order summary',
     deliveryFee: 'Delivery fee',
     total: 'Total',
@@ -96,6 +107,9 @@ export const storeEn = {
     pickup: 'Pickup',
     delivery: 'Delivery',
     notFound: 'This order could not be found.',
+    pickupAt: 'Pickup at: {{branch}}',
+    wanted: 'Requested time: {{time}}',
+    asap: 'As soon as possible',
   },
   status: {
     pending_payment: 'Waiting for payment',

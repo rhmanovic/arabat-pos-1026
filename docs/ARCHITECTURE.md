@@ -21,6 +21,9 @@ the code differ, the code wins and the differences are listed here:
   keeps `/manager`, and the two link to each other. Frontend separation only.
   Merchandising (ADR-0121): store titles, order (`@dnd-kit` sortable list), featured, store
   categories with pictures, logo / banner; prices, stock and product pictures stay the catalog's.
+  Fulfilment (ADR-0123): delivery areas, serving branches, hours and slots (`store-hours.ts`),
+  order e-mails (`OrderNotificationsService`, after commit), packing slips through the print
+  agents, and till hand-over (`PosHandoverService`, `/pos/online-orders`).
 - `apps/landing-web` is the public landing page at `/` (static React page, no session, no API
   calls; ADR-0113). Its text lives in `src/content.ts` (ar/en).
 Related documents: `AUTH.md` (authentication & permissions), `ROUTES.md`

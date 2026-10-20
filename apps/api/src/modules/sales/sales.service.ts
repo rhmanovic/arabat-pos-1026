@@ -880,6 +880,17 @@ export class SalesService {
         /** Staff member who recorded a manual payment. */
         collectedByUserId: string | null;
       };
+      /**
+       * Hand-over at the till (ADR-0123): the cashier's open shift takes the money with the
+       * POS tenders (several, with change); cash goes into the register drawer. `payment`
+       * then only names who collected it.
+       */
+      till?: {
+        shift: { id: string; registerId: string };
+        membershipId: string | null;
+        userId: string;
+        payments: CheckoutInput['payments'];
+      } | null;
     },
   ): Promise<{ receiptNumber: string; totalMinor: bigint }> {
     const { saleId, branchId, lines } = args;
@@ -942,19 +953,33 @@ export class SalesService {
         'PAYMENT_TOTAL_MISMATCH',
         'The payment does not match the order total.',
       );
-    const [method] = (
-      await tx.execute(sql`select * from payment_methods where id = ${args.payment.methodId}`)
-    ).rows as Record<string, unknown>[];
-    if (!method) throw AppError.notFound('Payment method not found.');
-    const cash = method['kind'] === 'cash';
+    const till = args.till ?? null;
+    // Till hand-over: the POS tender rules (BR-181), several tenders, change on cash.
+    const tillPaid = till
+      ? await this.preparePayments(
+          tx,
+          till.payments,
+          priced.totalMinor,
+          (await this.getSettingsInTx(tx, merchantId)).requireTenderReference,
+        )
+      : [];
+    const [method] = till
+      ? [null]
+      : ((await tx.execute(sql`select * from payment_methods where id = ${args.payment.methodId}`))
+          .rows as Record<string, unknown>[]);
+    if (!till && !method) throw AppError.notFound('Payment method not found.');
+    const cash = method?.['kind'] === 'cash';
     // A processing fee is charged by a card network, never on cash (FND-412).
-    const feeMinor = cash
-      ? 0n
-      : processingFee(priced.totalMinor, {
-          type: method['fee_type'] as FeeType,
-          fixedMinor: BigInt(method['fee_fixed_minor'] as string),
-          percent: method['fee_percent'] as string,
-        });
+    const feeMinor = till
+      ? tillPaid.reduce((sum, p) => sum + p.feeMinor, 0n)
+      : cash
+        ? 0n
+        : processingFee(priced.totalMinor, {
+            type: method!['fee_type'] as FeeType,
+            fixedMinor: BigInt(method!['fee_fixed_minor'] as string),
+            percent: method!['fee_percent'] as string,
+          });
+    const changeMinor = tillPaid.reduce((sum, p) => sum + p.changeMinor, 0n);
     let costMinor: bigint | null = 0n;
     const lineRows = lines.map((l, i) => {
       const lineCost = costs.total[i]!;
@@ -1004,60 +1029,120 @@ export class SalesService {
       orderDiscountMinor: 0n,
       totalMinor: priced.totalMinor,
       paidMinor: priced.totalMinor,
-      changeMinor: 0n,
+      changeMinor,
       feesMinor: feeMinor,
       costMinor,
+      ...(till
+        ? {
+            registerId: till.shift.registerId,
+            shiftId: till.shift.id,
+            membershipId: till.membershipId,
+            userId: till.userId,
+          }
+        : {}),
     });
     await tx.insert(saleLines).values(lineRows);
-    const paymentId = newId();
-    // Cash collected on hand-over is custody of the branch treasury (no register, ADR-0118).
-    const accountId = cash
-      ? (await branchTreasury(tx, branchId)).id
-      : ((method['financial_account_id'] as string | null) ?? null);
-    await tx.insert(payments).values({
-      id: paymentId,
-      merchantId,
-      saleId,
-      branchId,
-      shiftId: null,
-      paymentMethodId: args.payment.methodId,
-      methodKind: method['kind'] as string,
-      methodNameEn: (method['name_en'] as string | null) ?? null,
-      methodNameAr: (method['name_ar'] as string | null) ?? null,
-      amountMinor: priced.totalMinor,
-      feeMinor,
-      status: 'succeeded',
-      verification: args.payment.verification,
-      reference: args.payment.reference,
-      financialAccountId: accountId,
-    });
-    if (accountId)
-      await postEntries(tx, [
-        {
+    if (till) {
+      // Cash settles into the drawer of the register that took it (ADR-0090), as at the POS.
+      const drawer = tillPaid.some((p) => p.method.kind === 'cash')
+        ? (await registerAccount(tx, till.shift.registerId)).id
+        : null;
+      const accountOf = (p: (typeof tillPaid)[number]) =>
+        p.method.kind === 'cash' ? drawer : p.method.financialAccountId;
+      await tx.insert(payments).values(
+        tillPaid.map((p) => ({
+          id: p.id,
           merchantId,
-          accountId,
-          amountMinor: priced.totalMinor,
-          entryType: 'payment',
-          sourceType: 'payment',
-          sourceId: paymentId,
-          description: receiptNumber,
-          createdByUserId: args.payment.collectedByUserId,
-        },
-        ...(feeMinor > 0n
-          ? [
-              {
-                merchantId,
-                accountId,
-                amountMinor: -feeMinor,
-                entryType: 'fee' as const,
-                sourceType: 'payment',
-                sourceId: paymentId,
-                description: receiptNumber,
-                createdByUserId: args.payment.collectedByUserId,
-              },
-            ]
-          : []),
-      ]);
+          saleId,
+          branchId,
+          shiftId: till.shift.id,
+          paymentMethodId: p.method.id,
+          methodKind: p.method.kind,
+          methodNameEn: p.method.nameEn,
+          methodNameAr: p.method.nameAr,
+          amountMinor: p.amountMinor,
+          tenderedMinor: p.tenderedMinor,
+          changeMinor: p.changeMinor,
+          feeMinor: p.feeMinor,
+          status: 'succeeded',
+          verification: 'manual',
+          reference: p.reference,
+          financialAccountId: accountOf(p),
+        })),
+      );
+      await postEntries(
+        tx,
+        tillPaid.flatMap((p) => {
+          const accountId = accountOf(p);
+          if (!accountId) return [];
+          const base = {
+            merchantId,
+            accountId,
+            sourceType: 'payment',
+            sourceId: p.id,
+            description: receiptNumber,
+            createdByUserId: till.userId,
+            shiftId: p.method.kind === 'cash' ? till.shift.id : null,
+          };
+          return [
+            { ...base, entryType: 'payment' as const, amountMinor: p.amountMinor },
+            ...(p.feeMinor > 0n && p.method.kind !== 'cash'
+              ? [{ ...base, entryType: 'fee' as const, amountMinor: -p.feeMinor }]
+              : []),
+          ];
+        }),
+      );
+    } else {
+      const paymentId = newId();
+      // Cash collected on hand-over is custody of the branch treasury (no register, ADR-0118).
+      const accountId = cash
+        ? (await branchTreasury(tx, branchId)).id
+        : ((method!['financial_account_id'] as string | null) ?? null);
+      await tx.insert(payments).values({
+        id: paymentId,
+        merchantId,
+        saleId,
+        branchId,
+        shiftId: null,
+        paymentMethodId: args.payment.methodId,
+        methodKind: method!['kind'] as string,
+        methodNameEn: (method!['name_en'] as string | null) ?? null,
+        methodNameAr: (method!['name_ar'] as string | null) ?? null,
+        amountMinor: priced.totalMinor,
+        feeMinor,
+        status: 'succeeded',
+        verification: args.payment.verification,
+        reference: args.payment.reference,
+        financialAccountId: accountId,
+      });
+      if (accountId)
+        await postEntries(tx, [
+          {
+            merchantId,
+            accountId,
+            amountMinor: priced.totalMinor,
+            entryType: 'payment',
+            sourceType: 'payment',
+            sourceId: paymentId,
+            description: receiptNumber,
+            createdByUserId: args.payment.collectedByUserId,
+          },
+          ...(feeMinor > 0n
+            ? [
+                {
+                  merchantId,
+                  accountId,
+                  amountMinor: -feeMinor,
+                  entryType: 'fee' as const,
+                  sourceType: 'payment',
+                  sourceId: paymentId,
+                  description: receiptNumber,
+                  createdByUserId: args.payment.collectedByUserId,
+                },
+              ]
+            : []),
+        ]);
+    }
     await this.audit.recordIn(tx, {
       merchantId,
       actorType: args.payment.collectedByUserId ? 'user' : 'system',
@@ -1071,6 +1156,7 @@ export class SalesService {
         total: Money.ofMinor(priced.totalMinor, CURRENCY).toDecimalString(),
         verification: args.payment.verification,
         reference: args.payment.reference,
+        ...(till ? { till: true, shiftId: till.shift.id } : {}),
       },
     });
     await this.printJobs.queueAutoInTx(tx, {

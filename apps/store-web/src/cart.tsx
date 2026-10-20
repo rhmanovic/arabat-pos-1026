@@ -109,6 +109,11 @@ export function priceLines(
   products: StoreProduct[],
   store: Pick<Storefront, 'deliveryFee'>,
   fulfillment: 'pickup' | 'delivery',
+  /**
+   * The chosen delivery area (ADR-0123): its fee, free at or above its threshold. `undefined`
+   * = the store has no areas (flat fee); `null` = none chosen yet (nothing charged yet).
+   */
+  area?: Storefront['deliveryAreas'][number] | null,
 ) {
   const priced: PricedLine[] = [];
   const missing: CartLine[] = [];
@@ -132,6 +137,14 @@ export function priceLines(
   const currency = priced[0]?.unitPrice.currency ?? DEFAULT_CURRENCY;
   const subtotal = priced.reduce((sum, l) => sum.add(l.lineTotal), Money.zero(currency));
   const deliveryFee =
-    fulfillment === 'delivery' ? toMoney(store.deliveryFee) : Money.zero(currency);
+    fulfillment !== 'delivery'
+      ? Money.zero(currency)
+      : area === undefined
+        ? toMoney(store.deliveryFee)
+        : area === null
+          ? Money.zero(currency)
+          : area.freeDeliveryFrom !== null && subtotal.compare(toMoney(area.freeDeliveryFrom)) >= 0
+            ? Money.zero(currency)
+            : toMoney(area.fee);
   return { priced, missing, subtotal, deliveryFee, total: subtotal.add(deliveryFee) };
 }

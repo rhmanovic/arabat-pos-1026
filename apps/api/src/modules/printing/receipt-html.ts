@@ -1,4 +1,4 @@
-import type { ReceiptData } from '@arabat/pos-core';
+import type { OrderSlipData, ReceiptData } from '@arabat/pos-core';
 import { sql } from 'drizzle-orm';
 import type { Transaction } from '../../database/database.service.js';
 
@@ -89,4 +89,51 @@ export async function loadReceiptData(
   };
 }
 
-export { renderReceiptHtml, type ReceiptData } from '@arabat/pos-core';
+/** Reads an online order for its packing slip (ADR-0123), inside the caller's transaction. */
+export async function loadOrderSlipData(tx: Transaction, orderId: string): Promise<OrderSlipData> {
+  const [o] = (
+    await tx.execute(sql`
+      select o.number, o.status, o.fulfillment, o.payment_mode, o.sale_id, o.created_at, o.scheduled_for,
+             o.customer_name, o.customer_phone, o.delivery_address, o.delivery_area_name, o.note,
+             o.subtotal_minor::text, o.delivery_fee_minor::text, o.total_minor::text,
+             m.display_name_en, m.display_name_ar, m.timezone, b.name_en as b_en, b.name_ar as b_ar
+      from online_orders o join merchants m on m.id = o.merchant_id join branches b on b.id = o.branch_id
+      where o.id = ${orderId}`)
+  ).rows as Record<string, unknown>[];
+  if (!o) throw new Error(`Online order ${orderId} not found.`);
+  const lines = (
+    await tx.execute(sql`
+      select name_en, name_ar, variant_name_en, variant_name_ar, sku, quantity::text, line_total_minor::text
+      from online_order_lines where order_id = ${orderId} order by position`)
+  ).rows as Record<string, unknown>[];
+  return {
+    merchantName: ar(o['display_name_ar'], o['display_name_en']),
+    branchName: ar(o['b_ar'], o['b_en']),
+    orderNumber: o['number'] as string,
+    status: o['status'] as string,
+    fulfillment: o['fulfillment'] as string,
+    paymentMode: o['payment_mode'] as string,
+    paid: o['sale_id'] !== null,
+    createdAt: new Date(o['created_at'] as string),
+    scheduledFor: o['scheduled_for'] ? new Date(o['scheduled_for'] as string) : null,
+    timezone: o['timezone'] as string,
+    customerName: o['customer_name'] as string,
+    customerPhone: o['customer_phone'] as string,
+    deliveryAddress: (o['delivery_address'] as string | null) ?? null,
+    deliveryAreaName: (o['delivery_area_name'] as string | null) ?? null,
+    note: (o['note'] as string | null) ?? null,
+    lines: lines.map((l) => ({
+      name: [ar(l['name_ar'], l['name_en']), ar(l['variant_name_ar'], l['variant_name_en'])]
+        .filter(Boolean)
+        .join(' — '),
+      sku: (l['sku'] as string | null) ?? null,
+      quantity: String(l['quantity']).replace(/\.?0+$/, ''),
+      lineTotalMinor: BigInt(l['line_total_minor'] as string),
+    })),
+    subtotalMinor: BigInt(o['subtotal_minor'] as string),
+    deliveryFeeMinor: BigInt(o['delivery_fee_minor'] as string),
+    totalMinor: BigInt(o['total_minor'] as string),
+  };
+}
+
+export { renderOrderSlipHtml, renderReceiptHtml, type ReceiptData } from '@arabat/pos-core';

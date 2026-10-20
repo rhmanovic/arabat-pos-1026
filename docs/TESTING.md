@@ -66,6 +66,38 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-20 (online store Phase 5: fulfilment, ADR-0123, cloud sandbox run)
+- `ecommerce.int.test.ts` (+4, 16 in the file): delivery areas (flat fee without areas; an
+  inactive area is not offered; delivery without an area refused with a field issue; the area's
+  minimum; its fee on the order; free delivery at the threshold; the snapshot survives deleting
+  the area, then the flat fee again); serving branches (second branch with its own stock: the
+  storefront prices and caps at that branch, an order beyond its stock is refused, a smaller one
+  is prepared there; a branch closed today refuses an immediate order with `OUTSIDE_HOURS`; with
+  scheduling on, 30-minute slots over 7 days with capacity 1: the booked slot turns unavailable,
+  a second booking is `SLOT_FULL`, an off-grid time is refused); notifications and printing (a
+  placed order e-mails the shopper with the tracking link and address and the store at its
+  contact address with the console link; nothing printed until confirmed, then one
+  `online_order` job without a sale carrying the number, address and "collect on delivery",
+  visible to the branch's agent; later steps e-mail again); till hand-over (the till lists the
+  pickup order unpaid; a wrong total is `TOTAL_CHANGED`; cash 1.500 tendered 2.000 + card 1.000
+  create an online sale with change 0.500 in the shift; the same key replays the sale, a new
+  key is refused; the order is completed with the sale; stock 3.000; payment rows carry the
+  shift; a console-paid order is handed over after a version conflict is refused).
+- `apps/online-web/src/app.test.tsx` (+2, 15): the Kuwait pick-list fills the names and the
+  area is created with fee, free-from and minutes; a branch joins the store with preparation 45
+  and its own hours (Friday closed).
+- `apps/store-web/src/app.test.tsx` (+2, 16): no charge until an area is chosen (required on
+  submit), the area's fee, free delivery above the threshold, only available slots offered and
+  the chosen one sent, the tracking page shows the requested time; the branch picker reloads the
+  products for the chosen branch and remembers it.
+- `apps/pos-web/src/app.test.tsx` (+1, 14): "Online orders" lists the order to collect, the
+  payment dialog takes cash with change and posts to `/pos/online-orders/:id/pay`.
+- `e2e/store.spec.ts` (3): a Salmiya area from the console pick-list; the shopper's delivery
+  order charges it; a pickup order is handed over at the till for cash (receipt, online sale in
+  the shift, stock 4.000).
+- Totals: `pnpm verify` 343 unit/web (56 files), `pnpm test:integration` 303 (44 files),
+  `pnpm test:e2e` 42.
+
 ### Results 2026-10-20 (online store Phase 4: merchandising, ADR-0121, cloud sandbox run)
 - `ecommerce.int.test.ts` (+2, 12 in the file): new listings go to the end (positions 0, 1) with
   catalog name, no store title, no cap; a store category is created (position 0, no picture), a

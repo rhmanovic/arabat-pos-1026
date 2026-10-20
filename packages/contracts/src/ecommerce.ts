@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { moneyAmountSchema, moneySchema } from './catalog.js';
 import { quantitySchema } from './inventory.js';
 import { optionalId } from './optional-id.js';
+import { paymentInputSchema } from './sales.js';
 
 /** Online store contracts (Prompt 16). See BUSINESS_RULES.md BR-140…BR-149. */
 const text = (max: number) =>
@@ -69,6 +70,29 @@ export const RESERVED_STORE_SLUGS: readonly string[] = [
   'arabat',
 ];
 export const STORE_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{1,40}$/;
+// ---------------------------------------------------------------- hours and slots (ADR-0123)
+export const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+export type Weekday = (typeof WEEKDAYS)[number];
+/** HH:MM; 24:00 is allowed as a closing time (open until midnight). */
+const clock = z.string().regex(/^(([01]\d|2[0-3]):[0-5]\d|24:00)$/, { error: 'Use HH:MM.' });
+export const hoursRangeSchema = z
+  .object({ open: clock, close: clock })
+  .refine((r) => r.close > r.open, { error: 'Closing time must be after opening time.' });
+/** Opening hours per weekday; an empty list = closed that day. Null = always open. */
+const dayRanges = z.array(hoursRangeSchema).max(4);
+export const hoursSchema = z
+  .object({
+    mon: dayRanges,
+    tue: dayRanges,
+    wed: dayRanges,
+    thu: dayRanges,
+    fri: dayRanges,
+    sat: dayRanges,
+    sun: dayRanges,
+  })
+  .nullable();
+export type StoreHours = z.infer<typeof hoursSchema>;
+
 export const onlineStoreSchema = z.object({
   slug: z.string(),
   status: z.enum(STORE_STATUSES),
@@ -94,6 +118,12 @@ export const onlineStoreSchema = z.object({
   bannerUrl: z.string().nullable(),
   /** Leave products with nothing available out of the storefront. */
   hideOutOfStock: z.boolean(),
+  /** Opening hours (null = always open), time slots and merchant e-mails (ADR-0123). */
+  hours: hoursSchema,
+  schedulingEnabled: z.boolean(),
+  slotMinutes: z.number().int(),
+  slotCapacity: z.number().int().nullable(),
+  notifyEmail: z.boolean(),
   /** Payment methods available online (`availableOnline` and a gateway provider). */
   paymentMethods: z.array(
     z.object({
@@ -142,6 +172,17 @@ export const saveOnlineStoreSchema = z
     reservationMinutes: z.number().int().min(5).max(1440),
     payOnReceiptEnabled: z.boolean().default(true),
     hideOutOfStock: z.boolean().default(false),
+    hours: hoursSchema.default(null),
+    schedulingEnabled: z.boolean().default(false),
+    slotMinutes: z.number().int().min(15).max(240).default(30),
+    slotCapacity: z
+      .number()
+      .int()
+      .min(1)
+      .max(1000)
+      .nullish()
+      .transform((v) => v ?? null),
+    notifyEmail: z.boolean().default(true),
     version: z.number().int().nonnegative(),
   })
   .refine((s) => Boolean(s.nameAr || s.nameEn), {
@@ -290,6 +331,14 @@ export const publicOrderSchema = z.object({
   trackingToken: z.string(),
   /** Where to send the customer to pay (while pending payment). */
   paymentUrl: z.string().nullable(),
+  /** Requested slot start (ADR-0123); null = as soon as possible. */
+  scheduledFor: z.string().nullable(),
+  /** The area's name as it was at checkout (kept if the area is deleted). */
+  deliveryAreaName: z.string().nullable(),
+  /** The area's current names while it exists (for the visitor's language). */
+  deliveryArea: z.object(named).nullable(),
+  /** The branch that prepares the order (pickup address for the shopper). */
+  branch: z.object({ ...named, address: z.string().nullable(), phone: z.string().nullable() }),
   timeline: z.array(z.object({ status: z.enum(ONLINE_ORDER_STATUSES), at: z.string() })),
 });
 export type PublicOrder = z.infer<typeof publicOrderSchema>;
@@ -300,6 +349,7 @@ export const onlineOrderSchema = publicOrderSchema.extend({
   customerPhone: z.string(),
   customerEmail: z.string().nullable(),
   deliveryAddress: z.string().nullable(),
+  deliveryAreaId: z.string().nullable(),
   note: z.string().nullable(),
   customerId: z.string().nullable(),
   saleId: z.string().nullable(),
@@ -364,6 +414,114 @@ export const onlineOrderActionSchema = z
   });
 export type OnlineOrderActionInput = z.input<typeof onlineOrderActionSchema>;
 
+// ---------------------------------------------------------------- delivery areas and branches (ADR-0123)
+export const onlineDeliveryAreaSchema = z.object({
+  id: z.string(),
+  ...named,
+  fee: moneySchema,
+  minimumOrder: moneySchema,
+  /** Orders at or above this amount are delivered free; null = never. */
+  freeDeliveryFrom: moneySchema.nullable(),
+  estimatedMinutes: z.number().int().nullable(),
+  /** Serving branch; null = the store's fulfilment branch. */
+  branchId: z.string().nullable(),
+  position: z.number().int(),
+  active: z.boolean(),
+  version: z.number().int(),
+});
+export type OnlineDeliveryArea = z.infer<typeof onlineDeliveryAreaSchema>;
+export const onlineDeliveryAreaListSchema = z.object({
+  areas: z.array(onlineDeliveryAreaSchema),
+});
+export const saveOnlineDeliveryAreaSchema = z
+  .object({
+    nameEn: text(80),
+    nameAr: text(80),
+    fee: moneyAmountSchema,
+    minimumOrder: moneyAmountSchema.default('0.000'),
+    freeDeliveryFrom: moneyAmountSchema.nullish().transform((v) => v ?? null),
+    estimatedMinutes: z
+      .number()
+      .int()
+      .min(1)
+      .max(1440)
+      .nullish()
+      .transform((v) => v ?? null),
+    branchId: optionalId(),
+    active: z.boolean().default(true),
+    version: z.number().int().positive().optional(),
+  })
+  .refine((a) => Boolean(a.nameAr || a.nameEn), {
+    error: 'An area name is required.',
+    path: ['nameAr'],
+  });
+export type SaveOnlineDeliveryArea = z.input<typeof saveOnlineDeliveryAreaSchema>;
+export const onlineDeliveryAreaOrderSchema = z.object({ ids: z.array(z.uuid()).max(500) });
+
+export const onlineStoreBranchSchema = z.object({
+  branchId: z.string(),
+  ...named,
+  address: z.string().nullable(),
+  phone: z.string().nullable(),
+  pickupEnabled: z.boolean(),
+  deliveryEnabled: z.boolean(),
+  preparationMinutes: z.number().int(),
+  /** Null = the store's hours. */
+  hours: hoursSchema,
+  position: z.number().int(),
+  active: z.boolean(),
+  version: z.number().int(),
+});
+export type OnlineStoreBranch = z.infer<typeof onlineStoreBranchSchema>;
+export const onlineStoreBranchListSchema = z.object({
+  branches: z.array(onlineStoreBranchSchema),
+});
+export const saveOnlineStoreBranchSchema = z
+  .object({
+    pickupEnabled: z.boolean().default(true),
+    deliveryEnabled: z.boolean().default(false),
+    preparationMinutes: z.number().int().min(0).max(1440).default(30),
+    hours: hoursSchema.default(null),
+    active: z.boolean().default(true),
+    version: z.number().int().positive().optional(),
+  })
+  .refine((b) => b.pickupEnabled || b.deliveryEnabled, {
+    error: 'Enable pickup or delivery.',
+    path: ['pickupEnabled'],
+  });
+export type SaveOnlineStoreBranch = z.input<typeof saveOnlineStoreBranchSchema>;
+export const onlineStoreBranchOrderSchema = z.object({ branchIds: z.array(z.uuid()).max(200) });
+
+// ---------------------------------------------------------------- POS hand-over (ADR-0123)
+export const posOnlineOrderSchema = z.object({
+  id: z.string(),
+  number: z.string(),
+  status: z.enum(ONLINE_ORDER_STATUSES),
+  fulfillment: z.enum(FULFILLMENTS),
+  paymentMode: z.enum(PAYMENT_MODES),
+  customerName: z.string(),
+  customerPhone: z.string(),
+  total: moneySchema,
+  /** Set once the money was received (gateway, console or till). */
+  paid: z.boolean(),
+  scheduledFor: z.string().nullable(),
+  createdAt: z.string(),
+  lines: z.array(onlineOrderLineSchema),
+  note: z.string().nullable(),
+  version: z.number().int(),
+});
+export type PosOnlineOrder = z.infer<typeof posOnlineOrderSchema>;
+export const posOnlineOrderListSchema = z.object({ orders: z.array(posOnlineOrderSchema) });
+export const posOnlineOrderPaySchema = z.object({
+  idempotencyKey: z.uuid(),
+  payments: z.array(paymentInputSchema).min(1).max(10),
+  /** The total shown to the cashier; refused if the order changed meanwhile. */
+  expectedTotal: moneyAmountSchema,
+  version: z.number().int().positive(),
+});
+export type PosOnlineOrderPay = z.input<typeof posOnlineOrderPaySchema>;
+export const posOnlineOrderCompleteSchema = z.object({ version: z.number().int().positive() });
+
 // ---------------------------------------------------------------- storefront (public)
 export const storefrontSchema = z.object({
   slug: z.string(),
@@ -389,8 +547,43 @@ export const storefrontSchema = z.object({
   /** The store's own categories when it has any (ADR-0121), else the catalog's. */
   categorySource: z.enum(['online', 'pos']),
   categories: z.array(z.object({ id: z.string(), ...named, imageUrl: z.string().nullable() })),
+  /** Branches serving the store (ADR-0123); one entry = the single fulfilment branch. */
+  branches: z.array(
+    z.object({
+      id: z.string(),
+      ...named,
+      address: z.string().nullable(),
+      phone: z.string().nullable(),
+      pickupEnabled: z.boolean(),
+      deliveryEnabled: z.boolean(),
+      preparationMinutes: z.number().int(),
+      hours: hoursSchema,
+      /** Open right now by its hours (always true without hours). */
+      openNow: z.boolean(),
+    }),
+  ),
+  /** Products, stock and prices come from this branch unless the shopper picks another. */
+  defaultBranchId: z.string(),
+  /** Delivery areas to pick from (ADR-0123); empty = the flat `deliveryFee` applies. */
+  deliveryAreas: z.array(
+    z.object({
+      id: z.string(),
+      ...named,
+      fee: moneySchema,
+      minimumOrder: moneySchema,
+      freeDeliveryFrom: moneySchema.nullable(),
+      estimatedMinutes: z.number().int().nullable(),
+      branchId: z.string(),
+    }),
+  ),
+  scheduling: z.object({ enabled: z.boolean(), slotMinutes: z.number().int() }),
+  timezone: z.string(),
 });
 export type Storefront = z.infer<typeof storefrontSchema>;
+export const storeSlotListSchema = z.object({
+  slots: z.array(z.object({ start: z.string(), end: z.string(), available: z.boolean() })),
+});
+export type StoreSlotList = z.infer<typeof storeSlotListSchema>;
 
 export const storeProductSchema = z.object({
   productId: z.string(),
@@ -439,6 +632,15 @@ export const storeCheckoutSchema = z
         .transform((v) => v || null),
     }),
     deliveryAddress: text(300),
+    /** The branch that prepares the order (ADR-0123); null = the store's default branch. */
+    branchId: optionalId(),
+    /** Required when the store defines delivery areas and the order is delivered. */
+    deliveryAreaId: optionalId(),
+    /** Requested slot start (ISO 8601); null = as soon as possible. */
+    scheduledFor: z.iso
+      .datetime({ offset: true })
+      .nullish()
+      .transform((v) => v ?? null),
     note: text(300),
     /** An online method, or null to pay on receipt (when the store allows it). */
     paymentMethodId: z

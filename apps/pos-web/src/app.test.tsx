@@ -884,6 +884,133 @@ describe('pos app', () => {
     expect(fetch.calls.some((c) => c.path === '/pos/assistant/chat')).toBe(false);
   });
 
+  it('hands an online pickup order over at the till: lists it, takes the cash and prints (ADR-0123)', async () => {
+    const order = {
+      id: '0190a000-0000-7000-8000-0000000000e1',
+      number: 'W-000003',
+      status: 'confirmed',
+      fulfillment: 'pickup',
+      paymentMode: 'on_receipt',
+      customerName: 'Noura',
+      customerPhone: '+96560002222',
+      total: money('2.500'),
+      paid: false,
+      scheduledFor: null,
+      createdAt: '2026-10-12T06:00:00.000Z',
+      lines: [
+        {
+          position: 0,
+          variantId: '0190a000-0000-7000-8000-000000000a01',
+          productId: '0190a000-0000-7000-8000-000000000b01',
+          nameEn: 'Date box',
+          nameAr: null,
+          variantNameEn: null,
+          variantNameAr: null,
+          sku: 'DATES',
+          quantity: '2.000',
+          unitPrice: money('1.250'),
+          lineTotal: money('2.500'),
+        },
+      ],
+      note: null,
+      version: 2,
+    };
+    const sale = {
+      id: '0190a000-0000-7000-8000-000000000c02',
+      orderId: null,
+      receiptNumber: 'MAIN-000002',
+      branchId: SHIFT.branchId,
+      registerId: SHIFT.registerId,
+      shiftId: SHIFT.id,
+      cashierName: 'Cashier',
+      createdAt: '2026-10-12T06:00:00.000Z',
+      subtotal: money('2.500'),
+      lineDiscounts: money('0.000'),
+      orderDiscount: money('0.000'),
+      total: money('2.500'),
+      paid: money('2.500'),
+      change: money('0.500'),
+      refunded: money('0.000'),
+      customer: null,
+      lines: [],
+      payments: [],
+    };
+    const fetch = fakeApiFetch({
+      session: makeSession('pos', ['pos.access', 'shifts.operate', 'sales.create']),
+      routes: {
+        'GET /pos/shifts/current': () => ({ status: 200, body: { shift: SHIFT } }),
+        'GET /pos/catalog': () => ({
+          status: 200,
+          body: { branchId: SHIFT.branchId, categories: [], items: [], version: 'v1' },
+        }),
+        'GET /pos/inventory/availability': () => ({
+          status: 200,
+          body: { branchId: SHIFT.branchId, allowNegativeStock: false, items: [] },
+        }),
+        'GET /pos/payment-methods': () => ({
+          status: 200,
+          body: {
+            methods: [
+              {
+                id: '0190a000-0000-7000-8000-000000000d01',
+                kind: 'cash',
+                nameEn: 'Cash',
+                nameAr: null,
+                sortOrder: 0,
+              },
+            ],
+          },
+        }),
+        'GET /pos/online-orders': () => ({ status: 200, body: { orders: [order] } }),
+        'POST /pos/online-orders/0190a000-0000-7000-8000-0000000000e1/pay': () => ({
+          status: 201,
+          body: sale,
+        }),
+        'GET /pos/sales/0190a000-0000-7000-8000-000000000c02/print-status': () => ({
+          status: 200,
+          body: { status: 'printed', jobId: null, error: null, printerOnline: true },
+        }),
+        'GET /pos/sales/0190a000-0000-7000-8000-000000000c02/receipt': () => ({
+          status: 200,
+          body: {
+            sale,
+            merchant: { nameEn: 'Demo', nameAr: null },
+            branch: {
+              nameEn: 'Main',
+              nameAr: null,
+              phone: null,
+              address: null,
+              receiptHeader: null,
+              receiptFooter: null,
+            },
+            register: { code: 'R1', nameEn: 'Register 1', nameAr: null },
+          },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'pos', i18n, fetch });
+    await userEvent.click(await screen.findByRole('button', { name: 'Online orders' }));
+    const list = await screen.findByRole('dialog');
+    expect(within(list).getByText('W-000003')).toBeInTheDocument();
+    expect(within(list).getByText('To collect')).toBeInTheDocument();
+    expect(within(list).getByText(/Date box/)).toBeInTheDocument();
+    await userEvent.click(within(list).getByRole('button', { name: 'Take payment and hand over' }));
+    const pay = await screen.findByRole('dialog');
+    await userEvent.click(await within(pay).findByRole('button', { name: 'Cash' }));
+    await userEvent.type(within(pay).getByLabelText('Cash received (KWD)'), '3');
+    await userEvent.click(within(pay).getByRole('button', { name: 'Add payment' }));
+    expect(within(pay).getByTestId('change')).toHaveTextContent('KWD 0.500');
+    await userEvent.click(within(pay).getByRole('button', { name: 'Complete sale' }));
+    expect(await screen.findAllByTestId('receipt-number')).not.toHaveLength(0);
+    const call = fetch.calls.find((c) => c.method === 'POST')!;
+    expect(call.path).toBe('/pos/online-orders/0190a000-0000-7000-8000-0000000000e1/pay');
+    expect(call.body).toMatchObject({
+      payments: [{ amount: '2.500', tendered: '3.000' }],
+      expectedTotal: '2.500',
+      version: 2,
+    });
+  });
+
   it('defines the same translation keys in Arabic and English', () => {
     expect(flattenKeys(resources.ar).sort()).toEqual(flattenKeys(resources.en).sort());
   });

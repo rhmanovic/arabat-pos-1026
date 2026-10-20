@@ -40,6 +40,24 @@ const STORE = {
   bannerUrl: null,
   categorySource: 'pos',
   categories: [],
+  branches: [
+    {
+      id: '0190a000-0000-7000-8000-0000000000b1',
+      nameEn: 'Main branch',
+      nameAr: 'الفرع الرئيسي',
+      address: 'Salem Al-Mubarak St.',
+      phone: '+96522223333',
+      pickupEnabled: true,
+      deliveryEnabled: true,
+      preparationMinutes: 0,
+      hours: null,
+      openNow: true,
+    },
+  ],
+  defaultBranchId: '0190a000-0000-7000-8000-0000000000b1',
+  deliveryAreas: [],
+  scheduling: { enabled: false, slotMinutes: 30 },
+  timezone: 'Asia/Kuwait',
 };
 const COFFEE = '0190a000-0000-7000-8000-000000000001';
 const COFFEE_V = '0190a000-0000-7000-8000-000000000011';
@@ -122,6 +140,10 @@ const ORDER = {
   paidAt: null,
   reservedUntil: '2026-10-12T10:15:00.000Z',
   trackingToken: 'tok123',
+  scheduledFor: null,
+  deliveryAreaName: null,
+  deliveryArea: null,
+  branch: { nameEn: 'Main branch', nameAr: null, address: 'Salem Al-Mubarak St.', phone: null },
   paymentUrl: 'http://localhost/store/pay/mock_abc?return=x',
   timeline: [{ status: 'pending_payment', at: '2026-10-12T10:00:00.000Z' }],
 };
@@ -302,6 +324,118 @@ describe('storefront', () => {
       expectedTotal: '4.000',
     });
     expect(localStorage.getItem('arabat.cart.demo')).toBe('[]');
+  });
+
+  it('picks the delivery area with its fee, delivers free above the threshold and books a time slot', async () => {
+    localStorage.setItem(
+      'arabat.cart.demo',
+      JSON.stringify([{ variantId: COFFEE_V, productId: COFFEE, quantity: 2 }]),
+    );
+    const user = userEvent.setup();
+    const areas = [
+      {
+        id: '0190a000-0000-7000-8000-0000000000e1',
+        nameEn: 'Salmiya',
+        nameAr: 'السالمية',
+        fee: kwd('1.000'),
+        minimumOrder: kwd('0.000'),
+        freeDeliveryFrom: null,
+        estimatedMinutes: 45,
+        branchId: STORE.defaultBranchId,
+      },
+      {
+        id: '0190a000-0000-7000-8000-0000000000e2',
+        nameEn: 'Hawally',
+        nameAr: 'حولي',
+        fee: kwd('0.750'),
+        minimumOrder: kwd('0.000'),
+        freeDeliveryFrom: kwd('2.000'),
+        estimatedMinutes: null,
+        branchId: STORE.defaultBranchId,
+      },
+    ];
+    const slots = [
+      { start: '2026-10-13T08:00:00.000Z', end: '2026-10-13T08:30:00.000Z', available: true },
+      { start: '2026-10-13T08:30:00.000Z', end: '2026-10-13T09:00:00.000Z', available: false },
+      { start: '2026-10-13T09:00:00.000Z', end: '2026-10-13T09:30:00.000Z', available: true },
+    ];
+    const placed = {
+      ...ORDER,
+      status: 'placed',
+      paymentMode: 'on_receipt',
+      paymentUrl: null,
+      scheduledFor: slots[2]!.start,
+      deliveryAreaName: 'Hawally',
+      deliveryArea: null,
+    };
+    const { fetch } = renderStore('/demo/checkout', {
+      'GET /store/demo': () => ({
+        status: 200,
+        body: {
+          ...STORE,
+          paymentMethods: [],
+          deliveryAreas: areas,
+          scheduling: { enabled: true, slotMinutes: 30 },
+        },
+      }),
+      'GET /store/demo/slots': () => ({ status: 200, body: { slots } }),
+      'POST /store/demo/checkout': () => ({ status: 201, body: { order: placed } }),
+      'GET /store/demo/orders/tok123': () => ({ status: 200, body: placed }),
+    });
+    await user.click(await screen.findByRole('radio', { name: 'Delivery' }));
+    // No area yet: nothing is charged and the order cannot be placed.
+    expect(screen.getByTestId('checkout-total')).toHaveTextContent('KWD 2.500');
+    await user.type(screen.getByLabelText('Full name'), 'Sara');
+    await user.type(screen.getByLabelText('Phone'), '+96550000001');
+    await user.type(screen.getByLabelText('Delivery address'), 'Block 1');
+    await user.click(screen.getByRole('button', { name: 'Place order' }));
+    expect(await screen.findByText('Required')).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText('Delivery area'), areas[0]!.id);
+    expect(screen.getByTestId('checkout-total')).toHaveTextContent('KWD 3.500');
+    // Hawally is free from 2.000: the subtotal of 2.500 qualifies.
+    await user.selectOptions(screen.getByLabelText('Delivery area'), areas[1]!.id);
+    expect(screen.getByTestId('checkout-total')).toHaveTextContent('KWD 2.500');
+    expect(screen.getByText(/Free delivery for orders of KWD 2.000/)).toBeInTheDocument();
+    // A time instead of "as soon as possible": only available slots are offered.
+    await user.click(screen.getByRole('radio', { name: 'Choose a time' }));
+    const slot = await screen.findByLabelText('Time');
+    expect(within(slot).getAllByRole('option')).toHaveLength(2);
+    await user.selectOptions(slot, slots[2]!.start);
+    await user.click(screen.getByRole('button', { name: 'Place order' }));
+    expect(await screen.findByTestId('order-status')).toHaveTextContent('Received');
+    expect(fetch.calls.find((c) => c.method === 'POST')!.body).toMatchObject({
+      fulfillment: 'delivery',
+      deliveryAreaId: areas[1]!.id,
+      scheduledFor: slots[2]!.start,
+      expectedTotal: '2.500',
+    });
+    expect(screen.getByTestId('order-wanted')).toHaveTextContent('Requested time');
+  });
+
+  it('lets the shopper pick the pickup branch and loads that branch’s products', async () => {
+    const user = userEvent.setup();
+    const second = {
+      ...STORE.branches[0]!,
+      id: '0190a000-0000-7000-8000-0000000000b2',
+      nameEn: 'Mall branch',
+      address: 'The Avenues',
+    };
+    const { fetch } = renderStore('/demo', {
+      'GET /store/demo': () => ({
+        status: 200,
+        body: { ...STORE, branches: [STORE.branches[0]!, second] },
+      }),
+    });
+    expect(await screen.findByText('Coffee beans')).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText('Branch'), second.id);
+    await waitFor(() =>
+      expect(
+        fetch.calls.some(
+          (c) => c.path === '/store/demo/products' && c.query === `branch=${second.id}`,
+        ),
+      ).toBe(true),
+    );
+    expect(localStorage.getItem('arabat.store.demo.branch')).toBe(second.id);
   });
 
   it('places an order to pay on delivery without a gateway and shows the tracking page', async () => {
