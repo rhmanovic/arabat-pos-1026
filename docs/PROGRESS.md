@@ -1185,6 +1185,13 @@ unpaid orders hold no stock. Phase 1:
   by the job `arabat-migrate-42gwl`; Cloud Run moved traffic after the readiness probe). The
   sandbox cannot reach `www.arabatapp.com` directly (egress policy), so the check is Cloud Run's.
   The sandbox was signed out of `arabat-admin` afterwards; no key was deleted.
+- Re-released 2026-10-20 06:30 UTC at the owner's request with the latest `main`:
+  `b026ea3610e0` (revision `arabat-web-00037-g5s`; migration job `arabat-migrate-x9x2h`
+  completed, nothing new to apply). Verified from inside Google Cloud through a Cloud Build
+  step (build `e352d08d`): `/api/v1/health/ready` 200 `{"status":"ok","version":"b026ea3610e0",
+  database ok, 3 ms}`, `/health/live`, `/store/` and `/manager/` 200. Signed out afterwards; the
+  working admin key lives in the environment variable `GCP_Admin_KEY_01` (`GCP_ADMIN_KEY_B64`
+  holds a key that no longer exists in GCP and is refused with `invalid_grant`).
 
 ## Next step
 Online store Phase 2 (`/online` console, ADR-0119) per `docs/ONLINE_STORE_PLAN.md`.
