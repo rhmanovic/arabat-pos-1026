@@ -417,3 +417,115 @@ test('delivery areas at checkout, and a pickup order handed over at the till (AD
   ).find((b) => b.branchId === main)!.onHand;
   expect(level).toBe('4.000');
 });
+
+test('the owner designs the store as a restaurant, previews it live and publishes it (ADR-0128)', async ({
+  page,
+  browser,
+}) => {
+  const email = uniqueEmail('design-owner');
+  expect(
+    (
+      await page.request.post('/api/v1/auth/register', {
+        data: {
+          company: { nameEn: 'Design Co' },
+          owner: { fullName: 'Design Owner', email, password: 'Owner-Pass-2026' },
+        },
+      })
+    ).status(),
+  ).toBe(201);
+  const main = (
+    (await (await page.request.get('/api/v1/manager/branches')).json()).branches as {
+      id: string;
+    }[]
+  )[0]!.id;
+  const category = await (
+    await page.request.post('/api/v1/manager/online/categories', { data: { nameEn: 'Hot drinks' } })
+  ).json();
+  const product = await (
+    await page.request.post('/api/v1/manager/products', {
+      data: {
+        nameEn: 'Karak tea',
+        type: 'service',
+        trackInventory: false,
+        variants: [{ sku: 'KARAK', price: '0.500' }],
+      },
+    })
+  ).json();
+  await page.request.put('/api/v1/manager/online/listings', {
+    data: { productIds: [product.id], listed: true },
+  });
+  await page.request.put(`/api/v1/manager/online/listings/${product.id as string}`, {
+    data: {
+      titleEn: null,
+      titleAr: null,
+      descriptionEn: 'With cardamom',
+      descriptionAr: null,
+      featured: true,
+      maxPerOrder: null,
+      onlineCategoryId: category.id,
+    },
+  });
+  const slug = `design-${Date.now().toString(36)}`;
+  expect(
+    (
+      await page.request.put('/api/v1/manager/online/store', {
+        data: {
+          slug,
+          status: 'published',
+          nameEn: 'Karak Corner',
+          primaryColor: '#9a3412',
+          fulfillmentBranchId: main,
+          pickupEnabled: true,
+          deliveryEnabled: false,
+          deliveryFee: '0.000',
+          minimumOrder: '0.000',
+          reservationMinutes: 30,
+          payOnReceiptEnabled: true,
+          version: 0,
+        },
+      })
+    ).status(),
+  ).toBe(200);
+
+  // The editor shows the store in its preview frame; the restaurant template replaces the layout.
+  await page.goto('/online/design');
+  const preview = page.frameLocator('iframe[name="arabat-design-preview"]');
+  await expect(preview.getByText('Preview: what shoppers will see once you publish')).toBeVisible();
+  await page.getByRole('tab', { name: 'Template' }).click();
+  const restaurant = page
+    .locator('div', { has: page.getByText('Restaurant', { exact: true }) })
+    .filter({
+      has: page.getByRole('button', { name: 'Apply' }),
+    });
+  await restaurant.last().getByRole('button', { name: 'Apply' }).click();
+  await page.getByRole('button', { name: 'Yes, replace my design' }).click();
+  // The preview follows the unsaved draft at once.
+  await expect(preview.getByText('Fresh from our kitchen')).toBeVisible();
+  await page.getByRole('tab', { name: 'Pages' }).click();
+  await page.getByRole('button', { name: 'Edit Banner' }).click();
+  await page.getByLabel('Title (English)', { exact: true }).fill('Karak all day');
+  await expect(preview.getByText('Karak all day')).toBeVisible();
+  // Shoppers still see the old layout until the design is published.
+  const shopperContext = await browser.newContext();
+  await shopperContext.addInitScript(() => localStorage.setItem('arabat.language', 'en'));
+  const shopper = await shopperContext.newPage();
+  await shopper.goto(`/store/${slug}`);
+  await expect(
+    shopper.getByTestId('product-grid').getByRole('link', { name: /Karak tea/ }),
+  ).toBeVisible();
+  await expect(shopper.getByText('Karak all day')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Publish' }).click();
+  await expect(page.getByTestId('design-status')).toHaveText('Published');
+
+  await shopper.reload();
+  await expect(shopper.getByText('Karak all day')).toBeVisible();
+  await expect(shopper.getByText('Open now')).toBeVisible();
+  const menu = shopper.getByRole('region', { name: 'Menu' });
+  await expect(menu.getByRole('heading', { name: 'Hot drinks' })).toBeVisible();
+  await expect(menu.getByText('With cardamom')).toBeVisible();
+  await menu.getByRole('button', { name: 'Add one Karak tea to the cart' }).click();
+  await expect(shopper.getByRole('link', { name: 'Cart (1)' })).toBeVisible();
+  await shopper.getByRole('link', { name: 'Menu' }).first().click();
+  await expect(shopper).toHaveURL(new RegExp(`/store/${slug}/products$`));
+  await shopperContext.close();
+});

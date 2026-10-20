@@ -92,7 +92,7 @@ const slotsQuerySchema = branchQuerySchema.extend({
 });
 
 /** One `file` field of a multipart request, at most `MAX_STORE_IMAGE_BYTES` (ADR-0121). */
-async function readUpload(req: FastifyRequest): Promise<Buffer> {
+export async function readUpload(req: FastifyRequest): Promise<Buffer> {
   if (!req.isMultipart())
     throw new AppError(415, 'UNSUPPORTED_MEDIA', 'Send the image as multipart/form-data.');
   const file = await req.file({ limits: { fileSize: MAX_STORE_IMAGE_BYTES + 1, files: 1 } });
@@ -108,7 +108,7 @@ async function readUpload(req: FastifyRequest): Promise<Buffer> {
   return data;
 }
 
-const sendImage = (
+export const sendImage = (
   reply: FastifyReply,
   image: { data: Buffer; contentType: string },
   cache: string,

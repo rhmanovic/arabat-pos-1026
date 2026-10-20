@@ -203,6 +203,8 @@ export const commonEn = {
     ACCOUNTS_DISABLED: 'This store does not offer accounts.',
     EMAIL_TAKEN: 'An account with this e-mail already exists.',
     PHONE_TAKEN: 'An account with this phone already exists.',
+    ASSET_IN_USE: 'This picture is used in the store design. Remove it from the sections first.',
+    ASSET_LIMIT_REACHED: 'The store holds at most 200 design pictures. Delete some first.',
     PAYMENT_SIGNATURE_INVALID: 'The payment notification could not be verified.',
     MINIMUM_ORDER: 'The order is below the store’s minimum.',
     LINK_LIMIT_REACHED: 'A link page holds at most 50 links.',

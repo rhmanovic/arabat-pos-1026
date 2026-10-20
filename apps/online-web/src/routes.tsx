@@ -1,3 +1,4 @@
+import { DesignPage } from './features/design/DesignPage.js';
 import {
   NotFound,
   RedirectIfAuthenticated,
@@ -50,6 +51,7 @@ export const routes: RouteObject[] = [
       { path: 'branches', element: <BranchesPage /> },
       { path: 'promotions', element: <PromotionsPage /> },
       { path: 'analytics', element: <AnalyticsPage /> },
+      { path: 'design', element: <DesignPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: '*', element: <NotFound /> },
     ],

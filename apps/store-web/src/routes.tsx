@@ -9,8 +9,8 @@ import {
   ResetPasswordPage,
 } from './pages/AccountPages.js';
 import { CartPage } from './pages/CartPage.js';
-import { CatalogPage } from './pages/CatalogPage.js';
 import { CheckoutPage } from './pages/CheckoutPage.js';
+import { DesignedPage } from './design/sections.js';
 import { HomePage } from './pages/HomePage.js';
 import { LinksPage } from './pages/LinksPage.js';
 import { OrderPage } from './pages/OrderPage.js';
@@ -30,7 +30,10 @@ export const routes: RouteObject[] = [
     element: <StoreLayout />,
     errorElement: <RouteErrorBoundary />,
     children: [
-      { index: true, element: <CatalogPage /> },
+      // Pages built from the store design's sections (ADR-0128).
+      { index: true, element: <DesignedPage page="home" /> },
+      { path: 'products', element: <DesignedPage page="products" /> },
+      { path: 'categories', element: <DesignedPage page="categories" /> },
       { path: 'products/:productId', element: <ProductPage /> },
       { path: 'cart', element: <CartPage /> },
       { path: 'checkout', element: <CheckoutPage /> },

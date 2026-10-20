@@ -2141,3 +2141,59 @@ ADR; supersede it.
 - **Consequences:** the console feels like a modern app on a phone without changing what it
   does; labels used by tests and the e2e suite were kept ("Online store" stays the page heading).
   Other console pages inherit the palette, radii and dark mode through the tokens.
+
+## ADR-0128 — Storefront design: header, navigation, side menu, footer and page sections, with a live preview
+- **Status:** Accepted (2026-10-20). Owner's request: the store looked primitive; the owner wants
+  to choose the navigation bar, header, footer (styles and blocks), side menu, and to build the
+  home, products and categories pages from sections (slider, banner, products, picture, video…),
+  adding, removing, ordering and editing them, with different needs for shops and restaurants.
+  Migration 0070; BR-227…BR-231.
+- **Decision:**
+  - **One design document per store** (`online_store_designs`: `draft` and `published` jsonb,
+    `published_at`, `published_by_user_id`, version; RLS), validated on write and on read by the
+    shared `storeDesignSchema` (`packages/contracts/src/store-design.ts`). A stored design that no
+    longer parses falls back to the legacy layout, so a schema change can never break a store.
+  - **Shell:** template (retail / restaurant); style (corners, background white / tinted / dark,
+    cards, buttons); announcement bar style; header (layout classic / centred / minimal, colour
+    light / brand / dark, sticky, tagline, search button); navigation bar (links / underline /
+    pills / hidden, up to 8 items to a page, a category, a product or an https / tel / mailto /
+    store-path address — never `javascript:`); side menu (always on phones; optional on large
+    screens; categories, contact, social); footer (simple / columns / centred / dark, up to 6
+    blocks: about, links, categories, contact, opening hours, social accounts, payment methods;
+    "Powered by Arabat" switch); phone bottom bar; social accounts (handles, WhatsApp number).
+  - **Pages and sections:** home (≤ 30), products and categories (≤ 15 each). Section types:
+    slider (full / contained / cards, autoplay, ≤ 8 slides with picture, texts, button and link),
+    banner (text on picture / picture beside text / brand colour; store banner, upload or none),
+    products (featured / all / a category / chosen; grid with 2–4 columns, swipe row or list),
+    categories (tiles / circles / chips / list; all or chosen), picture, video (YouTube in
+    privacy mode, Vimeo, TikTok — the URL is parsed into an embed address, nothing else is
+    accepted), text, highlights (emoji + texts), restaurant menu (dishes grouped by category with
+    jump tabs, one-tap add for single-option dishes), store info (open now, today's hours,
+    preparation, delivery, minimum, branches, phone), and the catalog (search, sort, category
+    filter, featured first). The products page must keep one catalog or menu; the categories page
+    one categories section. Texts are Arabic and English; a missing language falls back.
+  - **Templates:** retail (slider, highlights, category circles, featured row, all products,
+    grid catalog, columns footer) and restaurant (hero "Order now", open-now strip, most ordered,
+    menu with tabs, centred header, pill navigation, hours in the footer). The console suggests
+    restaurant when the restaurant module is on. A store that never published keeps the legacy
+    layout (store banner + catalog), so nothing changed for existing stores.
+  - **Pictures:** `online_store_assets` (≤ 200 per store, JPEG / PNG / WebP ≤ 2 MB, checked by
+    content, `FileStorage`), served publicly at `/store/:slug/assets/:id` with a one-year
+    immutable cache; deleting one still used by the draft or the published design is refused
+    (`ASSET_IN_USE`). The global `no-store` header now yields to a route's own cache policy, which
+    also lets the existing logo / banner / category pictures cache as intended.
+  - **Draft, preview, publish:** the console's `/online/design` saves a draft (optimistic version),
+    publishes it, or discards back to the published one; audited (`online.design_saved /
+    _published / _discarded / _asset_added / _asset_removed`). The live preview is the real
+    storefront in a same-origin frame named `arabat-design-preview`: there it reads the store
+    through `/manager/online/preview/*` (also a draft store, with console picture links), shows a
+    preview badge, and replaces the design live from the editor's `postMessage` (origin and
+    source checked, payload validated). CSP: `frame-ancestors 'self'` (was `'none'`) and
+    `frame-src` for the three video players.
+  - **Storefront routes:** `/store/:slug` home, `/store/:slug/products` (products page; also
+    `?category=` and `?search=1`), `/store/:slug/categories`.
+- **Not in this phase:** custom fonts (CSP `font-src 'self'`), per-section colours, scheduled
+  publishing, design history beyond draft / published, uploaded videos (links only), A/B tests.
+- **Consequences:** merchants shape their store without code, see every change before shoppers
+  do, and shops and restaurants start from a layout made for them; the store stays safe because
+  every design passes one schema and links / videos are restricted.

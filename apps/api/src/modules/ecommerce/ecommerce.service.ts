@@ -94,6 +94,29 @@ const NEXT: Record<string, OnlineOrderStatus[]> = {
 type StoreImageKind = 'logo' | 'banner';
 const imageUrl = (path: string, version: number) => `/api/v1/${path}?v=${version}`;
 
+/**
+ * Where the storefront's pictures are served: the public store routes, or the console's own
+ * routes while the merchant previews a store that is not public yet (ADR-0128).
+ */
+interface StoreUrls {
+  logo: (version: number) => string;
+  banner: (version: number) => string;
+  category: (id: string, version: number) => string;
+  productImage: (productId: string, imageId: string) => string;
+}
+const publicUrls = (slug: string): StoreUrls => ({
+  logo: (v) => imageUrl(`store/${slug}/logo`, v),
+  banner: (v) => imageUrl(`store/${slug}/banner`, v),
+  category: (id, v) => imageUrl(`store/${slug}/categories/${id}/image`, v),
+  productImage: (productId, imageId) => `/api/v1/store/${slug}/images/${productId}/${imageId}`,
+});
+const PREVIEW_URLS: StoreUrls = {
+  logo: (v) => imageUrl('manager/online/store/logo', v),
+  banner: (v) => imageUrl('manager/online/store/banner', v),
+  category: (id, v) => imageUrl(`manager/online/categories/${id}/image`, v),
+  productImage: (productId, imageId) => `/api/v1/manager/products/${productId}/images/${imageId}`,
+};
+
 /** Statuses of a pay-on-receipt order whose payment can still be recorded (ADR-0118). */
 const PAYABLE: OnlineOrderStatus[] = [
   'placed',
@@ -853,21 +876,32 @@ export class EcommerceService {
     return row.m;
   }
 
-  private async storeRow(tx: Transaction) {
+  /** The store as shoppers may see it; a preview (ADR-0128) also opens a draft store. */
+  private async storeRow(tx: Transaction, preview = false) {
     const [store] = await tx.select().from(onlineStores);
-    if (!store || store.status === 'draft' || !store.fulfillmentBranchId)
+    if (!store || (store.status === 'draft' && !preview) || !store.fulfillmentBranchId)
       throw AppError.notFound('Store not found.');
     return store as typeof store & { fulfillmentBranchId: string };
   }
 
   async storefront(slug: string): Promise<Storefront> {
-    const merchantId = await this.merchantOf(slug);
+    return this.storefrontIn(await this.merchantOf(slug), false);
+  }
+
+  /** The storefront of the merchant's own store, also while it is a draft (ADR-0128). */
+  previewStorefront(actor: MerchantActor): Promise<Storefront> {
+    this.assertManage(actor);
+    return this.storefrontIn(actor.merchantId, true);
+  }
+
+  private storefrontIn(merchantId: string, preview: boolean): Promise<Storefront> {
     return this.database.withMerchantTx(merchantId, async (tx) => {
-      const store = await this.storeRow(tx);
+      const store = await this.storeRow(tx, preview);
+      const urls = preview ? PREVIEW_URLS : publicUrls(store.slug);
       const methods = (await this.onlineMethods(tx)).filter(
         (m) => this.payments.gateway(m['gateway_provider'] as string).ready,
       );
-      const nav = await this.storeCategories(tx, store.slug);
+      const nav = await this.storeCategories(tx, urls);
       const tz = await merchantTimezone(tx, merchantId);
       const now = new Date();
       const branches = await this.fulfilment.servingBranches(tx, store);
@@ -895,8 +929,8 @@ export class EcommerceService {
           provider: m['gateway_provider'] as string,
         })),
         payOnReceipt: store.payOnReceiptEnabled,
-        logoUrl: store.logoKey ? imageUrl(`store/${store.slug}/logo`, store.version) : null,
-        bannerUrl: store.bannerKey ? imageUrl(`store/${store.slug}/banner`, store.version) : null,
+        logoUrl: store.logoKey ? urls.logo(store.version) : null,
+        bannerUrl: store.bannerKey ? urls.banner(store.version) : null,
         categorySource: nav.source,
         categories: nav.categories,
         branches: branches.map((b) => ({
@@ -991,7 +1025,7 @@ export class EcommerceService {
    * The storefront's navigation (ADR-0121): the store's own active categories that hold listed
    * products when the merchant created any, else the catalog categories of the listed products.
    */
-  private async storeCategories(tx: Transaction, slug: string) {
+  private async storeCategories(tx: Transaction, urls: StoreUrls) {
     const own = (
       await tx.execute(sql`
         select c.id, c.name_en, c.name_ar, c.image_key, c.version from online_categories c
@@ -1009,10 +1043,7 @@ export class EcommerceService {
           nameEn: (c['name_en'] as string | null) ?? null,
           nameAr: (c['name_ar'] as string | null) ?? null,
           imageUrl: c['image_key']
-            ? imageUrl(
-                `store/${slug}/categories/${c['id'] as string}/image`,
-                c['version'] as number,
-              )
+            ? urls.category(c['id'] as string, c['version'] as number)
             : null,
         })),
       };
@@ -1054,7 +1085,7 @@ export class EcommerceService {
 
   private async storeProducts(
     tx: Transaction,
-    slug: string,
+    urls: StoreUrls,
     branchId: string,
     where: SQL,
   ): Promise<StoreProduct[]> {
@@ -1088,9 +1119,7 @@ export class EcommerceService {
       const free = parseQuantity(r['on_hand'] as string) - parseQuantity(r['reserved'] as string);
       const units = free > 0n ? Number(free / 1000n) : 0;
       const cap = Math.min(MAX_CART_QTY, (r['max_per_order'] as number | null) ?? MAX_CART_QTY);
-      const images = (r['images'] as string[]).map(
-        (imageId) => `/api/v1/store/${slug}/images/${id}/${imageId}`,
-      );
+      const images = (r['images'] as string[]).map((imageId) => urls.productImage(id, imageId));
       const product = out.get(id) ?? {
         productId: id,
         // The store's own title and description win over the catalog's (ADR-0121).
@@ -1127,12 +1156,7 @@ export class EcommerceService {
   }
 
   async products(slug: string, branchId: string | null = null) {
-    const merchantId = await this.merchantOf(slug);
-    return this.database.withMerchantTx(merchantId, async (tx) => {
-      const store = await this.storeRow(tx);
-      const branch = await this.browsingBranch(tx, store, branchId);
-      return { products: await this.storeProducts(tx, store.slug, branch.id, sql`true`) };
-    });
+    return this.productsIn(await this.merchantOf(slug), branchId, null, false);
   }
 
   async product(
@@ -1140,13 +1164,30 @@ export class EcommerceService {
     productId: string,
     branchId: string | null = null,
   ): Promise<StoreProduct> {
-    const merchantId = await this.merchantOf(slug);
+    const [p] = (await this.productsIn(await this.merchantOf(slug), branchId, productId, false))
+      .products;
+    if (!p) throw AppError.notFound('Product not found.');
+    return p;
+  }
+
+  /** Products of the merchant's own store for the design preview (ADR-0128). */
+  previewProducts(actor: MerchantActor, branchId: string | null, productId: string | null = null) {
+    this.assertManage(actor);
+    return this.productsIn(actor.merchantId, branchId, productId, true);
+  }
+
+  private productsIn(
+    merchantId: string,
+    branchId: string | null,
+    productId: string | null,
+    preview: boolean,
+  ): Promise<{ products: StoreProduct[] }> {
     return this.database.withMerchantTx(merchantId, async (tx) => {
-      const store = await this.storeRow(tx);
+      const store = await this.storeRow(tx, preview);
       const branch = await this.browsingBranch(tx, store, branchId);
-      const [p] = await this.storeProducts(tx, store.slug, branch.id, sql`p.id = ${productId}`);
-      if (!p) throw AppError.notFound('Product not found.');
-      return p;
+      const urls = preview ? PREVIEW_URLS : publicUrls(store.slug);
+      const where = productId ? sql`p.id = ${productId}` : sql`true`;
+      return { products: await this.storeProducts(tx, urls, branch.id, where) };
     });
   }
 
@@ -1221,7 +1262,7 @@ export class EcommerceService {
         (await this.browsingBranch(tx, store, input.branchId));
       const listed = await this.storeProducts(
         tx,
-        store.slug,
+        publicUrls(store.slug),
         branch.id,
         sql`v.id in (${sql.join(
           input.lines.map((l) => sql`${l.variantId}`),
@@ -1424,7 +1465,7 @@ export class EcommerceService {
         const branchId = branch.id;
         const listed = await this.storeProducts(
           tx,
-          store.slug,
+          publicUrls(store.slug),
           branchId,
           sql`v.id in (${sql.join(
             input.lines.map((l) => sql`${l.variantId}`),

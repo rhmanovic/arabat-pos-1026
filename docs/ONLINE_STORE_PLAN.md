@@ -248,6 +248,11 @@ meta + Open Graph per page and JSON-LD `Product`, PWA manifest and service worke
 offline, API always network). **Backend not built:** `online_events` stream (visits,
 conversion, abandoned carts), sitemap, bot SSR for link previews, image CDN rules.
 
+### Storefront design ✅ (ADR-0128, migration 0070, BR-227…231)
+Added on 2026-10-20 at the owner's request: header, navigation bar, side menu, footer and the
+sections of the home, products and categories pages, with shop and restaurant templates, a
+picture library, a live preview and draft / publish. See ADR-0128.
+
 ## 3. Cross-cutting rules for every phase
 
 - Permissions: `online.manage` (merchant-wide) and `online.orders` (branch-scoped) stay; Phase 3

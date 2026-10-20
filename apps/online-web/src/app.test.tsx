@@ -1,3 +1,4 @@
+import { legacyDesign } from '@arabat/contracts';
 import { flattenKeys } from '@arabat/i18n';
 import { fakeApiFetch, makeSession, renderApp } from '@arabat/web-core/testing';
 import { screen, waitFor, within } from '@testing-library/react';
@@ -903,6 +904,166 @@ describe('online store console', () => {
         ),
       ).toBe(true),
     );
+  });
+
+  describe('store design (ADR-0128)', () => {
+    function designRoutes(initial = legacyDesign()) {
+      let version = 0;
+      let draft: unknown = initial;
+      let published: unknown = null;
+      const state = () => ({
+        draft,
+        published,
+        publishedAt: published ? '2026-10-20T10:00:00.000Z' : null,
+        // Never saved: shoppers see the same legacy layout as the draft.
+        dirty: version > 0 && JSON.stringify(draft) !== JSON.stringify(published),
+        suggestedTemplate: 'retail',
+        version,
+      });
+      return {
+        'GET /manager/online/store': () => ({
+          status: 200,
+          body: { ...store, fulfillmentBranchId: BRANCH },
+        }),
+        'GET /manager/online/design': () => ({ status: 200, body: state() }),
+        'PUT /manager/online/design': (body: unknown) => {
+          draft = (body as { design: unknown }).design;
+          version += 1;
+          return { status: 200, body: state() };
+        },
+        'POST /manager/online/design/publish': () => {
+          published = draft;
+          version += 1;
+          return { status: 200, body: state() };
+        },
+      };
+    }
+    const session = () =>
+      makeSession('manager', ['manager.access', 'online.manage', 'branches.read']);
+
+    it('adds a video section, saves the draft and publishes it, with a live preview frame', async () => {
+      const user = userEvent.setup();
+      const fetch = fakeApiFetch({ session: session(), routes: designRoutes() });
+      renderApp({ routes, appInterface: 'manager', i18n, path: '/design', fetch });
+      const frame = await screen.findByTestId('design-preview');
+      expect(frame).toHaveAttribute('name', 'arabat-design-preview');
+      expect(frame).toHaveAttribute('src', '/store/demo');
+      expect(screen.getByTestId('design-status')).toHaveTextContent('Published');
+      // The legacy home page: the store banner, then the product list.
+      expect(screen.getByRole('button', { name: 'Edit Banner' })).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: 'Edit Product list (search & filter)' }),
+      ).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Add section' }));
+      const picker = await screen.findByRole('dialog', { name: 'Add section' });
+      await user.click(within(picker).getByRole('button', { name: /^Video/ }));
+      const url = await screen.findByLabelText('Video link');
+      await user.type(url, 'https://example.com/clip.mp4');
+      expect(screen.getByText('This is not a YouTube, Vimeo or TikTok link.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Save draft' })).toBeDisabled();
+      await user.clear(url);
+      await user.type(url, 'https://youtu.be/dQw4w9WgXcQ');
+      await user.click(screen.getByRole('radio', { name: 'Portrait (reels, TikTok)' }));
+      expect(screen.getByTestId('design-status')).toHaveTextContent('Unsaved changes');
+      await user.click(screen.getByRole('button', { name: 'Save draft' }));
+      await waitFor(() =>
+        expect(screen.getByTestId('design-status')).toHaveTextContent('Saved, not published'),
+      );
+      const put = fetch.calls.find(
+        (c) => c.method === 'PUT' && c.path === '/manager/online/design',
+      )!;
+      const body = put.body as {
+        version: number;
+        design: { pages: { home: { type: string; url?: string; aspect?: string }[] } };
+      };
+      expect(body.version).toBe(0);
+      expect(body.design.pages.home.map((x) => x.type)).toEqual(['banner', 'catalog', 'video']);
+      expect(body.design.pages.home[2]).toMatchObject({
+        url: 'https://youtu.be/dQw4w9WgXcQ',
+        aspect: 'portrait',
+      });
+      await user.click(screen.getByRole('button', { name: 'Publish' }));
+      await waitFor(() =>
+        expect(screen.getByTestId('design-status')).toHaveTextContent('Published'),
+      );
+      expect(fetch.calls.find((c) => c.path === '/manager/online/design/publish')!.body).toEqual({
+        version: 1,
+      });
+    });
+
+    it('applies the restaurant template and keeps the sections a page cannot lose', async () => {
+      const user = userEvent.setup();
+      const fetch = fakeApiFetch({ session: session(), routes: designRoutes() });
+      renderApp({ routes, appInterface: 'manager', i18n, path: '/design', fetch });
+      await user.click(await screen.findByRole('tab', { name: 'Template' }));
+      const restaurant = screen.getByText('Restaurant').closest('div')!;
+      await user.click(within(restaurant).getByRole('button', { name: 'Apply' }));
+      await user.click(within(restaurant).getByRole('button', { name: 'Yes, replace my design' }));
+      await user.click(screen.getByRole('radio', { name: 'Round' }));
+      await user.click(screen.getByRole('tab', { name: 'Pages' }));
+      expect(screen.getByRole('button', { name: 'Edit Restaurant menu' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Edit Store info' })).toBeInTheDocument();
+      // The products page keeps its only product list; extra sections can go.
+      await user.click(screen.getByRole('radio', { name: 'Products' }));
+      expect(screen.getByRole('button', { name: 'Delete Restaurant menu' })).toBeDisabled();
+      await user.click(screen.getByRole('button', { name: 'Delete Store info' }));
+      expect(screen.queryByRole('button', { name: 'Edit Store info' })).toBeNull();
+      await user.click(screen.getByRole('button', { name: 'Hide Restaurant menu' }));
+      await user.click(screen.getByRole('button', { name: 'Save draft' }));
+      await waitFor(() => expect(fetch.calls.some((c) => c.method === 'PUT')).toBe(true));
+      const design = (fetch.calls.find((c) => c.method === 'PUT')!.body as { design: unknown })
+        .design as {
+        template: string;
+        style: { radius: string };
+        pages: { home: { type: string }[]; products: { type: string; visible: boolean }[] };
+      };
+      expect(design.template).toBe('restaurant');
+      expect(design.style.radius).toBe('round');
+      expect(design.pages.home.map((x) => x.type)).toEqual(['banner', 'info', 'products', 'menu']);
+      expect(design.pages.products).toEqual([
+        expect.objectContaining({ type: 'menu', visible: false }),
+      ]);
+    });
+
+    it('sets the header, the navigation items, the social accounts and the footer blocks', async () => {
+      const user = userEvent.setup();
+      const fetch = fakeApiFetch({ session: session(), routes: designRoutes() });
+      renderApp({ routes, appInterface: 'manager', i18n, path: '/design', fetch });
+      await user.click(await screen.findByRole('tab', { name: 'Header' }));
+      await user.click(screen.getByRole('radio', { name: 'Logo in the centre' }));
+      await user.click(screen.getByRole('radio', { name: 'Pills' }));
+      await user.click(screen.getByRole('button', { name: 'Add item' }));
+      await user.type(screen.getByLabelText('Label (English)'), 'Offers');
+      await user.selectOptions(screen.getByLabelText('Opens'), 'url');
+      const address = screen.getByLabelText('An address');
+      await user.clear(address);
+      await user.type(address, 'https://offers.example.com');
+      await user.type(screen.getByLabelText('Instagram'), '@demo.shop');
+      await user.click(screen.getByRole('tab', { name: 'Footer' }));
+      await user.click(screen.getByRole('radio', { name: 'Dark' }));
+      await user.selectOptions(screen.getByLabelText('Block'), 'social');
+      await user.click(screen.getByRole('button', { name: 'Add block' }));
+      await user.click(screen.getByRole('button', { name: 'Save draft' }));
+      await waitFor(() => expect(fetch.calls.some((c) => c.method === 'PUT')).toBe(true));
+      const design = (fetch.calls.find((c) => c.method === 'PUT')!.body as { design: unknown })
+        .design as {
+        header: { layout: string };
+        navbar: { style: string; items: { label: { en: string }; link: unknown }[] };
+        social: { instagram: string };
+        footer: { style: string; blocks: { type: string }[] };
+      };
+      expect(design.header.layout).toBe('centered');
+      expect(design.navbar.style).toBe('pills');
+      expect(design.navbar.items).toEqual([
+        expect.objectContaining({
+          label: { en: 'Offers', ar: null },
+          link: { kind: 'url', url: 'https://offers.example.com' },
+        }),
+      ]);
+      expect(design.social.instagram).toBe('demo.shop');
+      expect(design.footer.style).toBe('dark');
+      expect(design.footer.blocks.map((b) => b.type)).toEqual(['contact', 'social']);
+    });
   });
 
   it('defines the same translation keys in Arabic and English', () => {

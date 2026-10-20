@@ -26,3 +26,4 @@ export * from './pricing.js';
 export * from './site.js';
 export * from './trials.js';
 export * from './links.js';
+export * from './store-design.js';

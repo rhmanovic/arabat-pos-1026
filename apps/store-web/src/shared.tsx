@@ -1,3 +1,4 @@
+import { isPreview } from './design/context.js';
 import { formatMoney } from '@arabat/i18n';
 import type { Money } from '@arabat/money';
 import { useApi } from '@arabat/web-core';
@@ -126,7 +127,12 @@ export function useSlug(): string {
 export function useStorefront() {
   const api = useApi();
   const slug = useSlug();
-  return useQuery({ queryKey: ['store', slug], queryFn: () => api.store.info(slug) });
+  // Inside the console's preview frame: the own store, also while it is a draft (ADR-0128).
+  const preview = isPreview();
+  return useQuery({
+    queryKey: ['store', slug, preview],
+    queryFn: () => (preview ? api.online.previewStorefront() : api.store.info(slug)),
+  });
 }
 
 /** Catalog with live availability; refreshed often because POS sales change stock. */
@@ -135,8 +141,11 @@ export function useStoreProducts() {
   const slug = useSlug();
   const { branchId, isDefault } = useBranchChoice();
   return useQuery({
-    queryKey: ['store', slug, 'products', isDefault ? null : branchId],
-    queryFn: () => api.store.products(slug, isDefault ? null : branchId),
+    queryKey: ['store', slug, 'products', isDefault ? null : branchId, isPreview()],
+    queryFn: () =>
+      isPreview()
+        ? api.online.previewProducts(isDefault ? null : branchId)
+        : api.store.products(slug, isDefault ? null : branchId),
     staleTime: 15_000,
   });
 }

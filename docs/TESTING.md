@@ -66,6 +66,38 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-20 (storefront design, ADR-0128, cloud sandbox run)
+- `ecommerce.int.test.ts` (+2, 23): an untouched store answers the legacy layout to the console
+  and shoppers; a design picture is uploaded (a non-image is 415); a draft with header, pills
+  navigation, footer, social account, slider, video and catalog is saved (version 0 → 1) while
+  shoppers keep the legacy layout; refused: a stale version, an unknown picture, a `javascript:`
+  link, a products page without a list, a non-video link; publishing serves the design and the
+  picture (image/png, immutable cache); a used picture is `ASSET_IN_USE`, an unused one is
+  deleted; discarding returns the draft to the published design; every step is audited; a branch
+  manager is refused and another company sees nothing of it. A draft store is 404 to shoppers but
+  previewed by its owner with console picture links (401 without a session); a company with the
+  restaurant module is offered the restaurant template.
+- `apps/store-web/src/app.test.tsx` (+3, 21): a retail design renders the slider placeholder with
+  its button, highlights, category circles, featured row, the privacy-mode YouTube embed, the
+  text section, pill navigation to a page / a category / an outside address (new tab), footer
+  columns with Instagram and "Powered by Arabat", and the products page with the catalog filtered
+  by `?category=`; a restaurant design shows the hero, "Open now", the menu grouped by category
+  with descriptions and a one-tap add that fills the cart (none for a sold-out dish); inside the
+  preview frame the draft is read from the console API only and replaced live by a same-origin
+  message, while a message from another origin is ignored.
+- `apps/online-web/src/app.test.tsx` (+3, 24): a video section is added from the picker, a
+  non-video link blocks saving, the saved body carries the section, then it is published with the
+  new version and the status follows; the restaurant template replaces the pages, the only
+  product list of the products page cannot be deleted, another section can, hiding is saved; the
+  header layout, pill navigation with an outside address, an Instagram handle (the @ removed) and
+  a dark footer with a social block are saved.
+- `e2e/store.spec.ts` (+1, 43 in the suite): the owner opens the editor, the preview frame shows the
+  store, the restaurant template and a banner title appear in the preview before saving, the
+  shopper still sees the old layout, then after publishing sees the new hero, "Open now", the menu
+  section with its dish and adds it with one tap.
+- Totals: `pnpm verify` 357 unit/web (56 files), `pnpm test:integration` 308 (44 files),
+  `pnpm test:e2e` 43.
+
 ### Results 2026-10-20 (online store console redesign, ADR-0127, cloud sandbox run)
 - `apps/online-web/src/app.test.tsx` (+3, 21): a draft store shows "3 of 6 steps done" with a 50 %
   ring and links each open step to its page, the WhatsApp share link carries the name and

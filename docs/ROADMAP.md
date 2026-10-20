@@ -161,7 +161,8 @@ time slots, order e-mails, packing slips, till hand-over; **Phase 6 ✅ (ADR-012
 accounts (e-mail + password, no SMS), saved addresses, own orders; **Phase 7 ✅ (ADR-0125)** —
 discount codes and automatic offers, quote endpoint, discount on the sale; **Phases 8–10
 frontend only (ADR-0126)** — gateway and domain placeholders, browser analytics, SEO meta +
-JSON-LD, PWA. Open backend work: a real gateway (owner's provider choice, OQ-021), host-based
+JSON-LD, PWA; **store design ✅ (ADR-0128)** — header, navigation, side menu, footer and page
+sections with shop / restaurant templates, live preview and publishing. Open backend work: a real gateway (owner's provider choice, OQ-021), host-based
 store resolution and custom domains, an `online_events` stream, bot SSR, SMS.
 
 Acceptance criteria:

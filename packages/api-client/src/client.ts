@@ -295,6 +295,11 @@ import {
   onlinePromotionSchema,
   onlinePromotionListSchema,
   type SaveOnlinePromotion,
+  type StoreDesignInput,
+  storeDesignStateSchema,
+  storeAssetSchema,
+  storeAssetListSchema,
+  publicStoreDesignSchema,
   type ChangeSubscription,
   type CreateMerchant,
   type PlatformAuditQuery,
@@ -1259,6 +1264,40 @@ export function createApiClient(options: ApiClientOptions = {}) {
           body: { ids },
           schema: onlinePromotionListSchema,
         }),
+      /** Store design (ADR-0128): draft, publish, discard and the design pictures. */
+      design: () => request('GET', '/manager/online/design', { schema: storeDesignStateSchema }),
+      saveDesign: (body: { design: StoreDesignInput; version: number }) =>
+        request('PUT', '/manager/online/design', { body, schema: storeDesignStateSchema }),
+      publishDesign: (version: number) =>
+        request('POST', '/manager/online/design/publish', {
+          body: { version },
+          schema: storeDesignStateSchema,
+        }),
+      discardDesign: (version: number) =>
+        request('POST', '/manager/online/design/discard', {
+          body: { version },
+          schema: storeDesignStateSchema,
+        }),
+      designAssets: () =>
+        request('GET', '/manager/online/design/assets', { schema: storeAssetListSchema }),
+      async uploadDesignAsset(file: Blob) {
+        return uploadImage('/manager/online/design/assets', file, storeAssetSchema);
+      },
+      removeDesignAsset: (id: string) =>
+        request('DELETE', `/manager/online/design/assets/${id}`, { schema: storeAssetListSchema }),
+      /** The own store as shoppers would see it, also while it is a draft (preview). */
+      previewStorefront: () =>
+        request('GET', '/manager/online/preview/storefront', { schema: storefrontSchema }),
+      previewProducts: (branchId?: string | null) =>
+        request('GET', `/manager/online/preview/products${branchId ? `?branch=${branchId}` : ''}`, {
+          schema: storeProductListSchema,
+        }),
+      previewProduct: (productId: string, branchId?: string | null) =>
+        request(
+          'GET',
+          `/manager/online/preview/products/${productId}${branchId ? `?branch=${branchId}` : ''}`,
+          { schema: storeProductSchema },
+        ),
     },
     /** Online orders handed over at the till (ADR-0123). */
     posOnline: {
@@ -1339,6 +1378,11 @@ export function createApiClient(options: ApiClientOptions = {}) {
       product: (slug: string, productId: string) =>
         request('GET', `/store/${encodeURIComponent(slug)}/products/${productId}`, {
           schema: storeProductSchema,
+        }),
+      /** The published design, or the legacy layout (ADR-0128). */
+      design: (slug: string) =>
+        request('GET', `/store/${encodeURIComponent(slug)}/design`, {
+          schema: publicStoreDesignSchema,
         }),
       checkout: (slug: string, body: StoreCheckout, token?: string | null) =>
         request('POST', `/store/${encodeURIComponent(slug)}/checkout`, {

@@ -1265,6 +1265,30 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-20 — Storefront design: header, navigation, footer and page sections (ADR-0128)
+Owner's request: the store looked primitive; let the owner design the navigation bar, header,
+footer, side menu and the sections of the home, products and categories pages, for shops and
+restaurants alike.
+- Migration 0070: `online_store_designs` (draft / published), `online_store_assets`.
+- Contracts: `storeDesignSchema` (shell + three pages, 11 section types with variants),
+  `legacyDesign`, `templateDesign('retail' | 'restaurant')`, `videoEmbed`, safe links.
+- API: `StoreDesignService` + `/manager/online/design` (save, publish, discard, picture library),
+  `/manager/online/preview/*` (also a draft store), public `/store/:slug/design` and
+  `/store/:slug/assets/:id`; CSP `frame-ancestors 'self'` and video `frame-src`; route cache
+  headers no longer overwritten by the global `no-store`.
+- Storefront: designed shell (announcement, 3 header layouts × 3 colours, 4 nav-bar styles, side
+  menu, 4 footer styles with 7 block types, phone bottom bar, store colour / corners / background
+  / cards / buttons), routes `/products` and `/categories`, section renderers, live preview mode.
+- Console `/online/design`: templates, style, header and navigation, social accounts, footer
+  blocks, page sections (add from a picker ordered for the business, drag to order, hide,
+  duplicate, delete, per-type editors with picture upload and library), desktop / phone preview
+  that follows every edit, save / publish / discard with status.
+- Tests: integration +2 (23 in the file), store-web +3 (21), online-web +3 (24), e2e +1 (43).
+  Screens checked in Chromium: editor with preview, retail and restaurant stores on desktop and
+  phone, side menu.
+- Verified (cloud sandbox): `pnpm verify` 357 unit/web (56 files), `pnpm test:integration` 308
+  (44 files), `pnpm test:e2e` 43.
+
 ### 2026-10-20 — Online store console redesign for young merchants (ADR-0127)
 Owner's request: make the store console suit Gen Z. Frontend only (`apps/online-web`).
 - Own palette (violet / pink, softer radii) and a dark mode (light / dark / device, remembered),

@@ -2133,3 +2133,211 @@ describe('promotions (ADR-0125)', () => {
     await app.get(OrderNotificationsService).drain();
   });
 });
+
+describe('store design (ADR-0128)', () => {
+  it('saves a draft, publishes it, serves its pictures and keeps shoppers on the published one', async () => {
+    const s = await setup({ gateway: false });
+    // Nothing designed yet: the legacy layout, also for shoppers.
+    const first = await s.ok('GET', '/manager/online/design');
+    expect(first).toMatchObject({ version: 0, published: null, dirty: false });
+    expect(first.suggestedTemplate).toBe('retail');
+    expect(first.draft.pages.home.map((x: { type: string }) => x.type)).toEqual([
+      'banner',
+      'catalog',
+    ]);
+    const legacy = (await pub(s, 'GET', '/design')).json().design;
+    expect(legacy.pages.home.map((x: { type: string }) => x.type)).toEqual(['banner', 'catalog']);
+
+    // A picture for the slider.
+    const asset = (await upload(s, '/manager/online/design/assets')).json();
+    expect(asset).toMatchObject({ contentType: 'image/png', bytes: png.length });
+    expect(
+      (await upload(s, '/manager/online/design/assets', Buffer.from('not an image'))).statusCode,
+    ).toBe(415);
+
+    const design = structuredClone(first.draft);
+    design.template = 'retail';
+    design.header = { ...design.header, layout: 'centered', background: 'brand' };
+    design.navbar = {
+      style: 'pills',
+      items: [
+        { id: 'n1', label: { en: 'Shop', ar: 'تسوق' }, link: { kind: 'page', page: 'products' } },
+      ],
+    };
+    design.footer = {
+      style: 'columns',
+      showPoweredBy: true,
+      blocks: [
+        {
+          id: 'about',
+          type: 'about',
+          title: { en: 'About', ar: null },
+          text: { en: 'Since 1990', ar: null },
+          links: [],
+        },
+      ],
+    };
+    design.social = { ...design.social, instagram: 'saffron.house', whatsapp: '+96550000000' };
+    design.pages.home = [
+      {
+        id: 'hero',
+        type: 'slider',
+        variant: 'full',
+        autoplay: true,
+        visible: true,
+        slides: [
+          {
+            id: 's1',
+            imageId: asset.id,
+            title: { en: 'Eid offers', ar: 'عروض العيد' },
+            subtitle: { en: null, ar: null },
+            button: { en: null, ar: null },
+            link: { kind: 'page', page: 'products' },
+          },
+        ],
+      },
+      { id: 'video', type: 'video', url: 'https://youtu.be/dQw4w9WgXcQ' },
+      { id: 'catalog', type: 'catalog' },
+    ];
+    const saved = await s.ok('PUT', '/manager/online/design', { design, version: 0 });
+    expect(saved).toMatchObject({ version: 1, dirty: true, published: null });
+    expect(saved.draft.pages.home[1]).toMatchObject({
+      type: 'video',
+      variant: 'contained',
+      aspect: 'landscape',
+    });
+    // Shoppers still see the legacy layout until it is published.
+    expect((await pub(s, 'GET', '/design')).json().design.pages.home[0].type).toBe('banner');
+
+    // Refused: stale version, an unknown picture, a script link, a products page without a list.
+    expect((await s.req('PUT', '/manager/online/design', { design, version: 0 })).json().code).toBe(
+      'VERSION_CONFLICT',
+    );
+    const ghost = structuredClone(design);
+    ghost.pages.home[0].slides[0].imageId = newId();
+    expect(
+      (await s.req('PUT', '/manager/online/design', { design: ghost, version: 1 })).statusCode,
+    ).toBe(400);
+    const script = structuredClone(design);
+    script.navbar.items[0].link = { kind: 'url', url: 'javascript:alert(1)' };
+    expect(
+      (await s.req('PUT', '/manager/online/design', { design: script, version: 1 })).statusCode,
+    ).toBe(400);
+    const empty = structuredClone(design);
+    empty.pages.products = [];
+    expect(
+      (await s.req('PUT', '/manager/online/design', { design: empty, version: 1 })).statusCode,
+    ).toBe(400);
+    const badVideo = structuredClone(design);
+    badVideo.pages.home[1].url = 'https://example.com/movie.mp4';
+    expect(
+      (await s.req('PUT', '/manager/online/design', { design: badVideo, version: 1 })).statusCode,
+    ).toBe(400);
+
+    // Published: shoppers get the design and its picture (cached for a year).
+    const published = await s.ok('POST', '/manager/online/design/publish', { version: 1 });
+    expect(published).toMatchObject({ version: 2, dirty: false });
+    expect(published.publishedAt).toBeTruthy();
+    const live = (await pub(s, 'GET', '/design')).json().design;
+    expect(live.pages.home.map((x: { type: string }) => x.type)).toEqual([
+      'slider',
+      'video',
+      'catalog',
+    ]);
+    expect(live.header).toMatchObject({ layout: 'centered', background: 'brand' });
+    expect(live.social.instagram).toBe('saffron.house');
+    const picture = await pub(s, 'GET', `/assets/${asset.id}`);
+    expect(picture.statusCode).toBe(200);
+    expect(picture.headers['content-type']).toBe('image/png');
+    expect(picture.headers['cache-control']).toContain('immutable');
+
+    // A picture in use cannot be deleted; an unused one can.
+    expect((await s.req('DELETE', `/manager/online/design/assets/${asset.id}`)).json().code).toBe(
+      'ASSET_IN_USE',
+    );
+    const spare = (await upload(s, '/manager/online/design/assets')).json();
+    expect(
+      (await s.ok('DELETE', `/manager/online/design/assets/${spare.id}`)).assets.map(
+        (a: { id: string }) => a.id,
+      ),
+    ).toEqual([asset.id]);
+
+    // Discarding a later edit returns the draft to what is published.
+    const edited = structuredClone(live);
+    edited.pages.home = edited.pages.home.filter((x: { type: string }) => x.type !== 'video');
+    await s.ok('PUT', '/manager/online/design', { design: edited, version: 2 });
+    const back = await s.ok('POST', '/manager/online/design/discard', { version: 3 });
+    expect(back.dirty).toBe(false);
+    expect(back.draft.pages.home).toHaveLength(3);
+
+    // Audit trail of the design.
+    const actions = (
+      await owner.query(
+        `select action from audit_log where merchant_id = $1 and action like 'online.design%' order by occurred_at`,
+        [s.c.merchantId],
+      )
+    ).rows.map((r: { action: string }) => r.action);
+    expect(actions).toEqual(
+      expect.arrayContaining([
+        'online.design_asset_added',
+        'online.design_saved',
+        'online.design_published',
+        'online.design_asset_removed',
+        'online.design_discarded',
+      ]),
+    );
+
+    // Others: a branch manager has no online.manage; another company sees nothing of it.
+    const bm = await s.c.hire(
+      [{ roleId: s.c.roles.branch_manager, branchId: s.c.main }],
+      'manager',
+    );
+    expect((await s.req('GET', '/manager/online/design', undefined, bm.cookies)).statusCode).toBe(
+      403,
+    );
+    const other = await setup({ gateway: false });
+    expect(
+      (await other.req('GET', `/manager/online/design/assets/${asset.id}/file`)).statusCode,
+    ).toBe(404);
+    expect((await pub(other, 'GET', `/assets/${asset.id}`)).statusCode).toBe(404);
+    expect((await other.ok('GET', '/manager/online/design')).version).toBe(0);
+  });
+
+  it('previews a draft store through the console and suggests the restaurant template', async () => {
+    const s = await setup({ gateway: false });
+    const current = await s.ok('GET', '/manager/online/store');
+    await s.ok('PUT', '/manager/online/store', {
+      ...current,
+      deliveryFee: current.deliveryFee.amount,
+      minimumOrder: current.minimumOrder.amount,
+      status: 'draft',
+    });
+    await upload(s, '/manager/online/store/logo');
+    // Hidden from shoppers, visible to its owner in the preview, with console picture links.
+    expect((await pub(s, 'GET', '')).statusCode).toBe(404);
+    const preview = await s.ok('GET', '/manager/online/preview/storefront');
+    expect(preview.slug).toBe(s.slug);
+    expect(preview.logoUrl).toMatch(/^\/api\/v1\/manager\/online\/store\/logo\?v=/);
+    const products = (await s.ok('GET', '/manager/online/preview/products')).products;
+    expect(products.map((p: { nameEn: string }) => p.nameEn).sort()).toEqual([
+      'Gift card',
+      'Saffron tea',
+    ]);
+    expect((await s.ok('GET', `/manager/online/preview/products/${s.teaProduct}`)).nameEn).toBe(
+      'Saffron tea',
+    );
+    expect((await s.c.client.request('GET', '/manager/online/preview/storefront')).statusCode).toBe(
+      401,
+    );
+
+    // A company running the restaurant module is offered the restaurant template.
+    await db.inMerchant(s.c.merchantId, (client) =>
+      client.query(
+        `insert into restaurant_settings (merchant_id, enabled) values ($1, true)
+         on conflict (merchant_id) do update set enabled = true`,
+        [s.c.merchantId],
+      ),
+    );
+    expect((await s.ok('GET', '/manager/online/design')).suggestedTemplate).toBe('restaurant');
+  });
+});

@@ -19,6 +19,9 @@ import { PosHandoverService } from './pos-handover.service.js';
 import { PromotionsService } from './promotions.service.js';
 import { StoreAccountsService } from './store-accounts.service.js';
 
+import { StoreDesignController, StoreDesignPublicController } from './store-design.controller.js';
+import { StoreDesignService } from './store-design.service.js';
+
 @Module({
   imports: [SalesModule, InventoryModule, AuthModule, PrintingModule, RegistersModule],
   controllers: [
@@ -27,6 +30,8 @@ import { StoreAccountsService } from './store-accounts.service.js';
     PaymentsGatewayController,
     PosOnlineOrdersController,
     StoreAccountController,
+    StoreDesignController,
+    StoreDesignPublicController,
   ],
   providers: [
     EcommerceService,
@@ -36,6 +41,7 @@ import { StoreAccountsService } from './store-accounts.service.js';
     PosHandoverService,
     PromotionsService,
     StoreAccountsService,
+    StoreDesignService,
   ],
   exports: [OnlinePaymentsService, OrderNotificationsService],
 })

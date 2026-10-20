@@ -34,7 +34,10 @@ export async function configureApp(app: NestFastifyApplication, env: Env): Promi
   const fastify = app.getHttpAdapter().getInstance();
   fastify.addHook('onSend', async (request, reply) => {
     void reply.header('x-request-id', request.id);
-    if (request.url.startsWith('/api/')) void reply.header('cache-control', 'no-store');
+    // API answers are never cached, except where a route chose its own policy (public
+    // pictures of the store: logo, banner, categories, design images).
+    if (request.url.startsWith('/api/') && !reply.hasHeader('cache-control'))
+      void reply.header('cache-control', 'no-store');
   });
   registerOriginCheck(fastify, env);
 
@@ -48,7 +51,15 @@ export async function configureApp(app: NestFastifyApplication, env: Env): Promi
         imgSrc: ["'self'", 'data:'],
         fontSrc: ["'self'"],
         connectSrc: ["'self'"],
-        frameAncestors: ["'none'"],
+        // Store design videos (ADR-0128): YouTube (privacy mode), Vimeo and TikTok players.
+        frameSrc: [
+          "'self'",
+          'https://www.youtube-nocookie.com',
+          'https://player.vimeo.com',
+          'https://www.tiktok.com',
+        ],
+        // Same-origin framing only: the console previews the storefront (ADR-0128).
+        frameAncestors: ["'self'"],
         // Only behind TLS in production; on http://localhost it would break asset loading.
         upgradeInsecureRequests: env.NODE_ENV === 'production' ? [] : null,
       },

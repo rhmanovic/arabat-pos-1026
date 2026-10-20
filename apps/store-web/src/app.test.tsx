@@ -1,8 +1,9 @@
 import { createApiClient } from '@arabat/api-client';
+import { type DesignSection, newSection, templateDesign } from '@arabat/contracts';
 import { flattenKeys } from '@arabat/i18n';
 import { createQueryClient } from '@arabat/web-core';
 import { fakeApiFetch, type FakeRoute } from '@arabat/web-core/testing';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RouterProvider, createMemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -721,6 +722,188 @@ describe('storefront', () => {
       saveAddress: false,
       expectedTotal: '3.750',
     });
+  });
+
+  it('renders a published retail design: navigation, slider, video, footer and the three pages', async () => {
+    const user = userEvent.setup();
+    const DRINKS = '0190a000-0000-7000-8000-0000000000c1';
+    const design = templateDesign('retail');
+    design.navbar = {
+      style: 'pills',
+      items: [
+        { id: 'n1', label: { en: 'Shop all', ar: null }, link: { kind: 'page', page: 'products' } },
+        {
+          id: 'n2',
+          label: { en: 'Drinks', ar: null },
+          link: { kind: 'category', categoryId: DRINKS },
+        },
+        {
+          id: 'n3',
+          label: { en: 'Blog', ar: null },
+          link: { kind: 'url', url: 'https://blog.example.com' },
+        },
+      ],
+    };
+    design.social = { ...design.social, instagram: 'demo.shop' };
+    design.pages.home = [
+      ...design.pages.home,
+      {
+        ...newSection('video', 'clip'),
+        url: 'https://youtu.be/dQw4w9WgXcQ',
+        title: { en: 'Our story', ar: null },
+      } as DesignSection,
+      {
+        ...newSection('text', 'about'),
+        title: { en: 'Roasted in Kuwait', ar: null },
+        body: { en: 'Since 1990', ar: null },
+      } as DesignSection,
+    ];
+    renderStore('/demo', {
+      'GET /store/demo': () => ({
+        status: 200,
+        body: {
+          ...STORE,
+          categories: [{ id: DRINKS, nameEn: 'Drinks', nameAr: null, imageUrl: null }],
+        },
+      }),
+      'GET /store/demo/products': () => ({
+        status: 200,
+        body: {
+          products: PRODUCTS.products.map((p, i) => ({
+            ...p,
+            categoryId: i === 0 ? DRINKS : null,
+            featured: i === 0,
+          })),
+        },
+      }),
+      'GET /store/demo/design': () => ({ status: 200, body: { design } }),
+    });
+    // Slider placeholder (no picture yet) with its button, features, categories, products.
+    expect(await screen.findByText('New arrivals')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Shop now' })).toHaveAttribute(
+      'href',
+      '/demo/products',
+    );
+    expect(screen.getByText('Fast delivery')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Shop by category' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Featured' })).toBeInTheDocument();
+    expect(screen.getByTestId('video-embed')).toHaveAttribute(
+      'src',
+      'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ',
+    );
+    expect(screen.getByText('Since 1990')).toBeInTheDocument();
+    // Navigation items: a page, a category and an outside link (new tab).
+    const header = screen.getByTestId('store-header');
+    expect(within(header).getByRole('link', { name: 'Drinks' })).toHaveAttribute(
+      'href',
+      `/demo/products?category=${DRINKS}`,
+    );
+    expect(within(header).getByRole('link', { name: 'Blog' })).toHaveAttribute('target', '_blank');
+    // Footer columns with the social block.
+    const footer = screen.getByTestId('store-footer');
+    expect(within(footer).getByRole('link', { name: 'Instagram' })).toHaveAttribute(
+      'href',
+      'https://instagram.com/demo.shop',
+    );
+    expect(within(footer).getByText('Powered by Arabat')).toBeInTheDocument();
+    // The products page holds the catalog; the categories page the category tiles.
+    await user.click(within(header).getByRole('link', { name: 'Shop all' }));
+    expect(await screen.findByTestId('product-grid')).toBeInTheDocument();
+    expect(screen.getByLabelText('Sort')).toBeInTheDocument();
+    await user.click(within(header).getByRole('link', { name: 'Drinks' }));
+    await waitFor(() =>
+      expect(within(screen.getByTestId('product-grid')).queryByText('Mug')).toBeNull(),
+    );
+    expect(
+      within(screen.getByTestId('product-grid')).getByText('Coffee beans'),
+    ).toBeInTheDocument();
+  });
+
+  it('shows a restaurant menu grouped by category and adds a dish with one tap', async () => {
+    const user = userEvent.setup();
+    const HOT = '0190a000-0000-7000-8000-0000000000c2';
+    renderStore('/demo', {
+      'GET /store/demo': () => ({
+        status: 200,
+        body: {
+          ...STORE,
+          categories: [{ id: HOT, nameEn: 'Hot drinks', nameAr: 'مشروبات ساخنة', imageUrl: null }],
+        },
+      }),
+      'GET /store/demo/products': () => ({
+        status: 200,
+        body: { products: PRODUCTS.products.map((p) => ({ ...p, categoryId: HOT })) },
+      }),
+      'GET /store/demo/design': () => ({
+        status: 200,
+        body: { design: templateDesign('restaurant') },
+      }),
+    });
+    expect(await screen.findByText('Fresh from our kitchen')).toBeInTheDocument();
+    expect(screen.getByText('Open now')).toBeInTheDocument();
+    const menu = await screen.findByRole('region', { name: 'Menu' });
+    expect(within(menu).getByRole('heading', { name: 'Hot drinks' })).toBeInTheDocument();
+    expect(within(menu).getByText('Medium roast')).toBeInTheDocument();
+    await user.click(
+      within(menu).getByRole('button', { name: 'Add one Coffee beans to the cart' }),
+    );
+    expect(await screen.findByRole('link', { name: 'Cart (1)' })).toBeInTheDocument();
+    // A sold-out dish has no quick add.
+    expect(within(menu).queryByRole('button', { name: 'Add one Mug to the cart' })).toBeNull();
+  });
+
+  it('previews the draft inside the console frame and follows the editor live', async () => {
+    window.name = 'arabat-design-preview';
+    try {
+      const draft = templateDesign('retail');
+      const { fetch } = renderStore('/demo', {
+        'GET /manager/online/preview/storefront': () => ({ status: 200, body: STORE }),
+        'GET /manager/online/preview/products': () => ({ status: 200, body: PRODUCTS }),
+        'GET /manager/online/design': () => ({
+          status: 200,
+          body: {
+            draft,
+            published: null,
+            publishedAt: null,
+            dirty: true,
+            suggestedTemplate: 'retail',
+            version: 1,
+          },
+        }),
+      });
+      expect(await screen.findByText('New arrivals')).toBeInTheDocument();
+      expect(
+        screen.getByText('Preview: what shoppers will see once you publish'),
+      ).toBeInTheDocument();
+      // Nothing was asked of the public store API.
+      expect(fetch.calls.some((c) => c.path.startsWith('/store/'))).toBe(false);
+      const edited = structuredClone(draft);
+      const slider = edited.pages.home[0] as Extract<DesignSection, { type: 'slider' }>;
+      slider.slides[0]!.title = { en: 'Eid sale', ar: null };
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: { type: 'arabat:design', design: edited },
+            origin: window.location.origin,
+            source: window,
+          }),
+        );
+      });
+      expect(await screen.findByText('Eid sale')).toBeInTheDocument();
+      // A message from another origin is ignored.
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: { type: 'arabat:design', design: draft },
+            origin: 'https://evil.example',
+            source: window,
+          }),
+        );
+      });
+      expect(screen.getByText('Eid sale')).toBeInTheDocument();
+    } finally {
+      window.name = '';
+    }
   });
 
   it('defines the same translation keys in Arabic and English', () => {

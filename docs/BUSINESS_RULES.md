@@ -117,6 +117,19 @@ engineering defaults pending owner confirmation.
   (the main register's first), and cannot sell while none is open. A device shift is never refused because
   the person left a shift open elsewhere; that shift is listed for the managers to close. Records
   that reach the server after the branch shift closed are booked to it and flagged "late".
+- **BR-231** Design pictures (ADR-0128): JPEG, PNG or WebP of at most 2 MB, at most 200 per
+  store; a picture used by the draft or the published design cannot be deleted.
+- **BR-230** Safe content (ADR-0128): design links go to a store page, a category, a product, or
+  an https, phone or e-mail address; videos come only from YouTube, Vimeo or TikTok links.
+- **BR-229** Pages keep their purpose (ADR-0128): the products page always lists the products (a
+  catalog or a menu) and the categories page always lists the categories; other sections are
+  free. Hidden sections stay in the design but are not shown.
+- **BR-228** Draft and publish (ADR-0128): design changes are a draft until the merchant
+  publishes them; shoppers never see an unpublished design. A store that never published keeps
+  its previous layout. The merchant can discard the draft back to the published design.
+- **BR-227** Store design (ADR-0128): a merchant with `online.manage` shapes the storefront's
+  header, navigation bar, side menu, footer and the sections of the home, products and categories
+  pages, starting from a shop or restaurant template; texts are in Arabic and English.
 - **BR-226** Promotion on the sale (ADR-0125): the online discount is the sale's order
   discount, recorded in the sale document and the sales report; refunds of such a sale follow
   the existing refund rules on the discounted amounts. Uses are append-only and count against

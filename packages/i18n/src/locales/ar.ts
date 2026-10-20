@@ -193,6 +193,8 @@ export const commonAr: CommonResources = {
     ACCOUNTS_DISABLED: 'هذا المتجر لا يوفر حسابات.',
     EMAIL_TAKEN: 'يوجد حساب بهذا البريد.',
     PHONE_TAKEN: 'يوجد حساب بهذا الهاتف.',
+    ASSET_IN_USE: 'هذه الصورة مستخدمة في تصميم المتجر. احذفها من الأقسام أولًا.',
+    ASSET_LIMIT_REACHED: 'يحتفظ المتجر بـ 200 صورة تصميم كحد أقصى. احذف بعضها أولًا.',
     PAYMENT_SIGNATURE_INVALID: 'تعذّر التحقق من إشعار الدفع.',
     MINIMUM_ORDER: 'قيمة الطلب أقل من الحد الأدنى للمتجر.',
     LINK_LIMIT_REACHED: 'صفحة الروابط تتسع لخمسين رابطًا كحد أقصى.',
