@@ -1272,6 +1272,11 @@ phone layout and hid every large-screen header setting. The frame now renders th
 (desktop) or 390 px (phone) and scales it to fit. Checked in Chromium: the frame reports 1280 px,
 and choosing split, floating and centred layouts and the dark colour changes the preview at once.
 Tests: online-web preview test now checks both widths.
+Verified (cloud sandbox): `pnpm verify` 359, `pnpm test:integration` 308, `pnpm test:e2e` 43.
+Released (ADR-0122, ADR-0088): staging (Railway, deployment `e7696623`, SUCCESS) and production
+`b804d852e157` (revision `arabat-web-00046-4l9`, migration job `arabat-migrate-ggbbq`, no new
+migration); Cloud Build check `d96aef81`: `/api/v1/health/ready` 200 with that version and
+database ok. Signed out afterwards, `config.env` removed; no key, account or secret deleted.
 
 ### 2026-10-20 — Store header system v2 (ADR-0128 amendment 1)
 Owner's feedback: the header looked primitive and scattered, its settings were few, and there were
