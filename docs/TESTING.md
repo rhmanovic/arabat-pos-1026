@@ -95,8 +95,9 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   check "Available", URL preview), shopper orders 2 to pay at pickup ("Received", stock
   unchanged), staff confirm, record the cash (sale link, stock 4 → 2), ready, completed;
   treasury 4.000; online sales list shows the sale.
-- Totals: `pnpm verify` ✅ (see PROGRESS), `pnpm test:integration` ✅, `pnpm test:e2e` ✅ (counts
-  in PROGRESS.md).
+- Totals: `pnpm verify` 330 unit/web in 56 files ✅, `pnpm test:integration` 296 in 44 files ✅,
+  `pnpm test:e2e` 41 ✅ (the first run had 8 failures only because Mailpit was not up; all pass
+  with `docker compose up -d mailpit`).
 
 ### Results 2026-10-20 (registers vs devices, ADR-0112 amendment 4, cloud sandbox run)
 

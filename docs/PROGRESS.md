@@ -1176,7 +1176,8 @@ unpaid orders hold no stock. Phase 1:
   its reference and settles into its account, cancel in place, store switch, availability /
   link-page namespace / rename history / rename limit / expiry), manager online page +2,
   storefront +2, `e2e/store.spec.ts` +1 (pay at pickup end to end).
-- Verified: see `TESTING.md` (results after ADR-0118).
+- Verified (cloud sandbox, 2026-10-20): `pnpm verify` 330 unit/web (56 files), `pnpm test:integration`
+  296 (44 files), `pnpm test:e2e` 41 (Mailpit running).
 - Not done (later phases): separate online payment methods, `/online` console, storefront
   currency (M12).
 
