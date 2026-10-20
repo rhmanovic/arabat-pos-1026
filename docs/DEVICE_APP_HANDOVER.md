@@ -142,3 +142,22 @@ Manual check (after §5): lock the till, type the same PIN, sell; try "Log out" 
 open (disabled); close the shift with `٥,٥٠٠`; on an additional till, sign in before the primary
 opened a shift ("no open shift at the branch"), then after it did (sells; no pay-in / pay-out).
 
+## 9. Registers are drawers, devices are devices (2026-10-19, ADR-0112 amendment 4)
+
+What changes for the native side (bridge version stays 2):
+
+1. Registration no longer asks for a role and creates no register. The answer and every snapshot
+   carry `device.code` (`D1`, `D2`, … per branch) and `device.registerId` / `registerName`
+   (null until a manager binds a cash drawer to the device in `/manager/registers` or
+   `/manager/devices`). `device.role` stays as a derived field: `primary` when bound.
+2. **Kick the cash drawer only when `device.registerId` is set** (same as `role === 'primary'`).
+3. **Connect to the print-agent socket only when bound**; an unbound device gets 403. Re-check
+   after each sync: binding and unbinding happen online and reach the device at its next sync.
+4. Receipt numbers are `{branch}-{device code}-NNNNNN` (the page computes them).
+5. Unbound tills show no cash methods, no pay-in / pay-out and no shift screens; they sell by card
+   or transfer into the branch's open register shift, or show "no open shift at the branch".
+
+Manual check: register a new device → `/manager/registers` shows the drawer unbound → bind it to
+the device → "Sync now" on the till → the drawer name appears in the status strip, cash is offered
+and the shift can be opened; unbind (shift closed) → cash disappears, the drawer never opens.
+

@@ -34,10 +34,11 @@ export const posDevices = pgTable(
     id: id(),
     merchantId: merchantId().references(() => merchants.id),
     branchId: uuid().notNull(),
-    registerId: uuid().notNull(),
+    /** The register (cash drawer) a manager bound to this device, or null (amendment 4). */
+    registerId: uuid(),
+    /** The device's permanent code in its branch (`D1`, `D2`, …, never reused): its receipt series. */
+    code: text().notNull(),
     name: text().notNull(),
-    /** `primary` (one per branch: the cash drawer and the browser print queue) or `secondary`. */
-    role: text().notNull().default('secondary'),
     tokenHash: bytea().notNull(),
     registeredByUserId: uuid()
       .notNull()
@@ -53,7 +54,11 @@ export const posDevices = pgTable(
   (t) => [
     unique('pos_devices_merchant_id_id_key').on(t.merchantId, t.id),
     uniqueIndex('pos_devices_token_hash_key').on(t.tokenHash),
-    uniqueIndex('pos_devices_register_key').on(t.registerId),
+    /** A register is bound to at most one device. */
+    uniqueIndex('pos_devices_register_key')
+      .on(t.registerId)
+      .where(sql`${t.registerId} is not null`),
+    uniqueIndex('pos_devices_branch_code_key').on(t.merchantId, t.branchId, sql`lower(${t.code})`),
     foreignKey({
       columns: [t.merchantId, t.branchId],
       foreignColumns: [branches.merchantId, branches.id],
@@ -63,18 +68,16 @@ export const posDevices = pgTable(
       foreignColumns: [registers.merchantId, registers.id, registers.branchId],
     }),
     check('pos_devices_name_present', sql`length(trim(${t.name})) between 1 and 80`),
-    check('pos_devices_role_valid', sql`${t.role} in ('primary', 'secondary')`),
-    uniqueIndex('pos_devices_one_primary_per_branch')
-      .on(t.merchantId, t.branchId)
-      .where(sql`${t.role} = 'primary' and ${t.revokedAt} is null`),
   ],
 );
 
 /**
- * The last device register number of a branch (`R1`, `R2`, …). It only grows, so a register code
- * is never reused and a device can never repeat another device's receipt numbers (ADR-0112 gap C).
+ * The last device number of a branch (`D1`, `D2`, …). It only grows, so a device code is never
+ * reused and a device can never repeat another device's receipt numbers (ADR-0112 gap C,
+ * amendment 4).
  */
-export const registerCodeSequences = pgTable(
+export const deviceCodeSequences = pgTable(
+  // Table name kept from the register era (migration 0052); it now numbers devices.
   'register_code_sequences',
   {
     merchantId: merchantId(),

@@ -211,6 +211,13 @@ export function prepareSale(
     priced.totalMinor,
     ctx.settings.requireTenderReference,
   );
+  // Cash needs a drawer: only a device bound to a register takes it (amendment 4).
+  if (ctx.device.registerId === null && payments.some((p) => p.method.kind === 'cash'))
+    throw new PosRuleError(
+      409,
+      'CASH_NOT_ALLOWED',
+      'This till has no cash drawer: card or transfer only.',
+    );
   const items = lines.map((l) => catalog.items.get(l.variantId)!);
   const record: Omit<SaleRecord, 'receiptNumber'> = {
     kind: 'sale',
@@ -303,7 +310,8 @@ export function commitSale(
     await assertShiftUsable(db, shift);
     const current = Number((await getMeta(db, META.receiptCounter)) ?? '0');
     const next = current + 1;
-    const receiptNumber = formatDeviceReceiptNumber(ctx.branch.code, ctx.register.code, next);
+    // The series is the device's own: `{branch}-{device code}-NNNNNN` (amendment 4).
+    const receiptNumber = formatDeviceReceiptNumber(ctx.branch.code, ctx.device.code, next);
     const record: SaleRecord = { ...prepared.record, receiptNumber };
     const at = nowIso(now);
     const r = record;

@@ -66,6 +66,15 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-20 (registers vs devices, ADR-0112 amendment 4, cloud sandbox run)
+
+`pnpm verify` green (325 unit/web tests: device engine with an unbound device, till card-only
+flow, manager bind dialog); `pnpm test:integration` 293 passed (devices: registration creates no
+register, binding from both sides with REGISTER_BOUND / REGISTER_BUSY, move needs unbinding,
+codes never reused, bound register out of the browser; ingest: unbound card sale into the branch
+shift, CASH_NOT_ALLOWED, SHIFT_REQUIRED without an open shift; printing: bound device only);
+`pnpm test:e2e` 40 passed (device spec: register → bind the drawer → sell `MAIN-D1-000001`).
+
 ### Results 2026-10-19 (device app fixes, ADR-0112 amendment 3, cloud sandbox run)
 
 `pnpm verify` green (325 unit/web tests: + money input normaliser, 3 device-core cases incl. the

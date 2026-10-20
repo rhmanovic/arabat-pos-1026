@@ -79,8 +79,34 @@ test('register → full sync → PIN → open shift → sale → upload accepted
   await page.getByLabel('Password').fill(password);
   await page.getByLabel('Device name').fill('E2E till');
   await page.getByRole('button', { name: 'Register' }).click();
-  // Then its role: the first device of the branch is its primary (drawer, browser receipts).
-  await page.getByRole('button', { name: /Primary till/ }).click();
+  // A device is not a drawer (amendment 4): the manager creates a register and binds it to the
+  // device, which makes it the drawer's primary (cash, shift, browser receipts).
+  // The registration call runs in the page: wait for the device to exist on the server.
+  type Listed = { devices: { id: string; code: string; registerId: string | null }[] };
+  await expect
+    .poll(
+      async () =>
+        ((await (await page.request.get('/api/v1/manager/devices')).json()) as Listed).devices
+          .length,
+      { timeout: 15_000 },
+    )
+    .toBe(1);
+  const devices = (await (await page.request.get('/api/v1/manager/devices')).json()) as Listed;
+  expect(devices.devices).toEqual([expect.objectContaining({ code: 'D1', registerId: null })]);
+  const drawer = await page.request.post('/api/v1/manager/registers', {
+    data: {
+      branchId: (await (await page.request.get('/api/v1/manager/branches')).json()).branches[0].id,
+      code: 'DRW',
+      nameEn: 'Front drawer',
+      isMain: true,
+    },
+  });
+  expect(drawer.status()).toBe(201);
+  const bound = await page.request.put(`/api/v1/manager/devices/${devices.devices[0]!.id}`, {
+    data: { registerId: (await drawer.json()).id },
+  });
+  expect(bound.status()).toBe(200);
+  await page.getByRole('button', { name: 'Sync now' }).click();
 
   // The first full sync brings the staff list. The owner has no PIN yet: "Set / reset PIN" on the
   // till e-mails a link (owner decision 6); the page behind it sets the PIN, nobody else sees it.
@@ -123,9 +149,9 @@ test('register → full sync → PIN → open shift → sale → upload accepted
   await dialog.getByTestId('tendered').fill('1');
   await dialog.getByTestId('add-payment').click();
   await dialog.getByTestId('complete-sale').click();
-  // The main branch already has a manual register R1: the device is R2 (never reused).
-  await expect(page.getByTestId('last-sale')).toContainText(/MAIN-R\d+-000001/);
-  const receipt = /MAIN-R\d+-000001/.exec(
+  // The receipt series is the device's own code (D1 in this branch).
+  await expect(page.getByTestId('last-sale')).toContainText(/MAIN-D1-000001/);
+  const receipt = /MAIN-D1-000001/.exec(
     (await page.getByTestId('last-sale').textContent()) ?? '',
   )![0];
   await expect.poll(() => page.evaluate(() => window.__arabatPrinted!().length)).toBe(1);
@@ -145,11 +171,11 @@ test('register → full sync → PIN → open shift → sale → upload accepted
     sales: { receiptNumber: string }[];
   };
   expect(sales.sales.map((s) => s.receiptNumber)).toContain(receipt);
-  const devices = (await (await page.request.get('/api/v1/manager/devices')).json()) as {
-    devices: { name: string; registerCode: string }[];
+  const listed = (await (await page.request.get('/api/v1/manager/devices')).json()) as {
+    devices: { name: string; code: string; registerCode: string | null }[];
   };
-  expect(devices.devices).toEqual([
-    expect.objectContaining({ name: 'E2E till', registerCode: receipt.split('-')[1] }),
+  expect(listed.devices).toEqual([
+    expect.objectContaining({ name: 'E2E till', code: 'D1', registerCode: 'DRW' }),
   ]);
 
   // The same records sent again are duplicates, never applied twice.

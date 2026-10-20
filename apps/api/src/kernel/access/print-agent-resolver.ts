@@ -48,10 +48,11 @@ export class PrintAgentResolver {
       { id: string; merchant_id: string; branch_id: string | null } | undefined;
     if (row)
       return { kind: 'agent', id: row.id, merchantId: row.merchant_id, branchId: row.branch_id };
-    // The branch's primary device prints the browser queue without a separate agent token.
+    // A device bound to a register (the drawer's primary, amendment 4) prints the browser queue
+    // without a separate agent token.
     const device = await this.devices.fromToken(token);
     if (!device || device.revoked) return null;
-    if (device.role !== 'primary') return 'not_primary';
+    if (device.registerId === null) return 'not_primary';
     return {
       kind: 'device',
       id: device.id,

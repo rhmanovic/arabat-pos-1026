@@ -1118,6 +1118,34 @@ platform plan and restaurant references. Verified: 221 unit/web, 230 integration
   "Invalid amount" on `0.250` could not be reproduced with ASCII input (the normaliser covers the
   locale forms seen on Mac keyboards).
 
+### 2026-10-19 — Registers are drawers, devices are devices (ADR-0112 amendment 4)
+
+- Migration 0065: `pos_devices.code` (`D1`, `D2`, … per branch, never reused), nullable
+  `register_id` (the bound drawer, one device per register), `role` dropped (derived),
+  `registers.is_main`; device-created registers without history deleted, the rest kept unbound;
+  every device unbound.
+- Server: registration creates no register and asks for no role; `PUT /manager/devices/:id
+  { registerId | null, branchId }` and `PUT /manager/registers/:id/device { deviceId | null }`
+  bind (managers; `REGISTER_BOUND`, `REGISTER_BUSY` while the shift is open; a move needs the
+  device unbound and gives a new code); registers list `isMain` and `device`; `saveRegister`
+  takes `isMain` (one per branch). Ingest: receipt prefix by device code, own sales through
+  `device_records`, `CASH_NOT_ALLOWED` for cash tenders of unbound devices, sales booked on the
+  shift's register; the snapshot's `register` is nullable and `branchShift` is the bound
+  register's latest shift or, unbound, the branch's open shift (main register first). Print
+  agent and auto-print count bound devices.
+- Device engine / till: receipt series by device code (counter resets on a code or branch
+  change), cash refused when unbound, cash methods hidden, drawer name in the status strip,
+  registration without the role step.
+- Manager: `/manager/registers` shows the bound device and the main flag, "bind to a device";
+  `/manager/devices` shows the bound drawer with bind / change; the role picker is gone.
+- `reset-merchant-data --main-register=<name>` also recreates one main, unbound register per
+  branch.
+- Tests: devices (registration creates no register, binding from both sides with REGISTER_BOUND
+  / REGISTER_BUSY, move needs unbinding, codes never reused, bound register out of the browser),
+  ingest (unbound card sale accepted into the branch shift, cash refused, nothing to sell into
+  → SHIFT_REQUIRED, late upload), printing (bound device only), engine (unbound device), till
+  (card-only unbound till), manager (bind dialog), e2e (register → bind → sell `MAIN-D1-…`).
+
 ## Next step
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.

@@ -73,11 +73,15 @@ export class DeviceSyncService {
           select id, code, name_en, name_ar, phone, address, receipt_header, receipt_footer
           from branches where id = ${device.branchId}`)
       ).rows as Row[];
-      const [register] = (
-        await tx.execute(sql`
-          select id, code, default_opening_float_minor::text as float, discrepancy_tolerance_minor::text as tolerance
-          from registers where id = ${device.registerId}`)
-      ).rows as Row[];
+      // The bound register (cash drawer), if any (amendment 4).
+      const [register] = device.registerId
+        ? ((
+            await tx.execute(sql`
+              select id, code, name_en, name_ar, default_opening_float_minor::text as float,
+                     discrepancy_tolerance_minor::text as tolerance
+              from registers where id = ${device.registerId}`)
+          ).rows as Row[])
+        : [];
       const [s] = (
         await tx.execute(sql`select * from sales_settings where merchant_id = ${device.merchantId}`)
       ).rows as Row[];
@@ -86,10 +90,12 @@ export class DeviceSyncService {
           sql`select allow_negative_stock from inventory_settings where merchant_id = ${device.merchantId}`,
         )
       ).rows as Row[];
+      // The device's own series: the highest receipt number it uploaded.
       const [counter] = (
         await tx.execute(sql`
-          select receipt_number from sales where register_id = ${device.registerId}
-          order by receipt_number desc limit 1`)
+          select result->>'receiptNumber' as receipt_number from device_records
+          where device_id = ${device.id} and kind = 'sale' and status = 'accepted'
+          order by result->>'receiptNumber' desc limit 1`)
       ).rows as Row[];
 
       const snapshot: DeviceSnapshot = {
@@ -116,12 +122,16 @@ export class DeviceSyncService {
           receiptHeader: str(branch!['receipt_header']),
           receiptFooter: str(branch!['receipt_footer']),
         },
-        register: {
-          id: device.registerId,
-          code: String(register!['code']),
-          defaultOpeningFloatMinor: String(register!['float']),
-          discrepancyToleranceMinor: String(register!['tolerance']),
-        },
+        register: register
+          ? {
+              id: String(register['id']),
+              code: String(register['code']),
+              nameEn: str(register['name_en']),
+              nameAr: str(register['name_ar']),
+              defaultOpeningFloatMinor: String(register['float']),
+              discrepancyToleranceMinor: String(register['tolerance']),
+            }
+          : null,
         settings: {
           maxDiscountPercent: decimal(s?.['max_discount_percent'] ?? '10')!,
           priceOverrideFloorPercent: s ? decimal(s['price_override_floor_percent']) : '50',
@@ -150,29 +160,39 @@ export class DeviceSyncService {
   }
 
   /**
-   * The branch shift (ADR-0112 amendment 3): the latest shift on the register of the branch's
-   * primary device, open or closed, and the primary itself. Secondary devices sell into the
-   * open one; the primary learns here when a manager closed its shift online.
+   * The branch shift (ADR-0112 amendments 3 and 4). A bound device: the latest shift of its own
+   * register, open or closed (so it learns a close done online). An unbound device: the open
+   * shift it sells into, on the branch's main register first, else the oldest open one, or null.
+   * `primaryDevice`: the device bound to the main register (else to the shift's register).
    */
   private async branchShift(
     tx: Transaction,
     device: Device,
   ): Promise<Pick<DeviceSnapshot, 'branchShift' | 'primaryDevice'>> {
+    const [s] = (
+      await tx.execute(
+        device.registerId
+          ? sql`
+            select s.id, s.status, s.register_id, g.code, s.opened_at, s.closed_at, s.membership_id, s.user_id, u.full_name
+            from shifts s join registers g on g.id = s.register_id join users u on u.id = s.user_id
+            where s.register_id = ${device.registerId}
+            order by (s.status = 'open') desc, s.opened_at desc limit 1`
+          : sql`
+            select s.id, s.status, s.register_id, g.code, s.opened_at, s.closed_at, s.membership_id, s.user_id, u.full_name
+            from shifts s join registers g on g.id = s.register_id join users u on u.id = s.user_id
+            where s.branch_id = ${device.branchId} and s.status = 'open'
+            order by g.is_main desc, s.opened_at asc limit 1`,
+      )
+    ).rows as Row[];
+    const shiftRegister = s ? String(s['register_id']) : null;
     const [primary] = (
       await tx.execute(sql`
-        select id, name, register_id from pos_devices
-        where branch_id = ${device.branchId} and role = 'primary' and revoked_at is null`)
-    ).rows as Row[];
-    if (!primary) return { branchShift: null, primaryDevice: null };
-    const [s] = (
-      await tx.execute(sql`
-        select s.id, s.status, s.register_id, g.code, s.opened_at, s.closed_at, s.membership_id, s.user_id, u.full_name
-        from shifts s join registers g on g.id = s.register_id join users u on u.id = s.user_id
-        where s.register_id = ${String(primary['register_id'])}
-        order by (s.status = 'open') desc, s.opened_at desc limit 1`)
+        select d.id, d.name from pos_devices d join registers g on g.id = d.register_id
+        where d.branch_id = ${device.branchId} and d.revoked_at is null
+        order by g.is_main desc, (g.id = ${shiftRegister}::uuid) desc, d.created_at limit 1`)
     ).rows as Row[];
     return {
-      primaryDevice: { id: String(primary['id']), name: String(primary['name']) },
+      primaryDevice: primary ? { id: String(primary['id']), name: String(primary['name']) } : null,
       branchShift: s
         ? {
             id: String(s['id']),

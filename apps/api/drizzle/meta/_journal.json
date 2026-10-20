@@ -456,6 +456,13 @@
       "when": 1792436605609,
       "tag": "0064_branch_shifts",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1792443571385,
+      "tag": "0065_register_bindings",
+      "breakpoints": true
     }
   ]
 }

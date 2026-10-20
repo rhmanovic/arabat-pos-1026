@@ -69,21 +69,55 @@ async function setup() {
     cash,
     ...reg,
     cashierId: membership.rows[0].id as string,
-    prefix: `MAIN-${reg.device.registerCode}-`,
+    prefix: `MAIN-${reg.device.code}-`,
   };
 }
 type Setup = Awaited<ReturnType<typeof setup>>;
 
-/** The first device of a branch is its primary (it holds the branch shift, amendment 3). */
-async function register(c: Co, branchId: string, role: 'primary' | 'secondary' = 'primary') {
+/**
+ * A device of the branch. `bound`: a manager creates a register (cash drawer) and binds the
+ * device to it, which makes it the drawer's primary (amendment 4); otherwise it sells card /
+ * transfer only, into the branch shift.
+ */
+async function register(c: Co, branchId: string, bound = true, name = 'Till') {
   const res = await c.client.request('POST', '/device/register', {
-    body: { email: c.email, password: PASSWORD, deviceName: 'Till', branchId, role },
+    body: { email: c.email, password: PASSWORD, deviceName: name, branchId },
   });
   expect(res.statusCode).toBe(200);
-  return res.json() as {
+  const out = res.json() as {
     token: string;
-    device: { id: string; registerId: string; registerCode: string };
+    device: { id: string; code: string; registerId: string | null; registerCode: string | null };
   };
+  if (bound) {
+    const reg = await c.client.request('POST', '/manager/registers', {
+      cookies: c.cookies,
+      body: { branchId, code: `DRW-${out.device.code}`, nameEn: `Drawer of ${name}`, isMain: true },
+    });
+    expect(reg.statusCode).toBe(201);
+    const b = await c.client.request('PUT', `/manager/devices/${out.device.id}`, {
+      cookies: c.cookies,
+      body: { registerId: reg.json().id },
+    });
+    expect(b.statusCode).toBe(200);
+    out.device.registerId = reg.json().id;
+    out.device.registerCode = reg.json().code;
+  }
+  return out;
+}
+
+/** A card method with a settlement account (card / transfer sales of unbound devices). */
+async function cardMethod(c: Co) {
+  const account = await c.client.request('POST', '/manager/financial-accounts', {
+    cookies: c.cookies,
+    body: { nameEn: 'Card clearing', kind: 'card_clearing' },
+  });
+  expect(account.statusCode).toBe(201);
+  const method = await c.client.request('POST', '/manager/payment-methods', {
+    cookies: c.cookies,
+    body: { kind: 'card', nameEn: 'Card', nameAr: 'بطاقة', financialAccountId: account.json().id },
+  });
+  expect(method.statusCode).toBe(201);
+  return method.json().id as string;
 }
 
 function sync(token: string, method: 'GET' | 'POST', records?: Rec[]) {
@@ -244,7 +278,7 @@ describe('sync upload', () => {
       register_id: s.device.registerId,
     });
     expect(new Date(row.created_at).toISOString()).toBe(theSale['occurredAt']);
-    expect(await drawerBalance(s.device.registerId)).toBe('125'); // 450 − 100 − 225
+    expect(await drawerBalance(s.device.registerId!)).toBe('125'); // 450 − 100 − 225
     const shift = (
       await owner.query(
         `select status, closed_at, discrepancy_minor::text from shifts where id = $1`,
@@ -270,7 +304,7 @@ describe('sync upload', () => {
     const again = (await sync(s.token, 'POST', batch)).json();
     expect(again.results.map((r: Rec) => r['status'])).toEqual(Array(5).fill('duplicate'));
     expect(again.results[3].result.refundNumber).toBe(`${s.prefix}000001-R1`);
-    expect(await drawerBalance(s.device.registerId)).toBe('125');
+    expect(await drawerBalance(s.device.registerId!)).toBe('125');
     // The same id with different content is refused, not applied.
     const changed = (await sync(s.token, 'POST', [{ ...movement, amountMinor: '200' }])).json();
     expect(changed.results[0]).toMatchObject({ status: 'refused', code: 'IDEMPOTENCY_CONFLICT' });
@@ -417,12 +451,12 @@ describe('sync upload', () => {
       ])
     ).json();
     expect(back.results[0]).toMatchObject({ status: 'accepted', result: { totalMinor: '1000' } });
-    expect(await drawerBalance(s.device.registerId)).toBe('1000');
+    expect(await drawerBalance(s.device.registerId!)).toBe('1000');
   });
 
   it('refunds only the device’s own sales and refuses people without POS access', async () => {
     const s = await setup();
-    const other = await register(s.c, s.c.main, 'secondary');
+    const other = await register(s.c, s.c.main, false, 'Back');
     const shiftA = newId();
     const theSale = sale(s, shiftA, 1);
     expect(
@@ -542,7 +576,7 @@ describe('sync upload', () => {
 
   it('lets secondary devices sell into the primary’s branch shift, flags uploads after its close as late, and keeps the drawer on the primary', async () => {
     const s = await setup();
-    const second = await register(s.c, s.c.main, 'secondary');
+    const second = await register(s.c, s.c.main, false, 'Back');
     const shiftId = newId();
     expect((await sync(s.token, 'POST', [openShift(s, shiftId)])).json().results[0].status).toBe(
       'accepted',
@@ -556,8 +590,20 @@ describe('sync upload', () => {
       registerCode: s.device.registerCode,
       openedBy: { membershipId: s.cashierId },
     });
-    const prefix = `MAIN-${second.device.registerCode}-`;
-    const inTime: Rec = { ...sale(s, shiftId, 1), receiptNumber: `${prefix}000001` };
+    const prefix = `MAIN-${second.device.code}-`;
+    const card = await cardMethod(s.c);
+    const byCard = (n: number): Rec => {
+      const base = sale(s, shiftId, n);
+      const [p] = base['payments'] as Rec[];
+      return {
+        ...base,
+        receiptNumber: `${prefix}${String(n).padStart(6, '0')}`,
+        payments: [
+          { ...p, methodId: card, tenderedMinor: null, changeMinor: '0', reference: 'A1' },
+        ],
+      };
+    };
+    const inTime = byCard(1);
     const res = (
       await sync(second.token, 'POST', [
         inTime,
@@ -580,13 +626,19 @@ describe('sync upload', () => {
       ['refused', 'NOT_PRIMARY_DEVICE'],
       ['refused', 'NOT_PRIMARY_DEVICE'],
     ]);
-    // Its cash went into the primary's drawer, and the sale keeps its own register.
-    expect(await drawerBalance(s.device.registerId)).toBe('450');
-    expect(await drawerBalance(second.device.registerId)).toBe('0');
+    // An unbound device has no drawer: a cash tender is refused (amendment 4).
+    const cash = (
+      await sync(second.token, 'POST', [
+        { ...sale(s, shiftId, 7), receiptNumber: `${prefix}000007` },
+      ])
+    ).json();
+    expect(cash.results[0]).toMatchObject({ status: 'refused', code: 'CASH_NOT_ALLOWED' });
+    // No cash reached the drawer; the card sale is booked on the register whose shift took it.
+    expect(await drawerBalance(s.device.registerId!)).toBe('0');
     const row = (
       await owner.query(`select register_id, shift_id from sales where id = $1`, [inTime['id']])
     ).rows[0];
-    expect(row).toEqual({ register_id: second.device.registerId, shift_id: shiftId });
+    expect(row).toEqual({ register_id: s.device.registerId, shift_id: shiftId });
     // A secondary's own shift_open is kept as refused for the managers, retried unchanged later.
     // The primary closes the branch shift: expected cash counts every device's sales.
     const close = (
@@ -597,17 +649,21 @@ describe('sync upload', () => {
           occurredAt: at(-5),
           membershipId: s.cashierId,
           shiftId,
-          countedCashMinor: '450',
+          countedCashMinor: '0',
           note: null,
         },
       ])
     ).json();
     expect(close.results[0]).toMatchObject({
       status: 'accepted',
-      result: { expectedCashMinor: '450', discrepancyMinor: '0', outcome: 'balanced' },
+      result: { expectedCashMinor: '0', discrepancyMinor: '0', outcome: 'balanced' },
     });
-    // The secondary was offline: its later upload still attaches to the closed shift, flagged.
-    const late: Rec = { ...sale(s, shiftId, 2), receiptNumber: `${prefix}000002` };
+    // Without any open register shift at the branch there is nothing to sell into.
+    expect((await sync(second.token, 'GET')).json().branchShift).toBeNull();
+    const nowhere = (await sync(second.token, 'POST', [{ ...byCard(3), shiftId: newId() }])).json();
+    expect(nowhere.results[0]).toMatchObject({ status: 'refused', code: 'SHIFT_REQUIRED' });
+    // The unbound device was offline: its later upload still attaches to the closed shift, flagged.
+    const late = byCard(2);
     const after = (await sync(second.token, 'POST', [late])).json();
     expect(after.results[0]).toMatchObject({ status: 'accepted', code: null, message: null });
     const flags = await owner.query(
@@ -615,16 +671,17 @@ describe('sync upload', () => {
       [late['id']],
     );
     expect(flags.rows).toEqual([{ kind: 'late', details: expect.objectContaining({ shiftId }) }]);
-    expect((await sync(second.token, 'GET')).json().branchShift).toMatchObject({
+    // The bound device itself still sees its closed shift (to learn of closes done online).
+    expect((await sync(s.token, 'GET')).json().branchShift).toMatchObject({
       id: shiftId,
       status: 'closed',
     });
-    // The owner cannot demote a primary whose shift is open.
+    // The register cannot be unbound while its shift is open.
     const again = newId();
     await sync(s.token, 'POST', [openShift(s, again)]);
     const demote = await s.c.client.request('PUT', `/manager/devices/${s.device.id}`, {
       cookies: s.c.cookies,
-      body: { role: 'secondary' },
+      body: { registerId: null },
     });
     expect(demote.statusCode).toBe(409);
     expect(demote.json().code).toBe('REGISTER_BUSY');

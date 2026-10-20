@@ -881,7 +881,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
           schema: createdPinLinkSchema,
         }),
       removePinLink: (branchId: string) => request('DELETE', `/manager/pin-links/${branchId}`),
-      /** Owner: role (primary / secondary) or branch (Plan A). */
+      /** Managers: the bound register (`registerId`, null unbinds); owner: the branch. */
       update: (id: string, body: UpdatePosDevice) =>
         request('PUT', `/manager/devices/${id}`, { body, schema: posDeviceSchema }),
       settings: () => request('GET', '/manager/device-settings', { schema: deviceSettingsSchema }),
@@ -923,6 +923,9 @@ export function createApiClient(options: ApiClientOptions = {}) {
           body: { status },
           schema: registerSchema,
         }),
+      /** Binds the drawer to one device (its primary), or frees it with null (ADR-0112 amendment 4). */
+      bindDevice: (id: string, deviceId: string | null) =>
+        request('PUT', `/manager/registers/${id}/device`, { body: { deviceId } }),
     },
     shifts: {
       list: (query: ShiftListQuery = {}) =>

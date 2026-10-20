@@ -317,8 +317,10 @@ It runs as `app_owner` with the merchant's user triggers switched off inside its
 only for a **test company** and only with the owner's approval. In production, run it through the
 migration job with the arguments overridden for one execution:
 `gcloud run jobs execute arabat-migrate --region=me-central1 --wait --args=apps/api/dist/database/cli/reset-merchant-data.js,--merchant=<uuid>,--apply`
-(the job's `DATABASE_ADMIN_URL` and `APP_OWNER_PASSWORD` give it the owner connection). Done once
-on 2026-10-19 for the owner's test company after ADR-0112 amendment 3.
+(the job's `DATABASE_ADMIN_URL` and `APP_OWNER_PASSWORD` give it the owner connection). With
+`--main-register=<Arabic name>` it also drops every register of the company and creates one main,
+unbound register per active branch with that name (ADR-0112 amendment 4). Done on 2026-10-19 for
+the owner's test company after amendments 3 and 4.
 
 ### 9.3 Release
 `bash infra/gcp/deploy.sh` from a clean, green commit: Cloud Build image → migration job

@@ -745,8 +745,13 @@ function PaymentDialog({
 }) {
   const { t, i18n } = useTranslation();
   const { methods, ctx } = useDevice();
+  // No drawer on an unbound device (amendment 4): cash is not offered.
   const usable = methods.filter(
-    (m) => m.status === 'active' && m.availableInPos && !m.gatewayProvider,
+    (m) =>
+      m.status === 'active' &&
+      m.availableInPos &&
+      !m.gatewayProvider &&
+      (m.kind !== 'cash' || ctx?.device.registerId !== null),
   );
   const [payments, setPayments] = useState<PaymentInput[]>([]);
   const [methodId, setMethodId] = useState<string>(usable[0]?.id ?? '');

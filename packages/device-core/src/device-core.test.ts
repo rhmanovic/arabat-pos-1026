@@ -63,8 +63,10 @@ function snapshot(partial: Partial<DeviceSnapshot> = {}): DeviceSnapshot {
       merchantId: U(2),
       branchId: U(3),
       branchCode: 'MAIN',
+      code: 'D1',
       registerId: U(4),
-      registerCode: 'R2',
+      registerCode: 'R1',
+      registerName: { nameEn: 'Main drawer', nameAr: null },
       role: 'primary',
     },
     merchant: {
@@ -86,7 +88,9 @@ function snapshot(partial: Partial<DeviceSnapshot> = {}): DeviceSnapshot {
     },
     register: {
       id: U(4),
-      code: 'R2',
+      code: 'R1',
+      nameEn: 'Main drawer',
+      nameAr: null,
       defaultOpeningFloatMinor: '0',
       discrepancyToleranceMinor: '0',
     },
@@ -448,7 +452,7 @@ describe('schema and snapshot', () => {
 
   it('continues the receipt series above the server’s counter after a reinstall', async () => {
     const d = await device();
-    await applySnapshot(d.db, snapshot({ counters: { lastReceiptNumber: 'MAIN-R2-000041' } }));
+    await applySnapshot(d.db, snapshot({ counters: { lastReceiptNumber: 'MAIN-D1-000041' } }));
     expect(await getMeta(d.db, META.receiptCounter)).toBe('41');
     await applySnapshot(d.db, snapshot({ counters: { lastReceiptNumber: 'MAIN-000099' } }));
     expect(await getMeta(d.db, META.receiptCounter)).toBe('41');
@@ -456,12 +460,12 @@ describe('schema and snapshot', () => {
 
   it('starts a new receipt series when the owner moves the device to another branch', async () => {
     const d = await device();
-    await applySnapshot(d.db, snapshot({ counters: { lastReceiptNumber: 'MAIN-R2-000041' } }));
+    await applySnapshot(d.db, snapshot({ counters: { lastReceiptNumber: 'MAIN-D1-000041' } }));
     const base = snapshot();
     await applySnapshot(d.db, {
       ...base,
       branch: { ...base.branch, id: U(30), code: 'MALL' },
-      register: { ...base.register, id: U(40), code: 'R1' },
+      register: { ...base.register!, id: U(40), code: 'R1' },
       device: {
         ...base.device,
         branchId: U(30),
@@ -587,7 +591,7 @@ describe('selling', () => {
       note: 'regular',
     });
     const sale = await commitSale(d.db, prepared, d.ctx);
-    expect(sale.receiptNumber).toBe('MAIN-R2-000001');
+    expect(sale.receiptNumber).toBe('MAIN-D1-000001');
     expect(sale.record.lines[0]).toMatchObject({
       grossMinor: '500',
       lineDiscountMinor: '50',
@@ -610,7 +614,7 @@ describe('selling', () => {
       ),
       d.ctx,
     );
-    expect(second.receiptNumber).toBe('MAIN-R2-000002');
+    expect(second.receiptNumber).toBe('MAIN-D1-000002');
     const outbox = await listOutbox(d.db);
     expect(outbox.map((o) => [o.seq, o.kind])).toEqual([
       [3, 'sale'],
@@ -620,12 +624,12 @@ describe('selling', () => {
     expect(JSON.parse(outbox[1]!.body)).toEqual(sale.record);
     // The receipt is the server's document.
     const html = receiptHtmlFor((await getSale(d.db, sale.saleId))!, d.ctx, d.sara);
-    expect(html).toContain('MAIN-R2-000001');
+    expect(html).toContain('MAIN-D1-000001');
     expect(html).toContain('شاي');
     expect(html).toContain('0.550');
     expect((await listSales(d.db)).map((s) => s.receiptNumber)).toEqual([
-      'MAIN-R2-000002',
-      'MAIN-R2-000001',
+      'MAIN-D1-000002',
+      'MAIN-D1-000001',
     ]);
     const summary = await shiftSummary(d.db, shift);
     expect(summary).toMatchObject({
@@ -691,9 +695,9 @@ describe('selling', () => {
       ),
     );
     expect(results.map((r) => r.receiptNumber).sort()).toEqual([
-      'MAIN-R2-000001',
-      'MAIN-R2-000002',
-      'MAIN-R2-000003',
+      'MAIN-D1-000001',
+      'MAIN-D1-000002',
+      'MAIN-D1-000003',
     ]);
     // A counter changed underneath (another writer) makes the guard fail the transaction.
     await d.db.exec(`UPDATE meta SET value = '10' WHERE key = ?`, [META.receiptCounter]);
@@ -872,7 +876,7 @@ describe('cash, refunds and shift close', () => {
       cashPaybackMinor: 250n,
     });
     const refund = await commitRefund(d.db, prepared, { refundable, shift, approver: d.omar });
-    expect(refund.refundNumber).toBe('MAIN-R2-000001-R1');
+    expect(refund.refundNumber).toBe('MAIN-D1-000001-R1');
     const again = (await refundableSale(d.db, sale.saleId))!;
     expect(again.lines[0]).toMatchObject({ refundedMilli: 1000n, refundedMinor: 250n });
     expect(again.payments[0]!.refundedMinor).toBe(250n);
@@ -1178,7 +1182,7 @@ describe('branch shift (ADR-0112 amendment 3)', () => {
     ]);
     expect((await shiftAcceptance(d.db, shift)).status).toBe('accepted');
     const sale = await commitSale(d.db, prepared, ctx);
-    expect(sale.receiptNumber).toBe('MAIN-R2-000002');
+    expect(sale.receiptNumber).toBe('MAIN-D1-000002');
     // A refused shift without records can be discarded, so a new one can be opened.
     const e = await device();
     e.server.setRefuseShiftOpen('NOT_PRIMARY_DEVICE');
@@ -1208,10 +1212,18 @@ describe('branch shift (ADR-0112 amendment 3)', () => {
       closedAt: null,
       openedBy: { membershipId: U(10), userId: U(11), fullName: 'Sara' },
     };
+    // An unbound device (amendment 4): its own code, no register, card / transfer only.
     const secondary = (partial: Partial<DeviceSnapshot> = {}) =>
       snapshot({
-        device: { ...snapshot().device, role: 'secondary', registerId: U(5), registerCode: 'R3' },
-        register: { ...snapshot().register, id: U(5), code: 'R3' },
+        device: {
+          ...snapshot().device,
+          role: 'secondary',
+          code: 'D3',
+          registerId: null,
+          registerCode: null,
+          registerName: null,
+        },
+        register: null,
         branchShift,
         ...partial,
       });
@@ -1247,26 +1259,35 @@ describe('branch shift (ADR-0112 amendment 3)', () => {
         role: 'secondary',
       }),
     ).rejects.toMatchObject({ code: 'NOT_PRIMARY_DEVICE' });
-    // Omar sells into Sara's branch shift; the sale carries the branch shift and his own name.
+    // No drawer: cash is refused; Omar sells by card into Sara's branch shift, and the sale
+    // carries the branch shift and his own name.
+    const catalog = await loadCatalog(d.db);
+    const methods = await loadPaymentMethods(d.db);
+    const input = {
+      cart: teaCart('1'),
+      cashier: omar,
+      shift,
+      supervisor: null,
+      zeroTotalReason: null,
+    };
+    expect(() => prepareSale({ ...input, payments: cash('0.250') }, ctx, catalog, methods)).toThrow(
+      /CASH_NOT_ALLOWED|no cash drawer/,
+    );
     const sale = await commitSale(
       d.db,
       prepareSale(
         {
-          cart: teaCart('1'),
-          payments: cash('0.250'),
-          cashier: omar,
-          shift,
-          supervisor: null,
-          zeroTotalReason: null,
+          ...input,
+          payments: [{ methodId: CARD, amount: '0.250', tendered: null, reference: 'A1' }],
         },
         ctx,
-        await loadCatalog(d.db),
-        await loadPaymentMethods(d.db),
+        catalog,
+        methods,
       ),
       ctx,
     );
     expect(sale.record).toMatchObject({ shiftId: U(500), membershipId: U(20) });
-    expect(sale.receiptNumber).toBe('MAIN-R3-000001');
+    expect(sale.receiptNumber).toBe('MAIN-D3-000001');
     expect((await listOutbox(d.db)).map((o) => o.kind)).toEqual(['sale']);
     // The primary closed the branch shift: the next sync closes it here too.
     await applySnapshot(

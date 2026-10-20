@@ -285,3 +285,40 @@ Fixes from the first real test of the device app (Plan A). Migration 0064; contr
    Digits typed into a field next to a PIN pad no longer feed the pad.
 8. Not changed: the browser POS (online only, its own shifts), restaurant, custody moves.
 
+## Amendment 4 — Registers are drawers, devices are devices (owner, 2026-10-19)
+
+The first real test showed three registers in a branch with one cash drawer: every device
+registration had created a register. Migration 0065; contract in `docs/DEVICE_API.md` §2, §3, §5;
+code in `apps/api/src/modules/devices/devices.service.ts` (binding), `device-ingest.service.ts`,
+`device-sync.service.ts`, `packages/device-core`, `apps/manager-web/src/features/cash`.
+
+1. **A register is a physical cash drawer.** Managers create registers (usually one per branch,
+   `registers.is_main` marks the branch's main one). Device registration never creates one.
+2. **A device is a selling device.** It registers with a branch only (no role at registration)
+   and gets a permanent code per branch, `D1`, `D2`, … (`pos_devices.code`, never reused, counter
+   in `register_code_sequences`). Its receipt series is `{branch}-{device code}-{6 digits}`,
+   gap-free per device as before; the server checks the prefix against the device's code and
+   finds the device's own sales through `device_records`.
+3. **Binding.** A manager with `registers.manage` binds a register to exactly one device
+   (`PUT /manager/devices/:id { registerId }` or `PUT /manager/registers/:id/device { deviceId }`;
+   null unbinds; `409 REGISTER_BOUND` for a second device, `409 REGISTER_BUSY` while the
+   register's shift is open, either side). The bound device is that register's **primary**: it
+   opens and closes the register's shift with a cash count, takes cash, opens the drawer, records
+   pay-ins / pay-outs and prints the browser POS's receipts (print-agent API). Revoking a device
+   frees its register; moving a device to another branch needs it unbound and gives it a new code.
+4. **Unbound devices** sell by card / transfer only: cash methods are hidden on the till and a
+   cash tender is refused by the server (`409 CASH_NOT_ALLOWED`); no drawer, no cash in / out, no
+   shift of their own. They sell only while a register shift is open in their branch: the snapshot
+   names it (`branchShift`: the main register's open shift, else the oldest open one) and their
+   sales attach to it for reporting (the sale's `register_id` is that shift's register). With no
+   open shift the till shows "لا توجد وردية مفتوحة في الفرع".
+5. **Role is derived.** `pos_devices.role` is gone; `device.role` in every answer is `primary`
+   when `registerId` is set, else `secondary`. `NOT_PRIMARY_DEVICE` keeps its meaning for the
+   print-agent API, `shift_open`, `shift_close` and `cash_movement`: bound devices only.
+6. **Migration.** Registers that device registrations had created were deleted when they had no
+   history (no shifts, sales, orders, cash movements, refunds or ledger entries) and kept as plain
+   unbound registers otherwise; every device got its code in registration order and was left
+   unbound. The one-primary-per-branch index and the role column were dropped.
+7. The browser POS is untouched: it keeps its own registers (unbound ones) and shifts; a register
+   bound to a device stays out of the browser till.
+

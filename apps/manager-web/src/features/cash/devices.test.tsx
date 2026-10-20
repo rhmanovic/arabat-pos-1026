@@ -14,8 +14,10 @@ const device = {
   id: DEVICE,
   name: 'Till Mac',
   branchId: '0190a000-0000-7000-8000-000000000001',
+  code: 'D1',
   registerId: '0190a000-0000-7000-8000-000000000101',
   registerCode: 'R2',
+  registerName: { nameEn: 'Front drawer', nameAr: null },
   role: 'primary',
   createdAt: '2026-10-17T07:00:00.000Z',
   lastSeenAt: '2026-10-17T08:00:00.000Z',
@@ -48,7 +50,7 @@ describe('devices', () => {
     });
     renderApp({ routes, appInterface: 'manager', i18n, path: '/devices', fetch });
     const row = await screen.findByRole('row', { name: /Till Mac/ });
-    expect(within(row).getByText('R2')).toBeInTheDocument();
+    expect(within(row).getByText('Front drawer')).toBeInTheDocument();
     expect(within(row).getByText('Online')).toBeInTheDocument();
     await userEvent.click(within(row).getByRole('button', { name: 'Remove' }));
     const dialog = await screen.findByRole('dialog');
@@ -242,11 +244,44 @@ describe('devices', () => {
     );
   });
 
-  it('lets the owner make a device additional; others see no change button (Plan A)', async () => {
+  it('binds the device to a drawer of its branch and frees it (amendment 4)', async () => {
+    const drawer = {
+      id: '0190a000-0000-7000-8000-000000000102',
+      branchId: device.branchId,
+      code: 'R3',
+      nameEn: 'Back drawer',
+      nameAr: null,
+      status: 'active',
+      accessMode: 'branch',
+      memberIds: [],
+      defaultOpeningFloat: { amount: '0.000', currency: 'KWD' },
+      discrepancyTolerance: { amount: '0.000', currency: 'KWD' },
+      openShift: null,
+      isMain: false,
+      device: null,
+      version: 1,
+    };
     const fetch = fakeApiFetch({
-      session: { ...makeSession('manager', ['manager.access', 'registers.manage']), isOwner: true },
+      session: makeSession('manager', ['manager.access', 'registers.manage']),
       routes: {
-        'GET /manager/devices': () => ({ status: 200, body: { devices: [device] } }),
+        'GET /manager/devices': () => ({
+          status: 200,
+          body: {
+            devices: [
+              {
+                ...device,
+                registerId: null,
+                registerCode: null,
+                registerName: null,
+                role: 'secondary',
+              },
+            ],
+          },
+        }),
+        'GET /manager/registers': () => ({
+          status: 200,
+          body: { registers: [drawer] },
+        }),
         [`PUT /manager/devices/${DEVICE}`]: (body) => ({
           status: 200,
           body: { ...device, ...(body as object) },
@@ -255,13 +290,13 @@ describe('devices', () => {
     });
     renderApp({ routes, appInterface: 'manager', i18n, path: '/devices', fetch });
     const row = await screen.findByRole('row', { name: /Till Mac/ });
-    expect(within(row).getByText('Primary')).toBeInTheDocument();
-    await userEvent.click(within(row).getByRole('button', { name: 'Change' }));
+    expect(within(row).getByText('No drawer (card / transfer only)')).toBeInTheDocument();
+    await userEvent.click(within(row).getByRole('button', { name: 'Bind a drawer' }));
     const dialog = await screen.findByRole('dialog');
-    await userEvent.selectOptions(within(dialog).getByLabelText('Role'), 'secondary');
+    await userEvent.selectOptions(await within(dialog).findByLabelText('Register'), drawer.id);
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     await vi.waitFor(() =>
-      expect(fetch.calls.find((c) => c.method === 'PUT')?.body).toEqual({ role: 'secondary' }),
+      expect(fetch.calls.find((c) => c.method === 'PUT')?.body).toEqual({ registerId: drawer.id }),
     );
   });
 

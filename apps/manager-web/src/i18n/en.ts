@@ -828,7 +828,19 @@ export const managerEn = {
     reconciliationHistory: 'Previous reconciliations',
     differenceShort: 'difference {{amount}}',
     registersTitle: 'Registers',
-    registersSubtitle: 'Cash registers of each branch and who may use them.',
+    registersSubtitle:
+      'Cash drawers of each branch: who may use them, and which Arabat till each one is bound to.',
+    boundDevice: 'Bound device',
+    unbound: 'Not bound',
+    bindDevice: 'Bind to a device',
+    rebind: 'Change device',
+    bindTitle: 'Device of “{{name}}”',
+    bindHint:
+      'The bound device becomes this drawer’s primary till: it opens and closes the shift, takes cash and prints the browser POS receipts. The shift must be closed.',
+    bindSaved: 'Binding saved',
+    mainRegister: 'Main register of the branch',
+    mainRegisterHint:
+      'Tills without a drawer attach their card sales to this register’s open shift.',
     newRegister: 'New register',
     code: 'Code',
     accessMode: 'Who can use it',
@@ -942,7 +954,7 @@ export const managerEn = {
   devices: {
     title: 'Devices',
     subtitle:
-      'Arabat app tills that keep selling without internet. A manager registers a device once in the app; each device is its own register.',
+      'Arabat app tills that keep selling without internet. A manager registers a device once in the app; bind a register (cash drawer) to it here or on the Registers page.',
     empty:
       'No device yet. Open the Arabat app on the till and sign in with a manager account to register it.',
     register: 'Register',
@@ -956,16 +968,19 @@ export const managerEn = {
     revokeHint:
       'The device stops selling at its next connection and must be registered again. Sales it already made are kept.',
     revokedDone: 'Device removed',
-    role: 'Role',
+    code: 'Device code',
     primary: 'Primary',
-    secondary: 'Additional',
-    roleHint:
-      'One primary per branch: it opens the cash drawer and prints the receipts of the browser POS. Additional devices never open the drawer.',
+    unbound: 'No drawer (card / transfer only)',
+    bind: 'Bind a drawer',
+    rebind: 'Change drawer',
+    bindTitle: 'Drawer of “{{name}}”',
+    bindHint:
+      'The bound device is the drawer’s primary: it opens and closes its shift, takes cash, opens the drawer and prints the browser POS receipts. The drawer’s shift must be closed.',
     change: 'Change',
     changeTitle: 'Change “{{name}}”',
     changeHint: 'The device keeps selling and applies the change at its next sync.',
     moveHint:
-      'Moving starts a new receipt series in the new branch. The device’s shift must be closed and its drawer emptied first.',
+      'Moving starts a new receipt series in the new branch. The device must be unbound first.',
     changed: 'Device updated',
     pinLinks: 'Browser POS sign-in with PIN',
     pinLinksHint:

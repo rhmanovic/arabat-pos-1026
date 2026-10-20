@@ -60,7 +60,7 @@ interface ShiftRow {
   status: string;
   openedAt: Date;
   closedAt: Date | null;
-  /** The device that opened it (null: a browser shift, which no device may use). */
+  /** The device that opened it (null: a shift opened in the browser on a manual register). */
   deviceId: string | null;
 }
 
@@ -333,10 +333,9 @@ export class DeviceIngestService {
   }
 
   /**
-   * A device shift of this branch, locked (ADR-0112 amendment 3): the branch shift is held by
-   * the primary device's register and every device of the branch sells into it, so a shift is
-   * usable by this device when it was opened by a device of the same branch. Browser shifts and
-   * other branches' shifts are `WRONG_DEVICE`.
+   * A register shift of this branch, locked (ADR-0112 amendments 3 and 4): a bound device sells
+   * into its own register's shift; an unbound device into the open shift of a register of its
+   * branch (the one its snapshot named). Another branch's shift is `WRONG_DEVICE`.
    */
   private async deviceShift(tx: Transaction, device: Device, shiftId: string): Promise<ShiftRow> {
     const [row] = (
@@ -345,12 +344,8 @@ export class DeviceIngestService {
         from shifts where id = ${shiftId} for update`)
     ).rows as Row[];
     if (!row) throw new AppError(409, 'SHIFT_REQUIRED', 'The shift has not been uploaded.');
-    if (row['device_id'] === null || row['branch_id'] !== device.branchId)
-      throw new AppError(
-        409,
-        'WRONG_DEVICE',
-        'This shift was not opened on a device of this branch.',
-      );
+    if (row['branch_id'] !== device.branchId)
+      throw new AppError(409, 'WRONG_DEVICE', 'This shift belongs to another branch.');
     return {
       id: String(row['id']),
       registerId: String(row['register_id']),
@@ -359,7 +354,7 @@ export class DeviceIngestService {
       status: String(row['status']),
       openedAt: new Date(row['opened_at'] as string),
       closedAt: row['closed_at'] ? new Date(row['closed_at'] as string) : null,
-      deviceId: String(row['device_id']),
+      deviceId: row['device_id'] === null ? null : String(row['device_id']),
     };
   }
 
@@ -388,13 +383,15 @@ export class DeviceIngestService {
       : [];
   }
 
-  private assertPrimary(device: Device, what: string) {
-    if (device.role !== 'primary')
+  /** Only a device bound to a register (its primary, amendment 4) holds a drawer. */
+  private assertPrimary(device: Device, what: string): string {
+    if (device.registerId === null)
       throw new AppError(
         409,
         'NOT_PRIMARY_DEVICE',
-        `Only the branch's primary device ${what}; this device sells into the branch shift.`,
+        `Only a device bound to a register ${what}; this device sells into the branch shift.`,
       );
+    return device.registerId;
   }
 
   /** A cashier signed in on the device: their last sign-in and the device audit log. */
@@ -437,10 +434,10 @@ export class DeviceIngestService {
     occurredAt: Date,
     ip: string,
   ): Promise<Outcome> {
-    this.assertPrimary(device, 'opens the branch shift');
+    const registerId = this.assertPrimary(device, 'opens the register shift');
     const actor = await this.actorFor(tx, device, r.membershipId, occurredAt);
     const countedMinor = BigInt(r.countedCashMinor);
-    const drawer = await registerAccount(tx, device.registerId);
+    const drawer = await registerAccount(tx, registerId);
     await lockAccounts(tx, [drawer.id]);
     const stale = (
       await tx.execute(sql`
@@ -452,11 +449,11 @@ export class DeviceIngestService {
     const [register] = (
       await tx.execute(sql`
         select needs_count, discrepancy_tolerance_minor::text as tolerance from registers
-        where id = ${device.registerId}`)
+        where id = ${registerId}`)
     ).rows as Row[];
     const [busy] = (
       await tx.execute(
-        sql`select id from shifts where register_id = ${device.registerId} and status = 'open'`,
+        sql`select id from shifts where register_id = ${registerId} and status = 'open'`,
       )
     ).rows as Row[];
     if (busy)
@@ -467,7 +464,7 @@ export class DeviceIngestService {
     const [last] = (
       await tx.execute(sql`
         select id, close_type, legacy_open from shifts
-        where register_id = ${device.registerId} and status = 'closed' order by closed_at desc limit 1`)
+        where register_id = ${registerId} and status = 'closed' order by closed_at desc limit 1`)
     ).rows as Row[];
     const followsShiftId =
       last && last['close_type'] === 'forced_uncounted' && !last['legacy_open']
@@ -479,7 +476,7 @@ export class DeviceIngestService {
       insert into shifts (id, merchant_id, branch_id, register_id, membership_id, user_id, opening_float_minor,
                           opening_expected_minor, opening_discrepancy_minor, opening_is_initial,
                           opening_follows_shift_id, opening_note, opened_at, device_id)
-      values (${r.id}, ${device.merchantId}, ${device.branchId}, ${device.registerId}, ${actor.membershipId},
+      values (${r.id}, ${device.merchantId}, ${device.branchId}, ${registerId}, ${actor.membershipId},
               ${actor.userId}, ${countedMinor}, ${expectedMinor}, ${initial ? null : differenceMinor}, ${initial},
               ${followsShiftId}, ${r.note}, ${occurredAt.toISOString()}::timestamptz, ${device.id})`);
     await postEntries(tx, [
@@ -495,9 +492,9 @@ export class DeviceIngestService {
         shiftId: r.id,
       },
     ]);
-    await tx.execute(sql`update registers set needs_count = false where id = ${device.registerId}`);
+    await tx.execute(sql`update registers set needs_count = false where id = ${registerId}`);
     await this.record(tx, actor, 'shift.opened', 'shift', r.id, ip, device, {
-      registerId: device.registerId,
+      registerId: registerId,
       expected: kwd(expectedMinor),
       counted: kwd(countedMinor),
       difference: kwd(differenceMinor),
@@ -542,7 +539,7 @@ export class DeviceIngestService {
     const actor = await this.actorFor(tx, device, r.membershipId, occurredAt);
     const shift = await this.deviceShift(tx, device, r.shiftId);
     if (shift.status !== 'open') throw new AppError(409, 'SHIFT_CLOSED', 'This shift is closed.');
-    if (shift.deviceId !== device.id) this.assertPrimary(device, 'closes the branch shift');
+    if (shift.deviceId !== device.id) this.assertPrimary(device, 'closes the register shift');
     if (r.forced) {
       if (!can(actor.access, 'registers.manage', device.branchId))
         throw new AppError(403, 'FORBIDDEN', 'Closing another person’s shift needs a manager.');
@@ -723,16 +720,11 @@ export class DeviceIngestService {
     const actor = await this.actorFor(tx, device, r.membershipId, occurredAt);
     const use = await this.shiftFor(tx, device, r.shiftId);
     const { shift } = use;
+    // The receipt series is the device's own: `{branch}-{device code}-NNNNNN` (amendment 4).
     const [codes] = (
-      await tx.execute(sql`
-        select b.code as branch, g.code as register from branches b, registers g
-        where b.id = ${device.branchId} and g.id = ${device.registerId}`)
+      await tx.execute(sql`select code as branch from branches where id = ${device.branchId}`)
     ).rows as Row[];
-    const prefix = formatDeviceReceiptNumber(
-      String(codes!['branch']),
-      String(codes!['register']),
-      0,
-    )
+    const prefix = formatDeviceReceiptNumber(String(codes!['branch']), device.code, 0)
       .slice(0, -6)
       .toLowerCase();
     if (
@@ -836,6 +828,13 @@ export class DeviceIngestService {
       const m = methods.get(p.methodId);
       if (!m)
         throw new AppError(409, 'PAYMENT_METHOD_UNAVAILABLE', `payments.${i}: unknown method.`);
+      // Cash needs a drawer: only a device bound to a register takes it (amendment 4).
+      if (m['kind'] === 'cash' && device.registerId === null)
+        throw new AppError(
+          409,
+          'CASH_NOT_ALLOWED',
+          `payments.${i}: this device has no cash drawer; card or transfer only.`,
+        );
       if (m['gateway_provider'])
         throw new AppError(
           409,
@@ -890,7 +889,8 @@ export class DeviceIngestService {
       id: orderId,
       merchantId: device.merchantId,
       branchId: device.branchId,
-      registerId: device.registerId,
+      // The shift's register: the device's own drawer, or the branch register it sells into.
+      registerId: shift.registerId,
       shiftId: shift.id,
       membershipId: actor.membershipId,
       userId: actor.userId,
@@ -999,7 +999,7 @@ export class DeviceIngestService {
       merchantId: device.merchantId,
       orderId,
       branchId: device.branchId,
-      registerId: device.registerId,
+      registerId: shift.registerId,
       shiftId: shift.id,
       membershipId: actor.membershipId,
       userId: actor.userId,
@@ -1088,7 +1088,8 @@ export class DeviceIngestService {
       receiptNumber: r.receiptNumber.toUpperCase(),
       total: kwd(priced.totalMinor),
       shiftId: shift.id,
-      registerId: device.registerId,
+      registerId: shift.registerId,
+      deviceCode: device.code,
       catalogVersion: r.catalogVersion,
       aboveLimit: r.aboveLimit,
       discounts: kwd(priced.lineDiscountsMinor + priced.orderDiscountMinor),
@@ -1141,10 +1142,13 @@ export class DeviceIngestService {
     const actor = await this.actorFor(tx, device, r.membershipId, occurredAt);
     const use = await this.shiftFor(tx, device, r.shiftId);
     const { shift } = use;
-    const [sale] = (await tx.execute(sql`select register_id from sales where id = ${r.saleId}`))
+    const [sale] = (await tx.execute(sql`select id from sales where id = ${r.saleId}`))
       .rows as Row[];
     if (!sale) throw new AppError(409, 'NOT_FOUND', 'The sale has not been uploaded.');
-    if (sale['register_id'] !== device.registerId)
+    // Its own sales are the ones it uploaded (amendment 4: a device is not a register).
+    const { rows: own } = await tx.execute(sql`
+      select 1 from device_records where id = ${r.saleId} and device_id = ${device.id} and status = 'accepted'`);
+    if (own.length === 0)
       throw new AppError(
         409,
         'NOT_OWN_SALE',

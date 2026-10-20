@@ -128,7 +128,11 @@ export const commonEn = {
     SHIFT_ALREADY_OPEN: 'You already have an open shift.',
     REGISTER_BUSY: 'This register is in use by another shift.',
     PRIMARY_EXISTS: 'This branch already has a primary device. Make that one additional first.',
-    NOT_PRIMARY_DEVICE: 'Only the branch’s primary device can print the browser receipts.',
+    NOT_PRIMARY_DEVICE:
+      'Only a device bound to a register does this (shift, cash, browser receipts).',
+    CASH_NOT_ALLOWED: 'This device has no cash drawer: card or transfer only.',
+    REGISTER_BOUND:
+      'This register is bound to another device, or the device is still bound. Unbind first.',
     PIN_LINK_INVALID: 'This sign-in link is no longer valid. Ask your manager for the new one.',
     PIN_NOT_SET: 'You have no PIN yet. Set it from the till app, then try again.',
     REGISTER_INACTIVE: 'This register is inactive.',

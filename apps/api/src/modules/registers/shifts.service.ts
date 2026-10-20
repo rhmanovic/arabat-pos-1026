@@ -142,6 +142,7 @@ export class ShiftsService {
       accessMode: input.accessMode,
       defaultOpeningFloatMinor: parseAmount(input.defaultOpeningFloat, 'defaultOpeningFloat'),
       discrepancyToleranceMinor: parseAmount(input.discrepancyTolerance, 'discrepancyTolerance'),
+      isMain: input.isMain,
     };
     const registerId = id ?? newId();
     try {
@@ -161,6 +162,18 @@ export class ShiftsService {
               message: `The tolerance cannot exceed the company maximum of ${Money.ofMinor(policy.maxToleranceMinor, CURRENCY).toDecimalString()} KWD.`,
             },
           ]);
+        // One main register per branch (ADR-0112 amendment 4): the new one takes the flag over.
+        if (input.isMain)
+          await tx
+            .update(registers)
+            .set({ isMain: false, version: sql`${registers.version} + 1`, updatedAt: sql`now()` })
+            .where(
+              and(
+                eq(registers.branchId, input.branchId),
+                eq(registers.isMain, true),
+                sql`${registers.id} <> ${registerId}`,
+              ),
+            );
         if (id) {
           if (!input.version)
             throw AppError.validation([
@@ -285,6 +298,11 @@ export class ShiftsService {
         select s.id, s.opened_at, u.full_name from shifts s join users u on u.id = s.user_id
         where s.register_id = ${r.id} and s.status = 'open'`)
     ).rows as { id: string; opened_at: string; full_name: string }[];
+    // The device this drawer is bound to (amendment 4).
+    const [device] = (
+      await tx.execute(sql`
+        select id, name, code from pos_devices where register_id = ${r.id} and revoked_at is null`)
+    ).rows as { id: string; name: string; code: string }[];
     return {
       id: r.id,
       branchId: r.branchId,
@@ -299,6 +317,8 @@ export class ShiftsService {
       openShift: open
         ? { id: open.id, employeeName: open.full_name, openedAt: iso(open.opened_at)! }
         : null,
+      isMain: r.isMain,
+      device: device ? { id: device.id, name: device.name, code: device.code } : null,
       version: r.version,
     };
   }
@@ -322,9 +342,9 @@ export class ShiftsService {
   ): Promise<boolean> {
     if (register.branchId !== actor.boundBranchId) return false;
     if (!can(actor.access, 'shifts.operate', register.branchId)) return false;
-    // A device's own register is operated only by that device (ADR-0112), never in a browser.
+    // A register bound to a device is operated only by that device (ADR-0112), never in a browser.
     const { rows: device } = await tx.execute(
-      sql`select 1 from pos_devices where register_id = ${register.id}`,
+      sql`select 1 from pos_devices where register_id = ${register.id} and revoked_at is null`,
     );
     if (device.length > 0) return false;
     if (register.accessMode === 'branch' || actor.access.isOwner) return true;

@@ -1590,6 +1590,24 @@ ADR; supersede it.
   - Amounts as typed (Arabic digits, comma, currency word) are accepted on the till
     (`Money.parseInput`).
 
+- **Amendment 4 — Registers are drawers, devices are devices (owner, 2026-10-19).** Full text in
+  the ADR file; migration 0065.
+  - A register is a physical cash drawer created by managers (`registers.is_main` marks the
+    branch's main one); device registration never creates one. A device registers with a branch
+    only and gets a permanent code `D1`, `D2`, … per branch (`pos_devices.code`, never reused);
+    its receipt series is `{branch}-{code}-NNNNNN`.
+  - A manager binds a register to exactly one device (`PUT /manager/devices/:id { registerId }`
+    or `PUT /manager/registers/:id/device`); the bound device is the register's primary (shift
+    with cash count, cash, drawer, cash in / out, browser receipts). `REGISTER_BOUND` for a second
+    device, `REGISTER_BUSY` while the register's shift is open. Revocation frees the register; a
+    branch move needs the device unbound and gives a new code.
+  - Unbound devices: card / transfer only (cash hidden on the till, `CASH_NOT_ALLOWED` on the
+    server), no shift of their own; they sell into the branch's open register shift named by the
+    snapshot (main register first, else the oldest open), or not at all.
+  - `role` is derived (`primary` ⇔ bound); the role column and the one-primary index are gone.
+    Device-created registers without history were deleted by the migration, the others kept
+    unbound; devices were left unbound. The browser POS is unchanged.
+
 ## ADR-0113 — Public landing page at `/`
 - **Date:** 2026-10-18 · **Status:** Accepted (owner, 2026-10-18: "a simple React landing page
   we can develop later", deployed to Google Cloud production).

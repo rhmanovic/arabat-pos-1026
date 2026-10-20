@@ -136,6 +136,10 @@ export const registerSchema = z.object({
   openShift: z
     .object({ id: z.string(), employeeName: z.string(), openedAt: z.string() })
     .nullable(),
+  /** The branch's main register: unbound devices attach their sales to its open shift (ADR-0112 amendment 4). */
+  isMain: z.boolean(),
+  /** The device this drawer is bound to (its primary), or null. */
+  device: z.object({ id: z.string(), name: z.string(), code: z.string() }).nullable(),
   version: z.number().int(),
 });
 export type Register = z.infer<typeof registerSchema>;
@@ -153,6 +157,7 @@ export const saveRegisterSchema = z
     memberIds: z.array(z.uuid()).max(200).default([]),
     defaultOpeningFloat: moneyAmountSchema.default('0'),
     discrepancyTolerance: moneyAmountSchema.default('0'),
+    isMain: z.boolean().default(false),
     version: z.number().int().positive().optional(),
   })
   .refine(nameRequired, { error: 'A name is required.', path: ['nameAr'] });
@@ -455,6 +460,10 @@ export const closeShiftSchema = z.object({
 export type CloseShift = z.input<typeof closeShiftSchema>;
 
 /** A manager's forced close: with a count it is verified; without one, `forced_uncounted`. */
+/** `PUT /manager/registers/:id/device`: bind the drawer to one device (null unbinds). */
+export const bindRegisterSchema = z.object({ deviceId: z.uuid().nullable() });
+export type BindRegister = z.infer<typeof bindRegisterSchema>;
+
 export const forceCloseShiftSchema = z.object({
   countedCash: moneyAmountSchema.optional(),
   breakdown: z.array(denominationSchema).max(30).optional(),

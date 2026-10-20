@@ -24,7 +24,7 @@ export function receiptDataFor(
     createdAt: new Date(sale.occurredAt),
     timezone: ctx.merchant.timezone,
     cashierName: cashier?.fullName ?? null,
-    registerName: ctx.device.name || ctx.register.code,
+    registerName: ctx.device.name || ctx.device.code,
     customerName: null,
     customerPhone: null,
     customerAddress: null,

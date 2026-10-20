@@ -9,6 +9,8 @@
  * `app.merchant_id` as well, in one transaction. Dry run by default; `--apply` commits.
  *
  *   node apps/api/dist/database/cli/reset-merchant-data.js --merchant=<uuid> [--apply]
+ *       [--main-register=<Arabic name>]   also drops every register and creates one main,
+ *                                         unbound register with that name (amendment 4)
  *
  * Connection: DATABASE_OWNER_URL, or DATABASE_ADMIN_URL + APP_OWNER_PASSWORD (Cloud Run job).
  */
@@ -19,6 +21,7 @@ const arg = (name: string) =>
   process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
 const merchantId = arg('merchant');
 const apply = process.argv.includes('--apply');
+const mainRegister = arg('main-register');
 if (!merchantId || !/^[0-9a-f-]{36}$/i.test(merchantId))
   throw new Error('Usage: reset-merchant-data --merchant=<uuid> [--apply]');
 
@@ -102,18 +105,20 @@ try {
     const r = await client.query(`delete from ${table} where merchant_id = $1`, [merchantId]);
     counts.push([table, r.rowCount ?? 0]);
   }
-  // Devices: their registers (never shared with the browser) go with them; register codes are
-  // never reused, so the counter stays. Manual registers stay and are counted again.
-  const devices = await client.query(
-    `select id, register_id from pos_devices where merchant_id = $1`,
-    [merchantId],
-  );
-  const registerIds = (devices.rows as { register_id: string }[]).map((d) => d.register_id);
+  // Devices go (their codes are never reused, so the counter stays). Registers are drawers of
+  // the branch (amendment 4): they stay and are counted again, unless `--main-register` asks for
+  // a clean start with one main, unbound register per active branch.
   counts.push([
     'pos_devices',
     (await client.query(`delete from pos_devices where merchant_id = $1`, [merchantId])).rowCount ??
       0,
   ]);
+  const registerIds = mainRegister
+    ? (
+        (await client.query(`select id from registers where merchant_id = $1`, [merchantId]))
+          .rows as { id: string }[]
+      ).map((r) => r.id)
+    : [];
   if (registerIds.length > 0) {
     await client.query(
       `delete from register_members where merchant_id = $1 and register_id = any($2::uuid[])`,
@@ -124,7 +129,7 @@ try {
       [merchantId, registerIds],
     );
     counts.push([
-      'registers (of devices)',
+      'registers',
       (
         await client.query(
           `delete from registers where merchant_id = $1 and id = any($2::uuid[])`,
@@ -132,6 +137,29 @@ try {
         )
       ).rowCount ?? 0,
     ]);
+  }
+  if (mainRegister) {
+    // One main register per branch, named as asked, unbound: a manager binds it to the till.
+    const branches = (
+      await client.query(`select id from branches where merchant_id = $1 and status = 'active'`, [
+        merchantId,
+      ])
+    ).rows as { id: string }[];
+    for (const b of branches) {
+      const [row] = (
+        await client.query(
+          `insert into registers (id, merchant_id, branch_id, code, name_en, name_ar, is_main)
+           values (gen_random_uuid(), $1, $2, 'MAIN', 'Main register', $3, true) returning id`,
+          [merchantId, b.id, mainRegister],
+        )
+      ).rows as { id: string }[];
+      await client.query(
+        `insert into financial_accounts (id, merchant_id, kind, branch_id, register_id, name_ar, name_en)
+         values (gen_random_uuid(), $1, 'register', $2, $3, $4, 'Main register')`,
+        [merchantId, b.id, row!.id, mainRegister],
+      );
+    }
+    counts.push(['registers created (main, unbound)', branches.length]);
   }
   // Everything was deleted: the drawers and treasuries are at zero and uncounted again.
   await client.query(

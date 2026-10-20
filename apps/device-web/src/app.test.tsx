@@ -39,8 +39,10 @@ function snapshot(partial: Partial<DeviceSnapshot> = {}): DeviceSnapshot {
       merchantId: U(2),
       branchId: U(3),
       branchCode: 'MAIN',
+      code: 'D1',
       registerId: U(4),
       registerCode: 'R1',
+      registerName: { nameEn: 'Main drawer', nameAr: 'الصندوق الرئيسي' },
       role: 'primary',
     },
     merchant: {
@@ -63,6 +65,8 @@ function snapshot(partial: Partial<DeviceSnapshot> = {}): DeviceSnapshot {
     register: {
       id: U(4),
       code: 'R1',
+      nameEn: 'Main drawer',
+      nameAr: 'الصندوق الرئيسي',
       defaultOpeningFloatMinor: '0',
       discrepancyToleranceMinor: '0',
     },
@@ -98,6 +102,20 @@ function snapshot(partial: Partial<DeviceSnapshot> = {}): DeviceSnapshot {
         feeFixedMinor: '0',
         feePercent: '0',
         sortOrder: 0,
+      },
+      {
+        id: U(901),
+        kind: 'card',
+        status: 'active',
+        availableInPos: true,
+        gatewayProvider: null,
+        financialAccountId: U(902),
+        nameEn: 'Card',
+        nameAr: 'بطاقة',
+        feeType: 'none',
+        feeFixedMinor: '0',
+        feePercent: '0',
+        sortOrder: 1,
       },
     ],
     staff: [
@@ -167,14 +185,7 @@ function fakeServer(
   const fetchImpl: typeof fetch = async (url, init) => {
     const u = String(url);
     if (u.endsWith('/device/register')) {
-      const body = JSON.parse(String(init?.body)) as { branchId?: string; role?: string };
-      if (body.branchId && !body.role)
-        return json(200, {
-          status: 'select_role',
-          merchantId: U(2),
-          branch: { id: U(3), code: 'MAIN', nameEn: 'Main', nameAr: null },
-          primaryTaken: false,
-        });
+      const body = JSON.parse(String(init?.body)) as { branchId?: string };
       if (!body.branchId)
         return json(200, {
           status: 'select_branch',
@@ -272,7 +283,6 @@ describe('device till', () => {
       await user.type(screen.getByLabelText('Device name'), 'Front till');
       await user.click(screen.getByRole('button', { name: 'Register' }));
       await user.click(await screen.findByRole('button', { name: /Main/ }));
-      await user.click(await screen.findByRole('button', { name: /Primary till/ }));
       expect(bridge.token).toBe('T'.repeat(43));
 
       // The staff list came with the first sync; Sara signs in with her PIN.
@@ -301,11 +311,11 @@ describe('device till', () => {
       await user.click(within(dialog).getByTestId('add-payment'));
       expect(within(dialog).getByText('Change').nextSibling).toHaveTextContent('KWD 0.500');
       await user.click(within(dialog).getByTestId('complete-sale'));
-      expect(await screen.findByTestId('last-sale')).toHaveTextContent('MAIN-R1-000001');
+      expect(await screen.findByTestId('last-sale')).toHaveTextContent('MAIN-D1-000001');
 
       // Printed through the bridge with the server's template; uploaded shift first, then the sale.
       await waitFor(() => expect(bridge.printed).toHaveLength(1));
-      expect(bridge.printed[0]).toContain('MAIN-R1-000001');
+      expect(bridge.printed[0]).toContain('MAIN-D1-000001');
       await waitFor(
         () =>
           expect(server.uploads.flat().map((r) => r.kind)).toEqual([
@@ -392,10 +402,18 @@ describe('device till', () => {
         closedAt: null,
         openedBy: { membershipId: U(20), userId: U(21), fullName: 'Boss' },
       };
+      // An unbound device (amendment 4): no drawer, card / transfer only.
       const secondary = (bs: DeviceSnapshot['branchShift']) =>
         snapshot({
-          device: { ...snapshot().device, role: 'secondary', registerId: U(5), registerCode: 'R2' },
-          register: { ...snapshot().register, id: U(5), code: 'R2' },
+          device: {
+            ...snapshot().device,
+            role: 'secondary',
+            code: 'D2',
+            registerId: null,
+            registerCode: null,
+            registerName: null,
+          },
+          register: null,
           branchShift: bs,
         });
       const server = fakeServer({ snap: () => secondary(null) });
@@ -412,13 +430,17 @@ describe('device till', () => {
       expect(screen.getByTestId('cart')).toHaveTextContent('Branch shift of Boss');
       expect(screen.queryByRole('button', { name: 'Pay in' })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Close shift' })).not.toBeInTheDocument();
+      expect(screen.getByTestId('drawer')).toHaveTextContent('No cash drawer');
       await user.click(within(catalog).getByRole('button', { name: /Tea/ }));
       await user.click(screen.getByTestId('pay'));
       const dialog = await screen.findByRole('dialog');
-      await user.type(within(dialog).getByTestId('tendered'), '1');
+      // No cash method is offered; the card needs its reference.
+      expect(within(dialog).queryByRole('button', { name: 'Cash' })).not.toBeInTheDocument();
+      expect(within(dialog).queryByTestId('tendered')).not.toBeInTheDocument();
+      await user.type(within(dialog).getByLabelText('Reference'), 'A1');
       await user.click(within(dialog).getByTestId('add-payment'));
       await user.click(within(dialog).getByTestId('complete-sale'));
-      expect(await screen.findByTestId('last-sale')).toHaveTextContent('MAIN-R2-000001');
+      expect(await screen.findByTestId('last-sale')).toHaveTextContent('MAIN-D2-000001');
       await waitFor(() => expect(server.uploads.flat().some((r) => r.kind === 'sale')).toBe(true), {
         timeout: 5000,
       });

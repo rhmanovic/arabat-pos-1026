@@ -28,9 +28,17 @@ export const registerDeviceSchema = z.object({
   deviceName: z.string().trim().min(1).max(80),
   merchantId: z.uuid().optional(),
   branchId: z.uuid().optional(),
-  /** Chosen once, after the branch; without it the answer is `select_role`. */
-  role: z.enum(DEVICE_ROLES).optional(),
 });
+
+/** The register (cash drawer) a device is bound to (ADR-0112 amendment 4), or null. */
+export const boundRegisterSchema = z
+  .object({
+    id: z.uuid(),
+    code: z.string(),
+    nameEn: z.string().nullable(),
+    nameAr: z.string().nullable(),
+  })
+  .nullable();
 export type RegisterDevice = z.infer<typeof registerDeviceSchema>;
 
 export const registeredDeviceSchema = z.object({
@@ -39,9 +47,15 @@ export const registeredDeviceSchema = z.object({
   merchantId: z.uuid(),
   branchId: z.uuid(),
   branchCode: z.string(),
-  registerId: z.uuid(),
-  /** Never reused within the branch (`R1`, `R2`, …); the receipt series is `{branch}-{register}-`. */
-  registerCode: z.string(),
+  /** The device's permanent code in its branch (`D1`, `D2`, …, never reused); the receipt series is `{branch}-{code}-`. */
+  code: z.string(),
+  /** The cash drawer a manager bound to this device, or null (card / transfer sales only). */
+  registerId: z.uuid().nullable(),
+  registerCode: z.string().nullable(),
+  registerName: z
+    .object({ nameEn: z.string().nullable(), nameAr: z.string().nullable() })
+    .nullable(),
+  /** Derived: `primary` when bound to a register (drawer, cash, shift, browser receipts), else `secondary`. */
   role: z.enum(DEVICE_ROLES),
 });
 export type RegisteredDevice = z.infer<typeof registeredDeviceSchema>;
@@ -68,13 +82,6 @@ export const registerDeviceResultSchema = z.discriminatedUnion('status', [
     ),
   }),
   z.object({
-    status: z.literal('select_role'),
-    merchantId: z.uuid(),
-    branch: deviceBranchOptionSchema,
-    /** The branch already has a primary device: only `secondary` will be accepted. */
-    primaryTaken: z.boolean(),
-  }),
-  z.object({
     status: z.literal('registered'),
     device: registeredDeviceSchema,
     /** The device's bearer token: shown only here, store it in the OS keychain. */
@@ -88,8 +95,12 @@ export const posDeviceSchema = z.object({
   id: z.uuid(),
   name: z.string(),
   branchId: z.uuid(),
-  registerId: z.uuid(),
-  registerCode: z.string(),
+  code: z.string(),
+  registerId: z.uuid().nullable(),
+  registerCode: z.string().nullable(),
+  registerName: z
+    .object({ nameEn: z.string().nullable(), nameAr: z.string().nullable() })
+    .nullable(),
   role: z.enum(DEVICE_ROLES),
   createdAt: z.string(),
   lastSeenAt: z.string().nullable(),
@@ -100,16 +111,17 @@ export const posDeviceSchema = z.object({
 export type PosDevice = z.infer<typeof posDeviceSchema>;
 
 /**
- * The owner changes a device's role or branch (`PUT /manager/devices/:id`). Nothing is revoked:
- * the device learns the change at its next sync. A move to another branch gives the device a new
- * register (a new receipt series) and is refused while its shift is open.
+ * `PUT /manager/devices/:id`: a manager binds the device to a register of its branch
+ * (`registerId`, null unbinds; amendment 4) and the owner moves it to another branch. Nothing is
+ * revoked: the device learns the change at its next sync. A move gives the device a new code (a
+ * new receipt series) and needs it unbound; binding needs the registers' shifts closed.
  */
 export const updatePosDeviceSchema = z
   .object({
-    role: z.enum(DEVICE_ROLES).optional(),
+    registerId: z.uuid().nullable().optional(),
     branchId: z.uuid().optional(),
   })
-  .refine((v) => v.role !== undefined || v.branchId !== undefined, {
+  .refine((v) => v.registerId !== undefined || v.branchId !== undefined, {
     error: 'Nothing to change.',
   });
 export type UpdatePosDevice = z.infer<typeof updatePosDeviceSchema>;
@@ -146,12 +158,17 @@ export const deviceSnapshotSchema = z.object({
     receiptHeader: z.string().nullable(),
     receiptFooter: z.string().nullable(),
   }),
-  register: z.object({
-    id: z.uuid(),
-    code: z.string(),
-    defaultOpeningFloatMinor: minor,
-    discrepancyToleranceMinor: minor,
-  }),
+  /** The bound register (cash drawer), null on an unbound device (amendment 4). */
+  register: z
+    .object({
+      id: z.uuid(),
+      code: z.string(),
+      nameEn: z.string().nullable(),
+      nameAr: z.string().nullable(),
+      defaultOpeningFloatMinor: minor,
+      discrepancyToleranceMinor: minor,
+    })
+    .nullable(),
   /** Selling rules for `@arabat/pos-core` (always complete). */
   settings: z.object({
     maxDiscountPercent: z.string(),

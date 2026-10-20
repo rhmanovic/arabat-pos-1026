@@ -131,7 +131,19 @@ export function StatusBar({ title }: { title?: string }) {
         <span className="font-semibold">{title ?? t('title')}</span>
         {ctx ? (
           <span className="text-sm text-console-fg/70" dir="ltr">
-            {ctx.branch.code}-{ctx.register.code}
+            {ctx.branch.code}-{ctx.device.code}
+          </span>
+        ) : null}
+        {ctx ? (
+          <span className="hidden text-xs text-console-fg/70 md:inline" data-testid="drawer">
+            {ctx.register
+              ? t('status.registerBound', {
+                  name:
+                    (i18n.language.startsWith('ar')
+                      ? ctx.register.nameAr || ctx.register.nameEn
+                      : ctx.register.nameEn || ctx.register.nameAr) ?? ctx.register.code,
+                })
+              : t('status.noDrawer')}
           </span>
         ) : null}
         {shiftOwner ? (

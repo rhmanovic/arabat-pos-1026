@@ -9,9 +9,12 @@ export type Device = {
   id: string;
   merchantId: string;
   branchId: string;
-  registerId: string;
+  /** The register (cash drawer) a manager bound to the device, or null (amendment 4). */
+  registerId: string | null;
+  /** The device's permanent code in its branch (`D1`, …): its receipt series. */
+  code: string;
   revoked: boolean;
-  /** `primary` devices also act as their branch's print agent (Plan A). */
+  /** Derived: `primary` when bound to a register (drawer, cash, shifts, browser receipts). */
   role: 'primary' | 'secondary';
 };
 
@@ -32,16 +35,16 @@ export class DeviceResolver {
   async fromToken(token: unknown): Promise<Device | null> {
     if (typeof token !== 'string' || !TOKEN.test(token)) return null;
     const { rows } = await this.database.db.execute(
-      sql`select id, merchant_id, branch_id, register_id, revoked, role from device_authenticate(${hashToken(token)})`,
+      sql`select id, merchant_id, branch_id, register_id, revoked, code from device_authenticate(${hashToken(token)})`,
     );
     const row = rows[0] as
       | {
           id: string;
           merchant_id: string;
           branch_id: string;
-          register_id: string;
+          register_id: string | null;
           revoked: boolean;
-          role: 'primary' | 'secondary';
+          code: string;
         }
       | undefined;
     return row
@@ -50,8 +53,9 @@ export class DeviceResolver {
           merchantId: row.merchant_id,
           branchId: row.branch_id,
           registerId: row.register_id,
+          code: row.code,
           revoked: row.revoked,
-          role: row.role,
+          role: row.register_id ? 'primary' : 'secondary',
         }
       : null;
   }

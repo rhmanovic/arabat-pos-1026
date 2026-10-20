@@ -6,6 +6,7 @@ import {
   type PosDevice,
   type RegisterDeviceResult,
   type RegisteredDevice,
+  bindRegisterSchema,
   deviceExceptionQuerySchema,
   devicePinResetCompleteSchema,
   devicePinResetRequestSchema,
@@ -180,7 +181,7 @@ export class ManagerDevicesController {
     return { devices: await this.devices.list(actor) };
   }
 
-  /** Owner only (checked in the service): role and branch; nothing is revoked (Plan A). */
+  /** Binding to a register (managers) and the branch move (owner); nothing is revoked. */
   @RequirePermission('manager', 'registers.manage')
   @Put('devices/:id')
   update(
@@ -190,6 +191,19 @@ export class ManagerDevicesController {
     @Req() req: FastifyRequest,
   ): Promise<PosDevice> {
     return this.devices.update(actor, id, body, req.ip);
+  }
+
+  /** Binds a register (cash drawer) to one device, or frees it (`deviceId: null`), amendment 4. */
+  @RequirePermission('manager', 'registers.manage')
+  @Put('registers/:id/device')
+  @HttpCode(204)
+  async bindRegister(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body(new ZodPipe(bindRegisterSchema)) body: z.output<typeof bindRegisterSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<void> {
+    await this.devices.bindRegister(actor, id, body.deviceId, req.ip);
   }
 
   @RequirePermission('manager', 'registers.manage')

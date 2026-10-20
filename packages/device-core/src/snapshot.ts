@@ -125,7 +125,7 @@ export function snapshotStatements(
   }
   s.push(...branchShiftStatements(snap, now));
   // The device's counter never goes below what the server already has from it (a reinstall).
-  const prefix = `${snap.branch.code}-${snap.register.code}-`;
+  const prefix = `${snap.branch.code}-${snap.device.code}-`;
   const serverSeq = receiptSequence(snap.counters.lastReceiptNumber, prefix) ?? 0;
   s.push(
     setMeta(META.branchShift, snap.branchShift ? JSON.stringify(snap.branchShift) : null),
@@ -136,7 +136,7 @@ export function snapshotStatements(
     setMeta(META.device, JSON.stringify(snap.device)),
     setMeta(META.merchant, JSON.stringify(snap.merchant)),
     setMeta(META.branch, JSON.stringify(snap.branch)),
-    setMeta(META.register, JSON.stringify(snap.register)),
+    setMeta(META.register, snap.register ? JSON.stringify(snap.register) : null),
     setMeta(META.settings, JSON.stringify(snap.settings)),
     setMeta(META.receiptCounter, String(Math.max(currentCounter, serverSeq))),
     setMeta(META.lastSuccessfulSyncAt, now),
@@ -183,10 +183,12 @@ export async function applySnapshot(
   snap: DeviceSnapshot,
   now = new Date(),
 ): Promise<void> {
-  // A device moved to another branch gets a new register and so a new series from 1.
-  const stored = await getMeta(db, META.register);
-  const sameRegister = !stored || (JSON.parse(stored) as { id: string }).id === snap.register.id;
-  const counter = sameRegister ? Number((await getMeta(db, META.receiptCounter)) ?? '0') : 0;
+  // A device moved to another branch gets a new code and so a new series from 1 (amendment 4).
+  const stored = await getMeta(db, META.device);
+  const before = stored ? (JSON.parse(stored) as { code?: string; branchId: string }) : null;
+  const sameSeries =
+    !before || (before.code === snap.device.code && before.branchId === snap.device.branchId);
+  const counter = sameSeries ? Number((await getMeta(db, META.receiptCounter)) ?? '0') : 0;
   await db.transaction(snapshotStatements(snap, counter, now.toISOString()));
 }
 
@@ -207,7 +209,7 @@ export async function loadContext(db: BridgeDb): Promise<LocalContext | null> {
     device,
     merchant: json<LocalContext['merchant']>(META.merchant)!,
     branch: json<LocalContext['branch']>(META.branch)!,
-    register: json<LocalContext['register']>(META.register)!,
+    register: json<NonNullable<LocalContext['register']>>(META.register),
     settings,
     catalogVersion: meta.get(META.catalogVersion) ?? '',
     version: meta.get(META.version) ?? '',

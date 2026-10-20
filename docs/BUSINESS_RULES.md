@@ -104,16 +104,24 @@ engineering defaults pending owner confirmation.
 - **BR-071** Processing fee per payment: none, fixed, percentage, or fixed + percentage;
   rounded half-up to the fils; never more than the payment.
 - **BR-072** Registers belong to a branch; open to everyone allowed to work shifts at the
-  branch, or restricted to listed employees. Every branch starts with one register.
+  branch, or restricted to listed employees. Every branch starts with one register. A register
+  is a physical cash drawer (ADR-0112 amendment 4): managers create them, one is the branch's
+  main register, and a manager may bind a register to exactly one Arabat till.
 - **BR-073** Shift policy: one employee per register at a time; one open shift per
   employee in the browser; only the owner of the shift uses it; managers may force-close with
   a note. Device shifts are per register (BR-203): a person may hold one besides a browser shift.
-- **BR-203** Branch shift on devices (owner, 2026-10-19, ADR-0112 amendment 3): one shift per
-  branch, opened and closed with a cash count on the branch's **primary** device, which alone
-  records pay-ins / pay-outs; secondary devices sell into it (their cash counts toward the
-  primary's drawer) and cannot sell while none is open. A device shift is never refused because
+- **BR-203** Branch shift on devices (owner, 2026-10-19, ADR-0112 amendments 3 and 4): a
+  register's shift is opened and closed with a cash count on the device **bound** to that
+  register (its primary), which alone takes cash, opens the drawer and records pay-ins /
+  pay-outs; unbound devices sell by card / transfer only, into the branch's open register shift
+  (the main register's first), and cannot sell while none is open. A device shift is never refused because
   the person left a shift open elsewhere; that shift is listed for the managers to close. Records
   that reach the server after the branch shift closed are booked to it and flagged "late".
+- **BR-205** Devices and drawers (owner, 2026-10-19, ADR-0112 amendment 4): registering a device
+  never creates a register; every device has a permanent code per branch (`D1`, `D2`, …, never
+  reused) and its receipt series `{branch}-{code}-NNNNNN`; binding, unbinding and rebinding are
+  manager actions and need the register's shift closed; a register is bound to one device at a
+  time; the bound device is the only one that may use the browser receipt queue.
 - **BR-204** On a device, "lock" keeps the signed-in cashier (PIN only; also after 5 minutes
   idle); while the primary holds an open shift only its opener signs in; "log out" needs the
   device's shift closed. A manager with `registers.manage` present at the till may close an

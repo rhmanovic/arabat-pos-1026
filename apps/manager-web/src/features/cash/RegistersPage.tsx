@@ -1,4 +1,4 @@
-import type { Register } from '@arabat/contracts';
+import type { PosDevice, Register } from '@arabat/contracts';
 import { Money, MoneyError } from '@arabat/money';
 import {
   Badge,
@@ -38,6 +38,7 @@ export function RegistersPage() {
   const { branchId } = useBranchContext();
   const branchName = useBranchName();
   const [editing, setEditing] = useState<Register | 'new' | null>(null);
+  const [binding, setBinding] = useState<Register | null>(null);
   const list = useQuery({
     queryKey: [...registersKey, branchId],
     queryFn: () => api.registers.list(branchId),
@@ -75,7 +76,10 @@ export function RegistersPage() {
             header: t('common.name'),
             cell: (r) => (
               <span>
-                <span className="block font-medium">{localizedName(r, i18n.language)}</span>
+                <span className="block font-medium">
+                  {localizedName(r, i18n.language)}{' '}
+                  {r.isMain ? <Badge tone="primary">{t('cash.mainRegister')}</Badge> : null}
+                </span>
                 <span className="block text-xs text-fg-muted" dir="ltr">
                   {r.code}
                 </span>
@@ -86,6 +90,21 @@ export function RegistersPage() {
             key: 'branch',
             header: t('inventory.branch'),
             cell: (r) => branchName(r.branchId) ?? '—',
+          },
+          {
+            key: 'device',
+            header: t('cash.boundDevice'),
+            cell: (r) =>
+              r.device ? (
+                <span>
+                  <bdi>{r.device.name}</bdi>{' '}
+                  <span className="text-xs text-fg-muted" dir="ltr">
+                    {r.device.code}
+                  </span>
+                </span>
+              ) : (
+                <span className="text-fg-muted">{t('cash.unbound')}</span>
+              ),
           },
           {
             key: 'access',
@@ -121,7 +140,15 @@ export function RegistersPage() {
             key: 'actions',
             header: <span className="sr-only">{t('common.actions')}</span>,
             cell: (r) => (
-              <span onClick={(e) => e.stopPropagation()}>
+              <span
+                className="flex flex-wrap justify-end gap-1"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {r.status === 'active' ? (
+                  <Button size="sm" variant="ghost" onClick={() => setBinding(r)}>
+                    {r.device ? t('cash.rebind') : t('cash.bindDevice')}
+                  </Button>
+                ) : null}
                 <Button size="sm" variant="ghost" onClick={() => status.mutate(r)}>
                   {r.status === 'active' ? t('cash.deactivate') : t('cash.activate')}
                 </Button>
@@ -136,7 +163,73 @@ export function RegistersPage() {
           onClose={() => setEditing(null)}
         />
       ) : null}
+      {binding ? <BindDialog register={binding} onClose={() => setBinding(null)} /> : null}
     </div>
+  );
+}
+
+/**
+ * Binds the drawer to one device of its branch (ADR-0112 amendment 4): the device becomes the
+ * drawer's primary. Needs the register's shift closed; "none" frees it.
+ */
+function BindDialog({ register, onClose }: { register: Register; onClose: () => void }) {
+  const { t } = useTranslation();
+  const api = useApi();
+  const notify = useNotify();
+  const queryClient = useQueryClient();
+  const devices = useQuery({ queryKey: ['manager', 'devices'], queryFn: () => api.devices.list() });
+  const [deviceId, setDeviceId] = useState<string>(register.device?.id ?? '');
+  const candidates = (devices.data?.devices ?? []).filter(
+    (d: PosDevice) =>
+      d.branchId === register.branchId &&
+      !d.revokedAt &&
+      (d.registerId === null || d.registerId === register.id),
+  );
+  const save = useMutation({
+    mutationFn: () => api.registers.bindDevice(register.id, deviceId || null),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: registersKey });
+      await queryClient.invalidateQueries({ queryKey: ['manager', 'devices'] });
+      notify.ok(t('cash.bindSaved'));
+      onClose();
+    },
+    onError: notify.fail,
+  });
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={t('cash.bindTitle', { name: register.nameAr || register.nameEn || register.code })}
+      description={t('cash.bindHint')}
+      size="sm"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            loading={save.isPending}
+            disabled={(register.device?.id ?? '') === deviceId}
+            onClick={() => save.mutate()}
+          >
+            {t('common.save')}
+          </Button>
+        </>
+      }
+    >
+      <Field label={t('cash.boundDevice')}>
+        {(p) => (
+          <Select {...p} value={deviceId} onChange={(e) => setDeviceId(e.target.value)}>
+            <option value="">{t('cash.unbound')}</option>
+            {candidates.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name} ({d.code})
+              </option>
+            ))}
+          </Select>
+        )}
+      </Field>
+    </Dialog>
   );
 }
 
@@ -159,6 +252,7 @@ function RegisterDialog({ register, onClose }: { register: Register | null; onCl
     memberIds: register?.memberIds ?? ([] as string[]),
     defaultOpeningFloat: register?.defaultOpeningFloat.amount ?? '0.000',
     discrepancyTolerance: register?.discrepancyTolerance.amount ?? '0.000',
+    isMain: register?.isMain ?? false,
   });
   const employees = useQuery({
     queryKey: ['manager', 'employees'],
@@ -283,6 +377,14 @@ function RegisterDialog({ register, onClose }: { register: Register | null; onCl
             />
           )}
         </Field>
+        <div className="sm:col-span-2">
+          <Checkbox
+            label={t('cash.mainRegister')}
+            description={t('cash.mainRegisterHint')}
+            checked={v.isMain}
+            onChange={(e) => setV({ ...v, isMain: e.target.checked })}
+          />
+        </div>
         <Field label={t('cash.accessMode')} className="sm:col-span-2">
           {(p) => (
             <Select

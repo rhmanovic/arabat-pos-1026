@@ -65,7 +65,7 @@ export class PrintJobsService {
                    (exists (select 1 from print_agents where merchant_id = ${args.merchantId}
                             and (branch_id is null or branch_id = ${args.branchId}))
                     or exists (select 1 from pos_devices where merchant_id = ${args.merchantId}
-                            and branch_id = ${args.branchId} and role = 'primary'
+                            and branch_id = ${args.branchId} and register_id is not null
                             and revoked_at is null)) as has_agent`)
         ).rows as { auto: boolean; has_agent: boolean }[];
         if (!row?.auto || !row.has_agent) return;
@@ -145,7 +145,7 @@ export class PrintJobsService {
                         and (branch_id is null or branch_id = ${args.branchId})
                         and last_seen_at > now() - make_interval(secs => ${PRINT_AGENT_ONLINE_SECONDS}))
              or exists (select 1 from pos_devices where merchant_id = ${args.merchantId}
-                        and branch_id = ${args.branchId} and role = 'primary' and revoked_at is null
+                        and branch_id = ${args.branchId} and register_id is not null and revoked_at is null
                         and last_seen_at > now() - make_interval(secs => ${PRINT_AGENT_ONLINE_SECONDS}))) as online`)
     ).rows as { online: boolean }[];
     return { ...job, copyNumber, agentOnline: online!.online };
@@ -173,7 +173,7 @@ export class PrintJobsService {
                           and (branch_id is null or branch_id = ${sale.branch_id})
                           and last_seen_at > now() - make_interval(secs => ${PRINT_AGENT_ONLINE_SECONDS}))
                or exists (select 1 from pos_devices where merchant_id = ${actor.merchantId}
-                          and branch_id = ${sale.branch_id} and role = 'primary' and revoked_at is null
+                          and branch_id = ${sale.branch_id} and register_id is not null and revoked_at is null
                           and last_seen_at > now() - make_interval(secs => ${PRINT_AGENT_ONLINE_SECONDS}))) as online`)
       ).rows as { online: boolean }[];
       return {

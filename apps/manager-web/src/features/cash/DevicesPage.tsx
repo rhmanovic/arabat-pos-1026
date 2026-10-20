@@ -1,4 +1,4 @@
-import type { DeviceRole, PosDevice } from '@arabat/contracts';
+import type { PosDevice, Register } from '@arabat/contracts';
 import {
   Badge,
   Button,
@@ -177,6 +177,7 @@ export function DevicesPage() {
   const { session } = useSession();
   const [removing, setRemoving] = useState<PosDevice | null>(null);
   const [changing, setChanging] = useState<PosDevice | null>(null);
+  const [binding, setBinding] = useState<PosDevice | null>(null);
   const devices = useQuery({
     queryKey: devicesKey,
     queryFn: () => api.devices.list(),
@@ -215,19 +216,19 @@ export function DevicesPage() {
             header: t('inventory.branch'),
             cell: (d) => branchName(d.branchId) ?? '—',
           },
+          { key: 'code', header: t('devices.code'), cell: (d) => <span dir="ltr">{d.code}</span> },
           {
             key: 'register',
             header: t('devices.register'),
-            cell: (d) => <span dir="ltr">{d.registerCode}</span>,
-          },
-          {
-            key: 'role',
-            header: t('devices.role'),
             cell: (d) =>
-              d.role === 'primary' ? (
-                <Badge tone="primary">{t('devices.primary')}</Badge>
+              d.registerId ? (
+                <span>
+                  <Badge tone="primary">{t('devices.primary')}</Badge>{' '}
+                  {localizedName(d.registerName ?? { nameEn: null, nameAr: null }, i18n.language) ||
+                    d.registerCode}
+                </span>
               ) : (
-                <Badge>{t('devices.secondary')}</Badge>
+                <span className="text-fg-muted">{t('devices.unbound')}</span>
               ),
           },
           {
@@ -260,6 +261,9 @@ export function DevicesPage() {
             cell: (d) =>
               d.revokedAt ? null : (
                 <span className="flex flex-wrap justify-end gap-1">
+                  <Button size="sm" variant="ghost" onClick={() => setBinding(d)}>
+                    {d.registerId ? t('devices.rebind') : t('devices.bind')}
+                  </Button>
                   {session.isOwner ? (
                     <Button size="sm" variant="ghost" onClick={() => setChanging(d)}>
                       {t('devices.change')}
@@ -287,26 +291,84 @@ export function DevicesPage() {
       {changing ? (
         <ChangeDeviceDialog key={changing.id} device={changing} onClose={() => setChanging(null)} />
       ) : null}
+      {binding ? (
+        <BindRegisterDialog key={binding.id} device={binding} onClose={() => setBinding(null)} />
+      ) : null}
       <DeviceExceptions />
     </div>
   );
 }
 
-/** Owner: the device's role and branch (Plan A). The device learns it at its next sync. */
+/**
+ * Binds the device to a register (cash drawer) of its branch, or frees it (ADR-0112 amendment
+ * 4). The bound device is the drawer's primary; the registers' shifts must be closed.
+ */
+function BindRegisterDialog({ device, onClose }: { device: PosDevice; onClose: () => void }) {
+  const { t, i18n } = useTranslation();
+  const api = useApi();
+  const notify = useNotify();
+  const queryClient = useQueryClient();
+  const registers = useQuery({
+    queryKey: ['manager', 'registers', device.branchId],
+    queryFn: () => api.registers.list(device.branchId),
+  });
+  const [registerId, setRegisterId] = useState<string>(device.registerId ?? '');
+  const free = (registers.data?.registers ?? []).filter(
+    (r: Register) => r.status === 'active' && (r.device === null || r.device.id === device.id),
+  );
+  const save = useMutation({
+    mutationFn: () => api.devices.update(device.id, { registerId: registerId || null }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: devicesKey });
+      await queryClient.invalidateQueries({ queryKey: ['manager', 'registers'] });
+      notify.ok(t('devices.changed'));
+      onClose();
+    },
+    onError: notify.fail,
+  });
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => (!open ? onClose() : undefined)}
+      title={t('devices.bindTitle', { name: device.name })}
+      description={t('devices.bindHint')}
+      size="sm"
+      footer={
+        <Button
+          disabled={(device.registerId ?? '') === registerId}
+          loading={save.isPending}
+          onClick={() => save.mutate()}
+        >
+          {t('common.save')}
+        </Button>
+      }
+    >
+      <Field label={t('devices.register')}>
+        {(field) => (
+          <Select {...field} value={registerId} onChange={(e) => setRegisterId(e.target.value)}>
+            <option value="">{t('devices.unbound')}</option>
+            {free.map((r) => (
+              <option key={r.id} value={r.id}>
+                {localizedName(r, i18n.language) || r.code} ({r.code})
+              </option>
+            ))}
+          </Select>
+        )}
+      </Field>
+    </Dialog>
+  );
+}
+
+/** Owner: the device's branch (Plan A). The device learns it at its next sync. */
 function ChangeDeviceDialog({ device, onClose }: { device: PosDevice; onClose: () => void }) {
   const { t, i18n } = useTranslation();
   const api = useApi();
   const notify = useNotify();
   const queryClient = useQueryClient();
   const { branches } = useBranchContext();
-  const [role, setRole] = useState<DeviceRole>(device.role);
   const [branchId, setBranchId] = useState(device.branchId);
   const save = useMutation({
-    mutationFn: () =>
-      api.devices.update(device.id, {
-        ...(role !== device.role ? { role } : {}),
-        ...(branchId !== device.branchId ? { branchId } : {}),
-      }),
+    mutationFn: () => api.devices.update(device.id, { branchId }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: devicesKey });
       notify.ok(t('devices.changed'));
@@ -314,7 +376,7 @@ function ChangeDeviceDialog({ device, onClose }: { device: PosDevice; onClose: (
     },
     onError: notify.fail,
   });
-  const unchanged = role === device.role && branchId === device.branchId;
+  const unchanged = branchId === device.branchId;
   return (
     <Dialog
       open
@@ -328,14 +390,6 @@ function ChangeDeviceDialog({ device, onClose }: { device: PosDevice; onClose: (
       }
     >
       <div className="grid gap-3">
-        <Field label={t('devices.role')} hint={t('devices.roleHint')}>
-          {(field) => (
-            <Select {...field} value={role} onChange={(e) => setRole(e.target.value as DeviceRole)}>
-              <option value="primary">{t('devices.primary')}</option>
-              <option value="secondary">{t('devices.secondary')}</option>
-            </Select>
-          )}
-        </Field>
         <Field
           label={t('inventory.branch')}
           hint={branchId !== device.branchId ? t('devices.moveHint') : undefined}

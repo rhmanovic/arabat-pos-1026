@@ -379,7 +379,7 @@ describe('print agent socket', () => {
     foreign.close();
   });
 
-  it('lets the primary device print the browser queue with its own token; an additional device gets 403 (Plan A)', async () => {
+  it('lets a device bound to a register print the browser queue with its own token; an unbound device gets 403', async () => {
     const { c, sell, cashier } = await shop();
     const status = async (saleId: string) =>
       (
@@ -387,15 +387,29 @@ describe('print agent socket', () => {
           cookies: cashier.cookies,
         })
       ).json();
-    const device = async (deviceName: string, role: 'primary' | 'secondary') => {
+    // A device bound to a register (its primary, amendment 4) prints the browser queue.
+    const device = async (deviceName: string, bound: boolean) => {
       const res = await c.client.request('POST', '/device/register', {
-        body: { email: c.email, password: PASSWORD, deviceName, branchId: c.main, role },
+        body: { email: c.email, password: PASSWORD, deviceName, branchId: c.main },
       });
       expect(res.statusCode).toBe(200);
-      return res.json() as { token: string; device: { id: string } };
+      const out = res.json() as { token: string; device: { id: string } };
+      if (bound) {
+        const reg = await c.client.request('POST', '/manager/registers', {
+          cookies: c.cookies,
+          body: { branchId: c.main, code: `DRW-${deviceName}`, nameEn: `Drawer ${deviceName}` },
+        });
+        expect(reg.statusCode).toBe(201);
+        const b = await c.client.request('PUT', `/manager/devices/${out.device.id}`, {
+          cookies: c.cookies,
+          body: { registerId: reg.json().id },
+        });
+        expect(b.statusCode).toBe(200);
+      }
+      return out;
     };
-    const primary = await device('Front', 'primary');
-    const extra = await device('Back', 'secondary');
+    const primary = await device('Front', true);
+    const extra = await device('Back', false);
 
     // No standalone agent: the primary device alone makes the browser sale queue its receipt.
     const socket = connect(primary.token);
@@ -435,11 +449,11 @@ describe('print agent socket', () => {
     expect(error.message).toMatch(/^forbidden/);
     extraSocket.close();
 
-    // Made additional by the owner, the old primary is disconnected and refused from then on.
+    // Unbound by a manager, the old primary is disconnected and refused from then on.
     const dropped = new Promise<string>((resolve) => socket.on('disconnect', resolve));
     await c.client.request('PUT', `/manager/devices/${primary.device.id}`, {
       cookies: c.cookies,
-      body: { role: 'secondary' },
+      body: { registerId: null },
     });
     expect(await dropped).toBe('io server disconnect');
     expect((await agentCall(c, primary.token, 'GET', '/jobs/pending')).statusCode).toBe(403);

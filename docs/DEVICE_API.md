@@ -40,7 +40,7 @@ Request:
 
 ```json
 { "email": "owner@example.com", "password": "…", "deviceName": "Front till",
-  "merchantId": "optional uuid", "branchId": "optional uuid", "role": "primary | secondary (optional)" }
+  "merchantId": "optional uuid", "branchId": "optional uuid" }
 ```
 
 1. Send `email`, `password`, `deviceName` only. If the person can register at exactly one branch of
@@ -52,44 +52,43 @@ Request:
                       "branches": [ { "id": "…", "code": "MAIN", "nameEn": "Main", "nameAr": "الرئيسي" } ] } ] }
    ```
 
-2. Send the same request again with `merchantId` and `branchId`. Without `role` the answer asks
-   for it (Plan A), once:
-
-   ```json
-   { "status": "select_role", "merchantId": "…",
-     "branch": { "id": "…", "code": "MAIN", "nameEn": "Main", "nameAr": "الرئيسي" },
-     "primaryTaken": false }
-   ```
-
-3. Send it again with `role`: `primary` (the till with the cash drawer; it also prints the browser
-   POS's receipts, §2b; **one per branch**, a second one → `409 PRIMARY_EXISTS`) or `secondary`
-   (an additional till that never opens the drawer):
+2. Send the same request again with `merchantId` and `branchId`:
 
    ```json
    { "status": "registered",
      "device": { "id": "…", "name": "Front till", "merchantId": "…", "branchId": "…",
-                 "branchCode": "MAIN", "registerId": "…", "registerCode": "R2", "role": "primary" },
+                 "branchCode": "MAIN", "code": "D1", "registerId": null, "registerCode": null,
+                 "registerName": null, "role": "secondary" },
      "token": "q3V…43 chars" }
    ```
 
-The device **is** a new register of that branch (`registerCode` `R1`, `R2`, … from a counter that
-only grows; codes are never reused, even after removal). Errors: `401` `INVALID_CREDENTIALS`,
-`403` `ACCOUNT_DISABLED`, `403` `FORBIDDEN` (no `registers.manage` there), `409`
-`PLAN_LIMIT_REACHED` (the company's plan allows no more registers), `404` (inactive branch).
+**A device is a selling device, a register is a cash drawer** (ADR-0112 amendment 4).
+Registration creates no register. The device gets a permanent `code` in its branch (`D1`, `D2`, …
+from a counter that only grows; codes are never reused, even after removal): its receipt series
+is `{branch}-{code}-NNNNNN`. Errors: `401` `INVALID_CREDENTIALS`, `403` `ACCOUNT_DISABLED`,
+`403` `FORBIDDEN` (no `registers.manage` there), `404` (inactive branch).
 
 `GET /device/me` → the `device` object above. Use it to check the token.
 
-**Role and branch change later (owner only, `/manager/devices`, `PUT /manager/devices/:id`
-`{ role?, branchId? }`):** nothing is revoked; the device keeps its token and learns the change
-from `device` in its next sync. A **move** to another branch needs the device's shift closed and
-its drawer emptied (`409 REGISTER_BUSY` / `REGISTER_HAS_CASH`), deactivates the old register and
-gives the device a new one in the new branch: a new `registerCode` and a new receipt series from
-`000001`. The next `GET /device/sync?since=…` after a move is a **full** snapshot of the new branch.
-The device engine resets its receipt counter whenever `register.id` changes.
+**Binding (managers, `/manager/registers` or `/manager/devices`):** a manager binds a register
+(cash drawer) of the branch to exactly one device: `PUT /manager/devices/:id { registerId }` or
+`PUT /manager/registers/:id/device { deviceId }` (null unbinds; `409 REGISTER_BOUND` when another
+device holds it, `409 REGISTER_BUSY` while the register's shift is open). The bound device is that
+register's **primary**: `device.registerId`, `registerCode` and `registerName` are set and
+`device.role` is `primary` (derived; `secondary` when unbound). It opens and closes the register's
+shift with a cash count, takes cash, opens the drawer, records pay-ins / pay-outs and prints the
+browser POS's receipts (§2b). Nothing is revoked by a binding change; the device learns it from
+`device` in its next sync. Removing a device frees its register.
 
-**Cash drawer.** The native app kicks the drawer only on a `primary` device, after a receipt the
-page prints itself (`print.receipt(html)` during a cash sale). A `secondary` device never kicks it.
-Queued jobs from the server (§2b) never open the drawer (`openDrawer: false`).
+**Branch move (owner only, `PUT /manager/devices/:id { branchId }`):** the device must be unbound
+(`409 REGISTER_BOUND`); it gets a new `code` in the new branch, hence a new receipt series from
+`000001`, and the next `GET /device/sync?since=…` is a **full** snapshot of the new branch. The
+device engine resets its receipt counter whenever `device.code` or `device.branchId` changes.
+
+**Cash drawer.** The native app kicks the drawer only when `device.registerId` is set (a bound
+device), after a receipt the page prints itself (`print.receipt(html)` during a cash sale). An
+unbound device never kicks it. Queued jobs from the server (§2b) never open the drawer
+(`openDrawer: false`).
 
 ## 2a. Cashier PINs (self-service)
 
@@ -106,10 +105,10 @@ answers `429 RATE_LIMITED`; a request for someone who is not an active member of
 company still answers 202 and sends nothing. Show the cashier: "if your e-mail is on file, a link
 is on its way; the till picks the new PIN up at its next sync".
 
-## 2b. The primary device prints the browser POS's receipts
+## 2b. The bound device prints the browser POS's receipts
 
-The branch's **primary** device is also its print agent, with its own device token — no separate
-print-agent token. It uses the print-agent API of ADR-0111 unchanged:
+A device **bound to a register** (its primary) is also a print agent of its branch, with its own
+device token — no separate print-agent token. It uses the print-agent API of ADR-0111 unchanged:
 
 - Socket.IO namespace `/print-agent` (path `/socket.io`), `auth: { token: <device token> }`; the
   server pushes `print:job { id }` for jobs of the device's branch.
@@ -120,9 +119,9 @@ print-agent token. It uses the print-agent API of ADR-0111 unchanged:
 - `POST /print-agent/jobs/:id/result` `{ ok: true }` or `{ ok: false, error }`. A job id is printed
   at most once: a second claim answers 409.
 
-A `secondary` device's token gets `403 NOT_PRIMARY_DEVICE` there (the socket is refused with
-`forbidden: …`); a revoked token, 401. When the owner makes the primary `secondary` or moves it,
-its socket is disconnected. Branches without a primary keep using standalone print agents
+An unbound device's token gets `403 NOT_PRIMARY_DEVICE` there (the socket is refused with
+`forbidden: …`); a revoked token, 401. When a manager unbinds the device or the owner moves it,
+its socket is disconnected. Branches without a bound device keep using standalone print agents
 (`/manager/printers`). The browser POS shows each receipt's state (waiting / printed / failed)
 from `GET /pos/sales/:id/print-status`.
 
@@ -138,10 +137,11 @@ snapshot). Call it at start-up, after every successful upload and every few minu
   "catalogVersion": "2026-10-17T07:58:41.902Z",
   "serverTime": "2026-10-17T08:15:00.123Z",
   "offlineLimitHours": 72,
-  "device":   { "id": "…", "name": "Front till", "merchantId": "…", "branchId": "…", "branchCode": "MAIN", "registerId": "…", "registerCode": "R2" },
+  "device":   { "id": "…", "name": "Front till", "merchantId": "…", "branchId": "…", "branchCode": "MAIN", "code": "D1",
+                "registerId": "…", "registerCode": "R1", "registerName": { "nameEn": "Main drawer", "nameAr": "الصندوق الرئيسي" }, "role": "primary" },
   "merchant": { "id": "…", "nameEn": "Arabat Café", "nameAr": "مقهى عربات", "currency": "KWD", "timezone": "Asia/Kuwait" },
   "branch":   { "id": "…", "code": "MAIN", "nameEn": "Main", "nameAr": "الرئيسي", "phone": null, "address": null, "receiptHeader": null, "receiptFooter": "Thank you" },
-  "register": { "id": "…", "code": "R2", "defaultOpeningFloatMinor": "0", "discrepancyToleranceMinor": "0" },
+  "register": { "id": "…", "code": "R1", "nameEn": "Main drawer", "nameAr": "الصندوق الرئيسي", "defaultOpeningFloatMinor": "0", "discrepancyToleranceMinor": "0" },
   "settings": {
     "maxDiscountPercent": "10", "priceOverrideFloorPercent": "50", "priceOverrideCeilingPercent": "200",
     "priceOverrideBelowCost": false, "requireTenderReference": true, "blindCashCount": true,
@@ -149,7 +149,7 @@ snapshot). Call it at start-up, after every successful upload and every few minu
     "refundWindowDays": 30, "refundApprovalLimitMinor": "20000", "refundOwnSalesNeedApproval": true,
     "allowNegativeStock": false, "heldSaleExpiryHours": 24
   },
-  "counters": { "lastReceiptNumber": "MAIN-R2-000041" },
+  "counters": { "lastReceiptNumber": "MAIN-D1-000041" },
   "branchShift": { "id": "…", "status": "open", "registerId": "…", "registerCode": "R1",
                    "openedAt": "2026-10-17T08:00:00.000Z", "closedAt": null,
                    "openedBy": { "membershipId": "…", "userId": "…", "fullName": "Sara" } },
@@ -173,6 +173,10 @@ snapshot). Call it at start-up, after every successful upload and every few minu
   only those changed since `since` (re-sent products replace the local copy; a few unchanged ones
   may be re-sent). **Every other collection is always complete** (settings, payment methods, staff,
   categories, branch, register).
+- `device.code`: the device's permanent code (its receipt series). `device.registerId` /
+  `registerCode` / `registerName` and `register`: the cash drawer a manager bound to this device,
+  **null when unbound** (then: card / transfer only, no drawer, no cash in / out, no shift of its
+  own). `device.role` is derived from it (`primary` when bound).
 - `sellable: false`: archived, or no longer sold at this branch. Hide it from selling; keep it for
   old receipts. A variant with `status: "archived"` is not sold either.
 - `catalogVersion`: record it on every sale priced with this catalog (§5).
@@ -182,11 +186,12 @@ snapshot). Call it at start-up, after every successful upload and every few minu
   (removed, deactivated, moved) must be signed out.
 - `counters.lastReceiptNumber`: the highest receipt number of this register the server has. After
   restoring a device from scratch with the same token, continue above it.
-- `branchShift` / `primaryDevice` (amendment 3, always complete): the latest shift on the register
-  of the branch's **primary** device (open or closed, with who opened it) and the primary itself;
-  `null` when the branch has no primary or it never opened a shift. A **secondary** device sells
-  into the open branch shift (its sales carry that `shiftId`) and shows "no open shift at the
-  branch" otherwise. The primary uses it to learn that a manager closed its shift online.
+- `branchShift` / `primaryDevice` (amendments 3 and 4, always complete). A **bound** device gets
+  the latest shift of its own register (open or closed, with who opened it): it learns here when
+  a manager closed its shift online. An **unbound** device gets the open register shift it sells
+  into — the branch's main register's, else the oldest open one — or `null`, when it shows "no
+  open shift at the branch" and cannot sell. `primaryDevice` is the device bound to the main
+  register (else to that shift's register), or `null`.
 - Payment methods: offer those with `status: "active"`, `availableInPos: true` and no
   `gatewayProvider` (gateway payments are online only).
 - Not in the snapshot: product images, customers, modifiers and recipes (restaurant only, online
@@ -200,11 +205,12 @@ snapshot). Call it at start-up, after every successful upload and every few minu
 | PIN | Verify with argon2id against `pinHash` (PHC string: 64 MiB, 3 passes, 1 lane). 3 wrong PINs lock that person on that device for 5 minutes, doubling on repeat (Plan A). Never upload or display the hash. |
 | Selling | Price and check every sale with `@arabat/pos-core` and the downloaded `settings` / `staff[].permissions`, in the order in `packages/pos-core/README.md` (rights, `evaluateSale`, `checkPayments`). Pass `expectedTotalMinor: null`. |
 | Supervisor | When `requiredSaleRights` lists rights the cashier lacks, a supervisor types **their own PIN**; check the right in their `permissions`; record `override` on the sale. |
-| Receipt numbers | `formatDeviceReceiptNumber(branch.code, register.code, n)` → `MAIN-R2-000042`; `n` is gap-free per device, taken in the same local transaction as the sale. |
-| Shifts | **One shift per branch, held by the primary device** (amendment 3): the primary opens and closes it with a cash count; a secondary sells into the branch shift from the snapshot and never opens, closes or moves cash (`NOT_PRIMARY_DEVICE`). Device shifts are per register: the server never refuses a device shift because the person has a shift open elsewhere (it lists that shift for the managers). Only the opener closes the shift; a manager (`registers.manage`) may force-close it at the till with a note. |
+| Receipt numbers | `formatDeviceReceiptNumber(branch.code, device.code, n)` → `MAIN-D1-000042`; `n` is gap-free per device, taken in the same local transaction as the sale. |
+| Shifts | **A register's shift is held by the device bound to it** (amendments 3 and 4): the bound device opens and closes it with a cash count; an unbound device sells into the branch's open register shift from the snapshot and never opens, closes or moves cash (`NOT_PRIMARY_DEVICE`). Device shifts are per register: the server never refuses a device shift because the person has a shift open elsewhere (it lists that shift for the managers). Only the opener closes the shift; a manager (`registers.manage`) may force-close it at the till with a note. |
+| Cash tenders | Only a bound device takes cash: hide cash methods when `device.registerId` is null; the server refuses a cash tender from an unbound device with `CASH_NOT_ALLOWED`. |
 | Refused shift | If the server refuses the `shift_open`, **block selling, cash and refunds at once** (show the code and what to do), keep resending the same record at every sync, and let the cashier discard the shift only when nothing was recorded in it. Never pile up records behind a refused shift. |
 | Lock vs. sign-out | "Lock" (button or 5 min idle) keeps the cashier and asks for their PIN only; while the primary holds an open shift, only its opener can sign in. "Log out" only when the device holds no open shift (primary: branch shift closed). |
-| Cash movements | Only pay-ins / pay-outs (`other`), **on the primary only**. Safe drops, float top-ups, bank deposits, expenses and supplier payments stay in the online flows. |
+| Cash movements | Only pay-ins / pay-outs (`other`), **on a bound device only**. Safe drops, float top-ups, bank deposits, expenses and supplier payments stay in the online flows. |
 | Amounts typed | Accept Arabic-Indic digits, a comma or `٫` as the decimal separator, spaces and a currency word (`Money.parseInput` in `@arabat/money`). |
 | Refunds | Only of sales **this device made**, through `computeRefund`, `paybackAllocation` and `refundApprovalReasons`; when approval is needed, a second person types their PIN (`approval`). |
 | Not on devices | Restaurant (tables, kitchen), customers, exchanges, voids, held sales across tills, gateway payments: online only. |
@@ -221,7 +227,7 @@ Answer (always `200` when the token is valid):
 ```json
 { "serverTime": "…",
   "results": [ { "id": "…", "kind": "sale", "status": "accepted",
-                 "result": { "saleId": "…", "receiptNumber": "MAIN-R2-000042" },
+                 "result": { "saleId": "…", "receiptNumber": "MAIN-D1-000042" },
                  "code": null, "message": null, "clockSkew": false } ] }
 ```
 
@@ -247,7 +253,8 @@ Every record has:
   "countedCashMinor": "5000", "note": null }
 ```
 
-The id becomes the shift id. **Primary devices only** (`NOT_PRIMARY_DEVICE` otherwise). The count
+The id becomes the shift id. **Bound devices only** (`NOT_PRIMARY_DEVICE` otherwise); the shift is
+the bound register's. The count
 is compared with the drawer balance the server holds; a difference is booked to the shift (as in
 the browser). Result: `{ shiftId, expectedCashMinor }`. Refusals: `REGISTER_BUSY` (another shift
 of this register is open on the server: a manager closes it in `/manager`), `MEMBER_NOT_ALLOWED`.
@@ -259,7 +266,7 @@ the device shift: it is accepted and the stale shift is listed for the managers
 
 ```json
 { "kind": "sale", "id": "…", "occurredAt": "…", "membershipId": "…", "shiftId": "…",
-  "receiptNumber": "MAIN-R2-000042", "catalogVersion": "2026-10-17T07:58:41.902Z",
+  "receiptNumber": "MAIN-D1-000042", "catalogVersion": "2026-10-17T07:58:41.902Z",
   "lines": [ { "variantId": "…", "quantity": "2", "listUnitPriceMinor": "250", "unitPriceMinor": "250",
                "priceOverrideReason": null, "discount": { "type": "percent", "value": "10" },
                "grossMinor": "500", "lineDiscountMinor": "50", "orderDiscountMinor": "0", "netMinor": "450" } ],
@@ -290,13 +297,16 @@ the device shift: it is accepted and the stale shift is listed for the managers
   for the branch's print agents. Otherwise the server never prints device sales.
 - Stock: the server books the sale through the stock ledger (recipes expanded). Stock **may go
   negative**; each item driven below zero becomes a manager exception. Never refused for stock.
-- `shiftId`: the branch shift (the primary's own, or the one a secondary learned from the
-  snapshot). A sale for a branch shift that is **already closed** (the device was offline while the
-  primary counted) is still accepted, booked to that shift and flagged `late` for the managers;
-  its cash reaches the drawer under the shift open on it now.
+- `shiftId`: the register shift (the bound device's own, or the branch shift an unbound device
+  learned from the snapshot). The sale is booked on that shift's register. A sale for a shift that
+  is **already closed** (the device was offline while the drawer was counted) is still accepted,
+  booked to that shift and flagged `late` for the managers; its cash reaches the drawer under the
+  shift open on it now.
+- Cash tenders need a drawer: an unbound device's cash payment is refused `CASH_NOT_ALLOWED`.
 - Result: `{ saleId, receiptNumber }`. Refusals: `SHIFT_REQUIRED` (shift not uploaded),
-  `WRONG_DEVICE` (a browser shift, or a shift of another branch), `RECEIPT_NUMBER_INVALID` (not
-  `{branch}-{register}-NNNNNN` of this device), `RECEIPT_NUMBER_TAKEN`, `UNKNOWN_VARIANT`,
+  `WRONG_DEVICE` (a shift of another branch), `RECEIPT_NUMBER_INVALID` (not
+  `{branch}-{device code}-NNNNNN` of this device), `RECEIPT_NUMBER_TAKEN`, `UNKNOWN_VARIANT`,
+  `CASH_NOT_ALLOWED`,
   `TOTALS_MISMATCH`, `PAYMENT_TOTAL_MISMATCH`, `PAYMENT_METHOD_UNAVAILABLE` (unknown method),
   `PAYMENT_NOT_VERIFIED` (gateway method), `REASON_REQUIRED`, `INVALID_QUANTITY`.
 
@@ -307,7 +317,7 @@ the device shift: it is accepted and the stale shift is listed for the managers
   "direction": "cash_out", "amountMinor": "1500", "note": "Ice" }
 ```
 
-A pay-in (`cash_in`) or pay-out (`cash_out`) of the drawer, reason "other", **primary devices
+A pay-in (`cash_in`) or pay-out (`cash_out`) of the drawer, reason "other", **bound devices
 only** (`NOT_PRIMARY_DEVICE`). A pay-out above the company limits (`cashOutOtherLimitMinor`,
 `cashOutOtherShiftLimitMinor`) is accepted and flagged for review (`result.limitExceeded`).
 Result: `{ movementId, limitExceeded }`.
@@ -323,7 +333,7 @@ Result: `{ movementId, limitExceeded }`.
 ```
 
 - `saleId` must be a sale **this device** uploaded (`NOT_OWN_SALE` otherwise; `NOT_FOUND` when it
-  has not been uploaded yet: retry later).
+  has not been uploaded yet: retry later). Cash paid back leaves the drawer of the shift's register.
 - `lines`: positions of the sale's lines (`computeRefund`); `restock` omitted = by reason
   (damaged / defective stay out of stock). `reason`: `changed_mind`, `defective`, `wrong_item`,
   `damaged`, `price_adjustment`, `other`.
@@ -342,8 +352,8 @@ Result: `{ movementId, limitExceeded }`.
   "countedCashMinor": "12500", "note": null, "forced": false }
 ```
 
-Closes the branch shift against the drawer balance on the server (all of the shift's records
-must be uploaded first; the primary only, except a shift the device opened itself). The person
+Closes the register's shift against the drawer balance on the server (all of the shift's records
+must be uploaded first; the bound device only, except a shift the device opened itself). The person
 closing is the one who opened it (`FORBIDDEN` otherwise), **or** a manager present at the till
 with `forced: true`: `membershipId` is the manager, who needs `registers.manage` at the branch
 (`FORBIDDEN`), and `note` is required (`REASON_REQUIRED`); the close is recorded as forced,
@@ -365,8 +375,8 @@ Result: `{ membershipId }`. Refusal: `MEMBER_NOT_ALLOWED`.
 ### Refusal codes (all kinds)
 
 `VALIDATION_FAILED` (shape; `message` names the field), `IDEMPOTENCY_CONFLICT`, `WRONG_DEVICE`,
-`MEMBER_NOT_ALLOWED`, `SHIFT_REQUIRED`, `SHIFT_CLOSED`, `NOT_PRIMARY_DEVICE`, `FORBIDDEN`,
-`INTERNAL_ERROR` (retry later), plus the per-kind codes above.
+`MEMBER_NOT_ALLOWED`, `SHIFT_REQUIRED`, `SHIFT_CLOSED`, `NOT_PRIMARY_DEVICE` (bound devices only),
+`CASH_NOT_ALLOWED`, `FORBIDDEN`, `INTERNAL_ERROR` (retry later), plus the per-kind codes above.
 
 ## 6. Example session
 
@@ -375,7 +385,7 @@ POST /device/register {email, password, deviceName}           → select_branch
 POST /device/register {email, password, deviceName, merchantId, branchId}
                                                                → registered, token (keychain)
 GET  /device/sync                                              → full snapshot, version V1
-… offline: Sara signs in with her PIN, opens the shift (S1), sells MAIN-R2-000001 (A1), pays out
+… offline: Sara signs in with her PIN, opens the shift (S1), sells MAIN-D1-000001 (A1), pays out
   1.500 KWD (C1), refunds part of A1 (F1), closes S1 (X1) …
 POST /device/sync {records: [S1, A1, C1, F1, X1]}              → accepted ×5
 POST /device/sync {records: [S1, A1, C1, F1, X1]}  (retry)     → duplicate ×5
@@ -406,8 +416,11 @@ guidance (`SHIFT_NOT_ACCEPTED`) and offers "discard this shift" when it has no r
 
 ## 8. What managers see
 
-- `/manager/devices`: devices (role, online / last seen / last sync), the owner's role / branch
-  change, removal, the browser POS's PIN sign-in link per branch, the offline limit
+- `/manager/registers`: the branch's cash drawers with their bound device, current shift and the
+  "main register of the branch" flag; "bind to a device" picks one of the branch's unbound tills.
+- `/manager/devices`: devices (code, bound drawer, online / last seen / last sync), bind / change
+  drawer, the owner's branch move, removal, the browser POS's PIN sign-in link per branch, the
+  offline limit
   (`offlineLimitHours`, 1–720, default 72), and the exceptions after uploads with "mark handled"
   and a note: `negative_stock`, `clock_skew`, `refused`, `shift_left_open` (the opener of a device
   shift still had a shift open elsewhere; "close the shift" force-closes it uncounted and marks

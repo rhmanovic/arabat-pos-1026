@@ -44,12 +44,17 @@ export const registers = pgTable(
      * force-closed without counting: the next opening must count it (ADR-0090).
      */
     needsCount: boolean().notNull().default(true),
+    /** The branch's main register: unbound devices sell into its open shift (ADR-0112 amendment 4). */
+    isMain: boolean().notNull().default(false),
     version: integer().notNull().default(1),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
     unique('registers_merchant_id_id_key').on(t.merchantId, t.id),
+    uniqueIndex('registers_one_main_per_branch')
+      .on(t.merchantId, t.branchId)
+      .where(sql`${t.isMain}`),
     unique('registers_merchant_id_id_branch_key').on(t.merchantId, t.id, t.branchId),
     foreignKey({
       columns: [t.merchantId, t.branchId],

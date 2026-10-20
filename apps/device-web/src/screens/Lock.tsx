@@ -213,7 +213,7 @@ export function LockScreen() {
         <span className="font-semibold">{t('title')}</span>
         <span className="text-sm text-console-fg/70" dir="auto">
           {ctx
-            ? `${i18n.language.startsWith('ar') ? ctx.merchant.nameAr || ctx.merchant.nameEn : ctx.merchant.nameEn || ctx.merchant.nameAr} · ${ctx.branch.code}-${ctx.register.code}`
+            ? `${i18n.language.startsWith('ar') ? ctx.merchant.nameAr || ctx.merchant.nameEn : ctx.merchant.nameEn || ctx.merchant.nameAr} · ${ctx.branch.code}-${ctx.device.code}`
             : ''}
         </span>
         <div className="flex-1" />

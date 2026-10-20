@@ -1,6 +1,7 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import type pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { newId } from '../../kernel/ids.js';
 import { DbFixtures, PASSWORD, createCompany } from '../../testing/auth-fixtures.js';
 import { prepareIntegrationDatabase } from '../../testing/integration-db.js';
 import { InMemoryMailer, createTestApp, testEnv } from '../../testing/test-app.js';
@@ -29,14 +30,9 @@ afterAll(async () => {
 type Co = Awaited<ReturnType<typeof createCompany>>;
 
 /** Registers a device at a branch with the owner's credentials; returns the 200 body. */
-async function registerDevice(
-  c: Co,
-  branchId: string,
-  name = 'Till Mac',
-  role: 'primary' | 'secondary' = 'secondary',
-) {
+async function registerDevice(c: Co, branchId: string, name = 'Till Mac') {
   const res = await c.client.request('POST', '/device/register', {
-    body: { email: c.email, password: PASSWORD, deviceName: name, branchId, role },
+    body: { email: c.email, password: PASSWORD, deviceName: name, branchId },
   });
   expect(res.statusCode).toBe(200);
   const body = res.json();
@@ -45,13 +41,28 @@ async function registerDevice(
     token: string;
     device: {
       id: string;
-      registerId: string;
-      registerCode: string;
+      code: string;
+      registerId: string | null;
+      registerCode: string | null;
       branchCode: string;
       role: string;
     };
   };
 }
+
+/** A manager creates a register (cash drawer) at the branch (amendment 4). */
+async function createRegister(c: Co, branchId: string, code: string, isMain = false) {
+  const res = await c.client.request('POST', '/manager/registers', {
+    cookies: c.cookies,
+    body: { branchId, code, nameEn: `Drawer ${code}`, nameAr: null, isMain },
+  });
+  expect(res.statusCode).toBe(201);
+  return res.json() as { id: string; code: string; version: number };
+}
+
+/** Binds a register to a device (`PUT /manager/devices/:id`); returns the response. */
+const bind = (c: Co, deviceId: string, registerId: string | null, cookies = c.cookies) =>
+  c.client.request('PUT', `/manager/devices/${deviceId}`, { cookies, body: { registerId } });
 
 const me = (c: Co, token: string | null) =>
   c.client.request('GET', '/device/me', {
@@ -59,7 +70,7 @@ const me = (c: Co, token: string | null) =>
   });
 
 describe('device registration', () => {
-  it('lists the branches first, then registers a device as a new register with a token', async () => {
+  it('lists the branches first, then registers a device with a code and a token, creating no register', async () => {
     const c = await createCompany(app, db, mailer);
     const choose = await c.client.request('POST', '/device/register', {
       body: { email: c.email, password: PASSWORD, deviceName: 'Till Mac' },
@@ -74,100 +85,160 @@ describe('device registration', () => {
         },
       ],
     });
-
+    const before = (
+      await owner.query(`select count(*)::int as n from registers where merchant_id = $1`, [
+        c.merchantId,
+      ])
+    ).rows[0].n;
     const { token, device } = await registerDevice(c, c.main);
     expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    // A device is a selling device, not a cash drawer: a code of its own, no register.
     expect(device).toMatchObject({
       branchCode: 'MAIN',
-      registerCode: expect.stringMatching(/^R\d+$/),
+      code: 'D1',
+      registerId: null,
+      registerCode: null,
+      role: 'secondary',
     });
     const stored = await owner.query(
       `select encode(token_hash, 'hex') as hash from pos_devices where id = $1`,
       [device.id],
     );
     expect(stored.rows[0].hash).not.toContain(token);
-    // Its own register, with a cash drawer account.
-    const reg = await owner.query(
-      `select r.code, (select count(*)::int from financial_accounts a where a.register_id = r.id) as accounts
-       from registers r where r.id = $1`,
-      [device.registerId],
-    );
-    expect(reg.rows[0]).toEqual({ code: device.registerCode, accounts: 1 });
+    const after = (
+      await owner.query(`select count(*)::int as n from registers where merchant_id = $1`, [
+        c.merchantId,
+      ])
+    ).rows[0].n;
+    expect(after).toBe(before);
 
     const who = await me(c, token);
     expect(who.statusCode).toBe(200);
-    expect(who.json()).toMatchObject({ id: device.id, registerCode: device.registerCode });
+    expect(who.json()).toMatchObject({ id: device.id, code: 'D1', registerId: null });
     const audit = await owner.query(`select action from audit_log where target_id = $1`, [
       device.id,
     ]);
     expect(audit.rows.map((r) => r.action)).toEqual(['device.registered']);
   });
 
-  it('asks for the role after the branch and refuses a second primary in the branch (Plan A)', async () => {
+  it('binds a register to exactly one device, from either side, never while its shift is open (amendment 4)', async () => {
     const c = await createCompany(app, db, mailer);
-    const step = await c.client.request('POST', '/device/register', {
-      body: { email: c.email, password: PASSWORD, deviceName: 'Front', branchId: c.main },
+    const a = await registerDevice(c, c.main, 'Front');
+    const b = await registerDevice(c, c.main, 'Back');
+    const drawer = await createRegister(c, c.main, 'DRW', true);
+    // From the device: the bound device is the register's primary.
+    const bound = await bind(c, a.device.id, drawer.id);
+    expect(bound.statusCode).toBe(200);
+    expect(bound.json()).toMatchObject({
+      registerId: drawer.id,
+      registerCode: 'DRW',
+      registerName: { nameEn: 'Drawer DRW' },
+      role: 'primary',
     });
-    expect(step.json()).toMatchObject({
-      status: 'select_role',
-      merchantId: c.merchantId,
-      branch: { id: c.main, code: 'MAIN' },
-      primaryTaken: false,
+    expect((await me(c, a.token)).json()).toMatchObject({
+      registerId: drawer.id,
+      registerName: { nameEn: 'Drawer DRW', nameAr: null },
+      role: 'primary',
     });
-    const primary = await registerDevice(c, c.main, 'Front', 'primary');
-    expect(primary.device.role).toBe('primary');
-    const again = await c.client.request('POST', '/device/register', {
-      body: { email: c.email, password: PASSWORD, deviceName: 'Back', branchId: c.main },
+    const snap = (
+      await c.client.request('GET', '/device/sync', {
+        headers: { authorization: `Bearer ${a.token}` },
+      })
+    ).json();
+    expect(snap.register).toMatchObject({ id: drawer.id, code: 'DRW', nameEn: 'Drawer DRW' });
+    expect(snap.device).toMatchObject({ code: 'D1', registerId: drawer.id, role: 'primary' });
+    // One device per register.
+    const twice = await bind(c, b.device.id, drawer.id);
+    expect(twice.statusCode).toBe(409);
+    expect(twice.json().code).toBe('REGISTER_BOUND');
+    // The registers list shows the binding and the main flag.
+    const list = (
+      await c.client.request('GET', `/manager/registers?branchId=${c.main}`, { cookies: c.cookies })
+    ).json().registers as { id: string; isMain: boolean; device: { id: string } | null }[];
+    expect(list.find((r) => r.id === drawer.id)).toMatchObject({
+      isMain: true,
+      device: { id: a.device.id, name: 'Front', code: 'D1' },
     });
-    expect(again.json()).toMatchObject({ status: 'select_role', primaryTaken: true });
-    const refused = await c.client.request('POST', '/device/register', {
+    // A second main register in the branch takes the flag over.
+    const other = await createRegister(c, c.main, 'DRW2', true);
+    const again = (
+      await c.client.request('GET', `/manager/registers?branchId=${c.main}`, { cookies: c.cookies })
+    ).json().registers as { id: string; isMain: boolean }[];
+    expect(again.filter((r) => r.isMain).map((r) => r.id)).toEqual([other.id]);
+
+    // While the register's shift is open nothing is rebound or unbound.
+    const ownerId = (
+      await owner.query(`select id from memberships where merchant_id = $1 and is_owner`, [
+        c.merchantId,
+      ])
+    ).rows[0].id as string;
+    const shiftId = newId();
+    const opened = await c.client.request('POST', '/device/sync', {
+      headers: { authorization: `Bearer ${a.token}` },
       body: {
-        email: c.email,
-        password: PASSWORD,
-        deviceName: 'Back',
-        branchId: c.main,
-        role: 'primary',
+        records: [
+          {
+            kind: 'shift_open',
+            id: shiftId,
+            occurredAt: new Date().toISOString(),
+            membershipId: ownerId,
+            countedCashMinor: '0',
+            note: null,
+          },
+        ],
       },
     });
-    expect(refused.statusCode).toBe(409);
-    expect(refused.json().code).toBe('PRIMARY_EXISTS');
-    // An additional device is fine, and the other branch may have its own primary.
-    const extra = await registerDevice(c, c.main, 'Back', 'secondary');
-    expect(extra.device.role).toBe('secondary');
-    expect((await registerDevice(c, c.second, 'Mall', 'primary')).device.role).toBe('primary');
-    expect((await me(c, extra.token)).json().role).toBe('secondary');
-
-    // The owner cannot promote the additional device while the primary is live…
-    const promote = await c.client.request('PUT', `/manager/devices/${extra.device.id}`, {
+    expect(opened.json().results[0].status).toBe('accepted');
+    const busy = await c.client.request('PUT', `/manager/registers/${drawer.id}/device`, {
       cookies: c.cookies,
-      body: { role: 'primary' },
+      body: { deviceId: b.device.id },
     });
-    expect(promote.json().code).toBe('PRIMARY_EXISTS');
-    // …but can after making the primary additional; nothing is revoked.
-    const demote = await c.client.request('PUT', `/manager/devices/${primary.device.id}`, {
-      cookies: c.cookies,
-      body: { role: 'secondary' },
+    expect(busy.statusCode).toBe(409);
+    expect(busy.json().code).toBe('REGISTER_BUSY');
+    expect((await bind(c, a.device.id, null)).json().code).toBe('REGISTER_BUSY');
+    await c.client.request('POST', '/device/sync', {
+      headers: { authorization: `Bearer ${a.token}` },
+      body: {
+        records: [
+          {
+            kind: 'shift_close',
+            id: newId(),
+            occurredAt: new Date().toISOString(),
+            membershipId: ownerId,
+            shiftId,
+            countedCashMinor: '0',
+            note: null,
+          },
+        ],
+      },
     });
-    expect(demote.json()).toMatchObject({ role: 'secondary', revokedAt: null });
-    const promoted = await c.client.request('PUT', `/manager/devices/${extra.device.id}`, {
-      cookies: c.cookies,
-      body: { role: 'primary' },
+    // Closed: a manager (not only the owner) rebinds from the register's side.
+    const manager = await c.hire([{ roleId: c.roles.company_manager, branchId: null }], 'manager');
+    const rebound = await c.client.request('PUT', `/manager/registers/${drawer.id}/device`, {
+      cookies: manager.cookies,
+      body: { deviceId: b.device.id },
     });
-    expect(promoted.json()).toMatchObject({ role: 'primary' });
-    const snap = await c.client.request('GET', '/device/sync', {
-      headers: { authorization: `Bearer ${extra.token}` },
-    });
-    expect(snap.json().device.role).toBe('primary');
-    // Revoking the primary frees the role.
-    await c.client.request('POST', `/manager/devices/${extra.device.id}/revoke`, {
-      cookies: c.cookies,
-    });
-    expect((await registerDevice(c, c.main, 'New', 'primary')).device.role).toBe('primary');
+    expect(rebound.statusCode).toBe(204);
+    expect((await me(c, a.token)).json()).toMatchObject({ registerId: null, role: 'secondary' });
+    expect((await me(c, b.token)).json()).toMatchObject({ registerId: drawer.id, role: 'primary' });
+    // Unbinding from the register's side frees it.
+    expect(
+      (
+        await c.client.request('PUT', `/manager/registers/${drawer.id}/device`, {
+          cookies: c.cookies,
+          body: { deviceId: null },
+        })
+      ).statusCode,
+    ).toBe(204);
+    expect((await me(c, b.token)).json().registerId).toBeNull();
+    // A register of another branch cannot be bound.
+    const elsewhere = await createRegister(c, c.second, 'B2D');
+    expect((await bind(c, b.device.id, elsewhere.id)).statusCode).toBe(404);
   });
 
-  it('lets only the owner move a device to another branch, with a new register and a full snapshot', async () => {
+  it('lets only the owner move an unbound device to another branch, with a new code and a full snapshot', async () => {
     const c = await createCompany(app, db, mailer);
-    const { token, device } = await registerDevice(c, c.main, 'Mover', 'secondary');
+    const { token, device } = await registerDevice(c, c.main, 'Mover');
     const first = await c.client.request('GET', '/device/sync', {
       headers: { authorization: `Bearer ${token}` },
     });
@@ -178,17 +249,25 @@ describe('device registration', () => {
       body: { branchId: c.second },
     });
     expect(notOwner.statusCode).toBe(403);
-    const moved = await c.client.request('PUT', `/manager/devices/${device.id}`, {
+    // Bound devices stay: unbind first.
+    const drawer = await createRegister(c, c.main, 'DRW');
+    expect((await bind(c, device.id, drawer.id)).statusCode).toBe(200);
+    const stuck = await c.client.request('PUT', `/manager/devices/${device.id}`, {
       cookies: c.cookies,
       body: { branchId: c.second },
     });
+    expect(stuck.json().code).toBe('REGISTER_BOUND');
+    const moved = await c.client.request('PUT', `/manager/devices/${device.id}`, {
+      cookies: c.cookies,
+      body: { branchId: c.second, registerId: null },
+    });
     expect(moved.statusCode).toBe(200);
-    expect(moved.json()).toMatchObject({ branchId: c.second, revokedAt: null });
-    expect(moved.json().registerId).not.toBe(device.registerId);
-    const old = await owner.query(`select status from registers where id = $1`, [
-      device.registerId,
-    ]);
-    expect(old.rows[0].status).toBe('inactive');
+    expect(moved.json()).toMatchObject({
+      branchId: c.second,
+      code: 'D1',
+      registerId: null,
+      revokedAt: null,
+    });
     const after = await c.client.request(
       'GET',
       `/device/sync?since=${encodeURIComponent(version)}`,
@@ -199,51 +278,32 @@ describe('device registration', () => {
     expect(after.json()).toMatchObject({
       full: true,
       branch: { id: c.second, code: 'B2' },
-      device: { branchId: c.second, registerId: moved.json().registerId },
+      device: { branchId: c.second, code: 'D1', registerId: null },
+      register: null,
       counters: { lastReceiptNumber: null },
     });
     const audit = await owner.query(
-      `select details from audit_log where target_id = $1 and action = 'device.updated'`,
+      `select details from audit_log where target_id = $1 and action = 'device.updated' order by occurred_at desc limit 1`,
       [device.id],
     );
     expect(audit.rows[0].details.changes.branchId).toEqual({ from: c.main, to: c.second });
   });
 
-  it('never reuses a register code, skipping codes manual registers use', async () => {
+  it('never reuses a device code within a branch', async () => {
     const c = await createCompany(app, db, mailer);
     const first = await registerDevice(c, c.main, 'A');
-    const n = Number(first.device.registerCode.slice(1));
-    // A manager creates a register by hand with the next code.
-    const manual = await c.client.request('POST', '/manager/registers', {
-      cookies: c.cookies,
-      body: {
-        branchId: c.main,
-        code: `R${n + 1}`,
-        nameEn: 'Manual',
-        nameAr: null,
-        accessMode: 'branch',
-        memberIds: [],
-        defaultOpeningFloat: '0',
-        discrepancyTolerance: '0',
-      },
-    });
-    expect(manual.statusCode).toBe(201);
+    expect(first.device.code).toBe('D1');
     const second = await registerDevice(c, c.main, 'B');
-    expect(second.device.registerCode).toBe(`R${n + 2}`);
+    expect(second.device.code).toBe('D2');
     // Revoking and registering again gives yet another code.
     await c.client.request('POST', `/manager/devices/${second.device.id}/revoke`, {
       cookies: c.cookies,
     });
     const third = await registerDevice(c, c.main, 'B');
-    expect(third.device.registerCode).toBe(`R${n + 3}`);
-    // Codes are per branch: the second branch counts from its own registers.
-    const existing = await owner.query(`select code from registers where branch_id = $1`, [
-      c.second,
-    ]);
+    expect(third.device.code).toBe('D3');
+    // Codes are per branch.
     const other = await registerDevice(c, c.second, 'C');
-    expect(other.device.branchCode).toBe('B2');
-    expect(existing.rows.map((r) => r.code)).not.toContain(other.device.registerCode);
-    expect(Number(other.device.registerCode.slice(1))).toBeLessThan(n + 3);
+    expect(other.device).toMatchObject({ branchCode: 'B2', code: 'D1' });
   });
 
   it('refuses wrong passwords and people without registers.manage', async () => {
@@ -283,18 +343,20 @@ describe('device registration', () => {
     ).toMatchObject({ revokedAt: expect.any(String), online: false });
   });
 
-  it('keeps a device register out of the browser till', async () => {
+  it('keeps a register bound to a device out of the browser till', async () => {
     const c = await createCompany(app, db, mailer);
     const { device } = await registerDevice(c, c.main);
+    const drawer = await createRegister(c, c.main, 'DRW');
+    expect((await bind(c, device.id, drawer.id)).statusCode).toBe(200);
     const cashier = await c.hire([{ roleId: c.roles.cashier, branchId: c.main }], 'pos');
     const regs = (
       await c.client.request('GET', '/pos/registers', { cookies: cashier.cookies })
     ).json();
     const ids = (Array.isArray(regs) ? regs : regs.registers).map((r: { id: string }) => r.id);
-    expect(ids).not.toContain(device.registerId);
+    expect(ids).not.toContain(drawer.id);
     const open = await c.client.request('POST', '/pos/shifts', {
       cookies: cashier.cookies,
-      body: { registerId: device.registerId, countedCash: '0.000', expectedCash: '0.000' },
+      body: { registerId: drawer.id, countedCash: '0.000', expectedCash: '0.000' },
     });
     expect(open.statusCode).toBeGreaterThanOrEqual(400);
   });
@@ -475,9 +537,9 @@ describe('sync download', () => {
     expect(snap).toMatchObject({
       full: true,
       offlineLimitHours: 48,
-      device: { id: device.id, registerCode: device.registerCode },
+      device: { id: device.id, code: device.code, registerId: null },
       branch: { id: c.main, code: 'MAIN' },
-      register: { id: device.registerId, code: device.registerCode },
+      register: null,
       merchant: { id: c.merchantId, currency: 'KWD' },
       settings: { maxDiscountPercent: '10', allowNegativeStock: false, heldSaleExpiryHours: 24 },
       counters: { lastReceiptNumber: null },
