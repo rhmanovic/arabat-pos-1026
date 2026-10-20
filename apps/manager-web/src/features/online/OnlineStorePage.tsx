@@ -621,9 +621,9 @@ function SettingsForm({ store }: { store: OnlineStore }) {
         );
         // On a phone the refused field may be far from the Save button: bring it into view.
         setTimeout(() => {
-          document
-            .querySelector(`[data-field="${fields[0]!}"]`)
-            ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          const target = document.querySelector(`[data-field="${fields[0]!}"]`);
+          if (target && typeof target.scrollIntoView === 'function')
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }, 0);
       }
       notify.fail(error);
