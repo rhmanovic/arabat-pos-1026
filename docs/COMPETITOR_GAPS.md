@@ -94,3 +94,89 @@ an owner decision before it enters `docs/ROADMAP.md`.
 70. **Pharmacy mode** — expiry, batches, prescriptions.
 71. **Apparel matrix** *(partial: variants exist)* — size × colour grid entry and reports.
 72. **Car wash / laundry tickets** — ticket in, collect later.
+
+## Second pass (2026-10-20)
+
+### Customers and marketing
+73. **Referral program** — reward a customer who brings a friend.
+74. **Paid membership / subscriptions** — monthly coffee plan, member prices.
+75. **Prepaid packages** — "10 washes" or "5 sessions" sold up front, used over time.
+76. **Customer app / white-label app** — the merchant's own branded ordering app.
+77. **Abandoned cart reminders** — online store follows up unpaid carts.
+78. **Reviews on the online store** — product ratings by buyers.
+79. **Customer self sign-up at the till** — QR to join loyalty and give a phone number.
+80. **Marketing consent and unsubscribe** — opt-in records per channel.
+
+### Selling at the till
+81. **Offline card payments queue** — card taken while the network is down, settled later.
+82. **Rounding to cash denomination** — round cash totals to the nearest 5 fils.
+83. **Age check prompt** — confirm ID for tobacco and similar items.
+84. **Item notes and custom items** — sell an open "misc" item with a typed price.
+85. **Price check mode** — scan to see price and stock without selling.
+86. **Returns without receipt** — refund by search with a manager limit.
+87. **Gift receipt** — receipt without prices.
+88. **Receipt customisation** — logo, footer, promotions, QR on the receipt.
+89. **Voice / photo product search** — find a product by camera image.
+90. **Cash drawer counting by denomination** — count notes and coins on close.
+91. **Cash recycler / smart safe integration** — counted cash machines.
+92. **Order on behalf for another branch** — sell at one branch, deliver from another.
+93. **Click & collect at the till** *(partial: online hand-over exists)* — reserve online, pay in store.
+94. **Endless aisle** — sell an out-of-stock item from the warehouse to ship.
+
+### Restaurant
+95. **Floor plan designer** *(partial: areas/tables exist)* — drag tables on a map.
+96. **Seat numbers** — order and split per seat.
+97. **Bar tabs** — open a tab with a card held.
+98. **Combo meals** — meal with choice of side and drink at a combo price.
+99. **Item 86 / out-of-stock sync** — mark an item sold out everywhere, including aggregators.
+100. **Prep time and kitchen timers** — ticket age, late alerts on the KDS.
+101. **Kitchen performance report** — average prep time per station.
+102. **Allergens and calories** — on the menu, the receipt and the online store.
+103. **Digital menu board** — TV menu screens managed from the dashboard.
+104. **Catering orders** — large future orders with deposits.
+105. **Waiter handheld app** — order taking on a phone at the table.
+106. **Pay at table** — card terminal or link brought to the table.
+
+### Inventory and purchasing
+107. **Supplier portal** — supplier sees and confirms POs online.
+108. **Purchase approval workflow** — PO above a limit needs approval.
+109. **Landed cost** — shipping and customs added to item cost.
+110. **Consignment stock** — goods owned by the supplier until sold.
+111. **Stock aging report** — slow and dead stock.
+112. **ABC analysis** — items by value contribution.
+113. **Bin / shelf locations** — where an item sits in the store or warehouse.
+114. **Waste log for retail** — expiry and damage write-offs by reason.
+115. **Product images by AI / auto descriptions** — generate catalog content.
+116. **Barcode lookup from a global database** — fill product data from GTIN.
+117. **Unit of measure conversion** — buy by carton, sell by piece.
+
+### Employees
+118. **Breaks tracking** — paid and unpaid breaks.
+119. **Leave requests** — vacations and sick days.
+120. **Overtime rules** — hours beyond the schedule.
+121. **Tasks / checklists for staff** — opening and closing checklists.
+122. **Employee self-service app** — see schedule and hours on the phone.
+123. **Cashier training mode** — sell without affecting stock or reports.
+
+### Finance and reporting
+124. **Custom report builder** — choose columns, filters and grouping.
+125. **Dashboards on TV / wall display** — live sales screen.
+126. **Benchmarking** — compare with similar shops in the area.
+127. **Hourly heatmap** — busy hours by day.
+128. **Tax per item and multiple tax rates** *(check)* — mixed VAT rates on one sale.
+129. **Expense categories with receipts photo** *(partial: disbursements exist)* — scan bills.
+130. **Petty cash requests app** — staff request, owner approves on the phone.
+131. **Bank feed import** — bank statement import for reconciliation.
+132. **Multi-entity consolidation** — reports across several companies.
+
+### Platform and operations
+133. **Two-factor sign-in (2FA)** — code app or SMS for owners.
+134. **Single sign-on (Google / Microsoft)** — sign in with an existing account.
+135. **Data export / backup for the merchant** — download all data at any time.
+136. **Sandbox / demo company** — try features with sample data.
+137. **In-app help center and chat support** — help articles and live chat.
+138. **Onboarding wizard by business type** *(partial: setup checklist exists)* — ready catalog templates.
+139. **Status page** — public uptime page.
+140. **Hardware management** — see each device's health and version remotely.
+141. **Remote device lock / wipe** — lost tablet protection.
+142. **Multi-language beyond ar/en** — Urdu, Hindi, Filipino staff interfaces.
