@@ -1219,7 +1219,8 @@ customers, accounts, permissions).
   overview counts, no-permission message, plan notice, orders step, pay-on-receipt payment,
   address check + refused fields, listings, key parity, actions); manager dashboard test updated;
   `e2e/store.spec.ts` runs through `/online` (and checks the `/manager/online` hand-over).
-- Verified: see TESTING.md (results after ADR-0119).
+- Verified (cloud sandbox): `pnpm verify` 334 unit/web (56 files), `pnpm test:integration` 297
+  (44 files), `pnpm test:e2e` 41.
 
 ## Next step
 Online store Phase 3 (online payment methods separate from POS tenders, ADR-0120) per
