@@ -20,23 +20,34 @@ import {
   useStoreProducts,
   useStorefront,
 } from '../shared.js';
-import { DesignAnchor } from './parts.js';
+import { DesignAnchor, StoreIcon } from './parts.js';
 import { assetUrl, linkTarget, useCard, useCta, useDesign, useText } from './context.js';
+import { SectionFrame, SectionTitle, full, shownSections } from './frame.js';
+import {
+  CollageSection,
+  CountdownSection,
+  CtaSection,
+  FaqSection,
+  GallerySection,
+  LogosSection,
+  SpacerSection,
+  TestimonialsSection,
+} from './sections-more.js';
 
-/** One designed page (home, products or categories): its visible sections in order. */
 /** The designed page a section is drawn on. */
 const PageContext = createContext<DesignPage>('home');
 
+/** One designed page (home, products or categories): its shown sections in order. */
 export function DesignedPage({ page }: { page: DesignPage }) {
   const design = useDesign();
-  const sections = design.pages[page].filter((s) => s.visible);
+  const sections = shownSections(design.pages[page]);
   return (
     <PageContext.Provider value={page}>
-      <div className="flex flex-col gap-8" data-page={page}>
+      <div className="-my-4 flex flex-col" data-page={page}>
         {sections.map((s) => (
-          <div key={s.id} id={`section-${s.id}`} data-section={s.type} className="scroll-mt-20">
+          <SectionFrame key={s.id} section={s}>
             <Section section={s} />
-          </div>
+          </SectionFrame>
         ))}
       </div>
     </PageContext.Provider>
@@ -67,16 +78,31 @@ function Section({ section: s }: { section: DesignSection }) {
       return <InfoSection s={s} />;
     case 'catalog':
       return <CatalogSection s={s} />;
+    case 'countdown':
+      return <CountdownSection s={s} />;
+    case 'testimonials':
+      return <TestimonialsSection s={s} />;
+    case 'faq':
+      return <FaqSection s={s} />;
+    case 'gallery':
+      return <GallerySection s={s} />;
+    case 'logos':
+      return <LogosSection s={s} />;
+    case 'collage':
+      return <CollageSection s={s} />;
+    case 'cta':
+      return <CtaSection s={s} />;
+    case 'spacer':
+      return <SpacerSection s={s} />;
   }
 }
 
-function SectionTitle({ children }: { children: string }) {
-  if (!children) return null;
-  return <h2 className="mb-3 text-xl font-bold">{children}</h2>;
-}
-
-/** A section that bleeds to the screen edges ("full" variants). */
-const full = 'relative start-1/2 w-screen max-w-none -translate-x-1/2 rtl:translate-x-1/2';
+/** Shade over pictures so the words on them stay readable. */
+export const OVERLAY = {
+  none: '',
+  light: 'bg-gradient-to-t from-black/40 via-black/5 to-transparent',
+  dark: 'bg-gradient-to-t from-black/70 via-black/20 to-transparent',
+} as const;
 
 // ---------------------------------------------------------------------------- slider
 function SliderSection({ s }: { s: SectionOf<'slider'> }) {
@@ -90,23 +116,49 @@ function SliderSection({ s }: { s: SectionOf<'slider'> }) {
   useEffect(() => {
     if (!s.autoplay || count < 2) return;
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
-    const timer = setInterval(() => setIndex((i) => (i + 1) % count), 5000);
+    const timer = setInterval(() => setIndex((i) => (i + 1) % count), s.interval * 1000);
     return () => clearInterval(timer);
-  }, [s.autoplay, count]);
+  }, [s.autoplay, s.interval, count]);
   useEffect(() => {
     const el = track.current;
     const slide = el?.children[index] as HTMLElement | undefined;
     if (el && slide) el.scrollTo?.({ left: slide.offsetLeft - el.offsetLeft, behavior: 'smooth' });
   }, [index]);
   if (count === 0) return null;
-  const tall =
-    s.variant === 'full' ? 'aspect-[4/5] sm:aspect-[21/8]' : 'aspect-[4/3] sm:aspect-[21/8]';
+  const tall = {
+    small: 'aspect-[16/10] sm:aspect-[3/1]',
+    medium:
+      s.variant === 'full' ? 'aspect-[4/5] sm:aspect-[21/8]' : 'aspect-[4/3] sm:aspect-[21/8]',
+    large: 'aspect-[4/5] sm:aspect-[16/7]',
+  }[s.height];
+  const arrow = (by: -1 | 1) => (
+    <button
+      type="button"
+      aria-label={by < 0 ? t('design.prevSlide') : t('design.nextSlide')}
+      onClick={() => setIndex((i) => (i + by + count) % count)}
+      className={cn(
+        'absolute top-1/2 z-10 grid size-10 -translate-y-1/2 place-items-center rounded-full bg-white/85 text-[#111] shadow-md backdrop-blur transition hover:bg-white max-sm:hidden',
+        by < 0 ? 'start-3' : 'end-3',
+      )}
+    >
+      <StoreIcon
+        name="chevron"
+        className={cn('size-5', by < 0 ? 'rotate-90 rtl:-rotate-90' : '-rotate-90 rtl:rotate-90')}
+      />
+    </button>
+  );
   return (
     <section
       aria-roledescription="carousel"
       aria-label={t('design.slider')}
-      className={cn(s.variant === 'full' && full)}
+      className={cn('relative', s.variant === 'full' && full)}
     >
+      {count > 1 && s.showArrows ? (
+        <>
+          {arrow(-1)}
+          {arrow(1)}
+        </>
+      ) : null}
       <div
         ref={track}
         className={cn(
@@ -154,7 +206,13 @@ function SliderSection({ s }: { s: SectionOf<'slider'> }) {
                 />
               )}
               {title || subtitle || button ? (
-                <div className="absolute inset-0 flex flex-col justify-end gap-2 bg-gradient-to-t from-black/60 via-black/10 to-transparent p-5 text-white sm:p-10">
+                <div
+                  className={cn(
+                    'absolute inset-0 flex flex-col justify-end gap-2 p-5 text-white sm:p-10',
+                    OVERLAY[s.overlay],
+                    s.textAlign === 'center' && 'items-center justify-center text-center',
+                  )}
+                >
                   {title ? (
                     <p className="max-w-xl text-2xl font-bold sm:text-4xl">{title}</p>
                   ) : null}
@@ -210,7 +268,8 @@ function BannerSection({ s }: { s: SectionOf<'banner'> }) {
   const title = text(s.title);
   const subtitle = text(s.subtitle);
   const button = text(s.button);
-  const hasText = Boolean(title || subtitle || button);
+  const button2 = text(s.button2);
+  const hasText = Boolean(title || subtitle || button || button2);
   if (!img && !hasText) return null;
   const testId = s.imageSource === 'store' ? 'store-banner' : undefined;
   const words = (light: boolean) => (
@@ -223,10 +282,19 @@ function BannerSection({ s }: { s: SectionOf<'banner'> }) {
           {subtitle}
         </p>
       ) : null}
-      {button ? (
-        <DesignAnchor link={s.link} className={cn(cta(light ? 'light' : 'primary'), 'mt-2 w-fit')}>
-          {button}
-        </DesignAnchor>
+      {button || button2 ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {button ? (
+            <DesignAnchor link={s.link} className={cn(cta(light ? 'light' : 'primary'), 'w-fit')}>
+              {button}
+            </DesignAnchor>
+          ) : null}
+          {button2 ? (
+            <DesignAnchor link={s.link2} className={cn(cta('outline'), 'w-fit')}>
+              {button2}
+            </DesignAnchor>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
@@ -264,10 +332,22 @@ function BannerSection({ s }: { s: SectionOf<'banner'> }) {
         >
           {title ? <p className="text-2xl font-bold sm:text-4xl">{title}</p> : null}
           {subtitle ? <p className="max-w-xl text-sm opacity-90 sm:text-base">{subtitle}</p> : null}
-          {button ? (
-            <DesignAnchor link={s.link} className={cn(cta('outline'), 'mt-2 w-fit')}>
-              {button}
-            </DesignAnchor>
+          {button || button2 ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {button ? (
+                <DesignAnchor link={s.link} className={cn(cta('outline'), 'w-fit')}>
+                  {button}
+                </DesignAnchor>
+              ) : null}
+              {button2 ? (
+                <DesignAnchor
+                  link={s.link2}
+                  className="inline-flex min-h-11 items-center px-3 text-sm font-semibold underline-offset-4 hover:underline"
+                >
+                  {button2}
+                </DesignAnchor>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </section>
@@ -282,8 +362,15 @@ function BannerSection({ s }: { s: SectionOf<'banner'> }) {
       />
       <div
         className={cn(
-          'relative flex min-h-64 flex-col justify-end bg-gradient-to-t from-black/65 via-black/20 to-transparent p-6 text-white sm:min-h-96 sm:p-12',
-          s.align === 'center' && 'justify-center bg-black/40',
+          'relative flex flex-col justify-end p-6 text-white sm:p-12',
+          {
+            small: 'min-h-48 sm:min-h-64',
+            medium: 'min-h-64 sm:min-h-96',
+            large: 'min-h-80 sm:min-h-[32rem]',
+          }[s.height],
+          OVERLAY[s.overlay],
+          s.align === 'center' && 'justify-center',
+          s.align === 'center' && s.overlay !== 'none' && 'bg-black/40',
         )}
       >
         {words(true)}
@@ -296,12 +383,42 @@ function BannerSection({ s }: { s: SectionOf<'banner'> }) {
 const lowestPrice = (p: StoreProduct) =>
   p.variants.map((v) => toMoney(v.price)).reduce((a, b) => (b.compare(a) < 0 ? b : a));
 
+/** A one-tap "add" for products with a single option (null otherwise). */
+function QuickAdd({ p, className }: { p: StoreProduct; className?: string }) {
+  const cart = useCart();
+  const name = useLocalName();
+  const { t } = useTranslation();
+  const single = p.variants.length === 1 ? p.variants[0]! : null;
+  if (!single || !single.available) return null;
+  return (
+    <button
+      type="button"
+      aria-label={t('design.addOne', { name: name(p) })}
+      onClick={(e) => {
+        e.preventDefault();
+        cart.add(
+          { variantId: single.variantId, productId: p.productId, quantity: 1 },
+          single.maxQuantity,
+        );
+      }}
+      className={cn(
+        'grid size-9 shrink-0 place-items-center rounded-full bg-primary text-lg font-bold text-primary-fg shadow-md transition-transform hover:scale-105',
+        className,
+      )}
+    >
+      +
+    </button>
+  );
+}
+
 export function ProductCard({
   p,
   variant = 'grid',
+  quickAdd = false,
 }: {
   p: StoreProduct;
   variant?: 'grid' | 'list';
+  quickAdd?: boolean;
 }) {
   const slug = useSlug();
   const name = useLocalName();
@@ -316,6 +433,16 @@ export function ProductCard({
   const description = i18n.language.startsWith('ar')
     ? p.descriptionAr || p.descriptionEn
     : p.descriptionEn || p.descriptionAr;
+  if (quickAdd)
+    return (
+      <div className="relative h-full">
+        <ProductCard p={p} variant={variant} />
+        <QuickAdd
+          p={p}
+          className={cn('absolute z-10', variant === 'list' ? 'bottom-3 end-3' : 'top-2 end-2')}
+        />
+      </div>
+    );
   if (variant === 'list')
     return (
       <Link
@@ -373,11 +500,13 @@ export function ProductGrid({
   testId,
   columns = 4,
   variant = 'grid',
+  quickAdd = false,
 }: {
   products: StoreProduct[];
   testId?: string;
   columns?: number;
   variant?: 'grid' | 'list' | 'carousel';
+  quickAdd?: boolean;
 }) {
   if (variant === 'carousel')
     return (
@@ -387,7 +516,7 @@ export function ProductGrid({
       >
         {products.map((p) => (
           <li key={p.productId} className="w-40 shrink-0 snap-start sm:w-52">
-            <ProductCard p={p} />
+            <ProductCard p={p} quickAdd={quickAdd} />
           </li>
         ))}
       </ul>
@@ -402,7 +531,7 @@ export function ProductGrid({
     >
       {products.map((p) => (
         <li key={p.productId}>
-          <ProductCard p={p} variant={variant === 'list' ? 'list' : 'grid'} />
+          <ProductCard p={p} variant={variant === 'list' ? 'list' : 'grid'} quickAdd={quickAdd} />
         </li>
       ))}
     </ul>
@@ -413,6 +542,7 @@ function ProductsSection({ s }: { s: SectionOf<'products'> }) {
   const products = useStoreProducts();
   const text = useText();
   const slug = useSlug();
+  const name = useLocalName();
   const { t } = useTranslation();
   if (!products.data) return null;
   const all = products.data.products;
@@ -426,7 +556,17 @@ function ProductsSection({ s }: { s: SectionOf<'products'> }) {
               .map((id) => all.find((p) => p.productId === id))
               .filter((p): p is StoreProduct => Boolean(p))
           : all;
-  const shown = chosen.slice(0, s.limit);
+  const sorted =
+    s.sort === 'position'
+      ? chosen
+      : [...chosen].sort((a, b) =>
+          s.sort === 'name'
+            ? name(a).localeCompare(name(b))
+            : s.sort === 'priceAsc'
+              ? lowestPrice(a).compare(lowestPrice(b))
+              : lowestPrice(b).compare(lowestPrice(a)),
+        );
+  const shown = sorted.slice(0, s.limit);
   if (shown.length === 0) return null;
   const more =
     s.source === 'category' && s.categoryId
@@ -434,15 +574,18 @@ function ProductsSection({ s }: { s: SectionOf<'products'> }) {
       : `/${slug}/products`;
   return (
     <section aria-label={text(s.title) || undefined}>
-      <div className="flex items-baseline justify-between gap-2">
-        <SectionTitle>{text(s.title)}</SectionTitle>
-        {chosen.length > shown.length || s.variant === 'carousel' ? (
-          <Link to={more} className="text-sm font-medium text-primary hover:underline">
-            {t('design.seeAll')}
-          </Link>
-        ) : null}
-      </div>
-      <ProductGrid products={shown} columns={s.columns} variant={s.variant} />
+      <SectionTitle
+        aside={
+          s.showViewAll && (chosen.length > shown.length || s.variant === 'carousel') ? (
+            <Link to={more} className="shrink-0 text-sm font-semibold text-primary hover:underline">
+              {t('design.seeAll')}
+            </Link>
+          ) : undefined
+        }
+      >
+        {text(s.title)}
+      </SectionTitle>
+      <ProductGrid products={shown} columns={s.columns} variant={s.variant} quickAdd={s.showAdd} />
     </section>
   );
 }
@@ -473,9 +616,29 @@ function CategoriesSection({ s }: { s: SectionOf<'categories'> }) {
       {label.slice(0, 1)}
     </span>
   );
+  const grid = {
+    2: 'grid-cols-2',
+    3: 'grid-cols-2 sm:grid-cols-3',
+    4: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4',
+    5: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5',
+    6: 'grid-cols-3 sm:grid-cols-4 lg:grid-cols-6',
+  }[s.columns];
   return (
     <section aria-label={text(s.title) || t('nav.categories')}>
-      <SectionTitle>{text(s.title)}</SectionTitle>
+      <SectionTitle
+        aside={
+          s.showViewAll && page !== 'categories' ? (
+            <Link
+              to={`/${slug}/categories`}
+              className="shrink-0 text-sm font-semibold text-primary hover:underline"
+            >
+              {t('design.seeAll')}
+            </Link>
+          ) : undefined
+        }
+      >
+        {text(s.title)}
+      </SectionTitle>
       {s.variant === 'circles' ? (
         <ul className="-mx-4 flex gap-4 overflow-x-auto px-4 pb-2 [scrollbar-width:none]">
           {list.map((c) => (
@@ -535,7 +698,7 @@ function CategoriesSection({ s }: { s: SectionOf<'categories'> }) {
           ))}
         </ul>
       ) : (
-        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        <ul className={cn('grid gap-3', grid)}>
           {list.map((c) => (
             <li key={c.id}>
               <Link
@@ -629,8 +792,10 @@ function VideoSection({ s }: { s: SectionOf<'video'> }) {
 function TextSection({ s }: { s: SectionOf<'text'> }) {
   const text = useText();
   const card = useCard();
+  const cta = useCta();
   const title = text(s.title);
   const body = text(s.body);
+  const button = text(s.button);
   if (!title && !body) return null;
   return (
     <section
@@ -643,6 +808,11 @@ function TextSection({ s }: { s: SectionOf<'text'> }) {
     >
       {title ? <h2 className="text-xl font-bold">{title}</h2> : null}
       {body ? <p className="max-w-3xl whitespace-pre-line text-fg-muted">{body}</p> : null}
+      {button && s.link ? (
+        <DesignAnchor link={s.link} className={cn(cta('primary'), 'mt-2 w-fit')}>
+          {button}
+        </DesignAnchor>
+      ) : null}
     </section>
   );
 }
@@ -652,40 +822,43 @@ function FeaturesSection({ s }: { s: SectionOf<'features'> }) {
   const card = useCard();
   if (s.items.length === 0) return null;
   return (
-    <ul
-      className={cn(
-        'grid gap-3',
-        s.variant === 'row'
-          ? 'grid-cols-1 sm:grid-flow-col sm:auto-cols-fr'
-          : 'grid-cols-2 lg:grid-cols-3',
-      )}
-    >
-      {s.items.map((f) => (
-        <li
-          key={f.id}
-          className={cn(
-            'flex items-center gap-3 rounded-lg p-4',
-            s.variant === 'cards' ? card : 'bg-surface-muted',
-            s.variant === 'grid' && 'flex-col text-center',
-          )}
-        >
-          {f.icon ? (
-            <span
-              aria-hidden
-              className="grid size-11 shrink-0 place-items-center rounded-full bg-surface text-xl"
-            >
-              {f.icon}
-            </span>
-          ) : null}
-          <span className="min-w-0">
-            <span className="block font-semibold">{text(f.title)}</span>
-            {text(f.text) ? (
-              <span className="block text-sm text-fg-muted">{text(f.text)}</span>
+    <section aria-label={text(s.title) || undefined}>
+      <SectionTitle>{text(s.title)}</SectionTitle>
+      <ul
+        className={cn(
+          'grid gap-3',
+          s.variant === 'row'
+            ? 'grid-cols-1 sm:grid-flow-col sm:auto-cols-fr'
+            : 'grid-cols-2 lg:grid-cols-3',
+        )}
+      >
+        {s.items.map((f) => (
+          <li
+            key={f.id}
+            className={cn(
+              'flex items-center gap-3 rounded-lg p-4',
+              s.variant === 'cards' ? card : 'bg-surface-muted',
+              s.variant === 'grid' && 'flex-col text-center',
+            )}
+          >
+            {f.icon ? (
+              <span
+                aria-hidden
+                className="grid size-11 shrink-0 place-items-center rounded-full bg-surface text-xl"
+              >
+                {f.icon}
+              </span>
             ) : null}
-          </span>
-        </li>
-      ))}
-    </ul>
+            <span className="min-w-0">
+              <span className="block font-semibold">{text(f.title)}</span>
+              {text(f.text) ? (
+                <span className="block text-sm text-fg-muted">{text(f.text)}</span>
+              ) : null}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

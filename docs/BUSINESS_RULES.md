@@ -117,6 +117,12 @@ engineering defaults pending owner confirmation.
   (the main register's first), and cannot sell while none is open. A device shift is never refused because
   the person left a shift open elsewhere; that shift is listed for the managers to close. Records
   that reach the server after the branch shift closed are booked to it and flagged "late".
+- **BR-234** Page sections (ADR-0128 amendment 3): any section can have a background, spacing,
+  width, a centred heading with a line under it, be limited to phones or large screens, and be
+  scheduled (shown from / until); outside its schedule shoppers never see it. An offer countdown
+  without an end or past its end is not shown; questions without answers, reviews without words
+  and pictures not uploaded are not shown. Reviews are entered by the merchant only and must be
+  real customers' words; the platform never fills them in.
 - **BR-233** Footer design (ADR-0128 amendment 2): the merchant picks one of seven footer
   layouts, its colour, edge, width, spacing and columns, a brand area, a call-to-action band, up
   to 4 reassurance badges, up to 6 blocks (about, links, categories, contact, hours, branches,

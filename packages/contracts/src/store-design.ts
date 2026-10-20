@@ -25,6 +25,14 @@ export const SECTION_TYPES = [
   'menu',
   'info',
   'catalog',
+  'countdown',
+  'testimonials',
+  'faq',
+  'gallery',
+  'logos',
+  'collage',
+  'cta',
+  'spacer',
 ] as const;
 export type SectionType = (typeof SECTION_TYPES)[number];
 
@@ -121,7 +129,38 @@ export function videoEmbed(url: string): { provider: string; src: string } | nul
 }
 
 // ------------------------------------------------------------------------------- sections
-const base = { id, visible: z.boolean().default(true) };
+/** A moment in time (ISO 8601 with an offset), or null. */
+const moment = z
+  .string()
+  .trim()
+  .max(40)
+  .refine((v) => !Number.isNaN(Date.parse(v)), 'Use a valid date and time.')
+  .nullish()
+  .transform((v) => v ?? null);
+
+/**
+ * How any section sits on the page (ADR-0128 amendment 3): its background, spacing, width,
+ * heading (subtitle and alignment), the screens it shows on, and when it shows.
+ */
+export const sectionLookSchema = z
+  .object({
+    background: z.enum(['none', 'soft', 'tinted', 'brand', 'dark']).default('none'),
+    spacing: z.enum(['compact', 'regular', 'roomy']).default('regular'),
+    /** `full` = edge to edge; a coloured background always spans the screen. */
+    width: z.enum(['contained', 'full']).default('contained'),
+    titleAlign: z.enum(['start', 'center']).default('start'),
+    subtitle: localized(200),
+    devices: z.enum(['all', 'desktop', 'phone']).default('all'),
+    showFrom: moment,
+    showUntil: moment,
+  })
+  .refine((l) => !l.showFrom || !l.showUntil || Date.parse(l.showFrom) < Date.parse(l.showUntil), {
+    message: 'The section must start before it ends.',
+    path: ['showUntil'],
+  });
+export type SectionLook = z.output<typeof sectionLookSchema>;
+
+const base = { id, visible: z.boolean().default(true), look: sectionLookSchema.prefault({}) };
 
 const slideSchema = z.object({
   id,
@@ -136,6 +175,12 @@ export const sliderSectionSchema = z.object({
   type: z.literal('slider'),
   variant: z.enum(['full', 'contained', 'cards']).default('contained'),
   autoplay: z.boolean().default(true),
+  /** Seconds per slide. */
+  interval: z.union([z.literal(3), z.literal(5), z.literal(8)]).default(5),
+  height: z.enum(['small', 'medium', 'large']).default('medium'),
+  overlay: z.enum(['none', 'light', 'dark']).default('dark'),
+  textAlign: z.enum(['start', 'center']).default('start'),
+  showArrows: z.boolean().default(true),
   slides: z.array(slideSchema).max(8).default([]),
 });
 export const bannerSectionSchema = z.object({
@@ -149,7 +194,12 @@ export const bannerSectionSchema = z.object({
   subtitle: localized(200),
   button: localized(30),
   link,
+  /** A second, quieter button. */
+  button2: localized(30),
+  link2: link,
   align: z.enum(['start', 'center']).default('start'),
+  height: z.enum(['small', 'medium', 'large']).default('medium'),
+  overlay: z.enum(['none', 'light', 'dark']).default('dark'),
 });
 export const productsSectionSchema = z.object({
   ...base,
@@ -161,6 +211,10 @@ export const productsSectionSchema = z.object({
   productIds: z.array(uuidLike).max(24).default([]),
   limit: z.number().int().min(1).max(24).default(8),
   columns: z.number().int().min(2).max(4).default(4),
+  sort: z.enum(['position', 'name', 'priceAsc', 'priceDesc']).default('position'),
+  /** One-tap "add" on products with a single option. */
+  showAdd: z.boolean().default(false),
+  showViewAll: z.boolean().default(true),
 });
 export const categoriesSectionSchema = z.object({
   ...base,
@@ -169,6 +223,8 @@ export const categoriesSectionSchema = z.object({
   title: localized(80),
   /** Empty = every category of the store, in its order. */
   categoryIds: z.array(uuidLike).max(40).default([]),
+  columns: z.number().int().min(2).max(6).default(4),
+  showViewAll: z.boolean().default(false),
 });
 export const imageSectionSchema = z.object({
   ...base,
@@ -199,11 +255,14 @@ export const textSectionSchema = z.object({
   title: localized(120),
   body: localized(2000),
   align: z.enum(['start', 'center']).default('start'),
+  button: localized(30),
+  link,
 });
 export const featuresSectionSchema = z.object({
   ...base,
   type: z.literal('features'),
   variant: z.enum(['row', 'grid', 'cards']).default('row'),
+  title: localized(80),
   items: z
     .array(
       z.object({
@@ -249,6 +308,109 @@ export const catalogSectionSchema = z.object({
   columns: z.number().int().min(2).max(4).default(4),
 });
 
+/** An offer that ends at a moment, with a live countdown; it hides itself once ended. */
+export const countdownSectionSchema = z.object({
+  ...base,
+  type: z.literal('countdown'),
+  variant: z.enum(['banner', 'card', 'minimal']).default('banner'),
+  title: localized(80),
+  subtitle: localized(200),
+  endsAt: moment,
+  button: localized(30),
+  link,
+});
+/** Words from customers, entered by the merchant (never invented by the platform). */
+export const testimonialsSectionSchema = z.object({
+  ...base,
+  type: z.literal('testimonials'),
+  variant: z.enum(['cards', 'carousel', 'quote']).default('cards'),
+  title: localized(80),
+  items: z
+    .array(
+      z.object({
+        id,
+        name: text(60),
+        detail: localized(60),
+        quote: localized(400),
+        rating: z.number().int().min(0).max(5).default(5),
+      }),
+    )
+    .max(12)
+    .default([]),
+});
+export const faqSectionSchema = z.object({
+  ...base,
+  type: z.literal('faq'),
+  variant: z.enum(['accordion', 'columns']).default('accordion'),
+  title: localized(80),
+  items: z
+    .array(z.object({ id, question: localized(160), answer: localized(1000) }))
+    .max(15)
+    .default([]),
+});
+export const gallerySectionSchema = z.object({
+  ...base,
+  type: z.literal('gallery'),
+  variant: z.enum(['grid', 'carousel', 'mosaic']).default('grid'),
+  title: localized(80),
+  columns: z.number().int().min(2).max(4).default(3),
+  items: z
+    .array(z.object({ id, imageId: image, caption: localized(80), link }))
+    .max(12)
+    .default([]),
+});
+export const logosSectionSchema = z.object({
+  ...base,
+  type: z.literal('logos'),
+  variant: z.enum(['row', 'grid']).default('row'),
+  title: localized(80),
+  grayscale: z.boolean().default(true),
+  items: z
+    .array(z.object({ id, imageId: image, alt: localized(60), link }))
+    .max(16)
+    .default([]),
+});
+/** Two to four promotion tiles with pictures; `mosaic` makes the first one big. */
+export const collageSectionSchema = z.object({
+  ...base,
+  type: z.literal('collage'),
+  variant: z.enum(['mosaic', 'even']).default('mosaic'),
+  tiles: z
+    .array(
+      z.object({
+        id,
+        imageId: image,
+        title: localized(60),
+        subtitle: localized(120),
+        button: localized(30),
+        link,
+      }),
+    )
+    .max(4)
+    .default([]),
+});
+/** A call to action with up to two buttons. */
+export const ctaSectionSchema = z.object({
+  ...base,
+  type: z.literal('cta'),
+  variant: z.enum(['brand', 'soft', 'outline', 'image']).default('brand'),
+  imageId: image,
+  title: localized(80),
+  text: localized(240),
+  button: localized(30),
+  link,
+  button2: localized(30),
+  link2: link,
+  align: z.enum(['start', 'center']).default('center'),
+});
+/** Breathing room between sections, with an optional line. */
+export const spacerSectionSchema = z.object({
+  ...base,
+  type: z.literal('spacer'),
+  size: z.enum(['small', 'medium', 'large']).default('medium'),
+  line: z.boolean().default(false),
+});
+
 export const sectionSchema = z.discriminatedUnion('type', [
   sliderSectionSchema,
   bannerSectionSchema,
@@ -261,6 +423,14 @@ export const sectionSchema = z.discriminatedUnion('type', [
   menuSectionSchema,
   infoSectionSchema,
   catalogSectionSchema,
+  countdownSectionSchema,
+  testimonialsSectionSchema,
+  faqSectionSchema,
+  gallerySectionSchema,
+  logosSectionSchema,
+  collageSectionSchema,
+  ctaSectionSchema,
+  spacerSectionSchema,
 ]);
 export type DesignSection = z.infer<typeof sectionSchema>;
 export type SectionOf<T extends SectionType> = Extract<DesignSection, { type: T }>;
@@ -577,7 +747,9 @@ export function designImageIds(design: StoreDesign): string[] {
   for (const page of DESIGN_PAGES)
     for (const s of design.pages[page]) {
       if (s.type === 'slider') ids.push(...s.slides.map((x) => x.imageId));
-      if (s.type === 'banner' || s.type === 'image') ids.push(s.imageId);
+      if (s.type === 'banner' || s.type === 'image' || s.type === 'cta') ids.push(s.imageId);
+      if (s.type === 'gallery' || s.type === 'logos') ids.push(...s.items.map((x) => x.imageId));
+      if (s.type === 'collage') ids.push(...s.tiles.map((x) => x.imageId));
     }
   return [...new Set(ids.filter((x): x is string => Boolean(x)))];
 }
@@ -880,6 +1052,298 @@ export function templateDesign(template: DesignTemplate): StoreDesign {
 /** A new section of a type with its defaults (the console's "Add section"). */
 export function newSection(type: SectionType, sectionId: string): DesignSection {
   return sectionSchema.parse({ id: sectionId, type });
+}
+
+// ------------------------------------------------------------- ready-made sections
+/**
+ * Sections filled in for a purpose (ADR-0128 amendment 3). Their words are neutral starting
+ * points in both languages; reviews, answers and logos stay empty until the merchant adds real
+ * ones, and an offer has no end until the merchant sets it (until then it does not show).
+ */
+export const READY_SECTIONS = [
+  'heroSlider',
+  'offerCountdown',
+  'collage',
+  'newArrivals',
+  'featured',
+  'shopByCategory',
+  'trustStrip',
+  'reviews',
+  'faq',
+  'contactCta',
+  'brands',
+  'story',
+] as const;
+export type ReadySection = (typeof READY_SECTIONS)[number];
+type SectionInput = z.input<typeof sectionSchema>;
+/** A section's input without its id (spread over every section type). */
+type SectionDraft = SectionInput extends infer T
+  ? T extends unknown
+    ? Omit<T, 'id'>
+    : never
+  : never;
+
+const products = { kind: 'page', page: 'products' } as const;
+const categoriesPage = { kind: 'page', page: 'categories' } as const;
+
+function readyInput(name: ReadySection): SectionDraft {
+  switch (name) {
+    case 'heroSlider':
+      return {
+        type: 'slider',
+        variant: 'contained',
+        height: 'large',
+        slides: [
+          {
+            id: 'slide-1',
+            title: l('New season', 'الموسم الجديد'),
+            subtitle: l('Discover what is new in the store', 'اكتشف الجديد في متجرنا'),
+            button: l('Shop now', 'تسوّق الآن'),
+            link: products,
+          },
+          {
+            id: 'slide-2',
+            title: l('Shop by category', 'تسوّق حسب التصنيف'),
+            subtitle: l('Find what you need faster', 'وصّل لطلبك أسرع'),
+            button: l('Browse', 'تصفّح'),
+            link: categoriesPage,
+          },
+        ],
+      };
+    case 'offerCountdown':
+      return {
+        type: 'countdown',
+        title: l('Limited-time offer', 'عرض لفترة محدودة'),
+        subtitle: l('It ends soon, do not miss it.', 'ينتهي قريبًا، لا يفوتك.'),
+        button: l('Shop the offer', 'تسوّق العرض'),
+        link: products,
+      };
+    case 'collage':
+      return {
+        type: 'collage',
+        tiles: [
+          {
+            id: 'tile-1',
+            title: l('New in', 'وصل حديثًا'),
+            button: l('Shop', 'تسوّق'),
+            link: products,
+          },
+          { id: 'tile-2', title: l('Our picks', 'اختياراتنا'), link: products },
+          { id: 'tile-3', title: l('Gifts', 'هدايا'), link: categoriesPage },
+        ],
+      };
+    case 'newArrivals':
+      return {
+        type: 'products',
+        variant: 'carousel',
+        source: 'all',
+        limit: 12,
+        title: l('New arrivals', 'وصل حديثًا'),
+      };
+    case 'featured':
+      return {
+        type: 'products',
+        variant: 'grid',
+        source: 'featured',
+        showAdd: true,
+        title: l('Picked for you', 'مختارات لك'),
+      };
+    case 'shopByCategory':
+      return {
+        type: 'categories',
+        variant: 'circles',
+        title: l('Shop by category', 'تسوّق حسب التصنيف'),
+      };
+    case 'trustStrip':
+      return {
+        type: 'features',
+        variant: 'row',
+        items: [
+          {
+            id: 'f1',
+            icon: '🛍️',
+            title: l('Order online', 'اطلب أونلاين'),
+            text: l('Pickup or delivery', 'استلام أو توصيل'),
+          },
+          { id: 'f2', icon: '💳', title: l('Pay your way', 'ادفع بطريقتك') },
+          { id: 'f3', icon: '💬', title: l('We are here to help', 'جاهزين نساعدك') },
+        ],
+      };
+    case 'reviews':
+      return { type: 'testimonials', title: l('What our customers say', 'آراء عملائنا') };
+    case 'faq':
+      return {
+        type: 'faq',
+        title: l('Questions and answers', 'أسئلة وأجوبة'),
+        items: [
+          { id: 'q1', question: l('How long does delivery take?', 'كم يستغرق التوصيل؟') },
+          {
+            id: 'q2',
+            question: l('Which payment methods do you accept?', 'ما طرق الدفع المتاحة؟'),
+          },
+          { id: 'q3', question: l('Can I pick up my order?', 'هل أقدر أستلم طلبي بنفسي؟') },
+          { id: 'q4', question: l('How do I return an item?', 'كيف أرجّع منتجًا؟') },
+        ],
+      };
+    case 'contactCta':
+      return {
+        type: 'cta',
+        variant: 'brand',
+        title: l('Have a question?', 'عندك سؤال؟'),
+        text: l('We are one message away.', 'راسلنا ونرد عليك.'),
+        button: l('Message us', 'راسلنا'),
+        button2: l('Shop now', 'تسوّق الآن'),
+        link2: products,
+      };
+    case 'brands':
+      return { type: 'logos', title: l('Brands we carry', 'الماركات المتوفرة') };
+    case 'story':
+      return { type: 'text', variant: 'card', align: 'center', title: l('Our story', 'قصتنا') };
+  }
+}
+
+/** A ready-made section with its own id. */
+export function readySection(name: ReadySection, sectionId: string): DesignSection {
+  return sectionSchema.parse({ ...readyInput(name), id: sectionId });
+}
+
+/** Whole home pages for a kind of business, built from ready-made sections. */
+export const HOME_LAYOUTS = [
+  'fashion',
+  'electronics',
+  'grocery',
+  'beauty',
+  'restaurant',
+  'cafe',
+  'minimal',
+] as const;
+export type HomeLayout = (typeof HOME_LAYOUTS)[number];
+
+export function homeLayout(layout: HomeLayout): DesignSection[] {
+  const r = (name: ReadySection, extra: Record<string, unknown> = {}) =>
+    sectionSchema.parse({ ...readyInput(name), ...extra, id: `${layout}-${name}` });
+  const one = (sectionId: string, input: SectionDraft) =>
+    sectionSchema.parse({ ...input, id: `${layout}-${sectionId}` });
+  switch (layout) {
+    case 'fashion':
+      return [
+        r('heroSlider', { variant: 'full' }),
+        r('collage'),
+        r('newArrivals'),
+        r('shopByCategory', { variant: 'tiles' }),
+        r('offerCountdown'),
+        r('featured', { columns: 4 }),
+        r('reviews'),
+        r('trustStrip', { look: { background: 'soft' } }),
+      ];
+    case 'electronics':
+      return [
+        r('heroSlider'),
+        r('trustStrip'),
+        r('shopByCategory', { variant: 'chips' }),
+        r('featured', { columns: 4 }),
+        r('offerCountdown', { variant: 'card' }),
+        r('brands'),
+        r('newArrivals'),
+        r('faq'),
+      ];
+    case 'grocery':
+      return [
+        one('hero', {
+          type: 'banner',
+          variant: 'color',
+          imageSource: 'none',
+          title: l('Your daily essentials', 'احتياجاتك اليومية'),
+          subtitle: l(
+            'Order in minutes, pick up or get it delivered.',
+            'اطلب في دقائق، استلام أو توصيل.',
+          ),
+          button: l('Start shopping', 'ابدأ التسوق'),
+          link: products,
+        }),
+        r('shopByCategory'),
+        r('featured', { variant: 'carousel', showAdd: true }),
+        r('collage', { variant: 'even' }),
+        one('all', {
+          type: 'products',
+          source: 'all',
+          limit: 12,
+          showAdd: true,
+          title: l('All products', 'كل المنتجات'),
+        }),
+        r('trustStrip'),
+        r('faq'),
+      ];
+    case 'beauty':
+      return [
+        r('heroSlider', { variant: 'full', textAlign: 'center' }),
+        r('shopByCategory'),
+        r('featured', { columns: 3 }),
+        r('story', { look: { background: 'tinted' } }),
+        r('reviews', { variant: 'carousel' }),
+        r('collage'),
+        r('contactCta'),
+      ];
+    case 'restaurant':
+      return [
+        one('hero', {
+          type: 'banner',
+          variant: 'overlay',
+          imageSource: 'store',
+          align: 'center',
+          height: 'large',
+          title: l('Fresh from our kitchen', 'طازج من مطبخنا'),
+          subtitle: l('Order for pickup or delivery', 'اطلب استلام أو توصيل'),
+          button: l('Order now', 'اطلب الآن'),
+          link: products,
+        }),
+        one('info', { type: 'info', variant: 'strip' }),
+        r('featured', { variant: 'carousel', title: l('Most ordered', 'الأكثر طلبًا') }),
+        one('menu', { type: 'menu', variant: 'list', title: l('Menu', 'المنيو') }),
+        r('reviews'),
+        r('contactCta', {
+          title: l('Planning an event?', 'عندك مناسبة؟'),
+          text: l('Message us for big orders.', 'راسلنا للطلبات الكبيرة.'),
+        }),
+      ];
+    case 'cafe':
+      return [
+        one('hero', {
+          type: 'banner',
+          variant: 'split',
+          imageSource: 'store',
+          title: l('Your daily cup', 'كوبك اليومي'),
+          subtitle: l('Order ahead and skip the line.', 'اطلب مسبقًا وتجنّب الانتظار.'),
+          button: l('Order now', 'اطلب الآن'),
+          link: products,
+        }),
+        one('info', { type: 'info', variant: 'cards', showBranches: true }),
+        r('collage', { variant: 'even' }),
+        one('menu', { type: 'menu', variant: 'compact', title: l('Menu', 'المنيو') }),
+        one('gallery', { type: 'gallery', variant: 'mosaic', title: l('Moments', 'لحظات') }),
+        r('faq'),
+      ];
+    case 'minimal':
+      return [
+        one('hero', {
+          type: 'banner',
+          variant: 'color',
+          imageSource: 'none',
+          align: 'center',
+          title: l('Welcome', 'أهلًا بك'),
+          button: l('Shop now', 'تسوّق الآن'),
+          link: products,
+        }),
+        one('all', {
+          type: 'products',
+          source: 'all',
+          limit: 12,
+          columns: 3,
+          title: l('Products', 'المنتجات'),
+        }),
+        r('story'),
+      ];
+  }
 }
 
 // ------------------------------------------------------------------------------- API

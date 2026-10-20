@@ -1147,6 +1147,101 @@ describe('online store console', () => {
       );
     });
 
+    describe('home page sections (ADR-0128 amendment 3)', () => {
+      const savedHome = async (
+        fetch: ReturnType<typeof fakeApiFetch>,
+        user: ReturnType<typeof userEvent.setup>,
+      ) => {
+        await user.click(screen.getByRole('button', { name: 'Save draft' }));
+        await waitFor(() => expect(fetch.calls.some((c) => c.method === 'PUT')).toBe(true));
+        return (fetch.calls.find((c) => c.method === 'PUT')!.body as { design: unknown })
+          .design as {
+          pages: {
+            home: {
+              type: string;
+              endsAt?: string | null;
+              look: { background: string; devices: string; showUntil: string | null };
+            }[];
+          };
+        };
+      };
+
+      it('finds a section in the gallery, sets its content, look, screens and schedule', async () => {
+        const user = userEvent.setup();
+        const fetch = fakeApiFetch({ session: session(), routes: designRoutes() });
+        renderApp({ routes, appInterface: 'manager', i18n, path: '/design', fetch });
+        await user.click(await screen.findByRole('button', { name: 'Add section' }));
+        const picker = await screen.findByRole('dialog', { name: 'Add section' });
+        await user.type(
+          within(picker).getByRole('searchbox', { name: 'Search sections' }),
+          'timer',
+        );
+        expect(within(picker).queryByRole('button', { name: /^Picture gallery/ })).toBeNull();
+        await user.click(within(picker).getByRole('button', { name: /^Offer countdown/ }));
+        // The new section opens with its content, look and visibility.
+        expect(
+          await screen.findByText('Until you set an end, shoppers do not see the countdown.'),
+        ).toBeInTheDocument();
+        await user.click(screen.getByRole('button', { name: 'In 3 days' }));
+        await user.click(
+          within(screen.getByRole('radiogroup', { name: 'Background' })).getByRole('radio', {
+            name: 'Dark',
+          }),
+        );
+        await user.click(
+          within(screen.getByRole('radiogroup', { name: 'Show on' })).getByRole('radio', {
+            name: 'Phones only',
+          }),
+        );
+        await user.type(screen.getByLabelText('Show until'), '2030-01-31T21:30');
+        const design = await savedHome(fetch, user);
+        const offer = design.pages.home.at(-1)!;
+        expect(offer.type).toBe('countdown');
+        const days = (Date.parse(offer.endsAt!) - Date.now()) / 86_400_000;
+        expect(days).toBeGreaterThan(2.9);
+        expect(days).toBeLessThan(3.1);
+        expect(offer.look).toEqual(
+          expect.objectContaining({ background: 'dark', devices: 'phone' }),
+        );
+        expect(new Date(offer.look.showUntil!).getFullYear()).toBe(2030);
+      });
+
+      it('adds a ready-made section, follows the recommendations and applies a ready home page', async () => {
+        const user = userEvent.setup();
+        const fetch = fakeApiFetch({ session: session(), routes: designRoutes() });
+        renderApp({ routes, appInterface: 'manager', i18n, path: '/design', fetch });
+        // The legacy home page (banner, product list) misses categories, trust and a next step.
+        expect(await screen.findByTestId('page-score')).toHaveTextContent('4 of 7 done');
+        await user.click(screen.getAllByRole('button', { name: 'Add it' })[0]!);
+        expect(screen.getByTestId('page-score')).toHaveTextContent('5 of 7 done');
+        expect(screen.getByRole('button', { name: 'Edit Categories' })).toBeInTheDocument();
+        // A ready-made section from the picker.
+        await user.click(screen.getByRole('button', { name: 'Add section' }));
+        const picker = await screen.findByRole('dialog', { name: 'Add section' });
+        await user.click(within(picker).getByRole('tab', { name: 'Ready-made' }));
+        await user.click(within(picker).getByRole('button', { name: /Questions & answers/ }));
+        await user.click(screen.getByRole('button', { name: /Back to sections/ }));
+        // The FAQ brings trust, but it waits for answers: the score holds and the list flags it.
+        expect(screen.getByTestId('page-score')).toHaveTextContent('5 of 7 done');
+        expect(screen.getByRole('button', { name: 'Edit Questions & answers' })).toHaveTextContent(
+          'Needs content',
+        );
+        // A whole ready home page replaces the sections after a confirmation.
+        await user.click(screen.getByRole('button', { name: 'Use the Grocery layout' }));
+        await user.click(screen.getByRole('button', { name: 'Yes, replace the home page' }));
+        const design = await savedHome(fetch, user);
+        expect(design.pages.home.map((x) => x.type)).toEqual([
+          'banner',
+          'categories',
+          'products',
+          'collage',
+          'products',
+          'features',
+          'faq',
+        ]);
+      });
+    });
+
     describe('footer editor (ADR-0128 amendment 2)', () => {
       const saved = async (
         fetch: ReturnType<typeof fakeApiFetch>,

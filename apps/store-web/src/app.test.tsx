@@ -1077,6 +1077,158 @@ describe('storefront', () => {
     expect(within(footer).queryByRole('button', { name: 'Back to top' })).toBeNull();
   });
 
+  it('builds the home page from rich sections: frames, schedule, countdown, reviews, questions, collage and quick add', async () => {
+    const user = userEvent.setup();
+    const hour = 3600_000;
+    const design = templateDesign('retail');
+    const look = (extra: Record<string, unknown> = {}) => ({
+      background: 'none',
+      spacing: 'regular',
+      width: 'contained',
+      titleAlign: 'start',
+      subtitle: { en: null, ar: null },
+      devices: 'all',
+      showFrom: null,
+      showUntil: null,
+      ...extra,
+    });
+    design.pages.home = [
+      newSection('products', 'all'),
+      newSection('countdown', 'offer'),
+      newSection('faq', 'faq'),
+      newSection('testimonials', 'reviews'),
+      newSection('cta', 'cta'),
+      newSection('collage', 'collage'),
+      newSection('text', 'later'),
+      newSection('text', 'phone'),
+    ] as typeof design.pages.home;
+    const [products, offer, faq, reviews, cta, collage, later, phone] = design.pages
+      .home as object[];
+    Object.assign(products as object, {
+      source: 'all',
+      showAdd: true,
+      sort: 'priceAsc',
+      title: { en: 'Everything', ar: null },
+      look: look({
+        background: 'dark',
+        titleAlign: 'center',
+        subtitle: { en: 'Fresh picks', ar: null },
+      }),
+    });
+    Object.assign(offer as object, {
+      title: { en: 'Weekend sale', ar: null },
+      endsAt: new Date(Date.now() + 26 * hour).toISOString(),
+      button: { en: 'Shop the sale', ar: null },
+      link: { kind: 'page', page: 'products' },
+    });
+    Object.assign(faq as object, {
+      items: [
+        {
+          id: 'q1',
+          question: { en: 'Do you deliver?', ar: null },
+          answer: { en: 'Yes, every day.', ar: null },
+        },
+        { id: 'q2', question: { en: 'Unanswered?', ar: null }, answer: { en: null, ar: null } },
+      ],
+    });
+    Object.assign(reviews as object, {
+      title: { en: 'Kind words', ar: null },
+      items: [
+        {
+          id: 'r1',
+          name: 'Noura',
+          detail: { en: 'Salmiya', ar: null },
+          quote: { en: 'Lovely service', ar: null },
+          rating: 4,
+        },
+      ],
+    });
+    Object.assign(cta as object, {
+      title: { en: 'Questions?', ar: null },
+      button: { en: 'Message us', ar: null },
+      link: { kind: 'url', url: 'https://wa.me/96550000000' },
+      button2: { en: 'Browse', ar: null },
+      link2: { kind: 'page', page: 'categories' },
+    });
+    Object.assign(collage as object, {
+      tiles: [
+        {
+          id: 't1',
+          imageId: null,
+          title: { en: 'New in', ar: null },
+          subtitle: { en: null, ar: null },
+          button: { en: null, ar: null },
+          link: { kind: 'page', page: 'products' },
+        },
+        {
+          id: 't2',
+          imageId: null,
+          title: { en: 'Gifts', ar: null },
+          subtitle: { en: null, ar: null },
+          button: { en: null, ar: null },
+          link: null,
+        },
+      ],
+    });
+    Object.assign(later as object, {
+      title: { en: 'Coming tomorrow', ar: null },
+      look: look({ showFrom: new Date(Date.now() + 24 * hour).toISOString() }),
+    });
+    Object.assign(phone as object, {
+      title: { en: 'Only on phones', ar: null },
+      look: look({ devices: 'phone' }),
+    });
+    renderStore('/demo', { 'GET /store/demo/design': () => ({ status: 200, body: { design } }) });
+    // Frames: a dark band with a centred heading and its subtitle.
+    const list = await screen.findByRole('heading', { name: 'Everything' });
+    const frame = list.closest('[data-section="products"]')!;
+    expect(frame).toHaveAttribute('data-background', 'dark');
+    expect(within(frame as HTMLElement).getByText('Fresh picks')).toBeInTheDocument();
+    // Sorted by price; one-tap add on an available single-option product only.
+    const names = within(frame as HTMLElement)
+      .getAllByText(/Coffee beans|Mug/)
+      .map((n) => n.textContent);
+    expect(names).toEqual(['Coffee beans', 'Mug']);
+    await user.click(
+      within(frame as HTMLElement).getByRole('button', {
+        name: 'Add one Coffee beans to the cart',
+      }),
+    );
+    expect(
+      within(frame as HTMLElement).queryByRole('button', { name: 'Add one Mug to the cart' }),
+    ).toBeNull();
+    expect(screen.getByRole('link', { name: 'Cart (1)' })).toBeInTheDocument();
+    // The countdown ticks towards its end (1 day, 1 or 2 hours left).
+    const clock = screen.getByTestId('countdown');
+    expect(clock).toHaveTextContent(/^01Days0[12]Hours/);
+    expect(screen.getByRole('link', { name: 'Shop the sale' })).toHaveAttribute(
+      'href',
+      '/demo/products',
+    );
+    // Questions without an answer stay out.
+    expect(screen.getByText('Do you deliver?')).toBeInTheDocument();
+    expect(screen.queryByText('Unanswered?')).toBeNull();
+    // Customer words with their stars.
+    expect(screen.getByText('“Lovely service”')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '4 of 5 stars' })).toBeInTheDocument();
+    // Two buttons on the call to action, the collage tiles.
+    const ctaBox = screen.getByTestId('cta-section');
+    expect(within(ctaBox).getByRole('link', { name: 'Message us' })).toHaveAttribute(
+      'target',
+      '_blank',
+    );
+    expect(within(ctaBox).getByRole('link', { name: 'Browse' })).toHaveAttribute(
+      'href',
+      '/demo/categories',
+    );
+    expect(
+      within(screen.getByTestId('collage')).getByRole('link', { name: 'New in' }),
+    ).toHaveAttribute('href', '/demo/products');
+    // A section scheduled for tomorrow is not shown; a phone-only one is hidden on large screens.
+    expect(screen.queryByText('Coming tomorrow')).toBeNull();
+    expect(screen.getByText('Only on phones').closest('[data-section]')).toHaveClass('sm:hidden');
+  });
+
   it('shows a restaurant menu grouped by category and adds a dish with one tap', async () => {
     const user = userEvent.setup();
     const HOT = '0190a000-0000-7000-8000-0000000000c2';

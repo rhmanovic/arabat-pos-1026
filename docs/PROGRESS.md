@@ -1265,6 +1265,26 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-20 — Page sections v2 for the home page (ADR-0128 amendment 3)
+Owner's request: the same depth for the home page as for the header and footer. Frontend +
+contract only (no migration).
+- Contract: a `look` on every section (background, spacing, width, heading position and line,
+  screens, schedule), eight new types (countdown, testimonials, faq, gallery, logos, collage, cta,
+  spacer), richer slider / banner / products / categories / text / features, `readySection` (12),
+  `homeLayout` (7), new pictures counted as in use. BR-234.
+- Storefront: `design/frame.tsx` (section frame with scoped colour tokens for brand and dark
+  bands, device and schedule filtering, heading with subtitle), `design/sections-more.tsx` (the
+  eight types), slider arrows / heights / shade, banner second button, products sort and one-tap
+  add, categories columns and "See all".
+- Console: picker gallery (groups, drawings, search, ready-made tab), ready home pages with
+  confirmation, home recommendations with fixes, section editor in three panels (content, look,
+  visibility), editors for the new types, list flags (needs content, colour, screens, scheduled).
+- Tests: contracts +5 (new `store-design.test.ts`), store-web +1 (25), online-web +2 (29). Screens
+  checked in Chromium: the seven ready home pages on desktop and phone, the picker (both tabs) and
+  a section's panels; fixed there: a missing label and the Arabic wording of the day buttons.
+- Verified (cloud sandbox): `pnpm verify` 371 unit/web, `pnpm test:integration` 308 (44 files),
+  `pnpm test:e2e` 43.
+
 ### 2026-10-20 — Store footer system v2 (ADR-0128 amendment 2)
 Owner's request: work through the footer completely, with every option, setting and
 recommendation. Frontend + contract only (no migration).

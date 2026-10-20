@@ -1,13 +1,11 @@
 import {
   type DesignPage as PageKey,
   type DesignSection,
-  type SectionType,
   type StoreDesign,
   type StoreDesignState,
-  newSection,
   storeDesignSchema,
 } from '@arabat/contracts';
-import { Alert, Badge, Button, Dialog, PageHeader, Segmented, cn } from '@arabat/ui';
+import { Alert, Badge, Button, PageHeader, Segmented, cn } from '@arabat/ui';
 import { AccessDenied, ErrorState, useApi, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type Ref, useCallback, useEffect, useRef, useState } from 'react';
@@ -16,13 +14,13 @@ import { Link } from 'react-router';
 import { useSession } from '../../app/context.js';
 import { key } from '../shared.js';
 import { SortableList, SortableRow } from '../sortable.js';
-import { designKey } from './fields.js';
+import { Panel, designKey } from './fields.js';
+import { PageLayouts, PageTips, SectionPicker, isEmptySection } from './PageTools.js';
 import {
   SECTION_ICON,
   SectionEditor,
   isRequired,
   newId,
-  sectionOrder,
   useSectionSummary,
 } from './SectionEditor.js';
 import { HeaderEditor } from './HeaderEditor.js';
@@ -428,6 +426,30 @@ function PagesEditor({
         ))}
       </div>
       <p className="text-sm text-fg-muted">{t(`design.pageHint_${page}`)}</p>
+      {page === 'home' ? (
+        <>
+          <Panel
+            icon="🪄"
+            title={t('design.homeLayouts')}
+            hint={t('design.homeLayoutsHint')}
+            defaultOpen={false}
+          >
+            <PageLayouts onApply={setSections} />
+          </Panel>
+          <Panel icon="💡" title={t('design.pageTips')} hint={t('design.pageTipsHint')}>
+            <PageTips
+              design={design}
+              page={page}
+              sections={sections}
+              onChange={setSections}
+              onEdit={(id) => {
+                setEditing(id);
+                onFocus(id);
+              }}
+            />
+          </Panel>
+        </>
+      ) : null}
       {sections.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-fg-muted">
           {t('design.noSections')}
@@ -474,7 +496,10 @@ function PagesEditor({
                   </span>
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-semibold">{label}</span>
-                    <span className="block truncate text-xs text-fg-muted">{summary(s)}</span>
+                    <span className="block truncate text-xs text-fg-muted">
+                      {isEmptySection(s) ? `⚠️ ${t('design.needsContent')} · ` : ''}
+                      {summary(s)}
+                    </span>
                   </span>
                 </button>
                 <span className="flex shrink-0 items-center gap-1">
@@ -525,10 +550,9 @@ function PagesEditor({
       ) : null}
       {picker ? (
         <SectionPicker
-          template={design.template}
+          design={design}
           onClose={() => setPicker(false)}
-          onPick={(type) => {
-            const s = newSection(type, newId(type));
+          onPick={(s) => {
             setSections([...sections, s]);
             setPicker(false);
             setEditing(s.id);
@@ -537,53 +561,5 @@ function PagesEditor({
         />
       ) : null}
     </div>
-  );
-}
-
-function SectionPicker({
-  template,
-  onClose,
-  onPick,
-}: {
-  template: StoreDesign['template'];
-  onClose: () => void;
-  onPick: (type: SectionType) => void;
-}) {
-  const { t } = useTranslation();
-  const order = sectionOrder(template);
-  return (
-    <Dialog
-      open
-      onOpenChange={(o) => (!o ? onClose() : undefined)}
-      title={t('design.addSection')}
-      description={t(`design.pickerHint_${template}`)}
-      size="lg"
-    >
-      <ul className="grid gap-2 sm:grid-cols-2">
-        {order.map((type, i) => (
-          <li key={type}>
-            <button
-              type="button"
-              onClick={() => onPick(type)}
-              className="vibe-lift flex w-full items-start gap-3 rounded-xl border border-border bg-surface p-3 text-start"
-            >
-              <span
-                aria-hidden
-                className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary-soft text-xl"
-              >
-                {SECTION_ICON[type]}
-              </span>
-              <span className="min-w-0">
-                <span className="flex items-center gap-2 text-sm font-semibold">
-                  {t(`design.type_${type}`)}
-                  {i < 2 ? <Badge tone="primary">{t('design.suggested')}</Badge> : null}
-                </span>
-                <span className="block text-xs text-fg-muted">{t(`design.typeHint_${type}`)}</span>
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </Dialog>
   );
 }

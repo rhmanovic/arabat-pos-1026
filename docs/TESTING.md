@@ -66,6 +66,23 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-20 (page sections v2, ADR-0128 amendment 3, cloud sandbox run)
+- `packages/contracts/src/store-design.test.ts` (new, 5): old sections get the default look; a
+  schedule that ends before it starts and a non-date are refused; gallery, logos, collage and
+  image call-to-action pictures count as in use; every ready section and ready home page parses
+  with unique ids; ready reviews, logos and answers are empty and an offer has no end.
+- `apps/store-web/src/app.test.tsx` (+1, 25): a dark band with a centred heading and its line;
+  products sorted by price with one-tap add only on an available single-option product (cart 1);
+  the countdown shows 01 day and 1–2 hours; a question without an answer is hidden; a review
+  with "4 of 5 stars"; a call to action with two buttons (outside link in a new tab); collage
+  tiles; a section scheduled for tomorrow is not shown and a phone-only one has `sm:hidden`.
+- `apps/online-web/src/app.test.tsx` (+2, 29): searching the picker keeps the countdown and
+  hides the gallery; the countdown's "In 3 days", dark background, phones only and "Show until"
+  are saved; on the legacy home page the recommendations read 4 of 7, a fix adds categories (5),
+  a ready FAQ adds trust but waits for answers (still 5, flagged "Needs content"); the Grocery
+  home page replaces the sections after confirmation.
+- Totals: `pnpm verify` 371 unit/web, `pnpm test:integration` 308 (44 files), `pnpm test:e2e` 43.
+
 ### Results 2026-10-20 (store footer system v2, ADR-0128 amendment 2, cloud sandbox run)
 - `apps/store-web/src/app.test.tsx` (+2, 24): a split footer in the brand colour shows its call to
   action (heading, "Order now" to the products page), a badge, the social account in the brand

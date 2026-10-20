@@ -9,6 +9,7 @@ import {
 } from '@arabat/contracts';
 import { Button, Field, Input, Select } from '@arabat/ui';
 import { localizedName } from '@arabat/web-core';
+import { type ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Choice,
@@ -17,6 +18,7 @@ import {
   LinkPicker,
   LocalizedField,
   MultiPick,
+  Panel,
   Toggle,
   useStoreCatalog,
 } from './fields.js';
@@ -33,6 +35,14 @@ export const SECTION_ICON: Record<SectionType, string> = {
   menu: '🍽️',
   info: 'ℹ️',
   catalog: '🔎',
+  countdown: '⏳',
+  testimonials: '💬',
+  faq: '❓',
+  gallery: '🖼',
+  logos: '🏷️',
+  collage: '🧩',
+  cta: '📣',
+  spacer: '↕️',
 };
 
 /** Sections suggested first for each kind of business (ADR-0128). */
@@ -40,7 +50,7 @@ export function sectionOrder(template: DesignTemplate): SectionType[] {
   const first: SectionType[] =
     template === 'restaurant'
       ? ['menu', 'info', 'banner', 'products', 'slider', 'categories']
-      : ['slider', 'products', 'categories', 'banner', 'features', 'catalog'];
+      : ['slider', 'products', 'categories', 'banner', 'collage', 'countdown'];
   return [...first, ...SECTION_TYPES.filter((t) => !first.includes(t))];
 }
 
@@ -66,16 +76,194 @@ export function useSectionSummary() {
         ? t('design.slides', { count: s.slides.length })
         : s.type === 'products'
           ? t(`design.source_${s.source}`)
-          : s.type === 'features'
+          : s.type === 'features' ||
+              s.type === 'testimonials' ||
+              s.type === 'faq' ||
+              s.type === 'gallery' ||
+              s.type === 'logos'
             ? t('design.items', { count: s.items.length })
-            : '';
-    return [variant, extra].filter(Boolean).join(' · ');
+            : s.type === 'collage'
+              ? t('design.items', { count: s.tiles.length })
+              : '';
+    const look = s.look;
+    const flags = [
+      look.background !== 'none' ? t(`design.lookBg_${look.background}`) : '',
+      look.devices !== 'all' ? t(`design.devices_${look.devices}`) : '',
+      look.showFrom || look.showUntil ? `⏰ ${t('design.scheduled')}` : '',
+    ];
+    return [variant, extra, ...flags].filter(Boolean).join(' · ');
   };
 }
 
 type Patch<T> = (patch: Partial<T>) => void;
 
 export function SectionEditor({
+  section,
+  onChange,
+}: {
+  section: DesignSection;
+  onChange: (next: DesignSection) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-col gap-3">
+      <Panel
+        icon="✏️"
+        title={t('design.sectionContent')}
+        hint={t(`design.typeHint_${section.type}`)}
+      >
+        <SectionContent section={section} onChange={onChange} />
+      </Panel>
+      <Panel icon="🎨" title={t('design.sectionLook')} hint={t('design.sectionLookHint')}>
+        <LookEditor section={section} onChange={onChange} />
+      </Panel>
+      <Panel
+        icon="👁️"
+        title={t('design.sectionVisibility')}
+        hint={t('design.sectionVisibilityHint')}
+      >
+        <VisibilityEditor section={section} onChange={onChange} />
+      </Panel>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------- look and visibility
+/** An ISO moment as the value of a `datetime-local` input (the merchant's own clock). */
+export const toLocalInput = (iso: string | null) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+};
+export const fromLocalInput = (value: string) => (value ? new Date(value).toISOString() : null);
+
+function Moment({
+  label,
+  value,
+  onChange,
+  hint,
+}: {
+  label: string;
+  value: string | null;
+  onChange: (v: string | null) => void;
+  hint?: string;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex items-end gap-2">
+      <Field label={label} hint={hint} className="flex-1">
+        {(p) => (
+          <Input
+            {...p}
+            type="datetime-local"
+            value={toLocalInput(value)}
+            onChange={(e) => onChange(fromLocalInput(e.target.value))}
+          />
+        )}
+      </Field>
+      {value ? (
+        <Button size="sm" variant="ghost" onClick={() => onChange(null)}>
+          {t('design.clear')}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function LookEditor({
+  section,
+  onChange,
+}: {
+  section: DesignSection;
+  onChange: (next: DesignSection) => void;
+}) {
+  const { t } = useTranslation();
+  const look = section.look;
+  const set = (p: Partial<DesignSection['look']>) =>
+    onChange({ ...section, look: { ...look, ...p } } as DesignSection);
+  const opts = <T extends string>(prefix: string, values: readonly T[]) =>
+    values.map((v) => ({ value: v, label: t(`design.${prefix}_${v}`) }));
+  return (
+    <>
+      <Choice
+        label={t('design.lookBackground')}
+        value={look.background}
+        options={opts('lookBg', ['none', 'soft', 'tinted', 'brand', 'dark'] as const)}
+        onChange={(background) => set({ background })}
+      />
+      <Choice
+        label={t('design.footerSpacing')}
+        value={look.spacing}
+        options={opts('spacing', ['compact', 'regular', 'roomy'] as const)}
+        onChange={(spacing) => set({ spacing })}
+      />
+      <Choice
+        label={t('design.headerWidth')}
+        value={look.width}
+        options={opts('width', ['contained', 'full'] as const)}
+        onChange={(width) => set({ width })}
+      />
+      <Choice
+        label={t('design.titleAlign')}
+        value={look.titleAlign}
+        options={opts('align', ['start', 'center'] as const)}
+        onChange={(titleAlign) => set({ titleAlign })}
+      />
+      <LocalizedField
+        label={t('design.sectionSubtitle')}
+        value={look.subtitle}
+        max={200}
+        onChange={(subtitle) => set({ subtitle })}
+      />
+    </>
+  );
+}
+
+function VisibilityEditor({
+  section,
+  onChange,
+}: {
+  section: DesignSection;
+  onChange: (next: DesignSection) => void;
+}) {
+  const { t } = useTranslation();
+  const look = section.look;
+  const set = (p: Partial<DesignSection['look']>) =>
+    onChange({ ...section, look: { ...look, ...p } } as DesignSection);
+  const wrongOrder =
+    look.showFrom && look.showUntil && Date.parse(look.showFrom) >= Date.parse(look.showUntil);
+  return (
+    <>
+      <Toggle
+        label={t('design.sectionShown')}
+        checked={section.visible}
+        onChange={(visible) => onChange({ ...section, visible } as DesignSection)}
+      />
+      <Choice
+        label={t('design.devices')}
+        value={look.devices}
+        options={(['all', 'desktop', 'phone'] as const).map((v) => ({
+          value: v,
+          label: t(`design.devices_${v}`),
+        }))}
+        onChange={(devices) => set({ devices })}
+      />
+      <Moment
+        label={t('design.showFrom')}
+        value={look.showFrom}
+        onChange={(showFrom) => set({ showFrom })}
+      />
+      <Moment
+        label={t('design.showUntil')}
+        value={look.showUntil}
+        hint={wrongOrder ? t('design.scheduleOrder') : t('design.scheduleHint')}
+        onChange={(showUntil) => set({ showUntil })}
+      />
+    </>
+  );
+}
+
+function SectionContent({
   section,
   onChange,
 }: {
@@ -106,7 +294,530 @@ export function SectionEditor({
       return <InfoEditor s={section} set={patch as Patch<SectionOf<'info'>>} />;
     case 'catalog':
       return <CatalogEditor s={section} set={patch as Patch<SectionOf<'catalog'>>} />;
+    case 'countdown':
+      return <CountdownEditor s={section} set={patch as Patch<SectionOf<'countdown'>>} />;
+    case 'testimonials':
+      return <TestimonialsEditor s={section} set={patch as Patch<SectionOf<'testimonials'>>} />;
+    case 'faq':
+      return <FaqEditor s={section} set={patch as Patch<SectionOf<'faq'>>} />;
+    case 'gallery':
+      return <GalleryEditor s={section} set={patch as Patch<SectionOf<'gallery'>>} />;
+    case 'logos':
+      return <LogosEditor s={section} set={patch as Patch<SectionOf<'logos'>>} />;
+    case 'collage':
+      return <CollageEditor s={section} set={patch as Patch<SectionOf<'collage'>>} />;
+    case 'cta':
+      return <CtaEditor s={section} set={patch as Patch<SectionOf<'cta'>>} />;
+    case 'spacer':
+      return <SpacerEditor s={section} set={patch as Patch<SectionOf<'spacer'>>} />;
   }
+}
+
+/** Repeated items (reviews, questions, pictures…): each in a group with order and remove. */
+function Items<T extends { id: string }>({
+  items,
+  max,
+  title,
+  addLabel,
+  make,
+  onChange,
+  render,
+}: {
+  items: T[];
+  max: number;
+  title: (n: number) => string;
+  addLabel: string;
+  make: () => T;
+  onChange: (next: T[]) => void;
+  render: (item: T, set: (p: Partial<T>) => void) => ReactNode;
+}) {
+  const { t } = useTranslation();
+  const move = (i: number, by: -1 | 1) => {
+    const next = [...items];
+    const [item] = next.splice(i, 1);
+    next.splice(i + by, 0, item!);
+    onChange(next);
+  };
+  return (
+    <div className="flex flex-col gap-3">
+      {items.map((item, i) => (
+        <Group key={item.id} title={title(i + 1)}>
+          {render(item, (p) => onChange(items.map((x, j) => (j === i ? { ...x, ...p } : x))))}
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" disabled={i === 0} onClick={() => move(i, -1)}>
+              {t('design.moveUp')}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={i === items.length - 1}
+              onClick={() => move(i, 1)}
+            >
+              {t('design.moveDown')}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onChange(items.filter((_, j) => j !== i))}
+            >
+              {t('design.removeItem')}
+            </Button>
+          </div>
+        </Group>
+      ))}
+      {items.length < max ? (
+        <Button
+          variant="secondary"
+          className="self-start"
+          onClick={() => onChange([...items, make()])}
+        >
+          {addLabel}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+const empty = () => ({ en: null, ar: null });
+
+function CountdownEditor({
+  s,
+  set,
+}: {
+  s: SectionOf<'countdown'>;
+  set: Patch<SectionOf<'countdown'>>;
+}) {
+  const { t } = useTranslation();
+  // The moment the editor opened is close enough to say whether the offer already ended.
+  const [now] = useState(() => Date.now());
+  const ended = s.endsAt !== null && Date.parse(s.endsAt) <= now;
+  return (
+    <div className="flex flex-col gap-4">
+      <Choice
+        label={t('design.shape')}
+        value={s.variant}
+        options={useVariants(['banner', 'card', 'minimal'] as const)}
+        onChange={(v) => set({ variant: v })}
+      />
+      <LocalizedField
+        label={t('design.title')}
+        value={s.title}
+        max={80}
+        onChange={(v) => set({ title: v })}
+      />
+      <LocalizedField
+        label={t('design.subtitle')}
+        value={s.subtitle}
+        max={200}
+        onChange={(v) => set({ subtitle: v })}
+      />
+      <Moment
+        label={t('design.endsAt')}
+        value={s.endsAt}
+        hint={
+          s.endsAt === null
+            ? t('design.endsAtHint')
+            : ended
+              ? t('design.countdownEnded')
+              : undefined
+        }
+        onChange={(endsAt) => set({ endsAt })}
+      />
+      <div className="flex flex-wrap gap-2">
+        {[1, 3, 7].map((days) => (
+          <Button
+            key={days}
+            size="sm"
+            variant="secondary"
+            onClick={() => set({ endsAt: new Date(Date.now() + days * 86_400_000).toISOString() })}
+          >
+            {t(`design.endsIn_${days}`)}
+          </Button>
+        ))}
+      </div>
+      <LocalizedField
+        label={t('design.button')}
+        value={s.button}
+        max={30}
+        onChange={(v) => set({ button: v })}
+      />
+      <LinkPicker label={t('design.link')} value={s.link} onChange={(v) => set({ link: v })} />
+    </div>
+  );
+}
+
+function TestimonialsEditor({
+  s,
+  set,
+}: {
+  s: SectionOf<'testimonials'>;
+  set: Patch<SectionOf<'testimonials'>>;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-col gap-4">
+      <Choice
+        label={t('design.shape')}
+        value={s.variant}
+        options={useVariants(['cards', 'carousel', 'quote'] as const)}
+        onChange={(v) => set({ variant: v })}
+      />
+      <LocalizedField
+        label={t('design.title')}
+        value={s.title}
+        max={80}
+        onChange={(v) => set({ title: v })}
+      />
+      <p className="rounded-lg bg-warning-soft p-3 text-xs">{t('design.reviewsHonest')}</p>
+      <Items
+        items={s.items}
+        max={12}
+        title={(n) => t('design.reviewN', { n })}
+        addLabel={t('design.addReview')}
+        make={() => ({
+          id: newId('review'),
+          name: null,
+          detail: empty(),
+          quote: empty(),
+          rating: 5,
+        })}
+        onChange={(items) => set({ items })}
+        render={(item, setItem) => (
+          <>
+            <Field label={t('design.customerName')}>
+              {(p) => (
+                <Input
+                  {...p}
+                  maxLength={60}
+                  value={item.name ?? ''}
+                  onChange={(e) => setItem({ name: e.target.value || null })}
+                />
+              )}
+            </Field>
+            <LocalizedField
+              label={t('design.reviewDetail')}
+              value={item.detail}
+              max={60}
+              onChange={(detail) => setItem({ detail })}
+            />
+            <LocalizedField
+              label={t('design.reviewQuote')}
+              value={item.quote}
+              max={400}
+              multiline
+              onChange={(quote) => setItem({ quote })}
+            />
+            <Choice
+              label={t('design.rating')}
+              value={item.rating}
+              options={[0, 1, 2, 3, 4, 5].map((n) => ({
+                value: n,
+                label: n === 0 ? t('design.noRating') : '★'.repeat(n),
+              }))}
+              onChange={(rating) => setItem({ rating })}
+            />
+          </>
+        )}
+      />
+    </div>
+  );
+}
+
+function FaqEditor({ s, set }: { s: SectionOf<'faq'>; set: Patch<SectionOf<'faq'>> }) {
+  const { t } = useTranslation();
+  const unanswered = s.items.filter(
+    (i) => (i.question.ar || i.question.en) && !i.answer.ar && !i.answer.en,
+  ).length;
+  return (
+    <div className="flex flex-col gap-4">
+      <Choice
+        label={t('design.shape')}
+        value={s.variant}
+        options={useVariants(['accordion', 'columns'] as const)}
+        onChange={(v) => set({ variant: v })}
+      />
+      <LocalizedField
+        label={t('design.title')}
+        value={s.title}
+        max={80}
+        onChange={(v) => set({ title: v })}
+      />
+      {unanswered > 0 ? (
+        <p className="rounded-lg bg-warning-soft p-3 text-xs">
+          {t('design.unanswered', { count: unanswered })}
+        </p>
+      ) : null}
+      <Items
+        items={s.items}
+        max={15}
+        title={(n) => t('design.questionN', { n })}
+        addLabel={t('design.addQuestion')}
+        make={() => ({ id: newId('q'), question: empty(), answer: empty() })}
+        onChange={(items) => set({ items })}
+        render={(item, setItem) => (
+          <>
+            <LocalizedField
+              label={t('design.question')}
+              value={item.question}
+              max={160}
+              onChange={(question) => setItem({ question })}
+            />
+            <LocalizedField
+              label={t('design.answer')}
+              value={item.answer}
+              max={1000}
+              multiline
+              onChange={(answer) => setItem({ answer })}
+            />
+          </>
+        )}
+      />
+    </div>
+  );
+}
+
+function GalleryEditor({ s, set }: { s: SectionOf<'gallery'>; set: Patch<SectionOf<'gallery'>> }) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-col gap-4">
+      <Choice
+        label={t('design.shape')}
+        value={s.variant}
+        options={useVariants(['grid', 'carousel', 'mosaic'] as const)}
+        onChange={(v) => set({ variant: v })}
+      />
+      <LocalizedField
+        label={t('design.title')}
+        value={s.title}
+        max={80}
+        onChange={(v) => set({ title: v })}
+      />
+      {s.variant === 'grid' ? (
+        <Choice
+          label={t('design.columns')}
+          value={s.columns}
+          options={[2, 3, 4].map((n) => ({ value: n, label: String(n) }))}
+          onChange={(v) => set({ columns: v })}
+        />
+      ) : null}
+      <Items
+        items={s.items}
+        max={12}
+        title={(n) => t('design.pictureN', { n })}
+        addLabel={t('design.addPicture')}
+        make={() => ({ id: newId('pic'), imageId: null, caption: empty(), link: null })}
+        onChange={(items) => set({ items })}
+        render={(item, setItem) => (
+          <>
+            <ImagePicker
+              label={t('design.image')}
+              value={item.imageId}
+              onChange={(imageId) => setItem({ imageId })}
+            />
+            <LocalizedField
+              label={t('design.caption')}
+              value={item.caption}
+              max={80}
+              onChange={(caption) => setItem({ caption })}
+            />
+            <LinkPicker
+              label={t('design.link')}
+              value={item.link}
+              onChange={(link) => setItem({ link })}
+            />
+          </>
+        )}
+      />
+    </div>
+  );
+}
+
+function LogosEditor({ s, set }: { s: SectionOf<'logos'>; set: Patch<SectionOf<'logos'>> }) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-col gap-4">
+      <Choice
+        label={t('design.shape')}
+        value={s.variant}
+        options={useVariants(['row', 'grid'] as const)}
+        onChange={(v) => set({ variant: v })}
+      />
+      <LocalizedField
+        label={t('design.title')}
+        value={s.title}
+        max={80}
+        onChange={(v) => set({ title: v })}
+      />
+      <Toggle
+        label={t('design.grayscale')}
+        checked={s.grayscale}
+        onChange={(grayscale) => set({ grayscale })}
+      />
+      <Items
+        items={s.items}
+        max={16}
+        title={(n) => t('design.logoN', { n })}
+        addLabel={t('design.addLogo')}
+        make={() => ({ id: newId('logo'), imageId: null, alt: empty(), link: null })}
+        onChange={(items) => set({ items })}
+        render={(item, setItem) => (
+          <>
+            <ImagePicker
+              label={t('design.image')}
+              value={item.imageId}
+              onChange={(imageId) => setItem({ imageId })}
+            />
+            <LocalizedField
+              label={t('design.brandName')}
+              value={item.alt}
+              max={60}
+              onChange={(alt) => setItem({ alt })}
+            />
+            <LinkPicker
+              label={t('design.link')}
+              value={item.link}
+              onChange={(link) => setItem({ link })}
+            />
+          </>
+        )}
+      />
+    </div>
+  );
+}
+
+function CollageEditor({ s, set }: { s: SectionOf<'collage'>; set: Patch<SectionOf<'collage'>> }) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-col gap-4">
+      <Choice
+        label={t('design.shape')}
+        value={s.variant}
+        options={useVariants(['mosaic', 'even'] as const)}
+        onChange={(v) => set({ variant: v })}
+      />
+      <Items
+        items={s.tiles}
+        max={4}
+        title={(n) => t('design.tileN', { n })}
+        addLabel={t('design.addTile')}
+        make={() => ({
+          id: newId('tile'),
+          imageId: null,
+          title: empty(),
+          subtitle: empty(),
+          button: empty(),
+          link: null,
+        })}
+        onChange={(tiles) => set({ tiles })}
+        render={(tile, setTile) => (
+          <>
+            <ImagePicker
+              label={t('design.image')}
+              value={tile.imageId}
+              onChange={(imageId) => setTile({ imageId })}
+            />
+            <LocalizedField
+              label={t('design.title')}
+              value={tile.title}
+              max={60}
+              onChange={(title) => setTile({ title })}
+            />
+            <LocalizedField
+              label={t('design.subtitle')}
+              value={tile.subtitle}
+              max={120}
+              onChange={(subtitle) => setTile({ subtitle })}
+            />
+            <LocalizedField
+              label={t('design.button')}
+              value={tile.button}
+              max={30}
+              onChange={(button) => setTile({ button })}
+            />
+            <LinkPicker
+              label={t('design.link')}
+              value={tile.link}
+              onChange={(link) => setTile({ link })}
+            />
+          </>
+        )}
+      />
+    </div>
+  );
+}
+
+function CtaEditor({ s, set }: { s: SectionOf<'cta'>; set: Patch<SectionOf<'cta'>> }) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-col gap-4">
+      <Choice
+        label={t('design.shape')}
+        value={s.variant}
+        options={useVariants(['brand', 'soft', 'outline', 'image'] as const)}
+        onChange={(v) => set({ variant: v })}
+      />
+      {s.variant === 'image' ? (
+        <ImagePicker
+          label={t('design.image')}
+          value={s.imageId}
+          onChange={(imageId) => set({ imageId })}
+        />
+      ) : null}
+      <LocalizedField
+        label={t('design.title')}
+        value={s.title}
+        max={80}
+        onChange={(v) => set({ title: v })}
+      />
+      <LocalizedField
+        label={t('design.text')}
+        value={s.text}
+        max={240}
+        onChange={(v) => set({ text: v })}
+      />
+      <LocalizedField
+        label={t('design.button')}
+        value={s.button}
+        max={30}
+        onChange={(v) => set({ button: v })}
+      />
+      <LinkPicker label={t('design.link')} value={s.link} onChange={(v) => set({ link: v })} />
+      <LocalizedField
+        label={t('design.button2')}
+        value={s.button2}
+        max={30}
+        onChange={(v) => set({ button2: v })}
+      />
+      <LinkPicker label={t('design.link2')} value={s.link2} onChange={(v) => set({ link2: v })} />
+      <Choice
+        label={t('design.align')}
+        value={s.align}
+        options={[
+          { value: 'start', label: t('design.align_start') },
+          { value: 'center', label: t('design.align_center') },
+        ]}
+        onChange={(v) => set({ align: v })}
+      />
+    </div>
+  );
+}
+
+function SpacerEditor({ s, set }: { s: SectionOf<'spacer'>; set: Patch<SectionOf<'spacer'>> }) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-col gap-4">
+      <Choice
+        label={t('design.spacerSize')}
+        value={s.size}
+        options={(['small', 'medium', 'large'] as const).map((v) => ({
+          value: v,
+          label: t(`design.size_${v}`),
+        }))}
+        onChange={(size) => set({ size })}
+      />
+      <Toggle label={t('design.spacerLine')} checked={s.line} onChange={(line) => set({ line })} />
+    </div>
+  );
 }
 
 function useVariants<T extends string>(values: readonly T[]) {
@@ -138,6 +849,49 @@ function SliderEditor({ s, set }: { s: SectionOf<'slider'>; set: Patch<SectionOf
         label={t('design.autoplay')}
         checked={s.autoplay}
         onChange={(v) => set({ autoplay: v })}
+      />
+      {s.autoplay ? (
+        <Choice
+          label={t('design.interval')}
+          value={s.interval}
+          options={([3, 5, 8] as const).map((n) => ({
+            value: n,
+            label: t('design.seconds', { count: n }),
+          }))}
+          onChange={(interval) => set({ interval })}
+        />
+      ) : null}
+      <Choice
+        label={t('design.height')}
+        value={s.height}
+        options={(['small', 'medium', 'large'] as const).map((v) => ({
+          value: v,
+          label: t(`design.size_${v}`),
+        }))}
+        onChange={(height) => set({ height })}
+      />
+      <Choice
+        label={t('design.overlay')}
+        value={s.overlay}
+        options={(['none', 'light', 'dark'] as const).map((v) => ({
+          value: v,
+          label: t(`design.overlay_${v}`),
+        }))}
+        onChange={(overlay) => set({ overlay })}
+      />
+      <Choice
+        label={t('design.align')}
+        value={s.textAlign}
+        options={[
+          { value: 'start', label: t('design.align_start') },
+          { value: 'center', label: t('design.align_center') },
+        ]}
+        onChange={(textAlign) => set({ textAlign })}
+      />
+      <Toggle
+        label={t('design.showArrows')}
+        checked={s.showArrows}
+        onChange={(showArrows) => set({ showArrows })}
       />
       {slides.map((slide, i) => (
         <Group key={slide.id} title={t('design.slideN', { n: i + 1 })}>
@@ -263,6 +1017,13 @@ function BannerEditor({ s, set }: { s: SectionOf<'banner'>; set: Patch<SectionOf
         onChange={(v) => set({ button: v })}
       />
       <LinkPicker label={t('design.link')} value={s.link} onChange={(v) => set({ link: v })} />
+      <LocalizedField
+        label={t('design.button2')}
+        value={s.button2}
+        max={30}
+        onChange={(v) => set({ button2: v })}
+      />
+      <LinkPicker label={t('design.link2')} value={s.link2} onChange={(v) => set({ link2: v })} />
       <Choice
         label={t('design.align')}
         value={s.align}
@@ -272,6 +1033,28 @@ function BannerEditor({ s, set }: { s: SectionOf<'banner'>; set: Patch<SectionOf
         ]}
         onChange={(v) => set({ align: v })}
       />
+      {s.variant === 'overlay' ? (
+        <>
+          <Choice
+            label={t('design.height')}
+            value={s.height}
+            options={(['small', 'medium', 'large'] as const).map((v) => ({
+              value: v,
+              label: t(`design.size_${v}`),
+            }))}
+            onChange={(height) => set({ height })}
+          />
+          <Choice
+            label={t('design.overlay')}
+            value={s.overlay}
+            options={(['none', 'light', 'dark'] as const).map((v) => ({
+              value: v,
+              label: t(`design.overlay_${v}`),
+            }))}
+            onChange={(overlay) => set({ overlay })}
+          />
+        </>
+      ) : null}
     </div>
   );
 }
@@ -358,6 +1141,25 @@ function ProductsEditor({
           onChange={(v) => set({ columns: v })}
         />
       ) : null}
+      <Choice
+        label={t('design.sortBy')}
+        value={s.sort}
+        options={(['position', 'name', 'priceAsc', 'priceDesc'] as const).map((v) => ({
+          value: v,
+          label: t(`design.sort_${v}`),
+        }))}
+        onChange={(sort) => set({ sort })}
+      />
+      <Toggle
+        label={t('design.showAdd')}
+        checked={s.showAdd}
+        onChange={(showAdd) => set({ showAdd })}
+      />
+      <Toggle
+        label={t('design.showViewAll')}
+        checked={s.showViewAll}
+        onChange={(showViewAll) => set({ showViewAll })}
+      />
     </div>
   );
 }
@@ -393,6 +1195,19 @@ function CategoriesEditor({
         }))}
         value={s.categoryIds}
         onChange={(v) => set({ categoryIds: v })}
+      />
+      {s.variant === 'tiles' ? (
+        <Choice
+          label={t('design.columns')}
+          value={s.columns}
+          options={[2, 3, 4, 5, 6].map((n) => ({ value: n, label: String(n) }))}
+          onChange={(columns) => set({ columns })}
+        />
+      ) : null}
+      <Toggle
+        label={t('design.showViewAll')}
+        checked={s.showViewAll}
+        onChange={(showViewAll) => set({ showViewAll })}
       />
     </div>
   );
@@ -495,6 +1310,13 @@ function TextEditor({ s, set }: { s: SectionOf<'text'>; set: Patch<SectionOf<'te
         multiline
         onChange={(v) => set({ body: v })}
       />
+      <LocalizedField
+        label={t('design.button')}
+        value={s.button}
+        max={30}
+        onChange={(v) => set({ button: v })}
+      />
+      <LinkPicker label={t('design.link')} value={s.link} onChange={(v) => set({ link: v })} />
       <Choice
         label={t('design.shape')}
         value={s.variant}
@@ -526,6 +1348,12 @@ function FeaturesEditor({
     set({ items: s.items.map((x, j) => (j === i ? { ...x, ...p } : x)) });
   return (
     <div className="flex flex-col gap-4">
+      <LocalizedField
+        label={t('design.title')}
+        value={s.title}
+        max={80}
+        onChange={(v) => set({ title: v })}
+      />
       <Choice
         label={t('design.shape')}
         value={s.variant}

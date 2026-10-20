@@ -2265,3 +2265,32 @@ ADR; supersede it.
   - Templates: retail = the shop preset (split, tinted, badges, categories / quick links /
     contact, payments in the bottom line); restaurant = the restaurant preset (stacked, dark,
     curve, "Order now" band, hours / branches / contact).
+- **Amendment 3 (2026-10-20) — page sections v2.** Owner's request: the same depth for the home
+  page as for the header and footer. BR-234. No migration (jsonb); every section saved before
+  parses with the default look, and the new options default to the old rendering.
+  - **Every section** has a `look`: background none / soft / tinted / brand / dark (a coloured
+    background spans the screen; the brand and dark bands re-map the colour tokens inside them so
+    cards, text and buttons stay readable), spacing compact / regular / roomy, contained or full
+    width, heading at the start or centred with a line under it, shown on all screens / large
+    screens / phones, and a schedule (`showFrom` / `showUntil`, ISO moments, start before end).
+    Shoppers never get a section outside its schedule; the preview shows it faded with a note.
+  - **Eight new types:** offer countdown (live timer, hidden without an end or once ended), customer
+    reviews (cards / swipe row / one big quote, stars; entered by the merchant only — the console
+    says to use real words with permission and nothing is pre-filled), questions & answers (folding
+    list or two columns; a question without an answer is not shown), picture gallery (grid /
+    swipe row / mosaic), brand logos (row / grid, optional grey), promotion collage (2–4 tiles,
+    mosaic or even), call to action (brand / soft / outline / on a picture, two buttons) and a
+    spacer. Their pictures count as in use (`designImageIds`).
+  - **Richer existing types:** slider height, shade, text position, interval 3 / 5 / 8 s and arrows;
+    banner height, shade and a second button; products order (yours / name / price), one-tap add
+    for single-option products and the "See all" switch; categories columns 2–6 and "See all";
+    text with a button; highlights with a heading.
+  - **Console:** the picker is a gallery grouped by purpose (top of the page & offers, products,
+    words & media, trust, layout) with a drawing per type, search and suggestions, plus a
+    **ready-made** tab of 12 filled sections (`readySection`). The home page offers 7 **ready home
+    pages** (fashion, electronics, grocery, beauty, restaurant, café, minimal: `homeLayout`,
+    replaced after a confirmation) and **recommendations** with a progress bar and one-tap fixes
+    (a strong start, products, a way to browse, reasons to trust, a next step, no section waiting
+    for content, 12 sections or fewer). Each section's editor has three panels: content, look,
+    visibility (screens and schedule); the list flags sections that need content, coloured,
+    device-only and scheduled ones.

@@ -423,14 +423,16 @@ export function Panel({
   hint,
   icon,
   children,
+  defaultOpen = true,
 }: {
   title: string;
   hint?: string;
   icon: string;
   children: ReactNode;
+  defaultOpen?: boolean;
 }) {
   return (
-    <details open className="group rounded-xl border border-border bg-surface">
+    <details open={defaultOpen} className="group rounded-xl border border-border bg-surface">
       <summary className="flex cursor-pointer list-none items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
         <span
           aria-hidden
