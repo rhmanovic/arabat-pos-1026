@@ -1,5 +1,13 @@
 import { NotFound, RouteErrorBoundary } from '@arabat/web-core';
 import type { RouteObject } from 'react-router';
+import {
+  AccountAddressesPage,
+  AccountLayout,
+  AccountOrdersPage,
+  AccountProfilePage,
+  ForgotPasswordPage,
+  ResetPasswordPage,
+} from './pages/AccountPages.js';
 import { CartPage } from './pages/CartPage.js';
 import { CatalogPage } from './pages/CatalogPage.js';
 import { CheckoutPage } from './pages/CheckoutPage.js';
@@ -27,6 +35,17 @@ export const routes: RouteObject[] = [
       { path: 'cart', element: <CartPage /> },
       { path: 'checkout', element: <CheckoutPage /> },
       { path: 'orders/:token', element: <OrderPage /> },
+      { path: 'account/forgot', element: <ForgotPasswordPage /> },
+      { path: 'account/reset/:token', element: <ResetPasswordPage /> },
+      {
+        path: 'account',
+        element: <AccountLayout />,
+        children: [
+          { index: true, element: <AccountOrdersPage /> },
+          { path: 'addresses', element: <AccountAddressesPage /> },
+          { path: 'profile', element: <AccountProfilePage /> },
+        ],
+      },
       { path: '*', element: <NotFound /> },
     ],
   },

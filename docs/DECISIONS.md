@@ -1993,3 +1993,116 @@ ADR; supersede it.
   for an online pickup. Migration 0068 also fixes the composite `set null` foreign keys (a
   composite `on delete set null` would have nulled `merchant_id`): `online_listings.online_category_id`
   and `online_orders.delivery_area_id` reference the parent's `id` only.
+
+## ADR-0124 — Online store Phase 6: shopper accounts (e-mail + password, no SMS)
+- **Status:** Accepted (2026-10-20). Owner's directive: "كمل الخطوه. لا تسوي رسائل" (no SMS /
+  WhatsApp messaging); migration 0069 (shared with ADR-0125); BR-221…BR-223.
+- **Context:** The plan (`docs/ONLINE_STORE_PLAN.md` Phase 6) had sketched phone-OTP sign-in
+  over an SMS adapter. No SMS provider is connected (a paid service needs the owner's approval,
+  CLAUDE.md §3.13) and the owner asked for the phase without messaging. Shoppers still typed
+  their details on every order and had no view of their own orders.
+- **Decision:**
+  - **Separate identity realm.** `customer_accounts` (e-mail unique per merchant, case-insensitive;
+    password hashed with the same `PasswordService` as staff; `status` active / disabled) is a
+    third realm beside merchant users and platform operators (AUTH.md): it can reach only
+    `/store/:slug/account/*` and the storefront. One account per `customers` record: registering
+    attaches to the till's customer with the same phone (name updated, e-mail filled when empty)
+    or creates one, so POS and online history are one customer (BR-114). A phone already bound to
+    another account is `PHONE_TAKEN`; an e-mail in use is `EMAIL_TAKEN`.
+  - **Sessions** are bearer tokens `st_<random>` kept hashed in `customer_sessions` (90 days,
+    `revoked_at` on sign-out), presented as `Authorization: Bearer` and resolved through the
+    SECURITY DEFINER function `customer_session_lookup(bytea)` (the store runs without a merchant
+    context until the token names it). Kept per store in the browser (`localStorage`), not a
+    cookie: the storefront has no session cookie and several stores may share a browser.
+  - **Password reset by e-mail only:** `POST …/account/forgot` always answers 202; when an
+    account exists a single-use token (hashed, 60 minutes, `customer_password_resets`) is
+    e-mailed through the existing `Mailer` with the store's link `/store/:slug/account/reset/:token`.
+    `RESET_TOKEN_INVALID` on a used or expired token. All account routes are rate-limited per IP
+    (20 per 10 minutes).
+  - **What an account gives:** the shopper's orders (`GET …/account/orders`, with the tracking
+    links), saved addresses (`customer_addresses`: label, delivery area, text, one default), the
+    profile (name, phone) and a password change (current password required). Checkout prefills
+    name, phone, e-mail and the default address, lets the shopper choose a saved address and
+    tick "save this address"; the order is attached to the account's customer. **Guest checkout
+    stays** and the merchant can turn accounts off (`online_stores.accounts_enabled`,
+    `ACCOUNTS_DISABLED`).
+  - **Audit:** `online.account_registered / _login / _updated / _password_changed /
+    _reset_requested / _password_reset` with `actor_type = 'customer'`.
+- **Not in this phase:** phone OTP, "notify me when back in stock", re-order in one click
+  (the order page links to the products), account deletion by the shopper, console page listing
+  the accounts (the CRM customer record carries the orders).
+- **Consequences:** shoppers return with their details and addresses; one customer record per
+  person across channels; no new paid service. Adding SMS later means an adapter in
+  `StoreAccountsService` (phone verification) without changing the account model.
+
+## ADR-0125 — Online store Phase 7: promotions (codes and automatic offers)
+- **Status:** Accepted (2026-10-20). Migration 0069 (shared with ADR-0124); BR-224…BR-226.
+- **Context:** The store could not discount anything; the plan listed coupons, automatic offers
+  and first-order discounts, recorded in the sale so reports reconcile.
+- **Decision:**
+  - **`online_promotions`**: name ar/en, `kind` code | automatic (`code` unique per merchant for
+    codes, letters and digits 3–20), `discount_type` percentage (0–100, three decimals) | fixed
+    (KWD) | free_delivery, `minimum_order_minor`, `max_uses` + `uses_count`,
+    `max_uses_per_customer` (by phone), `starts_at` / `ends_at`, `status` active | paused,
+    `applies_to` order | category | product with `target_ids` (store categories or catalog
+    categories, listed products), position, version. Deleting a used promotion pauses it
+    (uses stay referenced); an unused one is deleted.
+  - **One promotion per order** (`PromotionsService.apply`, pure arithmetic over priced lines):
+    the entered code when it fits, else the best automatic offer (largest discount; free
+    delivery counts as the delivery fee). A percentage or fixed discount applies to the lines in
+    scope (the whole order, the chosen categories or products), never exceeds that base and is
+    rounded down to fils; free delivery zeroes the delivery fee. Why a code did not apply is
+    told: `unknown`, `inactive`, `expired`, `not_started`, `minimum`, `used_up`, `customer_limit`,
+    `no_match`.
+  - **Quote** `POST /store/:slug/quote` (public, 120 per 10 minutes per IP) returns subtotal,
+    discount, delivery fee, total, the promotion and `codeIssue` for a cart; the storefront
+    shows the server's totals and the discount row. Checkout takes `promotionCode`; an entered
+    code that no longer fits is refused with `PROMOTION_INVALID` (field issue = the reason), a
+    missing code falls back to the best automatic offer. The order records `promotion_id`
+    (FK → `online_promotions(id)` on delete set null, single column), `promotion_code`,
+    `promotion_name` and `discount_minor`; the totals check becomes
+    `total = subtotal - discount + delivery_fee` and `total > 0`.
+  - **Uses** are append-only `online_promotion_uses` (order, customer, phone, discount) written
+    in the checkout transaction; `uses_count` is incremented there (`max_uses` enforced under the
+    row lock).
+  - **On the sale:** `completeOnlineSaleInTx` receives `orderDiscountMinor` and records it as
+    the sale's order discount (`pos-core` pricing, existing `order_discount` fields), so the
+    sales report's discounts include online promotions; the packing slip shows the discount row.
+  - **Console** `/online/promotions`: list in position order with code / automatic / paused
+    badges and a summary (value, scope, minimum, uses, end), dialog with all fields and the
+    targets as checkboxes; "Pause" for used ones, "Delete" for unused. Audit
+    `online.promotion_created / _updated / _paused / _deleted / online.promotions_reordered`.
+- **Not in this phase:** stacking several promotions, buy-X-get-Y, first-order-only flag
+  (use `max_uses_per_customer = 1`), promotions at the till (POS discounts stay BR-040 / D4).
+- **Consequences:** campaigns run without touching prices; the discount is one number on the
+  order and the sale, within the existing discount accounting; the quote endpoint is the single
+  source of the totals the shopper sees.
+
+## ADR-0126 — Online store Phases 8–10: frontend only (gateway and domain placeholders, analytics, SEO, PWA)
+- **Status:** Accepted (2026-10-20). Owner's directive: "سو الخطوات 8 و 9 و10 موكاملات فقط
+  الفرونت اند لا تسوي الباك اند ولا قواعد البيانات". No migration, no API change.
+- **Decision:**
+  - **Phase 8 (gateway) and Phase 9 (domain) placeholders** in `/online/settings`: a "Online
+    payment gateways" section listing K-net, Visa / Mastercard and wallets as "Coming soon" with
+    the note that each needs a provider contract and the owner's approval, and a "Store address
+    on the web" section showing the current `/store/<slug>` address and the future subdomain /
+    custom-domain rows. Nothing is stored; the sandbox gateway and pay on receipt stay as they are.
+  - **Phase 10 analytics** `/online/analytics` (`online.manage` or `online.orders`): computed in
+    the browser from the orders the console already loads (`GET /manager/online/orders`, pages of
+    100) and the lines of the last 50 paid orders, over 7 / 30 / 90 days: orders, revenue,
+    average order, cancelled-or-expired rate, revenue per day (one-hue bars + table), top
+    products, pickup / delivery mix, discounts given, status counts; the POS / online channel
+    split comes from the sales report when the user holds `reports.sales`. No `online_events`
+    stream, no visits or abandoned carts (they need backend events).
+  - **SEO:** the storefront sets per page the title, description, canonical URL and Open Graph
+    tags (`setPageMeta`) and, on a product page, a JSON-LD `Product` with offers and
+    availability. No server-side rendering for bots (backend), so link previews depend on the
+    crawler executing JavaScript.
+  - **PWA:** `apps/store-web/public/manifest.webmanifest` (name, start URL `/store/`, SVG
+    icon, theme colour) linked from `index.html`, and a service worker `sw.js` registered in
+    production builds only (scope `/store/`): the app shell and static assets are served from the
+    cache when offline; API calls always go to the network. Installable on phones.
+- **Consequences:** merchants see where gateways and domains will live; analytics need no new
+  storage and no tracker; product links carry metadata and the storefront installs as an app.
+  The backend parts of Phases 8–10 (real gateway, host-based store resolution, event stream,
+  bot SSR) remain open in `docs/ONLINE_STORE_PLAN.md` for the owner's go-ahead.

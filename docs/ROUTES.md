@@ -98,7 +98,8 @@ No session; every call goes to the public store API. Cart kept per store in the 
 | `/store/:slug/products/:productId` | Product details, picture gallery, share link, options, quantity (capped per listing), add to cart |
 | `/store/:slug/cart` | Cart (exact totals, minimum order, sold-out items removed) |
 | `/store/:slug/checkout` | Contact, pickup/delivery, address, payment (gateway method or pay on receipt), summary |
-| `/store/:slug/orders/:token` | Order tracking (status, history, pay link while unpaid; when to pay for pay-on-receipt orders) |
+| `/store/:slug/orders/:token` | Order tracking (status, history, pay link while unpaid; when to pay for pay-on-receipt orders; discount and promotion) |
+| `/store/:slug/account` | Sign in / create an account (e-mail + password), then the shopper's orders; `/account/addresses` saved addresses; `/account/profile` name, phone, password; `/account/forgot`, `/account/reset/:token` password reset by e-mail (ADR-0124) |
 | `/store/<former slug>/…` | A renamed store's old address redirects to the current one for 90 days (ADR-0118) |
 | `/store/pay/:reference` | Sandbox gateway page (mock adapter only) |
 | `/store/links/:slug` | Link page of a merchant ("link in bio", ADR-0116) |
@@ -119,7 +120,9 @@ dashboard's "Online store" tile open it (↗); `/manager/online` redirects here.
 | `/online/categories` | Store categories: add, edit, picture, hide, order, delete (ADR-0121) | `online.manage` |
 | `/online/delivery-areas` | Delivery areas: Kuwait pick-list, fee, minimum, free-delivery threshold, estimated time, serving branch, order, active (ADR-0123) | `online.manage` |
 | `/online/branches` | Branches serving the store: pickup / delivery, preparation time, own hours, order (ADR-0123) | `online.manage` |
-| `/online/settings` | Address (live check), status, branding, "e-mail me about new orders", appearance (logo, banner, hide out-of-stock products), fulfilment, opening hours and time slots, payment options | `online.manage` |
+| `/online/promotions` | Discount codes and automatic offers: value, scope, minimum, limits, dates, order; pause / delete (ADR-0125) | `online.manage` |
+| `/online/analytics` | Store analytics computed in the browser from the orders (7 / 30 / 90 days): orders, revenue, average, lost rate, revenue per day, top products, mix; channel split from the sales report with `reports.sales` (ADR-0126) | `online.manage` or `online.orders` |
+| `/online/settings` | Address (live check), status, branding, "e-mail me about new orders", shopper accounts on / off, appearance (logo, banner, hide out-of-stock products), fulfilment, opening hours and time slots, payment options; placeholders for online payment gateways and the store's own domain (ADR-0126) | `online.manage` |
 | Sidebar "Shared with the POS" | Opens `/manager/products`, `/manager/customers`, `/manager/reports`, `/manager/payments` with their own permissions | — |
 
 ## 2c. `/links` — links-web (link-page editor, ADR-0116 amendment 1)
@@ -406,9 +409,13 @@ only staff land on `/pos/kitchen`. Sales list and reports show the service type.
 | `GET/PUT /manager/online/store`, `GET /manager/online/store/slug-availability?slug=`, `GET/PUT /manager/online/listings`, `POST /manager/online/reconcile` | merchant-wide `online.manage` |
 | `PUT /manager/online/listings/order` (`{ productIds }`), `PUT /manager/online/listings/:productId` (store title / description, featured, max per order, store category), `GET/POST /manager/online/categories`, `PUT /manager/online/categories/order` (`{ ids }`), `PUT/DELETE /manager/online/categories/:id`, `GET/POST/DELETE /manager/online/categories/:id/image`, `GET/POST/DELETE /manager/online/store/:kind(logo\|banner)` (multipart `file`, JPEG / PNG / WebP ≤ 2 MB; ADR-0121) | merchant-wide `online.manage` |
 | `GET/POST /manager/online/delivery-areas`, `PUT /manager/online/delivery-areas/order` (`{ ids }`), `PUT/DELETE /manager/online/delivery-areas/:id`, `GET /manager/online/branches`, `PUT /manager/online/branches/order` (`{ branchIds }`), `PUT/DELETE /manager/online/branches/:branchId` (ADR-0123) | merchant-wide `online.manage` |
+| `GET/POST /manager/online/promotions`, `PUT /manager/online/promotions/order` (`{ ids }`), `PUT /manager/online/promotions/:id`, `DELETE /manager/online/promotions/:id` (pauses a used promotion; ADR-0125) | merchant-wide `online.manage` |
+| `GET /pos/online-orders`, `POST /pos/online-orders/:id/pay` (tenders of the open shift, idempotency key), `POST /pos/online-orders/:id/complete` (ADR-0123) | POS `sales.create` at the bound branch |
 | `GET /manager/online/orders?status=`, `GET /manager/online/orders/:id`, `POST /manager/online/orders/:id/action` (`confirm`, `mark_paid` with tender + reference, `preparing`, `ready`, `out_for_delivery`, `completed`, `cancel`), `GET /manager/online/tenders` | `online.orders` (branch of the order) |
 | `GET /store/:slug` (logo / banner URLs, `categorySource`, categories with pictures, `branches` with `openNow`, `defaultBranchId`, `deliveryAreas`, `scheduling`, `timezone`), `/products?branch=` (store titles, all pictures, featured, position, per-listing cap; stock and prices of the chosen branch; sold-out hidden when the store says so), `/products/:id?branch=`, `/slots?branch=&fulfillment=` (next 7 days, availability; ADR-0123), `/images/:productId/:imageId`, `/:kind(logo\|banner)`, `/categories/:id/image` (public, cached one day, `?v=`) | 🔓 published or paused store |
-| `POST /store/:slug/checkout` | 🔓 published store; idempotency key; 30 per 10 min per IP; `paymentMethodId: null` = pay on receipt (ADR-0118); `branchId` (pickup), `deliveryAreaId` (required with areas), `scheduledFor` (an offered slot or null; `SLOT_FULL`, `OUTSIDE_HOURS`; ADR-0123) |
+| `POST /store/:slug/checkout` | 🔓 published store; idempotency key; 30 per 10 min per IP; `paymentMethodId: null` = pay on receipt (ADR-0118); `branchId` (pickup), `deliveryAreaId` (required with areas), `scheduledFor` (an offered slot or null; `SLOT_FULL`, `OUTSIDE_HOURS`; ADR-0123); `promotionCode` (`PROMOTION_INVALID` when it no longer fits; ADR-0125); `saveAddress` and the account's customer with a bearer token (ADR-0124) |
+| `POST /store/:slug/quote` | 🔓 totals of a cart (subtotal, discount, delivery fee, total, promotion, `codeIssue`); 120 per 10 min per IP (ADR-0125) |
+| `POST /store/:slug/account/register`, `POST …/account/login` (→ `{ token, account }`), `POST …/account/logout`, `GET/PUT …/account` (profile + addresses), `PUT …/account/password`, `POST …/account/forgot` (always 202), `POST …/account/reset`, `GET …/account/orders`, `POST …/account/addresses`, `PUT/DELETE …/account/addresses/:id` | 🔓 store with accounts enabled; bearer `st_…` token where an account is needed (`UNAUTHENTICATED`); 20 per 10 min per IP (ADR-0124) |
 | `GET /store/:slug/orders/:token` | 🔓 tracking token |
 | `POST /webhooks/payments/:provider` | 🔓 provider signature (raw body) |
 | `GET/POST /payments/mock/:reference` | 🔓 sandbox only (disabled in production by default) |

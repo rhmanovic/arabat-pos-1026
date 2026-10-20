@@ -8,6 +8,7 @@ import {
   OnlineManagerController,
   PaymentsGatewayController,
   PosOnlineOrdersController,
+  StoreAccountController,
   StorefrontController,
 } from './ecommerce.controller.js';
 import { EcommerceService } from './ecommerce.service.js';
@@ -15,6 +16,8 @@ import { FulfilmentService } from './fulfilment.service.js';
 import { OnlinePaymentsService } from './online-payments.service.js';
 import { OrderNotificationsService } from './order-notifications.service.js';
 import { PosHandoverService } from './pos-handover.service.js';
+import { PromotionsService } from './promotions.service.js';
+import { StoreAccountsService } from './store-accounts.service.js';
 
 @Module({
   imports: [SalesModule, InventoryModule, AuthModule, PrintingModule, RegistersModule],
@@ -23,6 +26,7 @@ import { PosHandoverService } from './pos-handover.service.js';
     StorefrontController,
     PaymentsGatewayController,
     PosOnlineOrdersController,
+    StoreAccountController,
   ],
   providers: [
     EcommerceService,
@@ -30,6 +34,8 @@ import { PosHandoverService } from './pos-handover.service.js';
     FulfilmentService,
     OrderNotificationsService,
     PosHandoverService,
+    PromotionsService,
+    StoreAccountsService,
   ],
   exports: [OnlinePaymentsService, OrderNotificationsService],
 })

@@ -1,0 +1,12 @@
+{
+  "name": "Arabat Store",
+  "short_name": "Store",
+  "start_url": "/store/",
+  "scope": "/store/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1e3a8a",
+  "icons": [
+    { "src": "/store/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

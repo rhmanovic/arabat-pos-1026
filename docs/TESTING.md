@@ -66,6 +66,33 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-20 (online store Phases 6–10, ADR-0124/0125/0126, cloud sandbox run)
+- `ecommerce.int.test.ts` (+3, 19 in the file): shopper accounts (registering on the till's
+  customer by phone fills its e-mail; `EMAIL_TAKEN` / `PHONE_TAKEN`; wrong password 401; `me`
+  with a bearer token; profile update; password change needs the current one and signs the
+  other session out; addresses add / default / update / delete; checkout as the account with
+  `saveAddress` keeps the address and the order lists under `account/orders`; logout revokes the
+  token; a password reset by e-mail (Mailpit) with a single-use link, the old token refused;
+  `ACCOUNTS_DISABLED` when the store turns accounts off); promotions (a 10 % code with a minimum
+  and one use per customer, a fixed code on a category, an automatic free delivery above an
+  amount: the quote tells `minimum`, `unknown`, `customer_limit`; the best automatic offer wins
+  without a code; checkout with a code that stopped fitting is `PROMOTION_INVALID`; the order
+  carries the discount and the promotion snapshot, `online_promotion_uses` is appended and
+  cannot be updated; the sale records the order discount and the sales report counts it;
+  deleting a used promotion pauses it; the position order).
+- `apps/online-web/src/app.test.tsx` (+3, 18): a code is created from the dialog (upper-cased,
+  percentage, minimum, maximum uses) and a used one is paused; the analytics page computes the
+  tiles, the per-day chart, the top products and the discounts from the orders without
+  requesting the report when `reports.sales` is missing; the settings show the three "Coming
+  soon" gateway placeholders, the domain section and the shopper-accounts switch.
+- `apps/store-web/src/app.test.tsx` (+2, 18): sign-in stores the `st_` token, shows "Hello,
+  Sara" and the account's orders; a signed-in shopper's checkout is prefilled (name, phone,
+  default saved address), a wrong code shows the reason, `TEN` shows the discount and the
+  server's total, and the order posts `promotionCode`, the customer and `saveAddress`.
+- `e2e` (42): unchanged suite on the rebuilt apps (migration 0069 applied to `arabat_dev`).
+- Totals: `pnpm verify` 348 unit/web (56 files), `pnpm test:integration` 306 (44 files),
+  `pnpm test:e2e` 42.
+
 ### Results 2026-10-20 (online store Phase 5: fulfilment, ADR-0123, cloud sandbox run)
 - `ecommerce.int.test.ts` (+4, 16 in the file): delivery areas (flat fee without areas; an
   inactive area is not offered; delivery without an area refused with a field issue; the area's

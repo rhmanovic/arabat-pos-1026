@@ -1,13 +1,14 @@
 import { ApiError } from '@arabat/api-client';
 import { formatDateTime } from '@arabat/i18n';
-import { Alert, Button, Field, Input, Select, Spinner, Textarea } from '@arabat/ui';
+import { Alert, Button, Checkbox, Field, Input, Select, Spinner, Textarea } from '@arabat/ui';
 import { useApi, useErrorMessage } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Navigate, useNavigate } from 'react-router';
-import { priceLines, useCart } from '../cart.js';
+import { Link, Navigate, useNavigate } from 'react-router';
+import { priceLines, toMoney, useCart } from '../cart.js';
 import {
+  useAccount,
   useBranchChoice,
   useLocalName,
   useMoney,
@@ -39,11 +40,12 @@ export function CheckoutPage() {
   const { t } = useTranslation();
   const [key, setKey] = useState(newKey);
   const [form, setForm] = useState({
-    name: '',
-    phone: '',
-    email: '',
+    /** Null = not typed yet: a signed-in shopper's account value shows instead (ADR-0124). */
+    name: null as string | null,
+    phone: null as string | null,
+    email: null as string | null,
     fulfillment: null as 'pickup' | 'delivery' | null,
-    deliveryAddress: '',
+    deliveryAddress: null as string | null,
     /** Delivery area (ADR-0123); required when the store defines areas. */
     areaId: null as string | null,
     /** Requested slot start, or null for "as soon as possible". */
@@ -51,12 +53,31 @@ export function CheckoutPage() {
     note: '',
     /** A gateway method id, `ON_RECEIPT`, or null until chosen. */
     payment: null as string | null,
+    /** Promotion code typed by the shopper (ADR-0125); applied through the quote. */
+    promoInput: '',
+    promotionCode: null as string | null,
+    /** A saved address of the account (ADR-0124): null = untouched (the default one), '' = a new one. */
+    savedAddressId: null as string | null,
+    saveAddress: false,
   });
   const [touched, setTouched] = useState(false);
   const { branch: pickupBranch, setBranchId } = useBranchChoice();
+  const { token, account, addresses } = useAccount();
+  // A signed-in shopper's details and default address show until they type something else.
+  const defaultAddress = addresses.find((a) => a.isDefault) ?? addresses[0] ?? null;
+  const savedAddressId = form.savedAddressId ?? defaultAddress?.id ?? '';
+  const savedAddress = addresses.find((a) => a.id === savedAddressId) ?? null;
+  const values = {
+    name: form.name ?? account?.fullName ?? '',
+    phone: form.phone ?? account?.phone ?? '',
+    email: form.email ?? account?.email ?? '',
+    deliveryAddress: form.deliveryAddress ?? savedAddress?.address ?? '',
+    areaId: form.areaId ?? savedAddress?.deliveryAreaId ?? null,
+  };
 
   const checkout = useMutation({
-    mutationFn: (body: Parameters<typeof api.store.checkout>[1]) => api.store.checkout(slug, body),
+    mutationFn: (body: Parameters<typeof api.store.checkout>[1]) =>
+      api.store.checkout(slug, body, token),
     onSuccess: ({ order }) => {
       // Leave the page before emptying the cart, or the empty cart would send us to the cart page.
       if (order.paymentUrl) window.location.assign(order.paymentUrl);
@@ -71,30 +92,62 @@ export function CheckoutPage() {
     },
   });
 
+  const fulfillment = form.fulfillment ?? ((store?.pickupEnabled ?? true) ? 'pickup' : 'delivery');
+  const deliveryAreas = store?.deliveryAreas ?? [];
+  const area =
+    fulfillment === 'delivery' ? (deliveryAreas.find((a) => a.id === values.areaId) ?? null) : null;
+  const { priced, subtotal, deliveryFee, total } = priceLines(
+    cart.lines,
+    products.data?.products ?? [],
+    store ?? { deliveryFee: { amount: '0.000', currency: 'KWD' } },
+    fulfillment,
+    deliveryAreas.length > 0 ? area : undefined,
+  );
+  const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
+  // The server's totals with the promotion that applies (ADR-0125).
+  const quote = useQuery({
+    queryKey: [
+      'store',
+      slug,
+      'quote',
+      priced.map((l) => `${l.variantId}:${l.quantity}`).join(','),
+      fulfillment,
+      area?.id ?? null,
+      pickupBranch?.id ?? null,
+      form.promotionCode,
+      token,
+    ],
+    enabled: priced.length > 0,
+    staleTime: 30_000,
+    queryFn: () =>
+      api.store.quote(
+        slug,
+        {
+          lines: priced.map((l) => ({ variantId: l.variantId, quantity: String(l.quantity) })),
+          fulfillment,
+          deliveryAreaId: area?.id ?? null,
+          branchId: fulfillment === 'pickup' ? (pickupBranch?.id ?? null) : null,
+          promotionCode: form.promotionCode,
+        },
+        token,
+      ),
+  });
+  const quoted = quote.data ?? null;
+  const shownDeliveryFee = quoted ? toMoney(quoted.deliveryFee) : deliveryFee;
+  const shownDiscount = quoted ? toMoney(quoted.discount) : null;
+  const shownTotal = quoted ? toMoney(quoted.total) : total;
+
   if (!store || products.isPending) return <Spinner label={t('common:status.loading')} />;
   if (!products.data || (cart.lines.length === 0 && !checkout.isSuccess))
     return <Navigate to={`/${slug}/cart`} replace />;
 
-  const fulfillment = form.fulfillment ?? (store.pickupEnabled ? 'pickup' : 'delivery');
   const payment =
     form.payment ?? store.paymentMethods[0]?.id ?? (store.payOnReceipt ? ON_RECEIPT : null);
   const payOnReceipt = payment === ON_RECEIPT;
-  const area =
-    fulfillment === 'delivery'
-      ? (store.deliveryAreas.find((a) => a.id === form.areaId) ?? null)
-      : null;
-  const { priced, subtotal, deliveryFee, total } = priceLines(
-    cart.lines,
-    products.data.products,
-    store,
-    fulfillment,
-    store.deliveryAreas.length > 0 ? area : undefined,
-  );
-  const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
   const missing = {
-    name: !form.name.trim(),
-    phone: form.phone.trim().length < 6,
-    address: fulfillment === 'delivery' && !form.deliveryAddress.trim(),
+    name: !values.name.trim(),
+    phone: values.phone.trim().length < 6,
+    address: fulfillment === 'delivery' && !values.deliveryAddress.trim(),
     area: fulfillment === 'delivery' && store.deliveryAreas.length > 0 && area === null,
   };
   // The branch that prepares the order: the pickup branch, or the one serving the area.
@@ -114,14 +167,16 @@ export function CheckoutPage() {
       idempotencyKey: key,
       lines: priced.map((l) => ({ variantId: l.variantId, quantity: String(l.quantity) })),
       fulfillment,
-      customer: { name: form.name, phone: form.phone, email: form.email || null },
-      deliveryAddress: fulfillment === 'delivery' ? form.deliveryAddress : null,
+      customer: { name: values.name, phone: values.phone, email: values.email || null },
+      deliveryAddress: fulfillment === 'delivery' ? values.deliveryAddress : null,
       branchId: fulfillment === 'pickup' ? (pickupBranch?.id ?? null) : null,
       deliveryAreaId: area?.id ?? null,
       scheduledFor: form.scheduledFor,
       note: form.note || null,
+      promotionCode: quoted?.promotion?.code ?? null,
+      saveAddress: Boolean(token) && form.saveAddress && savedAddressId === '',
       paymentMethodId: payOnReceipt ? null : payment,
-      expectedTotal: total.toDecimalString(),
+      expectedTotal: shownTotal.toDecimalString(),
     });
   };
   const required = (bad: boolean) => (touched && bad ? t('checkout.required') : undefined);
@@ -132,12 +187,20 @@ export function CheckoutPage() {
         <h1 className="text-2xl font-semibold">{t('checkout.title')}</h1>
         <fieldset className="flex flex-col gap-3">
           <legend className="mb-2 font-semibold">{t('checkout.contact')}</legend>
+          {store.accountsEnabled && !token ? (
+            <p className="text-sm text-fg-muted">
+              <Link to={`/${slug}/account`} className="text-primary hover:underline">
+                {t('nav.signIn')}
+              </Link>{' '}
+              {t('account.signInHint')}
+            </p>
+          ) : null}
           <Field label={t('checkout.name')} error={required(missing.name)}>
             {(p) => (
               <Input
                 {...p}
                 autoComplete="name"
-                value={form.name}
+                value={values.name}
                 onChange={(e) => set({ name: e.target.value })}
               />
             )}
@@ -149,7 +212,7 @@ export function CheckoutPage() {
                 type="tel"
                 autoComplete="tel"
                 dir="ltr"
-                value={form.phone}
+                value={values.phone}
                 onChange={(e) => set({ phone: e.target.value })}
               />
             )}
@@ -161,7 +224,7 @@ export function CheckoutPage() {
                 type="email"
                 autoComplete="email"
                 dir="ltr"
-                value={form.email}
+                value={values.email}
                 onChange={(e) => set({ email: e.target.value })}
               />
             )}
@@ -218,7 +281,7 @@ export function CheckoutPage() {
               {(p) => (
                 <Select
                   {...p}
-                  value={form.areaId ?? ''}
+                  value={values.areaId ?? ''}
                   onChange={(e) => set({ areaId: e.target.value || null, scheduledFor: null })}
                 >
                   <option value="">{t('checkout.chooseArea')}</option>
@@ -239,17 +302,49 @@ export function CheckoutPage() {
               {t('checkout.freeFrom', { amount: money(area.freeDeliveryFrom) })}
             </p>
           ) : null}
+          {fulfillment === 'delivery' && token && addresses.length > 0 ? (
+            <Field label={t('account.useSaved')}>
+              {(p) => (
+                <Select
+                  {...p}
+                  value={savedAddressId}
+                  onChange={(e) => {
+                    const chosen = addresses.find((a) => a.id === e.target.value) ?? null;
+                    set({
+                      savedAddressId: e.target.value,
+                      deliveryAddress: chosen ? chosen.address : '',
+                      areaId: chosen?.deliveryAreaId ?? null,
+                    });
+                  }}
+                >
+                  {addresses.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {[a.label, a.address].filter(Boolean).join(' — ')}
+                    </option>
+                  ))}
+                  <option value="">{t('account.newAddress')}</option>
+                </Select>
+              )}
+            </Field>
+          ) : null}
           {fulfillment === 'delivery' ? (
             <Field label={t('checkout.address')} error={required(missing.address)}>
               {(p) => (
                 <Textarea
                   {...p}
                   autoComplete="street-address"
-                  value={form.deliveryAddress}
-                  onChange={(e) => set({ deliveryAddress: e.target.value })}
+                  value={values.deliveryAddress}
+                  onChange={(e) => set({ deliveryAddress: e.target.value, savedAddressId: '' })}
                 />
               )}
             </Field>
+          ) : null}
+          {fulfillment === 'delivery' && token && savedAddressId === '' ? (
+            <Checkbox
+              label={t('account.saveAddress')}
+              checked={form.saveAddress}
+              onChange={(e) => set({ saveAddress: e.target.checked })}
+            />
           ) : null}
           <Field label={t('checkout.note')}>
             {(p) => (
@@ -318,21 +413,60 @@ export function CheckoutPage() {
             </li>
           ))}
         </ul>
+        <div className="flex flex-col gap-1">
+          <Field label={t('checkout.promoCode')}>
+            {(p) => (
+              <div className="flex gap-2">
+                <Input
+                  {...p}
+                  dir="ltr"
+                  autoComplete="off"
+                  value={form.promoInput}
+                  onChange={(e) => set({ promoInput: e.target.value.toUpperCase() })}
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => set({ promotionCode: form.promoInput.trim() || null })}
+                >
+                  {t('checkout.apply')}
+                </Button>
+              </div>
+            )}
+          </Field>
+          {quoted?.codeIssue ? (
+            <p className="text-sm text-danger" data-testid="promo-issue">
+              {t(`checkout.codeIssue_${quoted.codeIssue}`)}
+            </p>
+          ) : quoted?.promotion ? (
+            <p className="text-sm text-success" data-testid="promo-applied">
+              {t('checkout.promoApplied', { name: name(quoted.promotion) })}
+            </p>
+          ) : null}
+        </div>
         <dl className="flex flex-col gap-1 border-t border-border pt-2 text-sm">
           <div className="flex justify-between">
             <dt>{t('cart.subtotal')}</dt>
             <dd className="tabular-nums">{money(subtotal)}</dd>
           </div>
+          {shownDiscount && !shownDiscount.isZero() ? (
+            <div className="flex justify-between">
+              <dt>{t('checkout.discount')}</dt>
+              <dd className="tabular-nums" data-testid="checkout-discount">
+                -{money(shownDiscount)}
+              </dd>
+            </div>
+          ) : null}
           {fulfillment === 'delivery' ? (
             <div className="flex justify-between">
               <dt>{t('checkout.deliveryFee')}</dt>
-              <dd className="tabular-nums">{money(deliveryFee)}</dd>
+              <dd className="tabular-nums">{money(shownDeliveryFee)}</dd>
             </div>
           ) : null}
           <div className="flex justify-between text-base font-semibold">
             <dt>{t('checkout.total')}</dt>
             <dd className="tabular-nums" data-testid="checkout-total">
-              {money(total)}
+              {money(shownTotal)}
             </dd>
           </div>
         </dl>

@@ -281,6 +281,20 @@ import {
   posOnlineOrderSchema,
   posOnlineOrderListSchema,
   type PosOnlineOrderPay,
+  type StoreQuote,
+  storeQuoteResultSchema,
+  type AccountRegister,
+  type AccountLogin,
+  type AccountUpdate,
+  type AccountPassword,
+  type AccountReset,
+  type SaveCustomerAddress,
+  accountSessionSchema,
+  accountViewSchema,
+  accountOrderListSchema,
+  onlinePromotionSchema,
+  onlinePromotionListSchema,
+  type SaveOnlinePromotion,
   type ChangeSubscription,
   type CreateMerchant,
   type PlatformAuditQuery,
@@ -1229,6 +1243,22 @@ export function createApiClient(options: ApiClientOptions = {}) {
           body: { branchIds },
           schema: onlineStoreBranchListSchema,
         }),
+      // Promotions (ADR-0125).
+      promotions: () =>
+        request('GET', '/manager/online/promotions', { schema: onlinePromotionListSchema }),
+      createPromotion: (body: SaveOnlinePromotion) =>
+        request('POST', '/manager/online/promotions', { body, schema: onlinePromotionSchema }),
+      updatePromotion: (id: string, body: SaveOnlinePromotion) =>
+        request('PUT', `/manager/online/promotions/${id}`, { body, schema: onlinePromotionSchema }),
+      deletePromotion: (id: string) =>
+        request('DELETE', `/manager/online/promotions/${id}`, {
+          schema: onlinePromotionListSchema,
+        }),
+      orderPromotions: (ids: string[]) =>
+        request('PUT', '/manager/online/promotions/order', {
+          body: { ids },
+          schema: onlinePromotionListSchema,
+        }),
     },
     /** Online orders handed over at the till (ADR-0123). */
     posOnline: {
@@ -1310,15 +1340,84 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('GET', `/store/${encodeURIComponent(slug)}/products/${productId}`, {
           schema: storeProductSchema,
         }),
-      checkout: (slug: string, body: StoreCheckout) =>
+      checkout: (slug: string, body: StoreCheckout, token?: string | null) =>
         request('POST', `/store/${encodeURIComponent(slug)}/checkout`, {
           body,
           schema: storeCheckoutResultSchema,
+          ...(token ? { headers: { authorization: `Bearer ${token}` } } : {}),
         }),
       order: (slug: string, token: string) =>
         request('GET', `/store/${encodeURIComponent(slug)}/orders/${token}`, {
           schema: publicOrderSchema,
         }),
+      /** Totals with the promotion that applies (ADR-0125), before placing the order. */
+      quote: (slug: string, body: StoreQuote, token?: string | null) =>
+        request('POST', `/store/${encodeURIComponent(slug)}/quote`, {
+          body,
+          schema: storeQuoteResultSchema,
+          ...(token ? { headers: { authorization: `Bearer ${token}` } } : {}),
+        }),
+      /** Shopper accounts (ADR-0124): a bearer token kept by the storefront. */
+      account: {
+        register: (slug: string, body: AccountRegister) =>
+          request('POST', `/store/${encodeURIComponent(slug)}/account/register`, {
+            body,
+            schema: accountSessionSchema,
+          }),
+        login: (slug: string, body: AccountLogin) =>
+          request('POST', `/store/${encodeURIComponent(slug)}/account/login`, {
+            body,
+            schema: accountSessionSchema,
+          }),
+        logout: (slug: string, token: string) =>
+          request('POST', `/store/${encodeURIComponent(slug)}/account/logout`, {
+            headers: { authorization: `Bearer ${token}` },
+          }),
+        me: (slug: string, token: string) =>
+          request('GET', `/store/${encodeURIComponent(slug)}/account`, {
+            schema: accountViewSchema,
+            headers: { authorization: `Bearer ${token}` },
+          }),
+        update: (slug: string, token: string, body: AccountUpdate) =>
+          request('PUT', `/store/${encodeURIComponent(slug)}/account`, {
+            body,
+            schema: accountViewSchema,
+            headers: { authorization: `Bearer ${token}` },
+          }),
+        changePassword: (slug: string, token: string, body: AccountPassword) =>
+          request('PUT', `/store/${encodeURIComponent(slug)}/account/password`, {
+            body,
+            headers: { authorization: `Bearer ${token}` },
+          }),
+        forgot: (slug: string, email: string) =>
+          request('POST', `/store/${encodeURIComponent(slug)}/account/forgot`, {
+            body: { email },
+          }),
+        reset: (slug: string, body: AccountReset) =>
+          request('POST', `/store/${encodeURIComponent(slug)}/account/reset`, { body }),
+        orders: (slug: string, token: string) =>
+          request('GET', `/store/${encodeURIComponent(slug)}/account/orders`, {
+            schema: accountOrderListSchema,
+            headers: { authorization: `Bearer ${token}` },
+          }),
+        addAddress: (slug: string, token: string, body: SaveCustomerAddress) =>
+          request('POST', `/store/${encodeURIComponent(slug)}/account/addresses`, {
+            body,
+            schema: accountViewSchema,
+            headers: { authorization: `Bearer ${token}` },
+          }),
+        updateAddress: (slug: string, token: string, id: string, body: SaveCustomerAddress) =>
+          request('PUT', `/store/${encodeURIComponent(slug)}/account/addresses/${id}`, {
+            body,
+            schema: accountViewSchema,
+            headers: { authorization: `Bearer ${token}` },
+          }),
+        deleteAddress: (slug: string, token: string, id: string) =>
+          request('DELETE', `/store/${encodeURIComponent(slug)}/account/addresses/${id}`, {
+            schema: accountViewSchema,
+            headers: { authorization: `Bearer ${token}` },
+          }),
+      },
       mockPayment: (reference: string) =>
         request('GET', `/payments/mock/${encodeURIComponent(reference)}`, {
           schema: mockPaymentSchema,

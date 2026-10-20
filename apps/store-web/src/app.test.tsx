@@ -58,6 +58,7 @@ const STORE = {
   deliveryAreas: [],
   scheduling: { enabled: false, slotMinutes: 30 },
   timezone: 'Asia/Kuwait',
+  accountsEnabled: true,
 };
 const COFFEE = '0190a000-0000-7000-8000-000000000001';
 const COFFEE_V = '0190a000-0000-7000-8000-000000000011';
@@ -133,6 +134,8 @@ const ORDER = {
     },
   ],
   subtotal: kwd('2.500'),
+  discount: kwd('0.000'),
+  promotion: null,
   deliveryFee: kwd('1.500'),
   total: kwd('4.000'),
   createdAt: '2026-10-12T10:00:00.000Z',
@@ -148,11 +151,55 @@ const ORDER = {
   timeline: [{ status: 'pending_payment', at: '2026-10-12T10:00:00.000Z' }],
 };
 
+/** What the API's quote would answer for a cart (no promotion; the area's fee or the flat one). */
+type Area = {
+  id: string;
+  fee: { amount: string; currency: string };
+  freeDeliveryFrom: { amount: string; currency: string } | null;
+};
+function quoteFor(body: unknown, areas: Area[] = []) {
+  const q = body as {
+    lines: { variantId: string; quantity: string }[];
+    fulfillment: string;
+    deliveryAreaId: string | null;
+  };
+  const subtotal = q.lines.reduce((sum, l) => {
+    const variant = PRODUCTS.products
+      .flatMap((p) => p.variants)
+      .find((v) => v.variantId === l.variantId)!;
+    return sum + Number(variant.price.amount) * Number(l.quantity);
+  }, 0);
+  const area = areas.find((a) => a.id === q.deliveryAreaId) ?? null;
+  const fee =
+    q.fulfillment !== 'delivery'
+      ? 0
+      : areas.length > 0
+        ? area === null
+          ? 0
+          : area.freeDeliveryFrom !== null && subtotal >= Number(area.freeDeliveryFrom.amount)
+            ? 0
+            : Number(area.fee.amount)
+        : Number(STORE.deliveryFee.amount);
+  const money = (n: number) => ({ amount: n.toFixed(3), currency: 'KWD' });
+  return {
+    status: 200,
+    body: {
+      subtotal: money(subtotal),
+      discount: money(0),
+      deliveryFee: money(fee),
+      total: money(subtotal + fee),
+      promotion: null,
+      codeIssue: null,
+    },
+  };
+}
+
 function renderStore(path: string, routesMap: Record<string, FakeRoute> = {}) {
   const fetch = fakeApiFetch({
     routes: {
       'GET /store/demo': () => ({ status: 200, body: STORE }),
       'GET /store/demo/products': () => ({ status: 200, body: PRODUCTS }),
+      'POST /store/demo/quote': (body) => quoteFor(body),
       ...routesMap,
     },
   });
@@ -315,7 +362,7 @@ describe('storefront', () => {
     await user.type(screen.getByLabelText('Delivery address'), 'Block 1, Street 2');
     await user.click(screen.getByRole('button', { name: 'Place order and pay' }));
     await waitFor(() => expect(assign).toHaveBeenCalledWith(ORDER.paymentUrl));
-    const call = fetch.calls.find((c) => c.method === 'POST')!;
+    const call = fetch.calls.find((c) => c.method === 'POST' && c.path === '/store/demo/checkout')!;
     expect(call.body).toMatchObject({
       lines: [{ variantId: COFFEE_V, quantity: '2' }],
       fulfillment: 'delivery',
@@ -379,6 +426,7 @@ describe('storefront', () => {
         },
       }),
       'GET /store/demo/slots': () => ({ status: 200, body: { slots } }),
+      'POST /store/demo/quote': (body) => quoteFor(body, areas),
       'POST /store/demo/checkout': () => ({ status: 201, body: { order: placed } }),
       'GET /store/demo/orders/tok123': () => ({ status: 200, body: placed }),
     });
@@ -403,7 +451,9 @@ describe('storefront', () => {
     await user.selectOptions(slot, slots[2]!.start);
     await user.click(screen.getByRole('button', { name: 'Place order' }));
     expect(await screen.findByTestId('order-status')).toHaveTextContent('Received');
-    expect(fetch.calls.find((c) => c.method === 'POST')!.body).toMatchObject({
+    expect(
+      fetch.calls.find((c) => c.method === 'POST' && c.path === '/store/demo/checkout')!.body,
+    ).toMatchObject({
       fulfillment: 'delivery',
       deliveryAreaId: areas[1]!.id,
       scheduledFor: slots[2]!.start,
@@ -465,7 +515,9 @@ describe('storefront', () => {
     await user.click(screen.getByRole('button', { name: 'Place order' }));
     expect(await screen.findByTestId('order-status')).toHaveTextContent('Received');
     expect(screen.getByText(/pay the driver when your order is delivered/)).toBeInTheDocument();
-    expect(fetch.calls.find((c) => c.method === 'POST')!.body).toMatchObject({
+    expect(
+      fetch.calls.find((c) => c.method === 'POST' && c.path === '/store/demo/checkout')!.body,
+    ).toMatchObject({
       paymentMethodId: null,
       expectedTotal: '4.000',
     });
@@ -499,8 +551,14 @@ describe('storefront', () => {
       await screen.findByText('Prices changed. Review the sale and try again.'),
     ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Place order and pay' }));
-    await waitFor(() => expect(fetch.calls.filter((c) => c.method === 'POST')).toHaveLength(2));
-    const [a, b] = fetch.calls.filter((c) => c.method === 'POST');
+    await waitFor(() =>
+      expect(
+        fetch.calls.filter((c) => c.method === 'POST' && c.path === '/store/demo/checkout'),
+      ).toHaveLength(2),
+    );
+    const [a, b] = fetch.calls.filter(
+      (c) => c.method === 'POST' && c.path === '/store/demo/checkout',
+    );
     expect((a!.body as { idempotencyKey: string }).idempotencyKey).not.toBe(
       (b!.body as { idempotencyKey: string }).idempotencyKey,
     );
@@ -539,6 +597,130 @@ describe('storefront', () => {
     await user.click(screen.getByRole('button', { name: 'Pay (test success)' }));
     await waitFor(() => expect(assign).toHaveBeenCalledWith(payment.returnUrl));
     expect(fetch.calls.find((c) => c.method === 'POST')!.body).toEqual({ outcome: 'succeeded' });
+  });
+
+  it('signs a shopper in and lists the orders of the account', async () => {
+    const user = userEvent.setup();
+    const account = {
+      id: '0190a000-0000-7000-8000-0000000000d1',
+      fullName: 'Sara',
+      phone: '+96550000001',
+      email: 'sara@example.com',
+      createdAt: '2026-10-01T08:00:00.000Z',
+    };
+    let token: string | null = null;
+    const { fetch } = renderStore('/demo/account', {
+      'POST /store/demo/account/login': () => {
+        token = 'st_secret';
+        return { status: 200, body: { token, account } };
+      },
+      'GET /store/demo/account': () =>
+        token
+          ? { status: 200, body: { account, addresses: [] } }
+          : { status: 401, body: { status: 401, code: 'UNAUTHENTICATED' } },
+      'GET /store/demo/account/orders': () => ({
+        status: 200,
+        body: {
+          orders: [
+            {
+              ...ORDER,
+              lines: undefined,
+              timeline: undefined,
+              status: 'completed',
+              lineCount: 1,
+            },
+          ],
+        },
+      }),
+    });
+    await user.type(await screen.findByLabelText('E-mail'), 'sara@example.com');
+    await user.type(screen.getByLabelText('Password'), 'secret-pass');
+    await user.click(screen.getAllByRole('button', { name: 'Sign in' }).at(-1)!);
+    expect(await screen.findByText('Hello, Sara')).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'W-000001' })).toBeInTheDocument();
+    expect(localStorage.getItem('arabat.store.demo.token')).toBe('st_secret');
+    expect(
+      fetch.calls.find((c) => c.method === 'POST' && c.path === '/store/demo/account/login')!.body,
+    ).toEqual({ email: 'sara@example.com', password: 'secret-pass' });
+    expect(screen.getByRole('link', { name: 'My account' })).toBeInTheDocument();
+  });
+
+  it('prefills the checkout of a signed-in shopper and applies a promotion code', async () => {
+    localStorage.setItem('arabat.store.demo.token', 'st_secret');
+    localStorage.setItem(
+      'arabat.cart.demo',
+      JSON.stringify([{ variantId: COFFEE_V, productId: COFFEE, quantity: 2 }]),
+    );
+    const user = userEvent.setup();
+    const account = {
+      id: '0190a000-0000-7000-8000-0000000000d1',
+      fullName: 'Sara',
+      phone: '+96550000001',
+      email: 'sara@example.com',
+      createdAt: '2026-10-01T08:00:00.000Z',
+    };
+    const home = {
+      id: '0190a000-0000-7000-8000-0000000000d2',
+      label: 'Home',
+      deliveryAreaId: null,
+      address: 'Block 1, Street 2',
+      isDefault: true,
+    };
+    const { fetch } = renderStore('/demo/checkout', {
+      'GET /store/demo/account': () => ({ status: 200, body: { account, addresses: [home] } }),
+      'POST /store/demo/quote': (body) => {
+        const base = quoteFor(body);
+        const code = (body as { promotionCode: string | null }).promotionCode;
+        if (code === 'TEN')
+          return {
+            status: 200,
+            body: {
+              ...base.body,
+              discount: kwd('0.250'),
+              total: kwd('3.750'),
+              promotion: { code: 'TEN', nameEn: 'Ten percent', nameAr: null },
+            },
+          };
+        if (code) return { status: 200, body: { ...base.body, codeIssue: 'unknown' } };
+        return base;
+      },
+      'POST /store/demo/checkout': () => ({
+        status: 201,
+        body: {
+          order: {
+            ...ORDER,
+            discount: kwd('0.250'),
+            promotion: { code: 'TEN', name: 'Ten percent' },
+            total: kwd('3.750'),
+          },
+        },
+      }),
+    });
+    await user.click(await screen.findByRole('radio', { name: /Delivery/ }));
+    await waitFor(() => expect(screen.getByLabelText('Full name')).toHaveValue('Sara'));
+    expect(screen.getByLabelText('Phone')).toHaveValue('+96550000001');
+    expect(screen.getByLabelText('Delivery address')).toHaveValue('Block 1, Street 2');
+    expect(screen.getByLabelText('Saved address')).toHaveValue(home.id);
+    await user.type(screen.getByLabelText('Promotion code'), 'nope');
+    await user.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(await screen.findByTestId('promo-issue')).toHaveTextContent('This code does not exist.');
+    await user.clear(screen.getByLabelText('Promotion code'));
+    await user.type(screen.getByLabelText('Promotion code'), 'ten');
+    await user.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(await screen.findByTestId('promo-applied')).toHaveTextContent('Ten percent applied.');
+    expect(screen.getByTestId('checkout-discount')).toHaveTextContent('KWD 0.250');
+    expect(screen.getByTestId('checkout-total')).toHaveTextContent('KWD 3.750');
+    await user.click(screen.getByRole('button', { name: 'Place order and pay' }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(ORDER.paymentUrl));
+    expect(
+      fetch.calls.find((c) => c.method === 'POST' && c.path === '/store/demo/checkout')!.body,
+    ).toMatchObject({
+      customer: { name: 'Sara', phone: '+96550000001', email: 'sara@example.com' },
+      deliveryAddress: 'Block 1, Street 2',
+      promotionCode: 'TEN',
+      saveAddress: false,
+      expectedTotal: '3.750',
+    });
   });
 
   it('defines the same translation keys in Arabic and English', () => {

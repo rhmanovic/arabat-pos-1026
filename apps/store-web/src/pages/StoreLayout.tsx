@@ -6,7 +6,10 @@ import { useTranslation } from 'react-i18next';
 import { Link, Navigate, Outlet, useLocation } from 'react-router';
 import { CartProvider, useCart } from '../cart.js';
 import {
+  AccountProvider,
   BranchChoiceProvider,
+  useAccount,
+  setPageMeta,
   useBranchChoice,
   useLocalName,
   useSlug,
@@ -44,9 +47,11 @@ export function StoreLayout() {
     );
   return (
     <BranchChoiceProvider key={slug} slug={slug}>
-      <CartProvider slug={slug}>
-        <Shell />
-      </CartProvider>
+      <AccountProvider slug={slug}>
+        <CartProvider slug={slug}>
+          <Shell />
+        </CartProvider>
+      </AccountProvider>
     </BranchChoiceProvider>
   );
 }
@@ -57,11 +62,23 @@ function Shell() {
   const cart = useCart();
   const name = useLocalName();
   const { branchId, setBranchId } = useBranchChoice();
+  const { token } = useAccount();
   const { t, i18n } = useTranslation();
   const storeName = store ? name(store) : '';
+  const storeDescription = store
+    ? i18n.language.startsWith('ar')
+      ? store.taglineAr || store.taglineEn
+      : store.taglineEn || store.taglineAr
+    : null;
   useEffect(() => {
-    if (storeName) document.title = storeName;
-  }, [storeName]);
+    if (storeName)
+      setPageMeta({
+        title: storeName,
+        description: storeDescription,
+        image: store?.logoUrl ?? store?.bannerUrl ?? null,
+        jsonLd: null,
+      });
+  }, [storeName, storeDescription, store?.logoUrl, store?.bannerUrl]);
   if (!store) return null;
   const ar = i18n.language.startsWith('ar');
   const tagline = ar ? store.taglineAr || store.taglineEn : store.taglineEn || store.taglineAr;
@@ -119,6 +136,11 @@ function Shell() {
             <Link to={`/${slug}`} className="text-sm hover:underline">
               {t('nav.catalog')}
             </Link>
+            {store.accountsEnabled || token ? (
+              <Link to={`/${slug}/account`} className="text-sm hover:underline">
+                {token ? t('nav.account') : t('nav.signIn')}
+              </Link>
+            ) : null}
             <Link
               to={`/${slug}/cart`}
               className="rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"

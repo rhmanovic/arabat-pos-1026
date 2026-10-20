@@ -301,6 +301,7 @@ export class OnlinePaymentsService implements OnModuleInit, OnModuleDestroy {
             verification: 'gateway',
             collectedByUserId: null,
           },
+          orderDiscountMinor: order.discountMinor,
         });
       });
     } catch (error) {

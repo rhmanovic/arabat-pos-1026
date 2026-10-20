@@ -309,6 +309,20 @@ function OrderDialog({ id, onClose }: { id: string; onClose: () => void }) {
                 <dd className="whitespace-pre-line">{o.note}</dd>
               </>
             ) : null}
+            {o.promotion ? (
+              <>
+                <dt className="text-fg-muted">{t('store.discount')}</dt>
+                <dd>
+                  -{formatAmount(o.discount, i18n.language)} · {o.promotion.name}
+                  {o.promotion.code ? (
+                    <>
+                      {' '}
+                      (<span dir="ltr">{o.promotion.code}</span>)
+                    </>
+                  ) : null}
+                </dd>
+              </>
+            ) : null}
             <dt className="text-fg-muted">{t('sales.method')}</dt>
             <dd>
               {o.paymentMethod ? localizedName(o.paymentMethod, i18n.language) : '—'}

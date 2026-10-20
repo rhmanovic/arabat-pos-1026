@@ -484,6 +484,13 @@
       "when": 1792487732656,
       "tag": "0068_online_fulfilment",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1792490624266,
+      "tag": "0069_online_accounts_promotions",
+      "breakpoints": true
     }
   ]
 }

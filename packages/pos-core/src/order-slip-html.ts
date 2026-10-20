@@ -20,6 +20,7 @@ export type OrderSlipData = {
   note: string | null;
   lines: { name: string; sku: string | null; quantity: string; lineTotalMinor: bigint }[];
   subtotalMinor: bigint;
+  discountMinor: bigint;
   deliveryFeeMinor: bigint;
   totalMinor: bigint;
 };
@@ -71,6 +72,7 @@ export function renderOrderSlipHtml(data: OrderSlipData, printedAt: Date): strin
     .join('');
   const totals = [
     h.row('المجموع', h.kwd(data.subtotalMinor), { ltr: true }),
+    data.discountMinor > 0n ? h.row('الخصم', `-${h.kwd(data.discountMinor)}`, { ltr: true }) : '',
     data.deliveryFeeMinor > 0n
       ? h.row('رسوم التوصيل', h.kwd(data.deliveryFeeMinor), { ltr: true })
       : '',

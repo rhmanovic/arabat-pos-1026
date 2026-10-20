@@ -216,7 +216,7 @@
 | 21 ★ | `21-manager-purchasing.md` | الموردون و«كشف حساب» المورد ودفعاته، أوامر الشراء وتاريخ المستند، استلام الشحنات وتاريخ التسليم | مدير الفرع، مدير الشركة | `/manager/suppliers`، `/manager/purchasing`، `/manager/purchasing/new`، `/manager/purchasing/:orderId` | `purchasing.read`، `purchasing.manage`، `purchasing.approve`، `purchasing.receive` | BR-100، BR-101، BR-102، BR-188، BR-190، OQ-018 |
 | 22 | `22-manager-customers.md` | العملاء: البحث، الملف، سجل المشتريات والمرتجعات، الملاحظات، التفعيل والإيقاف | مدير الفرع، مدير الشركة | `/manager/customers`، `/manager/customers/:customerId` | `customers.read`، `customers.create`، `customers.manage` | BR-110، BR-111، BR-112، BR-113، BR-114، OQ-019 |
 | 23 ★ | `23-manager-reports.md` | التقارير: المبيعات، المدفوعات والنقد، المصروفات، الورديات، المخزون (الختامي حتى تاريخ، تدوير الرصيد)، المشتريات؛ «كيف تُحسب هذه الأرقام»؛ «تصدير CSV» وتسجيل العرض والتصدير | مدير الفرع، مدير الشركة، أمين الخزينة، المالك | `/manager/reports` | `reports.sales`، `reports.financial`، `reports.inventory` | BR-120 إلى BR-129، BR-126a، BR-176، BR-184، BR-185، BR-187 |
-| 24 | `24-manager-online-store.md` | المتجر الإلكتروني: الطلبات وخطواتها، إعدادات المتجر، المنتجات المعروضة، فحص المدفوعات المعلّقة | مدير الفرع (الطلبات)، مدير الشركة (الإعداد) | `/manager/online` | `online.orders`، `online.manage` | BR-140 إلى BR-149، BR-161، OQ-021 |
+| 24 | `24-manager-online-store.md` | المتجر الإلكتروني: الطلبات وخطواتها، إعدادات المتجر، المنتجات المعروضة، مناطق التوصيل والفروع، حسابات المتسوقين، العروض، التحليلات، فحص المدفوعات المعلّقة | مدير الفرع (الطلبات)، مدير الشركة (الإعداد) | `/manager/online` | `online.orders`، `online.manage` | BR-140 إلى BR-149، BR-161، OQ-021 |
 
 ### الجزء السادس — الإعداد (مدير الشركة والمالك)
 

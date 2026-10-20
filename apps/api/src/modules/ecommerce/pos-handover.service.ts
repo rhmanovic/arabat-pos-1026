@@ -186,6 +186,7 @@ export class PosHandoverService {
           userId: actor.userId,
           payments: input.payments,
         },
+        orderDiscountMinor: BigInt(order['discount_minor'] as string),
       });
       await tx.execute(sql`
         update online_orders set sale_id = ${saleId}, paid_at = now(), payment_method_id = ${first.methodId},

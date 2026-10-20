@@ -95,7 +95,7 @@ export async function loadOrderSlipData(tx: Transaction, orderId: string): Promi
     await tx.execute(sql`
       select o.number, o.status, o.fulfillment, o.payment_mode, o.sale_id, o.created_at, o.scheduled_for,
              o.customer_name, o.customer_phone, o.delivery_address, o.delivery_area_name, o.note,
-             o.subtotal_minor::text, o.delivery_fee_minor::text, o.total_minor::text,
+             o.subtotal_minor::text, o.discount_minor::text, o.delivery_fee_minor::text, o.total_minor::text,
              m.display_name_en, m.display_name_ar, m.timezone, b.name_en as b_en, b.name_ar as b_ar
       from online_orders o join merchants m on m.id = o.merchant_id join branches b on b.id = o.branch_id
       where o.id = ${orderId}`)
@@ -131,6 +131,7 @@ export async function loadOrderSlipData(tx: Transaction, orderId: string): Promi
       lineTotalMinor: BigInt(l['line_total_minor'] as string),
     })),
     subtotalMinor: BigInt(o['subtotal_minor'] as string),
+    discountMinor: BigInt(o['discount_minor'] as string),
     deliveryFeeMinor: BigInt(o['delivery_fee_minor'] as string),
     totalMinor: BigInt(o['total_minor'] as string),
   };

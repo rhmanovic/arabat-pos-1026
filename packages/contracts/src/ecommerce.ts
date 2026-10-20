@@ -124,6 +124,8 @@ export const onlineStoreSchema = z.object({
   slotMinutes: z.number().int(),
   slotCapacity: z.number().int().nullable(),
   notifyEmail: z.boolean(),
+  /** Shoppers may create an account and sign in (ADR-0124); guests still order. */
+  accountsEnabled: z.boolean(),
   /** Payment methods available online (`availableOnline` and a gateway provider). */
   paymentMethods: z.array(
     z.object({
@@ -183,6 +185,7 @@ export const saveOnlineStoreSchema = z
       .nullish()
       .transform((v) => v ?? null),
     notifyEmail: z.boolean().default(true),
+    accountsEnabled: z.boolean().default(true),
     version: z.number().int().nonnegative(),
   })
   .refine((s) => Boolean(s.nameAr || s.nameEn), {
@@ -321,6 +324,9 @@ export const publicOrderSchema = z.object({
   customerName: z.string(),
   lines: z.array(onlineOrderLineSchema),
   subtotal: moneySchema,
+  /** Order discount of the applied promotion (ADR-0125); zero without one. */
+  discount: moneySchema,
+  promotion: z.object({ code: z.string().nullable(), name: z.string() }).nullable(),
   deliveryFee: moneySchema,
   total: moneySchema,
   createdAt: z.string(),
@@ -578,6 +584,8 @@ export const storefrontSchema = z.object({
   ),
   scheduling: z.object({ enabled: z.boolean(), slotMinutes: z.number().int() }),
   timezone: z.string(),
+  /** Shoppers may sign in (ADR-0124). */
+  accountsEnabled: z.boolean(),
 });
 export type Storefront = z.infer<typeof storefrontSchema>;
 export const storeSlotListSchema = z.object({
@@ -642,6 +650,16 @@ export const storeCheckoutSchema = z
       .nullish()
       .transform((v) => v ?? null),
     note: text(300),
+    /** A promotion code entered by the shopper (ADR-0125); automatic offers need none. */
+    promotionCode: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .max(20)
+      .nullish()
+      .transform((v) => v || null),
+    /** Signed-in shoppers: keep the delivery address on the account (ADR-0124). */
+    saveAddress: z.boolean().default(false),
     /** An online method, or null to pay on receipt (when the store allows it). */
     paymentMethodId: z
       .uuid()
@@ -656,6 +674,207 @@ export const storeCheckoutSchema = z
   });
 export type StoreCheckout = z.input<typeof storeCheckoutSchema>;
 export const storeCheckoutResultSchema = z.object({ order: publicOrderSchema });
+
+// ---------------------------------------------------------------- quote (ADR-0125)
+export const storeQuoteSchema = z.object({
+  lines: z
+    .array(z.object({ variantId: z.uuid(), quantity: quantitySchema }))
+    .min(1)
+    .max(50),
+  fulfillment: z.enum(FULFILLMENTS),
+  deliveryAreaId: optionalId(),
+  branchId: optionalId(),
+  promotionCode: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .max(20)
+    .nullish()
+    .transform((v) => v || null),
+});
+export type StoreQuote = z.input<typeof storeQuoteSchema>;
+export const storeQuoteResultSchema = z.object({
+  subtotal: moneySchema,
+  discount: moneySchema,
+  deliveryFee: moneySchema,
+  total: moneySchema,
+  /** The promotion applied (a code, or the best automatic offer), or none. */
+  promotion: z.object({ code: z.string().nullable(), ...named }).nullable(),
+  /** Why the entered code was not applied, if it was not. */
+  codeIssue: z
+    .enum([
+      'unknown',
+      'inactive',
+      'expired',
+      'not_started',
+      'minimum',
+      'used_up',
+      'customer_limit',
+      'no_match',
+    ])
+    .nullable(),
+});
+export type StoreQuoteResult = z.infer<typeof storeQuoteResultSchema>;
+
+// ---------------------------------------------------------------- shopper accounts (ADR-0124)
+const passwordSchema = z.string().min(8).max(100);
+export const customerAccountSchema = z.object({
+  id: z.string(),
+  fullName: z.string(),
+  phone: z.string(),
+  email: z.string(),
+  createdAt: z.string(),
+});
+export type CustomerAccount = z.infer<typeof customerAccountSchema>;
+export const customerAddressSchema = z.object({
+  id: z.string(),
+  label: z.string().nullable(),
+  deliveryAreaId: z.string().nullable(),
+  address: z.string(),
+  isDefault: z.boolean(),
+});
+export type CustomerAddress = z.infer<typeof customerAddressSchema>;
+export const accountViewSchema = z.object({
+  account: customerAccountSchema,
+  addresses: z.array(customerAddressSchema),
+});
+export type AccountView = z.infer<typeof accountViewSchema>;
+export const accountSessionSchema = z.object({ token: z.string(), account: customerAccountSchema });
+export type AccountSession = z.infer<typeof accountSessionSchema>;
+export const accountRegisterSchema = z.object({
+  fullName: z.string().trim().min(1).max(120),
+  phone: z.string().trim().min(6).max(30),
+  email: z.email().trim().toLowerCase().max(254),
+  password: passwordSchema,
+});
+export type AccountRegister = z.input<typeof accountRegisterSchema>;
+export const accountLoginSchema = z.object({
+  email: z.email().trim().toLowerCase().max(254),
+  password: z.string().min(1).max(100),
+});
+export type AccountLogin = z.input<typeof accountLoginSchema>;
+export const accountUpdateSchema = z.object({
+  fullName: z.string().trim().min(1).max(120),
+  phone: z.string().trim().min(6).max(30),
+});
+export type AccountUpdate = z.input<typeof accountUpdateSchema>;
+export const accountPasswordSchema = z.object({
+  current: z.string().min(1).max(100),
+  next: passwordSchema,
+});
+export type AccountPassword = z.input<typeof accountPasswordSchema>;
+export const accountForgotSchema = z.object({ email: z.email().trim().toLowerCase().max(254) });
+export const accountResetSchema = z.object({
+  token: z.string().min(10).max(200),
+  password: passwordSchema,
+});
+export type AccountReset = z.input<typeof accountResetSchema>;
+export const saveCustomerAddressSchema = z.object({
+  label: text(40),
+  deliveryAreaId: optionalId(),
+  address: z.string().trim().min(1).max(300),
+  isDefault: z.boolean().default(false),
+});
+export type SaveCustomerAddress = z.input<typeof saveCustomerAddressSchema>;
+export const accountOrderListSchema = z.object({
+  orders: z.array(
+    publicOrderSchema.omit({ lines: true, timeline: true }).extend({ lineCount: z.number().int() }),
+  ),
+});
+export type AccountOrderList = z.infer<typeof accountOrderListSchema>;
+
+// ---------------------------------------------------------------- promotions (ADR-0125, manager)
+export const PROMOTION_KINDS = ['code', 'automatic'] as const;
+export const PROMOTION_TYPES = ['percentage', 'fixed', 'free_delivery'] as const;
+export const PROMOTION_TARGETS = ['order', 'category', 'product'] as const;
+export const onlinePromotionSchema = z.object({
+  id: z.string(),
+  ...named,
+  kind: z.enum(PROMOTION_KINDS),
+  code: z.string().nullable(),
+  discountType: z.enum(PROMOTION_TYPES),
+  percent: z.string().nullable(),
+  amount: moneySchema.nullable(),
+  minimumOrder: moneySchema,
+  maxUses: z.number().int().nullable(),
+  usesCount: z.number().int(),
+  maxUsesPerCustomer: z.number().int().nullable(),
+  startsAt: z.string().nullable(),
+  endsAt: z.string().nullable(),
+  status: z.enum(['active', 'paused']),
+  appliesTo: z.enum(PROMOTION_TARGETS),
+  targetIds: z.array(z.string()),
+  position: z.number().int(),
+  version: z.number().int(),
+});
+export type OnlinePromotion = z.infer<typeof onlinePromotionSchema>;
+export const onlinePromotionListSchema = z.object({ promotions: z.array(onlinePromotionSchema) });
+export const saveOnlinePromotionSchema = z
+  .object({
+    nameEn: text(80),
+    nameAr: text(80),
+    kind: z.enum(PROMOTION_KINDS).default('code'),
+    code: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^[A-Z0-9]{3,20}$/, { error: 'Letters and digits, 3–20 characters.' })
+      .nullish()
+      .transform((v) => v || null),
+    discountType: z.enum(PROMOTION_TYPES),
+    percent: z
+      .string()
+      .regex(/^\d{1,3}(\.\d{1,2})?$/)
+      .nullish()
+      .transform((v) => v || null),
+    amount: moneyAmountSchema.nullish().transform((v) => v || null),
+    minimumOrder: moneyAmountSchema.default('0.000'),
+    maxUses: z
+      .number()
+      .int()
+      .min(1)
+      .nullish()
+      .transform((v) => v ?? null),
+    maxUsesPerCustomer: z
+      .number()
+      .int()
+      .min(1)
+      .nullish()
+      .transform((v) => v ?? null),
+    startsAt: z.iso
+      .datetime({ offset: true })
+      .nullish()
+      .transform((v) => v ?? null),
+    endsAt: z.iso
+      .datetime({ offset: true })
+      .nullish()
+      .transform((v) => v ?? null),
+    status: z.enum(['active', 'paused']).default('active'),
+    appliesTo: z.enum(PROMOTION_TARGETS).default('order'),
+    targetIds: z.array(z.uuid()).max(200).default([]),
+    version: z.number().int().positive().optional(),
+  })
+  .refine((p) => Boolean(p.nameAr || p.nameEn), { error: 'A name is required.', path: ['nameAr'] })
+  .refine((p) => p.kind !== 'code' || p.code !== null, { error: 'Enter the code.', path: ['code'] })
+  .refine(
+    (p) =>
+      p.discountType !== 'percentage' ||
+      (p.percent !== null && Number(p.percent) > 0 && Number(p.percent) <= 100),
+    {
+      error: 'Enter a percentage between 0 and 100.',
+      path: ['percent'],
+    },
+  )
+  .refine((p) => p.discountType !== 'fixed' || (p.amount !== null && Number(p.amount) > 0), {
+    error: 'Enter the discount amount.',
+    path: ['amount'],
+  })
+  .refine((p) => p.appliesTo === 'order' || p.targetIds.length > 0, {
+    error: 'Choose at least one category or product.',
+    path: ['targetIds'],
+  });
+export type SaveOnlinePromotion = z.input<typeof saveOnlinePromotionSchema>;
+export const onlinePromotionOrderSchema = z.object({ ids: z.array(z.uuid()).max(500) });
 
 // ---------------------------------------------------------------- mock gateway (test only)
 export const mockPaymentSchema = z.object({

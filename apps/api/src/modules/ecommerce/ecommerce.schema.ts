@@ -21,6 +21,7 @@ import { createdAt, id, merchantId, updatedAt } from '../../database/schema/colu
 import { branches } from '../branches/branches.schema.js';
 import { productVariants, products } from '../catalog/catalog.schema.js';
 import { merchants } from '../merchants/merchants.schema.js';
+import { onlinePromotions } from './promotions.schema.js';
 
 const quantity = () => numeric({ precision: 14, scale: 3 });
 const minor = () => bigint({ mode: 'bigint' });
@@ -78,6 +79,8 @@ export const onlineStores = pgTable(
     slotCapacity: integer(),
     /** E-mail the store's contact address about new orders. */
     notifyEmail: boolean().notNull().default(true),
+    /** Shoppers may create an account (ADR-0124); guests can always order. */
+    accountsEnabled: boolean().notNull().default(true),
     version: integer().notNull().default(1),
     updatedAt: updatedAt(),
   },
@@ -303,6 +306,13 @@ export const onlineOrders = pgTable(
     scheduledFor: timestamp({ withTimezone: true }),
     /** Idempotency key of the till payment that settled the order (POS hand-over, ADR-0123). */
     posIdempotencyKey: uuid(),
+    /** The promotion applied (ADR-0125): id while it exists, code and name as they were. */
+    promotionId: uuid().references(() => onlinePromotions.id, { onDelete: 'set null' }),
+    promotionCode: text(),
+    promotionName: text(),
+    discountMinor: minor()
+      .notNull()
+      .default(sql`0`),
     note: text(),
     customerId: uuid(),
     currency: char({ length: 3 }).notNull().default('KWD'),
@@ -363,7 +373,8 @@ export const onlineOrders = pgTable(
     ),
     check(
       'online_orders_totals',
-      sql`${t.totalMinor} = ${t.subtotalMinor} + ${t.deliveryFeeMinor} and ${t.totalMinor} > 0`,
+      sql`${t.totalMinor} = ${t.subtotalMinor} - ${t.discountMinor} + ${t.deliveryFeeMinor}
+          and ${t.discountMinor} >= 0 and ${t.discountMinor} <= ${t.subtotalMinor} and ${t.totalMinor} > 0`,
     ),
     index('online_orders_status_idx').on(t.merchantId, t.status, t.createdAt),
   ],

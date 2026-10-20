@@ -117,6 +117,28 @@ engineering defaults pending owner confirmation.
   (the main register's first), and cannot sell while none is open. A device shift is never refused because
   the person left a shift open elsewhere; that shift is listed for the managers to close. Records
   that reach the server after the branch shift closed are booked to it and flagged "late".
+- **BR-226** Promotion on the sale (ADR-0125): the online discount is the sale's order
+  discount, recorded in the sale document and the sales report; refunds of such a sale follow
+  the existing refund rules on the discounted amounts. Uses are append-only and count against
+  the promotion's limits in the checkout transaction.
+- **BR-225** Entered codes (ADR-0125): a code is checked before the order is placed and the
+  shopper is told why it does not apply (unknown, paused, not started, expired, below the
+  minimum, used up, used by this customer before, nothing in scope); an order with a code that
+  no longer fits is refused, never placed without the discount silently.
+- **BR-224** One promotion per order (ADR-0125): the entered code when it fits, otherwise the
+  best automatic offer; a percentage or fixed discount applies to the lines in its scope,
+  never exceeds them and is rounded down to fils; free delivery zeroes the delivery fee. The
+  total stays above zero. Deleting a used promotion pauses it.
+- **BR-223** Password reset (ADR-0124): by e-mail only, with a single-use link valid for 60
+  minutes; the response never tells whether the e-mail has an account. No SMS or WhatsApp is
+  sent without a provider the owner approved.
+- **BR-222** One customer across channels (ADR-0124): a shopper account attaches to the
+  merchant's customer record with the same phone, so POS and online orders are one history; a
+  phone or e-mail already bound to another account is refused.
+- **BR-221** Shopper accounts (ADR-0124): a store may let shoppers create accounts (e-mail +
+  password; the merchant may turn this off) that reach only the storefront: their orders, saved
+  addresses, profile and password. Guest checkout stays available. Sessions last 90 days and
+  end on sign-out.
 - **BR-220** Till hand-over (ADR-0123): a cashier hands over the branch's pickup orders at the
   POS; an unpaid pay-on-receipt order is paid there with the till's tenders in the cashier's
   own open shift (same tender rules as a sale, change on cash, cash into the register drawer)

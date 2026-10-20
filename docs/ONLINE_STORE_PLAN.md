@@ -203,55 +203,50 @@ the POS hand-over (sale in the cashier's shift, cash into the drawer).
 **Done when:** a restaurant or shop with three branches runs delivery by area and pickup per
 branch, customers are notified, and orders print at the branch.
 
-### Phase 6 — Customer accounts
-Size: M. Migration 0070. ADR-0123. BR-223…BR-226.
+### Phase 6 — Customer accounts ✅ (ADR-0124, migration 0069, BR-221…223)
+Done 2026-10-20 **without messaging** (owner: "لا تسوي رسائل"). Differences from the sketch:
 
-- Phone-OTP sign-in for shoppers (`online_customers`, OTP through the SMS adapter of Phase 5,
-  rate-limited), separate identity realm from merchant users and platform operators (AUTH.md
-  realm rules), session cookie scoped to `/store`.
-- Saved addresses, order history, re-order, "notify me when back in stock".
-- Link to the merchant's `customers` (CRM) record by phone on first order, so POS and online
-  history are one customer (BR-114 rules, consent flag).
-- Guest checkout stays available (store setting).
+- E-mail + password accounts (`customer_accounts`, bearer tokens `st_…` kept per store in the
+  browser) instead of phone OTP; password reset by e-mail through the existing `Mailer`. SMS
+  stays an adapter point for a provider the owner approves.
+- Separate identity realm reaching only `/store/:slug/account/*`; one account per `customers`
+  record, attached by phone to the till's customer (BR-114).
+- Saved addresses, own orders with tracking links, profile and password; checkout prefills and
+  can save the address; guest checkout stays; the merchant may turn accounts off.
+- Not done: "notify me when back in stock", one-click re-order, OTP.
 
-### Phase 7 — Promotions
-Size: M. Migration 0071. ADR-0124. BR-227…BR-230.
+### Phase 7 — Promotions ✅ (ADR-0125, migration 0069, BR-224…226)
+Done 2026-10-20. Differences from the sketch:
 
-- Coupons (`online_coupons`: code, percent / fixed, minimum, per-customer and total limits,
-  validity, products / categories scope), automatic offers (free delivery above X, buy X get Y
-  limited to the discount rules D4 / company bounds), first-order discount.
-- Discounts are sale lines / line discounts in the sale document so reports reconcile
-  (reuses the POS discount engine in `pos-core`).
+- `online_promotions` (codes and automatic offers: percentage / fixed / free delivery, minimum,
+  total and per-customer limits, dates, scope order / categories / products) and append-only
+  `online_promotion_uses`; one promotion per order (the entered code when it fits, else the
+  best automatic offer); `POST /store/:slug/quote` gives the totals and why a code fails.
+- The discount is the sale's **order discount** (`pos-core` pricing), not per-line discounts;
+  reports reconcile through the existing discount fields. No buy-X-get-Y, no stacking;
+  first-order discount = `max_uses_per_customer = 1`.
 
-### Phase 8 — Real payment gateway (sandbox → live)
-Size: M per provider. ADR-0125. OQ-021 closed.
+### Phase 8 — Real payment gateway (sandbox → live) — frontend placeholder only (ADR-0126)
+Done 2026-10-20 as a "Coming soon" section in `/online/settings` (K-net, cards, wallets) with
+the note that each needs a provider contract and the owner's approval. **Backend not built**
+(owner: "فقط الفرونت اند"). When the owner picks a provider: `initiate / verify / parseWebhook`
+for real, idempotent webhooks, refunds through the provider API, credentials per merchant
+through the platform (encrypted, never in the repo), sandbox certification from `e2e`. **Live
+activation only with the owner's explicit approval** (CLAUDE.md §3.13).
 
-- One provider first for Kuwait (KNET through **MyFatoorah** or **Tap** — the owner chooses on
-  commercial terms; Hesabe / UPayments adapters stay as alternatives). Implement
-  `initiate / verify / parseWebhook` for real, idempotent webhooks (already modelled), refunds
-  through the provider API (today: manual), settlement report by provider.
-- Credentials per merchant through the platform (`/platform/merchants/:id/gateway`,
-  encrypted at rest, never in the repo), sandbox certification run from `e2e`.
-- **Live activation only with the owner's explicit approval** (CLAUDE.md §3.13); until then
-  Phases 1–7 run on pay-when-you-receive and bank transfer.
+### Phase 9 — Own address: subdomain and custom domain — frontend placeholder only (ADR-0126)
+Done 2026-10-20 as a "Store address on the web" section in `/online/settings` (current
+`/store/<slug>` address, future subdomain and custom-domain rows). **Backend not built:**
+`<slug>.arabatapp.com` (wildcard certificate, host-based resolution in `store_merchant`),
+`online_store_domains` (verification TXT, managed certificate, CSP / CORS per host), platform
+approval page.
 
-### Phase 9 — Own address: subdomain and custom domain
-Size: M. Migration 0072. ADR-0126.
-
-- `<slug>.arabatapp.com` (wildcard certificate on the load balancer, host-based resolution in
-  the API — `store_merchant` gains a host lookup; `/store/<slug>` keeps working).
-- Custom domain per merchant (`online_store_domains`: domain, verification TXT token, status;
-  managed certificate per domain through the GCP API; CSP / CORS per host). Platform page to
-  approve domains.
-
-### Phase 10 — Analytics, SEO and PWA
-Size: M. No migration beyond events.
-
-- Store analytics in the console (visits, conversion, top products, abandoned carts) from an
-  append-only `online_events` stream (no third-party trackers by default).
-- Sitemap, structured data, Open Graph per store and product, server-rendered meta for product
-  links shared on WhatsApp (small SSR endpoint for bots only).
-- Installable PWA storefront, image CDN caching through the load balancer.
+### Phase 10 — Analytics, SEO and PWA — frontend only (ADR-0126)
+Done 2026-10-20 in the browser: `/online/analytics` (orders, revenue, average, lost rate,
+revenue per day, top products, mix, discounts; channel split from the sales report), storefront
+meta + Open Graph per page and JSON-LD `Product`, PWA manifest and service worker (app shell
+offline, API always network). **Backend not built:** `online_events` stream (visits,
+conversion, abandoned carts), sitemap, bot SSR for link previews, image CDN rules.
 
 ## 3. Cross-cutting rules for every phase
 

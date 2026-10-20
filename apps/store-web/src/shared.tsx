@@ -39,6 +39,65 @@ export function BranchChoiceProvider({ slug, children }: { slug: string; childre
   return <BranchContext.Provider value={value}>{children}</BranchContext.Provider>;
 }
 
+/** The shopper's account token (ADR-0124), kept per store in the browser. */
+const AccountContext = createContext<{
+  token: string | null;
+  setToken: (token: string | null) => void;
+} | null>(null);
+const tokenStorageKey = (slug: string) => `arabat.store.${slug}.token`;
+
+export function AccountProvider({ slug, children }: { slug: string; children: ReactNode }) {
+  const [token, setState] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(tokenStorageKey(slug));
+    } catch {
+      return null;
+    }
+  });
+  const setToken = useCallback(
+    (next: string | null) => {
+      setState(next);
+      try {
+        if (next) localStorage.setItem(tokenStorageKey(slug), next);
+        else localStorage.removeItem(tokenStorageKey(slug));
+      } catch {
+        // Private mode: signed in for this page only.
+      }
+    },
+    [slug],
+  );
+  const value = useMemo(() => ({ token, setToken }), [token, setToken]);
+  return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>;
+}
+
+/** Token and sign-in state of the shopper; `account` loads when a token is present. */
+export function useAccount() {
+  const ctx = useContext(AccountContext);
+  const api = useApi();
+  const slug = useSlug();
+  const token = ctx?.token ?? null;
+  const setToken = ctx?.setToken ?? (() => undefined);
+  const view = useQuery({
+    queryKey: ['store', slug, 'account', token],
+    queryFn: () => api.store.account.me(slug, token!),
+    enabled: token !== null,
+    retry: false,
+  });
+  // A revoked or expired token signs the shopper out quietly.
+  if (view.isError && token) setToken(null);
+  return {
+    token,
+    setToken,
+    account: view.data?.account ?? null,
+    addresses: view.data?.addresses ?? [],
+    isPending: token !== null && view.isPending,
+    signOut: async () => {
+      if (token) await api.store.account.logout(slug, token).catch(() => undefined);
+      setToken(null);
+    },
+  };
+}
+
 /**
  * The branch products, stock and prices come from: the shopper's choice when it serves the
  * store, else the store's default branch.
@@ -88,6 +147,50 @@ export function useLocalName() {
   return (item: { nameEn: string | null; nameAr: string | null }) =>
     (i18n.language.startsWith('ar') ? item.nameAr || item.nameEn : item.nameEn || item.nameAr) ??
     '';
+}
+
+/** Page metadata for search engines and link previews (Phase 10): title, description, OG tags, JSON-LD. */
+export function setPageMeta(meta: {
+  title: string;
+  description?: string | null;
+  image?: string | null;
+  jsonLd?: Record<string, unknown> | null;
+}) {
+  document.title = meta.title;
+  const tag = (selector: string, create: () => HTMLElement) => {
+    let el = document.head.querySelector<HTMLElement>(selector);
+    if (!el) {
+      el = create();
+      document.head.appendChild(el);
+    }
+    return el;
+  };
+  const metaTag = (attr: 'name' | 'property', key: string, content: string | null | undefined) => {
+    const el = tag(`meta[${attr}="${key}"]`, () => {
+      const m = document.createElement('meta');
+      m.setAttribute(attr, key);
+      return m;
+    });
+    if (content) el.setAttribute('content', content);
+    else el.remove();
+  };
+  metaTag('name', 'description', meta.description);
+  metaTag('property', 'og:title', meta.title);
+  metaTag('property', 'og:description', meta.description);
+  metaTag(
+    'property',
+    'og:image',
+    meta.image ? new URL(meta.image, window.location.origin).toString() : null,
+  );
+  metaTag('property', 'og:type', meta.jsonLd ? 'product' : 'website');
+  const ld = tag('script[data-seo="jsonld"]', () => {
+    const s = document.createElement('script');
+    s.type = 'application/ld+json';
+    s.setAttribute('data-seo', 'jsonld');
+    return s;
+  });
+  if (meta.jsonLd) ld.textContent = JSON.stringify(meta.jsonLd);
+  else ld.remove();
 }
 
 export function useMoney() {

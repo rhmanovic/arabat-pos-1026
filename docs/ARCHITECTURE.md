@@ -24,6 +24,12 @@ the code differ, the code wins and the differences are listed here:
   Fulfilment (ADR-0123): delivery areas, serving branches, hours and slots (`store-hours.ts`),
   order e-mails (`OrderNotificationsService`, after commit), packing slips through the print
   agents, and till hand-over (`PosHandoverService`, `/pos/online-orders`).
+  Shopper accounts (ADR-0124): a third identity realm (`customer_accounts`, bearer tokens
+  resolved by `StoreAccountsService` through `customer_session_lookup`), reaching only
+  `/store/:slug/account/*`. Promotions (ADR-0125): `PromotionsService.apply` (pure over priced
+  lines) behind `POST /store/:slug/quote` and checkout; the discount is the sale's order
+  discount. Phases 8–10 are frontend only (ADR-0126): placeholders, browser analytics, SEO
+  meta / JSON-LD, PWA manifest + service worker in `apps/store-web/public`.
 - `apps/landing-web` is the public landing page at `/` (static React page, no session, no API
   calls; ADR-0113). Its text lives in `src/content.ts` (ar/en).
 Related documents: `AUTH.md` (authentication & permissions), `ROUTES.md`

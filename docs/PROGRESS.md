@@ -1265,6 +1265,32 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-20 — Online store Phases 6–10: shopper accounts, promotions, frontend-only 8–10 (ADR-0124/0125/0126)
+Owner's directive: Phase 6 without SMS / WhatsApp, Phase 7 complete, Phases 8–10 frontend only,
+one release at the end.
+- Migration 0069: `customer_accounts`, `customer_sessions` (+ `customer_session_lookup`),
+  `customer_password_resets`, `customer_addresses`, `online_promotions`, `online_promotion_uses`
+  (append-only), `online_orders.promotion_* / discount_minor` with the new totals check,
+  `online_stores.accounts_enabled`.
+- API: `StoreAccountsService` (`/store/:slug/account/*`: register on the till's customer by
+  phone, login / logout with bearer `st_…` tokens, me / update / password, forgot / reset by
+  e-mail, orders, addresses; rate-limited; audited), `PromotionsService` (console CRUD, order,
+  pause-on-delete, `apply` + `recordUse`), `POST /store/:slug/quote`, checkout with
+  `promotionCode` / `saveAddress` / the account's customer, the discount on the order, the sale
+  (`orderDiscountMinor`) and the packing slip.
+- Console `/online`: Promotions page (list, dialog with scope targets, pause / delete),
+  Analytics page (browser-computed, 7 / 30 / 90 days), settings: shopper accounts switch,
+  gateway and domain placeholder sections. Storefront: account pages (sign in / register,
+  orders, addresses, profile, forgot / reset), checkout prefill + saved addresses + "save this
+  address", promotion code with the server's quote and the reason a code fails, discount rows on
+  checkout and tracking, SEO meta + Open Graph + JSON-LD Product, PWA manifest + service worker.
+- Tests: `ecommerce.int.test.ts` +3 (19), online-web +3 (18), store-web +2 (18); see TESTING.
+- Docs: ADR-0124, ADR-0125, ADR-0126, BR-221…226, ROUTES, DATABASE (0069), ROADMAP,
+  ARCHITECTURE, plan (Phases 6–10 with the differences), user guide chapter 24, CLAUDE.md.
+- Verified (cloud sandbox): `pnpm verify` 348 unit/web (56 files), `pnpm test:integration` 306
+  (44 files), `pnpm test:e2e` 42.
+- Released: see the release note below (staging then production per ADR-0122).
+
 ### 2026-10-20 — Online store Phase 4: catalog and merchandising (ADR-0121)
 Owner request ("ابدا خطوه 4"). The catalog, prices and stock stay shared with the POS; the store
 adds how it presents them.
@@ -1303,9 +1329,10 @@ adds how it presents them.
   "Arabat Online Store") 200. Signed out afterwards; no key deleted.
 
 ## Next step
-Online store: Phase 5 ✅ (ADR-0123); next is Phase 6 (customer accounts), then 7 (promotions), per
-`docs/ONLINE_STORE_PLAN.md`; production releases follow ADR-0122. SMS / WhatsApp notifications
-wait for a provider the owner approves.
+Online store: Phases 1, 2, 4, 5, 6, 7 ✅ and 8–10 frontend only (ADR-0126). Open backend work
+needs the owner's decisions: a real payment gateway (provider choice, OQ-021), subdomains /
+custom domains, an `online_events` stream for visits and abandoned carts, bot SSR for link
+previews, SMS / WhatsApp. Production releases follow ADR-0122.
 Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
 lock, first restore drill.
 Staging: first platform operator, SMTP; owner decisions OQ-021–025.

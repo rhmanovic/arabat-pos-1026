@@ -6,12 +6,14 @@ import {
 } from '@arabat/web-core';
 import type { RouteObject } from 'react-router';
 import { OnlineLayout } from './app/OnlineLayout.js';
+import { AnalyticsPage } from './features/analytics/AnalyticsPage.js';
 import { CategoriesPage } from './features/categories/CategoriesPage.js';
 import { DashboardPage } from './features/dashboard/DashboardPage.js';
 import { BranchesPage } from './features/fulfilment/BranchesPage.js';
 import { DeliveryAreasPage } from './features/fulfilment/DeliveryAreasPage.js';
 import { OrdersPage } from './features/orders/OrdersPage.js';
 import { ProductsPage } from './features/products/ProductsPage.js';
+import { PromotionsPage } from './features/promotions/PromotionsPage.js';
 import { SettingsPage } from './features/settings/SettingsPage.js';
 import { ForgotPasswordPage, LoginPage } from './pages/LoginPage.js';
 
@@ -46,6 +48,8 @@ export const routes: RouteObject[] = [
       { path: 'categories', element: <CategoriesPage /> },
       { path: 'delivery-areas', element: <DeliveryAreasPage /> },
       { path: 'branches', element: <BranchesPage /> },
+      { path: 'promotions', element: <PromotionsPage /> },
+      { path: 'analytics', element: <AnalyticsPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: '*', element: <NotFound /> },
     ],

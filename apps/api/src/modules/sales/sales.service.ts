@@ -880,6 +880,8 @@ export class SalesService {
         /** Staff member who recorded a manual payment. */
         collectedByUserId: string | null;
       };
+      /** Order discount of an applied promotion (ADR-0125), spread over the lines. */
+      orderDiscountMinor?: bigint;
       /**
        * Hand-over at the till (ADR-0123): the cashier's open shift takes the money with the
        * POS tenders (several, with change); cash goes into the register drawer. `payment`
@@ -939,13 +941,14 @@ export class SalesService {
       applied,
       (i) => catalogCosts.get(lines[i]!.variantId) ?? null,
     );
+    const orderDiscountMinor = args.orderDiscountMinor ?? 0n;
     const priced = priceCart(
       lines.map((l) => ({
         unitPriceMinor: l.unitPriceMinor,
         quantityMilli: l.quantityMilli,
         discount: null,
       })),
-      null,
+      orderDiscountMinor > 0n ? { type: 'amount', amountMinor: orderDiscountMinor } : null,
     );
     if (priced.totalMinor !== args.payment.amountMinor)
       throw new AppError(
@@ -1010,7 +1013,7 @@ export class SalesService {
         discountType: null,
         discountValue: null,
         lineDiscountMinor: 0n,
-        orderDiscountMinor: 0n,
+        orderDiscountMinor: p.orderDiscountMinor,
         netMinor: p.netMinor,
         trackInventory: costs.tracked[i]!,
         unitCostMinor: unitCost,
@@ -1026,7 +1029,7 @@ export class SalesService {
       customerId: args.customerId,
       subtotalMinor: priced.subtotalMinor,
       lineDiscountsMinor: 0n,
-      orderDiscountMinor: 0n,
+      orderDiscountMinor: priced.orderDiscountMinor,
       totalMinor: priced.totalMinor,
       paidMinor: priced.totalMinor,
       changeMinor,

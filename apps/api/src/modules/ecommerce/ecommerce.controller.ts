@@ -6,8 +6,13 @@ import {
   type OnlineOrder,
   type OnlineStore,
   type OnlineStoreBranch,
+  type AccountOrderList,
+  type AccountSession,
+  type AccountView,
+  type OnlinePromotion,
   type PosOnlineOrder,
   type PublicOrder,
+  type StoreQuoteResult,
   type Sale,
   type SlugAvailability,
   type StoreProduct,
@@ -22,6 +27,16 @@ import {
   onlineStoreBranchOrderSchema,
   posOnlineOrderCompleteSchema,
   posOnlineOrderPaySchema,
+  accountForgotSchema,
+  accountLoginSchema,
+  accountPasswordSchema,
+  accountRegisterSchema,
+  accountResetSchema,
+  accountUpdateSchema,
+  onlinePromotionOrderSchema,
+  saveCustomerAddressSchema,
+  saveOnlinePromotionSchema,
+  storeQuoteSchema,
   saveListingSchema,
   saveListingsSchema,
   saveOnlineCategorySchema,
@@ -57,11 +72,15 @@ import { RateLimiterService } from '../auth/rate-limiter.service.js';
 import { EcommerceService } from './ecommerce.service.js';
 import { FulfilmentService } from './fulfilment.service.js';
 import { PosHandoverService } from './pos-handover.service.js';
+import { PromotionsService } from './promotions.service.js';
+import { StoreAccountsService } from './store-accounts.service.js';
 import { OnlinePaymentsService } from './online-payments.service.js';
 
 const uuid = new ParseUUIDPipe();
 type O<T extends z.ZodType> = z.output<T>;
 const CHECKOUT_LIMIT = { limit: 30, windowSeconds: 600 };
+const QUOTE_LIMIT = { limit: 120, windowSeconds: 600 };
+const ACCOUNT_LIMIT = { limit: 20, windowSeconds: 600 };
 const branchQuerySchema = z.object({
   branch: z
     .uuid()
@@ -110,7 +129,58 @@ export class OnlineManagerController {
   constructor(
     private readonly store: EcommerceService,
     private readonly fulfilment: FulfilmentService,
+    private readonly promotions: PromotionsService,
   ) {}
+
+  // ---------------------------------------------------------------- promotions (ADR-0125)
+  @RequirePermission('manager', 'online.manage')
+  @Get('promotions')
+  promotionList(
+    @CurrentMerchantActor() actor: MerchantActor,
+  ): Promise<{ promotions: OnlinePromotion[] }> {
+    return this.promotions.list(actor);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Post('promotions')
+  createPromotion(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Body(new ZodPipe(saveOnlinePromotionSchema)) body: O<typeof saveOnlinePromotionSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<OnlinePromotion> {
+    return this.promotions.create(actor, body, req.ip);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Put('promotions/order')
+  orderPromotions(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Body(new ZodPipe(onlinePromotionOrderSchema)) body: O<typeof onlinePromotionOrderSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<{ promotions: OnlinePromotion[] }> {
+    return this.promotions.order(actor, body.ids, req.ip);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Put('promotions/:id')
+  updatePromotion(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Body(new ZodPipe(saveOnlinePromotionSchema)) body: O<typeof saveOnlinePromotionSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<OnlinePromotion> {
+    return this.promotions.update(actor, id, body, req.ip);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Delete('promotions/:id')
+  deletePromotion(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Req() req: FastifyRequest,
+  ): Promise<{ promotions: OnlinePromotion[] }> {
+    return this.promotions.remove(actor, id, req.ip);
+  }
 
   @RequirePermission('manager', 'online.manage')
   @Get('store')
@@ -434,6 +504,7 @@ export class StorefrontController {
   constructor(
     private readonly store: EcommerceService,
     private readonly limiter: RateLimiterService,
+    private readonly accounts: StoreAccountsService,
   ) {}
 
   @Public()
@@ -523,7 +594,21 @@ export class StorefrontController {
     @Req() req: FastifyRequest,
   ): Promise<{ order: PublicOrder }> {
     await this.limiter.consume(`store-checkout:${req.ip}`, CHECKOUT_LIMIT);
-    return { order: await this.store.checkout(slug, body, req.ip) };
+    const customer = await this.accounts.resolve(req.headers.authorization);
+    return { order: await this.store.checkout(slug, body, req.ip, customer) };
+  }
+
+  /** Prices a cart with the promotion that applies, before the order is placed (ADR-0125). */
+  @Public()
+  @Post('quote')
+  async quote(
+    @Param('slug') slug: string,
+    @Body(new ZodPipe(storeQuoteSchema)) body: O<typeof storeQuoteSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<StoreQuoteResult> {
+    await this.limiter.consume(`store-quote:${req.ip}`, QUOTE_LIMIT);
+    const customer = await this.accounts.resolve(req.headers.authorization);
+    return this.store.quote(slug, body, customer);
   }
 
   @Public()
@@ -600,5 +685,143 @@ export class PosOnlineOrdersController {
     @Req() req: FastifyRequest,
   ): Promise<PosOnlineOrder> {
     return this.handover.complete(actor, id, body, req.ip);
+  }
+}
+
+/** Shopper accounts of a store (ADR-0124): bearer token in `Authorization: Bearer st_…`. */
+@Controller('store/:slug/account')
+export class StoreAccountController {
+  constructor(
+    private readonly store: EcommerceService,
+    private readonly accounts: StoreAccountsService,
+    private readonly limiter: RateLimiterService,
+  ) {}
+
+  private async signedIn(slug: string, req: FastifyRequest) {
+    const merchantId = await this.store.merchantIdOf(slug);
+    return this.accounts.assertStore(
+      await this.accounts.resolve(req.headers.authorization),
+      merchantId,
+    );
+  }
+
+  @Public()
+  @Post('register')
+  async register(
+    @Param('slug') slug: string,
+    @Body(new ZodPipe(accountRegisterSchema)) body: O<typeof accountRegisterSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<AccountSession> {
+    await this.limiter.consume(`store-account:${req.ip}`, ACCOUNT_LIMIT);
+    return this.accounts.register(await this.store.merchantIdOf(slug), body, req.ip);
+  }
+
+  @Public()
+  @Post('login')
+  @HttpCode(200)
+  async login(
+    @Param('slug') slug: string,
+    @Body(new ZodPipe(accountLoginSchema)) body: O<typeof accountLoginSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<AccountSession> {
+    await this.limiter.consume(`store-account:${req.ip}`, ACCOUNT_LIMIT);
+    return this.accounts.login(await this.store.merchantIdOf(slug), body, req.ip);
+  }
+
+  @Public()
+  @Post('logout')
+  @HttpCode(204)
+  async logout(@Param('slug') slug: string, @Req() req: FastifyRequest): Promise<void> {
+    const merchantId = await this.store.merchantIdOf(slug);
+    const customer = await this.accounts.resolve(req.headers.authorization);
+    if (customer && customer.merchantId === merchantId) await this.accounts.logout(customer);
+  }
+
+  @Public()
+  @Get()
+  async me(@Param('slug') slug: string, @Req() req: FastifyRequest): Promise<AccountView> {
+    return this.accounts.me(await this.signedIn(slug, req));
+  }
+
+  @Public()
+  @Put()
+  async update(
+    @Param('slug') slug: string,
+    @Body(new ZodPipe(accountUpdateSchema)) body: O<typeof accountUpdateSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<AccountView> {
+    return this.accounts.update(await this.signedIn(slug, req), body, req.ip);
+  }
+
+  @Public()
+  @Put('password')
+  @HttpCode(204)
+  async password(
+    @Param('slug') slug: string,
+    @Body(new ZodPipe(accountPasswordSchema)) body: O<typeof accountPasswordSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<void> {
+    await this.accounts.changePassword(await this.signedIn(slug, req), body, req.ip);
+  }
+
+  @Public()
+  @Post('forgot')
+  @HttpCode(204)
+  async forgot(
+    @Param('slug') slug: string,
+    @Body(new ZodPipe(accountForgotSchema)) body: O<typeof accountForgotSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<void> {
+    await this.limiter.consume(`store-account:${req.ip}`, ACCOUNT_LIMIT);
+    await this.accounts.forgot(await this.store.merchantIdOf(slug), slug, body.email, req.ip);
+  }
+
+  @Public()
+  @Post('reset')
+  @HttpCode(204)
+  async reset(
+    @Param('slug') slug: string,
+    @Body(new ZodPipe(accountResetSchema)) body: O<typeof accountResetSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<void> {
+    await this.limiter.consume(`store-account:${req.ip}`, ACCOUNT_LIMIT);
+    await this.accounts.reset(await this.store.merchantIdOf(slug), body, req.ip);
+  }
+
+  @Public()
+  @Get('orders')
+  async orders(@Param('slug') slug: string, @Req() req: FastifyRequest): Promise<AccountOrderList> {
+    return this.accounts.orders(await this.signedIn(slug, req));
+  }
+
+  @Public()
+  @Post('addresses')
+  async addAddress(
+    @Param('slug') slug: string,
+    @Body(new ZodPipe(saveCustomerAddressSchema)) body: O<typeof saveCustomerAddressSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<AccountView> {
+    return this.accounts.saveAddress(await this.signedIn(slug, req), null, body);
+  }
+
+  @Public()
+  @Put('addresses/:id')
+  async updateAddress(
+    @Param('slug') slug: string,
+    @Param('id', uuid) id: string,
+    @Body(new ZodPipe(saveCustomerAddressSchema)) body: O<typeof saveCustomerAddressSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<AccountView> {
+    return this.accounts.saveAddress(await this.signedIn(slug, req), id, body);
+  }
+
+  @Public()
+  @Delete('addresses/:id')
+  async deleteAddress(
+    @Param('slug') slug: string,
+    @Param('id', uuid) id: string,
+    @Req() req: FastifyRequest,
+  ): Promise<AccountView> {
+    return this.accounts.deleteAddress(await this.signedIn(slug, req), id);
   }
 }

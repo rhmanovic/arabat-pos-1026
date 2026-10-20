@@ -20,6 +20,13 @@ export const NAV: NavItem[] = [
   { key: 'categories', to: '/categories', anyOf: ['online.manage'], section: 'store' },
   { key: 'areas', to: '/delivery-areas', anyOf: ['online.manage'], section: 'store' },
   { key: 'branches', to: '/branches', anyOf: ['online.manage'], section: 'store' },
+  { key: 'promotions', to: '/promotions', anyOf: ['online.manage'], section: 'store' },
+  {
+    key: 'analytics',
+    to: '/analytics',
+    anyOf: ['online.manage', 'online.orders'],
+    section: 'store',
+  },
   { key: 'settings', to: '/settings', anyOf: ['online.manage'], section: 'store' },
   { key: 'links', to: linksUrl(), anyOf: ['online.manage'], external: true, section: 'store' },
   {

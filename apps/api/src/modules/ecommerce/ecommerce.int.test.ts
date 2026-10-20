@@ -7,6 +7,7 @@ import { DbFixtures, createCompany } from '../../testing/auth-fixtures.js';
 import { prepareIntegrationDatabase } from '../../testing/integration-db.js';
 import { InMemoryMailer, createTestApp, testEnv } from '../../testing/test-app.js';
 import { OrderNotificationsService } from './order-notifications.service.js';
+import { StoreAccountsService } from './store-accounts.service.js';
 
 let app: NestFastifyApplication;
 let owner: pg.Pool;
@@ -1715,5 +1716,420 @@ describe('fulfilment (ADR-0123)', () => {
     );
     expect(handed.status).toBe('completed');
     await drain();
+  });
+});
+
+describe('shopper accounts (ADR-0124)', () => {
+  const auth = (token: string) => ({ authorization: `Bearer ${token}` });
+  const acct = (
+    s: S,
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    path: string,
+    token: string | null,
+    body?: unknown,
+  ) =>
+    s.c.client.request(method, `/store/${s.slug}/account${path}`, {
+      ...(body === undefined ? {} : { body }),
+      ...(token ? { headers: auth(token) } : {}),
+    });
+
+  it('registers a shopper on the till customer by phone, signs in, keeps addresses and lists own orders', async () => {
+    const s = await setup({ gateway: false });
+    // A guest order earlier created the customer by phone; the account attaches to it.
+    const guest = (
+      await checkout(s, {
+        paymentMethodId: null,
+        customer: { name: 'Mariam', phone: '6000 1111', email: null },
+        expectedTotal: '3.000',
+      })
+    ).json().order;
+    expect(guest.number).toBe('W-000001');
+    const weak = await acct(s, 'POST', '/register', null, {
+      fullName: 'Mariam A.',
+      phone: '6000 1111',
+      email: 'mariam@example.com',
+      password: 'short',
+    });
+    expect(weak.statusCode).toBe(400);
+    const registered = await acct(s, 'POST', '/register', null, {
+      fullName: 'Mariam A.',
+      phone: '6000 1111',
+      email: 'Mariam@Example.com',
+      password: 'Shopper-Pass-2026',
+    });
+    expect(registered.statusCode).toBe(201);
+    const { token, account } = registered.json();
+    expect(token).toMatch(/^st_/);
+    expect(account).toMatchObject({ fullName: 'Mariam A.', email: 'mariam@example.com' });
+    expect(
+      await count('select count(*)::int as n from customers where merchant_id = $1', [
+        s.c.merchantId,
+      ]),
+    ).toBe(1);
+    // Same e-mail or phone again is refused.
+    expect(
+      (
+        await acct(s, 'POST', '/register', null, {
+          fullName: 'X',
+          phone: '6000 1111',
+          email: 'other@example.com',
+          password: 'Shopper-Pass-2026',
+        })
+      ).json().code,
+    ).toBe('PHONE_TAKEN');
+    expect(
+      (
+        await acct(s, 'POST', '/register', null, {
+          fullName: 'X',
+          phone: '6000 9999',
+          email: 'mariam@example.com',
+          password: 'Shopper-Pass-2026',
+        })
+      ).json().code,
+    ).toBe('EMAIL_TAKEN');
+    // The account's orders include the guest order placed with the same phone.
+    const mine = (await acct(s, 'GET', '/orders', token)).json();
+    expect(
+      mine.orders.map((o: { number: string; lineCount: number }) => [o.number, o.lineCount]),
+    ).toEqual([['W-000001', 1]]);
+    // Addresses: add, default, update, delete.
+    const area = await s.ok('POST', '/manager/online/delivery-areas', {
+      nameEn: 'Salmiya',
+      fee: '1.000',
+    });
+    let view = (
+      await acct(s, 'POST', '/addresses', token, {
+        label: 'Home',
+        deliveryAreaId: area.id,
+        address: 'Block 3',
+        isDefault: true,
+      })
+    ).json();
+    expect(view.addresses).toEqual([
+      expect.objectContaining({ label: 'Home', deliveryAreaId: area.id, isDefault: true }),
+    ]);
+    view = (
+      await acct(s, 'POST', '/addresses', token, {
+        label: 'Work',
+        address: 'Office 9',
+        isDefault: true,
+      })
+    ).json();
+    expect(
+      view.addresses.map((a: { label: string; isDefault: boolean }) => [a.label, a.isDefault]),
+    ).toEqual([
+      ['Work', true],
+      ['Home', false],
+    ]);
+    view = (await acct(s, 'DELETE', `/addresses/${view.addresses[1].id}`, token)).json();
+    expect(view.addresses).toHaveLength(1);
+    // A signed-in checkout belongs to the account and may keep its address.
+    const placed = (
+      await s.c.client.request('POST', `/store/${s.slug}/checkout`, {
+        headers: auth(token),
+        body: {
+          idempotencyKey: newId(),
+          lines: [{ variantId: s.gift, quantity: '1' }],
+          fulfillment: 'delivery',
+          customer: { name: 'Mariam A.', phone: '6000 1111', email: 'mariam@example.com' },
+          deliveryAddress: 'Block 7, Hawally',
+          deliveryAreaId: area.id,
+          saveAddress: true,
+          paymentMethodId: null,
+          expectedTotal: '6.000',
+        },
+      })
+    ).json().order;
+    expect(placed.number).toBe('W-000002');
+    const after = (await acct(s, 'GET', '', token)).json();
+    expect(after.addresses.map((a: { address: string }) => a.address)).toEqual([
+      'Office 9',
+      'Block 7, Hawally',
+    ]);
+    expect((await acct(s, 'GET', '/orders', token)).json().orders).toHaveLength(2);
+    // Profile and password; the old token of other sessions is revoked by a password change.
+    const second = (
+      await acct(s, 'POST', '/login', null, {
+        email: 'mariam@example.com',
+        password: 'Shopper-Pass-2026',
+      })
+    ).json().token;
+    expect(
+      (await acct(s, 'PUT', '', token, { fullName: 'Mariam Ali', phone: '6000 1111' })).json()
+        .account.fullName,
+    ).toBe('Mariam Ali');
+    expect(
+      (await acct(s, 'PUT', '/password', token, { current: 'wrong', next: 'Another-Pass-2026' }))
+        .statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await acct(s, 'PUT', '/password', token, {
+          current: 'Shopper-Pass-2026',
+          next: 'Another-Pass-2026',
+        })
+      ).statusCode,
+    ).toBe(204);
+    expect((await acct(s, 'GET', '', second)).statusCode).toBe(401);
+    expect((await acct(s, 'GET', '', token)).statusCode).toBe(200);
+    // Logout ends the session; a wrong password is refused without saying which part.
+    expect((await acct(s, 'POST', '/logout', token)).statusCode).toBe(204);
+    expect((await acct(s, 'GET', '', token)).statusCode).toBe(401);
+    expect(
+      (
+        await acct(s, 'POST', '/login', null, {
+          email: 'mariam@example.com',
+          password: 'Shopper-Pass-2026',
+        })
+      ).json().code,
+    ).toBe('INVALID_CREDENTIALS');
+    expect(
+      (
+        await acct(s, 'POST', '/login', null, {
+          email: 'mariam@example.com',
+          password: 'Another-Pass-2026',
+        })
+      ).statusCode,
+    ).toBe(200);
+    // Another store cannot use this token.
+    const other = await setup({ gateway: false });
+    expect(
+      (
+        await other.c.client.request('GET', `/store/${other.slug}/account`, {
+          headers: auth(token),
+        })
+      ).statusCode,
+    ).toBe(401);
+  });
+
+  it('resets a forgotten password by e-mail and refuses accounts when the store turned them off', async () => {
+    const s = await setup({ gateway: false });
+    const { token } = (
+      await acct(s, 'POST', '/register', null, {
+        fullName: 'Dana',
+        phone: '6000 2222',
+        email: 'dana@example.com',
+        password: 'Shopper-Pass-2026',
+      })
+    ).json();
+    const before = mailer.outbox.length;
+    expect(
+      (await acct(s, 'POST', '/forgot', null, { email: 'nobody@example.com' })).statusCode,
+    ).toBe(204);
+    expect((await acct(s, 'POST', '/forgot', null, { email: 'dana@example.com' })).statusCode).toBe(
+      204,
+    );
+    await app.get(StoreAccountsService).drain();
+    const sent = mailer.outbox.slice(before);
+    expect(sent).toHaveLength(1);
+    const reset = new RegExp(`/store/${s.slug}/account/reset/([A-Za-z0-9_-]+)`).exec(
+      sent[0]!.text,
+    )![1]!;
+    expect(
+      (
+        await acct(s, 'POST', '/reset', null, {
+          token: 'nope-nope-nope',
+          password: 'Fresh-Pass-2026',
+        })
+      ).json().code,
+    ).toBe('RESET_TOKEN_INVALID');
+    expect(
+      (await acct(s, 'POST', '/reset', null, { token: reset, password: 'Fresh-Pass-2026' }))
+        .statusCode,
+    ).toBe(204);
+    expect(
+      (await acct(s, 'POST', '/reset', null, { token: reset, password: 'Fresh-Pass-2026' }))
+        .statusCode,
+    ).toBe(400);
+    expect((await acct(s, 'GET', '', token)).statusCode).toBe(401);
+    expect(
+      (
+        await acct(s, 'POST', '/login', null, {
+          email: 'dana@example.com',
+          password: 'Fresh-Pass-2026',
+        })
+      ).statusCode,
+    ).toBe(200);
+    const store = await s.ok('GET', '/manager/online/store');
+    await s.ok('PUT', '/manager/online/store', {
+      ...store,
+      deliveryFee: store.deliveryFee.amount,
+      minimumOrder: store.minimumOrder.amount,
+      accountsEnabled: false,
+    });
+    expect((await pub(s, 'GET', '')).json().accountsEnabled).toBe(false);
+    expect(
+      (
+        await acct(s, 'POST', '/register', null, {
+          fullName: 'X',
+          phone: '6000 3333',
+          email: 'x@example.com',
+          password: 'Shopper-Pass-2026',
+        })
+      ).json().code,
+    ).toBe('ACCOUNTS_DISABLED');
+  });
+});
+
+describe('promotions (ADR-0125)', () => {
+  const quote = (s: S, body: Record<string, unknown>) =>
+    pub(s, 'POST', '/quote', {
+      lines: [{ variantId: s.tea, quantity: '2' }],
+      fulfillment: 'delivery',
+      ...body,
+    });
+
+  it('applies a code or the best automatic offer, counts uses and records the discount on the sale', async () => {
+    const s = await setup({ gateway: false });
+    const ten = await s.ok('POST', '/manager/online/promotions', {
+      nameEn: 'Ten off',
+      kind: 'code',
+      code: 'ten10',
+      discountType: 'percentage',
+      percent: '10',
+      minimumOrder: '2.000',
+      maxUses: 2,
+      maxUsesPerCustomer: 1,
+    });
+    expect(ten).toMatchObject({ code: 'TEN10', percent: '10.00', usesCount: 0, status: 'active' });
+    expect(
+      (
+        await s.req('POST', '/manager/online/promotions', {
+          nameEn: 'Dup',
+          code: 'TEN10',
+          discountType: 'fixed',
+          amount: '1.000',
+        })
+      ).json().code,
+    ).toBe('DUPLICATE_CODE');
+    const freeShip = await s.ok('POST', '/manager/online/promotions', {
+      nameEn: 'Free delivery over 2',
+      kind: 'automatic',
+      discountType: 'free_delivery',
+      minimumOrder: '2.000',
+    });
+    const gift = await s.ok('POST', '/manager/online/promotions', {
+      nameEn: 'Gift cards 1 KWD off',
+      kind: 'automatic',
+      discountType: 'fixed',
+      amount: '1.000',
+      appliesTo: 'product',
+      targetIds: [
+        s.teaProduct === s.teaProduct
+          ? (await s.ok('GET', '/manager/online/listings')).products.find(
+              (p: { nameEn: string }) => p.nameEn === 'Gift card',
+            ).productId
+          : '',
+      ],
+    });
+    // Tea 2 × 1.250 = 2.500 delivered: the automatic free delivery beats nothing else (the gift
+    // offer does not match); the code gives 0.250 and wins when entered.
+    let q = (await quote(s, {})).json();
+    expect(q).toMatchObject({
+      subtotal: { amount: '2.500' },
+      discount: { amount: '0.000' },
+      deliveryFee: { amount: '0.000' },
+      total: { amount: '2.500' },
+      promotion: { nameEn: 'Free delivery over 2' },
+      codeIssue: null,
+    });
+    q = (await quote(s, { promotionCode: 'ten10' })).json();
+    expect(q).toMatchObject({
+      discount: { amount: '0.250' },
+      deliveryFee: { amount: '0.500' },
+      total: { amount: '2.750' },
+      promotion: { code: 'TEN10' },
+    });
+    expect((await quote(s, { promotionCode: 'NOPE' })).json()).toMatchObject({
+      codeIssue: 'unknown',
+      promotion: { nameEn: 'Free delivery over 2' },
+    });
+    expect(
+      (
+        await quote(s, { promotionCode: 'TEN10', lines: [{ variantId: s.tea, quantity: '1' }] })
+      ).json().codeIssue,
+    ).toBe('minimum');
+    // The gift card offer applies to the gift product only.
+    q = (
+      await quote(s, { lines: [{ variantId: s.gift, quantity: '1' }], fulfillment: 'pickup' })
+    ).json();
+    expect(q).toMatchObject({
+      discount: { amount: '1.000' },
+      total: { amount: '4.000' },
+      promotion: { nameEn: 'Gift cards 1 KWD off' },
+    });
+    // Checkout with the code: the order carries the discount, the use is counted.
+    const wrongTotal = await checkout(s, {
+      paymentMethodId: null,
+      promotionCode: 'TEN10',
+      expectedTotal: '3.000',
+    });
+    expect(wrongTotal.json().code).toBe('TOTAL_CHANGED');
+    const order = (
+      await checkout(s, { paymentMethodId: null, promotionCode: 'TEN10', expectedTotal: '2.750' })
+    ).json().order;
+    expect(order).toMatchObject({
+      discount: { amount: '0.250' },
+      deliveryFee: { amount: '0.500' },
+      total: { amount: '2.750' },
+      promotion: { code: 'TEN10', name: 'Ten off' },
+    });
+    expect(
+      (await s.ok('GET', '/manager/online/promotions')).promotions.find(
+        (p: { id: string }) => p.id === ten.id,
+      ).usesCount,
+    ).toBe(1);
+    // The same shopper may not use it again (per customer 1); another shopper may, then it is used up.
+    expect(
+      (
+        await checkout(s, { paymentMethodId: null, promotionCode: 'TEN10', expectedTotal: '2.750' })
+      ).json().issues[0],
+    ).toMatchObject({ path: 'promotionCode', code: 'customer_limit' });
+    const second = (
+      await checkout(s, {
+        paymentMethodId: null,
+        promotionCode: 'TEN10',
+        customer: { name: 'Noor', phone: '6000 5555', email: null },
+        expectedTotal: '2.750',
+      })
+    ).json().order;
+    expect(second.number).toBe('W-000002');
+    expect(
+      (
+        await checkout(s, {
+          paymentMethodId: null,
+          promotionCode: 'TEN10',
+          customer: { name: 'Omar', phone: '6000 6666', email: null },
+          expectedTotal: '2.750',
+        })
+      ).json().issues[0].code,
+    ).toBe('used_up');
+    // Recording the payment creates the sale with the order discount spread over its lines.
+    const [placed] = (await s.ok('GET', '/manager/online/orders?status=placed')).orders.filter(
+      (o: { number: string }) => o.number === order.number,
+    );
+    const paid = await s.ok('POST', `/manager/online/orders/${placed.id}/action`, {
+      action: 'mark_paid',
+      paymentMethodId: s.cash,
+      version: 1,
+    });
+    const sale = await s.ok('GET', `/manager/sales/${paid.saleId}`);
+    expect(sale).toMatchObject({
+      subtotal: { amount: '3.000' },
+      orderDiscount: { amount: '0.250' },
+      total: { amount: '2.750' },
+    });
+    // A used promotion is paused, not deleted; an unused one is deleted.
+    expect(
+      (await s.ok('DELETE', `/manager/online/promotions/${ten.id}`)).promotions.find(
+        (p: { id: string }) => p.id === ten.id,
+      ).status,
+    ).toBe('paused');
+    expect(
+      (await s.ok('DELETE', `/manager/online/promotions/${gift.id}`)).promotions.map(
+        (p: { id: string }) => p.id,
+      ),
+    ).toEqual([ten.id, freeShip.id]);
+    await app.get(OrderNotificationsService).drain();
   });
 });

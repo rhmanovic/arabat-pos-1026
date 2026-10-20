@@ -22,6 +22,8 @@ const summary = {
   fulfillment: 'pickup',
   customerName: 'Sara',
   subtotal: money('2.500'),
+  discount: money('0.000'),
+  promotion: null,
   deliveryFee: money('0.000'),
   total: money('2.500'),
   createdAt: '2026-10-12T08:00:00.000Z',
@@ -110,6 +112,7 @@ const store = {
   slotMinutes: 30,
   slotCapacity: null,
   notifyEmail: true,
+  accountsEnabled: true,
   paymentMethods: [
     { id: 'm1', nameEn: 'Card', nameAr: null, provider: 'mock', ready: true },
     { id: 'm2', nameEn: 'KNET', nameAr: null, provider: 'tap', ready: false },
@@ -675,6 +678,135 @@ describe('online store console', () => {
         hours: { mon: [{ open: '09:00', close: '22:00' }], fri: [] },
       }),
     );
+  });
+
+  it('creates a discount code and pauses a used promotion', async () => {
+    const user = userEvent.setup();
+    const ten = {
+      id: '0190a000-0000-7000-8000-0000000000e5',
+      nameEn: 'Ten percent',
+      nameAr: null,
+      kind: 'code',
+      code: 'TEN',
+      discountType: 'percentage',
+      percent: '10',
+      amount: null,
+      minimumOrder: money('5.000'),
+      maxUses: 100,
+      usesCount: 3,
+      maxUsesPerCustomer: null,
+      startsAt: null,
+      endsAt: null,
+      status: 'active',
+      appliesTo: 'order',
+      targetIds: [],
+      position: 0,
+      version: 1,
+    };
+    let created = false;
+    let paused = false;
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'online.manage']),
+      routes: {
+        'GET /manager/online/promotions': () => ({
+          status: 200,
+          body: { promotions: created ? [{ ...ten, status: paused ? 'paused' : 'active' }] : [] },
+        }),
+        'POST /manager/online/promotions': () => {
+          created = true;
+          return { status: 201, body: ten };
+        },
+        [`DELETE /manager/online/promotions/${ten.id}`]: () => {
+          paused = true;
+          return { status: 200, body: { promotions: [{ ...ten, status: 'paused' }] } };
+        },
+        'GET /manager/online/categories': () => ({ status: 200, body: { categories: [] } }),
+        'GET /manager/online/listings': () => ({ status: 200, body: { products: [] } }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/promotions', fetch });
+    expect(await screen.findByText('No promotions yet.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Add promotion' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByLabelText('Name (English)'), 'Ten percent');
+    await user.type(within(dialog).getByLabelText('Code'), 'ten');
+    await user.type(within(dialog).getByLabelText('Percent'), '10');
+    await user.clear(within(dialog).getByLabelText('Minimum order (KWD)'));
+    await user.type(within(dialog).getByLabelText('Minimum order (KWD)'), '5.000');
+    await user.type(within(dialog).getByLabelText('Maximum uses'), '100');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(fetch.calls.find((c) => c.method === 'POST')?.body).toMatchObject({
+        nameEn: 'Ten percent',
+        kind: 'code',
+        code: 'TEN',
+        discountType: 'percentage',
+        percent: '10',
+        minimumOrder: '5.000',
+        maxUses: 100,
+        status: 'active',
+        appliesTo: 'order',
+      }),
+    );
+    const row = await screen.findByTestId('promotion');
+    expect(within(row).getByText('TEN')).toBeInTheDocument();
+    expect(within(row).getByText(/10% off · min\. KWD 5\.000 · used 3 \/ 100/)).toBeInTheDocument();
+    await user.click(within(row).getByRole('button', { name: 'Pause' }));
+    expect(await screen.findByText('Paused')).toBeInTheDocument();
+    expect(fetch.calls.some((c) => c.method === 'DELETE')).toBe(true);
+  });
+
+  it('computes the store analytics in the browser from its orders', async () => {
+    const today = new Date().toISOString();
+    const cancelled = {
+      ...summary,
+      id: '0190a000-0000-7000-8000-0000000000f2',
+      number: 'W-000008',
+      status: 'cancelled',
+      createdAt: today,
+    };
+    const paid = { ...summary, createdAt: today, discount: money('0.500'), total: money('2.000') };
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'online.orders']),
+      routes: {
+        'GET /manager/online/orders': () => ({
+          status: 200,
+          body: { orders: [paid, cancelled], total: 2, page: 1, pageSize: 100, counts: {} },
+        }),
+        [`GET /manager/online/orders/${ORDER_ID}`]: () => ({
+          status: 200,
+          body: { ...detail, ...paid },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/analytics', fetch });
+    expect(await screen.findByTestId('kpi-orders')).toHaveTextContent('1');
+    expect(screen.getByTestId('kpi-revenue')).toHaveTextContent('KWD 2.000');
+    expect(screen.getByTestId('kpi-average')).toHaveTextContent('KWD 2.000');
+    expect(screen.getByTestId('kpi-lost')).toHaveTextContent('50%');
+    expect(await screen.findByText('Coffee beans')).toBeInTheDocument();
+    expect(screen.getByText('KWD 0.500')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Revenue per day' })).toBeInTheDocument();
+    // Without reports.sales the sales report is not requested.
+    expect(fetch.calls.some((c) => c.path.startsWith('/manager/reports'))).toBe(false);
+  });
+
+  it('reserves the gateway and domain sections of the settings for later phases', async () => {
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'online.manage', 'branches.read']),
+      routes: {
+        'GET /manager/branches': () => ({ status: 200, body: branches }),
+        'GET /manager/online/store': () => ({ status: 200, body: store }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/settings', fetch });
+    const gateways = await screen.findByTestId('gateway-placeholders');
+    expect(within(gateways).getAllByText('Coming soon')).toHaveLength(3);
+    expect(within(gateways).getByText('K-net')).toBeInTheDocument();
+    expect(screen.getByText('Store address on the web')).toBeInTheDocument();
+    expect(screen.getAllByText(store.url).length).toBeGreaterThan(0);
+    expect(screen.getByRole('checkbox', { name: /Let shoppers create accounts/ })).toBeChecked();
+    expect(fetch.calls.every((c) => c.method === 'GET')).toBe(true);
   });
 
   it('defines the same translation keys in Arabic and English', () => {

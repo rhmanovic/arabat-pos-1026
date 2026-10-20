@@ -92,6 +92,22 @@ export function OrderPage() {
             <dt>{t('cart.subtotal')}</dt>
             <dd className="tabular-nums">{money(o.subtotal)}</dd>
           </div>
+          {o.promotion ? (
+            <div className="flex justify-between">
+              <dt>
+                {t('checkout.discount')}
+                {o.promotion.code ? (
+                  <>
+                    {' '}
+                    (<span dir="ltr">{o.promotion.code}</span>)
+                  </>
+                ) : (
+                  ` (${o.promotion.name})`
+                )}
+              </dt>
+              <dd className="tabular-nums">-{money(o.discount)}</dd>
+            </div>
+          ) : null}
           {o.fulfillment === 'delivery' ? (
             <div className="flex justify-between">
               <dt>{t('checkout.deliveryFee')}</dt>

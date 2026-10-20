@@ -8,6 +8,7 @@ import type {
   SlugAvailability,
   StoreHours,
   StoreProduct,
+  StoreQuoteResult,
   StoreSlotList,
   Storefront,
   onlineOrderActionSchema,
@@ -16,8 +17,14 @@ import type {
   saveOnlineCategorySchema,
   saveOnlineStoreSchema,
   storeCheckoutSchema,
+  storeQuoteSchema,
 } from '@arabat/contracts';
-import { MAX_STORE_IMAGE_BYTES, RESERVED_STORE_SLUGS, STORE_SLUG_PATTERN } from '@arabat/contracts';
+import {
+  MAX_STORE_IMAGE_BYTES,
+  RESERVED_STORE_SLUGS,
+  STORE_SLUG_PATTERN,
+  normalizePhone,
+} from '@arabat/contracts';
 import { type FeeType, Money, formatQuantity, parseQuantity, priceCart } from '@arabat/money';
 import { can, permissionBranchScope } from '@arabat/permissions';
 import { type PosPaymentMethod, checkPayments } from '@arabat/pos-core';
@@ -58,6 +65,8 @@ import { type OrderEvent, OrderNotificationsService } from './order-notification
 import { PrintJobsService } from '../printing/print-jobs.service.js';
 import { isOpenAt, slotsFrom } from './store-hours.js';
 import { merchantTimezone } from '../../kernel/time/period.js';
+import { type PromotionLine, PromotionsService } from './promotions.service.js';
+import { type StoreCustomer, StoreAccountsService } from './store-accounts.service.js';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
 
 type Row = Record<string, unknown>;
@@ -112,6 +121,8 @@ export class EcommerceService {
     private readonly fulfilment: FulfilmentService,
     private readonly notifications: OrderNotificationsService,
     private readonly printJobs: PrintJobsService,
+    private readonly promotions: PromotionsService,
+    private readonly accounts: StoreAccountsService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -177,6 +188,7 @@ export class EcommerceService {
         slotMinutes: row?.slotMinutes ?? 30,
         slotCapacity: row?.slotCapacity ?? null,
         notifyEmail: row?.notifyEmail ?? true,
+        accountsEnabled: row?.accountsEnabled ?? true,
         paymentMethods: methods.map((x) => ({
           id: x['id'] as string,
           nameEn: (x['name_en'] as string | null) ?? null,
@@ -231,6 +243,7 @@ export class EcommerceService {
           slotMinutes: input.slotMinutes,
           slotCapacity: input.slotCapacity,
           notifyEmail: input.notifyEmail,
+          accountsEnabled: input.accountsEnabled,
         };
         // A published store must offer some way to pay: on hand-over, or a gateway that works.
         if (
@@ -828,6 +841,11 @@ export class EcommerceService {
 
   // ------------------------------------------------------------ storefront (public)
   /** Resolves a public store slug to its merchant (published or paused stores only). */
+  /** The merchant behind a store address (public routes of the account, ADR-0124). */
+  merchantIdOf(slug: string): Promise<string> {
+    return this.merchantOf(slug);
+  }
+
   private async merchantOf(slug: string): Promise<string> {
     const [row] = (await this.database.db.execute(sql`select store_merchant(${slug}) as m`))
       .rows as { m: string | null }[];
@@ -907,6 +925,7 @@ export class EcommerceService {
         })),
         scheduling: { enabled: store.schedulingEnabled, slotMinutes: store.slotMinutes },
         timezone: tz,
+        accountsEnabled: store.accountsEnabled,
       };
     });
   }
@@ -1154,12 +1173,134 @@ export class EcommerceService {
    * and the sale is created when staff record the payment. Retries with the same key return
    * the same order (BR-141, BR-142).
    */
+  /**
+   * The promotion engine's view of priced lines: catalog category and store category per
+   * product, net amount per line (ADR-0125).
+   */
+  private async promotionLines(
+    tx: Transaction,
+    lines: { productId: string; netMinor: bigint }[],
+  ): Promise<PromotionLine[]> {
+    if (lines.length === 0) return [];
+    const rows = (
+      await tx.execute(sql`
+        select p.id, p.category_id, ol.online_category_id from products p
+        left join online_listings ol on ol.product_id = p.id
+        where p.id in (${sql.join(
+          [...new Set(lines.map((l) => l.productId))].map((id) => sql`${id}`),
+          sql`, `,
+        )})`)
+    ).rows as Row[];
+    const byProduct = new Map(rows.map((r) => [r['id'] as string, r]));
+    return lines.map((l) => ({
+      productId: l.productId,
+      categoryId: (byProduct.get(l.productId)?.['category_id'] as string | null) ?? null,
+      onlineCategoryId:
+        (byProduct.get(l.productId)?.['online_category_id'] as string | null) ?? null,
+      netMinor: l.netMinor,
+    }));
+  }
+
+  /** Prices a cart the way checkout would, without placing anything (ADR-0125). */
+  async quote(
+    slug: string,
+    input: z.output<typeof storeQuoteSchema>,
+    customer: StoreCustomer | null,
+  ): Promise<StoreQuoteResult> {
+    const merchantId = await this.merchantOf(slug);
+    return this.database.withMerchantTx(merchantId, async (tx) => {
+      const store = await this.storeRow(tx);
+      const branches = await this.fulfilment.servingBranches(tx, store);
+      const areas = await this.fulfilment.servingAreas(tx, this.defaultBranch(branches, store).id);
+      const area =
+        input.fulfillment === 'delivery'
+          ? (areas.find((a) => a.id === input.deliveryAreaId) ?? null)
+          : null;
+      const branch =
+        (area ? branches.find((b) => b.id === area.branchId) : undefined) ??
+        (await this.browsingBranch(tx, store, input.branchId));
+      const listed = await this.storeProducts(
+        tx,
+        store.slug,
+        branch.id,
+        sql`v.id in (${sql.join(
+          input.lines.map((l) => sql`${l.variantId}`),
+          sql`, `,
+        )})`,
+      );
+      const variants = new Map(
+        listed.flatMap((p) => p.variants.map((v) => [v.variantId, { p, v }] as const)),
+      );
+      const lines = input.lines.flatMap((l) => {
+        const found = variants.get(l.variantId);
+        if (!found) return [];
+        const quantityMilli = parseQuantity(l.quantity);
+        return [
+          {
+            productId: found.p.productId,
+            unitPriceMinor: parseAmount(found.v.price.amount, 'price'),
+            quantityMilli: quantityMilli > 0n ? quantityMilli : 1000n,
+          },
+        ];
+      });
+      const priced = priceCart(
+        lines.map((l) => ({
+          unitPriceMinor: l.unitPriceMinor,
+          quantityMilli: l.quantityMilli,
+          discount: null,
+        })),
+        null,
+      );
+      const fee =
+        input.fulfillment !== 'delivery'
+          ? 0n
+          : areas.length > 0
+            ? area === null
+              ? 0n
+              : area.freeDeliveryFromMinor !== null &&
+                  priced.totalMinor >= area.freeDeliveryFromMinor
+                ? 0n
+                : area.feeMinor
+            : store.deliveryFeeMinor;
+      const phone = customer
+        ? (((
+            (await tx.execute(sql`select phone from customers where id = ${customer.customerId}`))
+              .rows[0] as Row | undefined
+          )?.['phone'] as string | null) ?? null)
+        : null;
+      const { promotion, codeIssue } = await this.promotions.apply(tx, {
+        lines: await this.promotionLines(
+          tx,
+          lines.map((l, i) => ({ productId: l.productId, netMinor: priced.lines[i]!.netMinor })),
+        ),
+        subtotalMinor: priced.totalMinor,
+        deliveryFeeMinor: fee,
+        code: input.promotionCode,
+        customerPhone: phone,
+      });
+      const discount = promotion?.discountMinor ?? 0n;
+      const deliveryFee = promotion?.freeDelivery ? 0n : fee;
+      return {
+        subtotal: money(priced.totalMinor),
+        discount: money(discount),
+        deliveryFee: money(deliveryFee),
+        total: money(priced.totalMinor - discount + deliveryFee),
+        promotion: promotion
+          ? { code: promotion.code, nameEn: promotion.nameEn, nameAr: promotion.nameAr }
+          : null,
+        codeIssue,
+      };
+    });
+  }
+
   async checkout(
     slug: string,
     input: z.output<typeof storeCheckoutSchema>,
     ip: string,
+    customer: StoreCustomer | null = null,
   ): Promise<PublicOrder> {
     const merchantId = await this.merchantOf(slug);
+    if (customer && customer.merchantId !== merchantId) customer = null;
     const requestHash = createHash('sha256')
       .update(JSON.stringify({ ...input, idempotencyKey: undefined }))
       .digest('hex');
@@ -1361,7 +1502,27 @@ export class EcommerceService {
             'MINIMUM_ORDER',
             `The minimum order is ${Money.ofMinor(minimum, CURRENCY).toDecimalString()} KWD.`,
           );
-        const total = priced.totalMinor + deliveryFee;
+        // The promotion (ADR-0125): the entered code must fit; else the best automatic offer.
+        const { promotion, codeIssue } = await this.promotions.apply(tx, {
+          lines: await this.promotionLines(
+            tx,
+            lines.map((l, i) => ({
+              productId: l.item.productId,
+              netMinor: priced.lines[i]!.netMinor,
+            })),
+          ),
+          subtotalMinor: priced.totalMinor,
+          deliveryFeeMinor: deliveryFee,
+          code: input.promotionCode,
+          customerPhone: normalizePhone(input.customer.phone),
+        });
+        if (input.promotionCode && codeIssue)
+          throw new AppError(409, 'PROMOTION_INVALID', 'This promotion code cannot be used.', [
+            { path: 'promotionCode', code: codeIssue, message: 'Not applicable.' },
+          ]);
+        const discountMinor = promotion?.discountMinor ?? 0n;
+        const finalDeliveryFee = promotion?.freeDelivery ? 0n : deliveryFee;
+        const total = priced.totalMinor - discountMinor + finalDeliveryFee;
         if (total !== parseAmount(input.expectedTotal, 'expectedTotal'))
           throw new AppError(
             409,
@@ -1370,11 +1531,28 @@ export class EcommerceService {
           );
         amountMinor = total;
         const number = await nextDocumentNumber(tx, merchantId, 'online_order', 'W');
-        const customerId = await ensureCustomerByPhone(tx, merchantId, {
-          fullName: input.customer.name,
-          phone: input.customer.phone,
-          email: input.customer.email,
-        });
+        // A signed-in shopper is the account's customer (ADR-0124); guests are matched by phone.
+        const customerId = customer
+          ? customer.customerId
+          : await ensureCustomerByPhone(tx, merchantId, {
+              fullName: input.customer.name,
+              phone: input.customer.phone,
+              email: input.customer.email,
+            });
+        if (customer && input.saveAddress && input.fulfillment === 'delivery') {
+          const [same] = (
+            await tx.execute(
+              sql`select 1 from customer_addresses where customer_id = ${customer.customerId} and address = ${input.deliveryAddress}`,
+            )
+          ).rows;
+          if (!same)
+            await this.accounts.saveAddressIn(tx, merchantId, customer.customerId, null, {
+              label: null,
+              deliveryAreaId: area?.id ?? null,
+              address: input.deliveryAddress!,
+              isDefault: false,
+            });
+        }
         if (onReceipt) {
           // Nothing is held for an unpaid order (owner's decision, ADR-0118): only what is
           // free right now can be ordered, and the stock is deducted when the payment is recorded.
@@ -1408,7 +1586,11 @@ export class EcommerceService {
           note: input.note,
           customerId,
           subtotalMinor: priced.totalMinor,
-          deliveryFeeMinor: deliveryFee,
+          discountMinor,
+          promotionId: promotion?.id ?? null,
+          promotionCode: promotion?.code ?? null,
+          promotionName: promotion ? (promotion.nameAr ?? promotion.nameEn) : null,
+          deliveryFeeMinor: finalDeliveryFee,
           totalMinor: total,
           paymentMethodId: input.paymentMethodId,
           trackingToken: token,
@@ -1457,6 +1639,14 @@ export class EcommerceService {
             amountMinor: total,
           });
         }
+        if (promotion)
+          await this.promotions.recordUse(tx, merchantId, {
+            promotionId: promotion.id,
+            orderId,
+            customerId,
+            customerPhone: normalizePhone(input.customer.phone) ?? input.customer.phone,
+            discountMinor: promotion.freeDelivery ? deliveryFee : discountMinor,
+          });
         await this.record(tx, merchantId, null, 'online.order_placed', orderId, ip, {
           number,
           total: Money.ofMinor(total, CURRENCY).toDecimalString(),
@@ -1464,6 +1654,9 @@ export class EcommerceService {
           branchId,
           deliveryArea: area ? (area.nameAr ?? area.nameEn) : null,
           scheduledFor: scheduledFor?.toISOString() ?? null,
+          promotion: promotion?.code ?? promotion?.nameEn ?? null,
+          discount: Money.ofMinor(discountMinor, CURRENCY).toDecimalString(),
+          account: customer?.accountId ?? null,
         });
       });
     } catch (error) {
@@ -1564,6 +1757,8 @@ export class EcommerceService {
       customerName: o.customerName,
       lines: o.lines,
       subtotal: o.subtotal,
+      discount: o.discount,
+      promotion: o.promotion,
       deliveryFee: o.deliveryFee,
       total: o.total,
       createdAt: o.createdAt,
@@ -1647,6 +1842,13 @@ export class EcommerceService {
         lineTotal: money(l.lineTotalMinor),
       })),
       subtotal: money(o['subtotal_minor'] as string),
+      discount: money(o['discount_minor'] as string),
+      promotion: o['promotion_name']
+        ? {
+            code: (o['promotion_code'] as string | null) ?? null,
+            name: o['promotion_name'] as string,
+          }
+        : null,
       deliveryFee: money(o['delivery_fee_minor'] as string),
       total: money(o['total_minor'] as string),
       createdAt: iso(o['created_at'])!,
@@ -1916,6 +2118,7 @@ export class EcommerceService {
         verification: 'manual',
         collectedByUserId: actor.userId,
       },
+      orderDiscountMinor: order.discountMinor,
     });
     const confirmNow = order.status === 'placed';
     await tx.execute(sql`

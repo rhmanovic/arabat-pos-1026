@@ -61,6 +61,7 @@ function toForm(s: OnlineStore): SaveOnlineStore {
     slotMinutes: s.slotMinutes,
     slotCapacity: s.slotCapacity,
     notifyEmail: s.notifyEmail,
+    accountsEnabled: s.accountsEnabled,
     version: s.version,
   };
 }
@@ -313,6 +314,13 @@ function SettingsForm({ store }: { store: OnlineStore }) {
             checked={v.notifyEmail ?? true}
             onChange={(e) => set({ notifyEmail: e.target.checked })}
           />
+          <Checkbox
+            className="sm:col-span-2"
+            label={t('store.accounts')}
+            description={t('store.accountsHint')}
+            checked={v.accountsEnabled ?? true}
+            onChange={(e) => set({ accountsEnabled: e.target.checked })}
+          />
         </div>
       </Section>
       <Section title={t('store.fulfillmentSection')} description={t('store.fulfillmentHint')}>
@@ -456,6 +464,37 @@ function SettingsForm({ store }: { store: OnlineStore }) {
             onChange={(e) => set({ hideOutOfStock: e.target.checked })}
           />
         </div>
+      </Section>
+      <Section title={t('gateways.title')} description={t('gateways.hint')}>
+        <ul className="grid gap-2 sm:grid-cols-3" data-testid="gateway-placeholders">
+          {(['knet', 'cards', 'wallets'] as const).map((g) => (
+            <li
+              key={g}
+              className="flex flex-col gap-1 rounded-lg border border-dashed border-border p-3"
+            >
+              <span className="font-medium">{t(`gateways.${g}`)}</span>
+              <span className="text-xs text-fg-muted">{t(`gateways.${g}Hint`)}</span>
+              <Badge>{t('gateways.soon')}</Badge>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-2 text-xs text-fg-muted">{t('gateways.note')}</p>
+      </Section>
+      <Section title={t('domain.title')} description={t('domain.hint')}>
+        <dl className="grid gap-2 text-sm sm:grid-cols-[auto_1fr]">
+          <dt className="text-fg-muted">{t('domain.current')}</dt>
+          <dd dir="ltr">{store.url}</dd>
+          <dt className="text-fg-muted">{t('domain.subdomain')}</dt>
+          <dd dir="ltr">
+            {`https://${v.slug.trim().toLowerCase() || store.slug}.arabatapp.com`}{' '}
+            <Badge>{t('gateways.soon')}</Badge>
+          </dd>
+          <dt className="text-fg-muted">{t('domain.custom')}</dt>
+          <dd>
+            <Input dir="ltr" placeholder="www.your-store.com" disabled className="max-w-xs" />
+            <span className="mt-1 block text-xs text-fg-muted">{t('domain.customHint')}</span>
+          </dd>
+        </dl>
       </Section>
       <Section title={t('store.paymentsSection')} description={t('store.paymentsHint')}>
         <Checkbox

@@ -3,7 +3,14 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useHref, useLocation, useParams } from 'react-router';
 import { useCart } from '../cart.js';
-import { useLocalName, useMoney, useSlug, useStoreProducts, useStorefront } from '../shared.js';
+import {
+  setPageMeta,
+  useLocalName,
+  useMoney,
+  useSlug,
+  useStoreProducts,
+  useStorefront,
+} from '../shared.js';
 
 export function ProductPage() {
   const slug = useSlug();
@@ -23,8 +30,29 @@ export function ProductPage() {
   const title = product ? name(product) : '';
   const storeName = store ? name(store) : '';
   useEffect(() => {
-    if (title) document.title = storeName ? `${title} · ${storeName}` : title;
-  }, [title, storeName]);
+    if (!product || !title) return;
+    const lowest = product.variants.map((v) => v.price.amount).sort()[0];
+    setPageMeta({
+      title: storeName ? `${title} · ${storeName}` : title,
+      description: product.descriptionEn || product.descriptionAr,
+      image: product.imageUrl,
+      jsonLd: {
+        '@context': 'https://schema.org',
+        '@type': 'Product',
+        name: title,
+        description: product.descriptionEn || product.descriptionAr || undefined,
+        image: product.images.map((src) => new URL(src, window.location.origin).toString()),
+        offers: {
+          '@type': 'Offer',
+          priceCurrency: 'KWD',
+          price: lowest,
+          availability: product.variants.some((v) => v.available)
+            ? 'https://schema.org/InStock'
+            : 'https://schema.org/OutOfStock',
+        },
+      },
+    });
+  }, [product, title, storeName]);
 
   if (products.isPending) return null;
   if (!product)
