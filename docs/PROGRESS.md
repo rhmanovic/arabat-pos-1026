@@ -1286,6 +1286,13 @@ no different header designs or arrangements. Frontend + contract only (no migrat
   oversized mega-menu tiles.
 - Verified (cloud sandbox): `pnpm verify` 359 unit/web (56 files), `pnpm test:integration` 308
   (44 files), `pnpm test:e2e` 43.
+- Released (ADR-0122, ADR-0088): staging (Railway, `main`, 2026-10-20 21:45 UTC, deployment
+  `fa6a4981`, "Migrations and reference data applied") and production 2026-10-20: `0dd02efaf057`
+  (revision `arabat-web-00045-htv`, migration job `arabat-migrate-2zz8k` completed, no new
+  migration). Cloud Build check `f1f1f7a4`: `/api/v1/health/ready` 200 with version
+  `0dd02efaf057` and database ok (3 ms); `live`, `/store/`, `/manager/` and `/online/` 200. Signed
+  out afterwards, `config.env` removed; no key, account or secret deleted. This staging deploy
+  also brings staging up to the store design release (ADR-0128) that had waited for Railway.
 
 ### 2026-10-20 — Storefront design: header, navigation, footer and page sections (ADR-0128)
 Owner's request: the store looked primitive; let the owner design the navigation bar, header,
@@ -1314,9 +1321,9 @@ restaurants alike.
   migration job `arabat-migrate-tq96t` completed: migration 0070 applied). Cloud Build check
   `55e5d427`: `/api/v1/health/ready` 200 with version `59c95a9f752d` and database ok (3 ms);
   `live`, `/store/`, `/manager/` and `/online/` 200. Signed out afterwards, `config.env` removed; no
-  key, account or secret deleted. **Staging not updated:** Railway answered "Deploys have been
-  paused temporarily" (a pause on Railway's side) on three attempts; staging still runs
-  `321fc772d334` and is to be redeployed from `main` once Railway resumes.
+  key, account or secret deleted. Staging: Railway answered "Deploys have been paused temporarily"
+  on three attempts; once it resumed, staging was deployed from `main` at `0dd02efaf057` (see
+  the header system v2 entry above).
 
 ### 2026-10-20 — Online store console redesign for young merchants (ADR-0127)
 Owner's request: make the store console suit Gen Z. Frontend only (`apps/online-web`).
