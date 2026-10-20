@@ -796,7 +796,7 @@ describe('storefront', () => {
       'href',
       '/demo/products',
     );
-    expect(screen.getByText('Fast delivery')).toBeInTheDocument();
+    expect(within(screen.getByRole('main')).getByText('Fast delivery')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Shop by category' })).toBeInTheDocument();
     expect(await screen.findByRole('region', { name: 'Featured' })).toBeInTheDocument();
     expect(screen.getByTestId('video-embed')).toHaveAttribute(
@@ -944,6 +944,139 @@ describe('storefront', () => {
     expect(screen.getByRole('searchbox', { name: 'Search products' })).toHaveValue('Mug');
   });
 
+  it('builds the footer from the design: layout, call to action, badges, brand, folding blocks and the bottom line', async () => {
+    const user = userEvent.setup();
+    const scrollTo = vi.fn();
+    window.scrollTo = scrollTo as unknown as typeof window.scrollTo;
+    const design = templateDesign('retail');
+    design.social = { ...design.social, instagram: 'saffron.house' };
+    design.footer = {
+      ...design.footer,
+      layout: 'split',
+      background: 'brand',
+      topEdge: 'wave',
+      cta: {
+        enabled: true,
+        title: { en: 'Hungry?', ar: null },
+        text: { en: 'Order for pickup or delivery.', ar: null },
+        button: { en: 'Order now', ar: null },
+        link: { kind: 'page', page: 'products' },
+      },
+      badges: [
+        {
+          id: 'b1',
+          icon: '🎁',
+          title: { en: 'Gift wrapping', ar: null },
+          text: { en: null, ar: null },
+        },
+      ],
+      blocks: [
+        {
+          id: 'help',
+          type: 'links',
+          title: { en: 'Help', ar: null },
+          text: { en: null, ar: null },
+          links: [
+            {
+              id: 'l1',
+              label: { en: 'All products', ar: null },
+              link: { kind: 'page', page: 'products' },
+            },
+          ],
+        },
+        {
+          id: 'branches',
+          type: 'branches',
+          title: { en: 'Our branches', ar: null },
+          text: { en: null, ar: null },
+          links: [],
+        },
+      ],
+      bottom: {
+        ...design.footer.bottom,
+        copyright: { en: '© Saffron House', ar: null },
+        links: [
+          {
+            id: 'privacy',
+            label: { en: 'Privacy', ar: null },
+            link: { kind: 'url', url: 'https://example.com/privacy' },
+          },
+        ],
+        showPayments: true,
+        showBackToTop: true,
+      },
+      mobileCollapse: true,
+    };
+    renderStore('/demo', {
+      'GET /store/demo': () => ({ status: 200, body: STORE }),
+      'GET /store/demo/design': () => ({ status: 200, body: { design } }),
+    });
+    const footer = await screen.findByTestId('store-footer');
+    expect(footer).toHaveAttribute('data-layout', 'split');
+    // The call to action and the reassurance badges.
+    const cta = within(footer).getByTestId('footer-cta');
+    expect(within(cta).getByRole('heading', { name: 'Hungry?' })).toBeInTheDocument();
+    expect(within(cta).getByRole('link', { name: 'Order now' })).toHaveAttribute(
+      'href',
+      '/demo/products',
+    );
+    expect(within(footer).getByTestId('footer-badges')).toHaveTextContent('Gift wrapping');
+    // Without a social block, the brand area carries the social accounts.
+    expect(
+      within(within(footer).getByTestId('footer-brand')).getByRole('link', { name: 'Instagram' }),
+    ).toHaveAttribute('href', 'https://instagram.com/saffron.house');
+    // A titled block folds on phones: its button opens it.
+    const help = within(footer).getByRole('button', { name: 'Help' });
+    expect(help).toHaveAttribute('aria-expanded', 'false');
+    await user.click(help);
+    expect(help).toHaveAttribute('aria-expanded', 'true');
+    expect(within(footer).getByRole('link', { name: 'All products' })).toHaveAttribute(
+      'href',
+      '/demo/products',
+    );
+    expect(within(footer).getByText('Salem Al-Mubarak St.')).toBeInTheDocument();
+    // The bottom line: own copyright, a policy link, payment methods and back to top.
+    const bottom = within(footer).getByTestId('footer-bottom');
+    expect(within(bottom).getByText('© Saffron House')).toBeInTheDocument();
+    expect(within(bottom).getByRole('link', { name: 'Privacy' })).toHaveAttribute(
+      'target',
+      '_blank',
+    );
+    const payments = within(bottom).getByRole('list', { name: 'Payment methods' });
+    expect(payments).toHaveTextContent('Card');
+    expect(payments).toHaveTextContent('Pay on receipt');
+    await user.click(within(bottom).getByRole('button', { name: 'Back to top' }));
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
+  });
+
+  it('keeps a footer saved in the first design format as it was', async () => {
+    const design = {
+      ...templateDesign('retail'),
+      footer: {
+        style: 'dark',
+        showPoweredBy: true,
+        blocks: [
+          {
+            id: 'about',
+            type: 'about',
+            title: { en: 'About', ar: null },
+            text: { en: 'Since 1990', ar: null },
+            links: [],
+          },
+        ],
+      },
+    };
+    renderStore('/demo', {
+      'GET /store/demo': () => ({ status: 200, body: STORE }),
+      'GET /store/demo/design': () => ({ status: 200, body: { design } }),
+    });
+    const footer = await screen.findByTestId('store-footer');
+    expect(footer).toHaveAttribute('data-layout', 'columns');
+    expect(footer).toHaveTextContent('Since 1990');
+    expect(within(footer).getByText(/© \d{4} Demo/)).toBeInTheDocument();
+    expect(within(footer).queryByRole('button', { name: 'Back to top' })).toBeNull();
+  });
+
   it('shows a restaurant menu grouped by category and adds a dish with one tap', async () => {
     const user = userEvent.setup();
     const HOT = '0190a000-0000-7000-8000-0000000000c2';
@@ -965,7 +1098,7 @@ describe('storefront', () => {
       }),
     });
     expect(await screen.findByText('Fresh from our kitchen')).toBeInTheDocument();
-    expect(screen.getByText('Open now')).toBeInTheDocument();
+    expect(within(screen.getByRole('main')).getByText('Open now')).toBeInTheDocument();
     const menu = await screen.findByRole('region', { name: 'Menu' });
     expect(within(menu).getByRole('heading', { name: 'Hot drinks' })).toBeInTheDocument();
     expect(within(menu).getByText('Medium roast')).toBeInTheDocument();

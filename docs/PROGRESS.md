@@ -1265,6 +1265,28 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-20 — Store footer system v2 (ADR-0128 amendment 2)
+Owner's request: work through the footer completely, with every option, setting and
+recommendation. Frontend + contract only (no migration).
+- Contract: seven footer layouts, colour, top edge (line / wave / curve), width, spacing, columns,
+  brand area, call-to-action band, up to 4 badges, nine block types (new: branches, free text;
+  links up to 10), social icon style, bottom line (copyright, policy links, payments, language,
+  back to top), folding on phones; `footerPreset` (shop, restaurant, brand, minimal),
+  `suggestedBadges`; footers in the first format keep their look. BR-233.
+- Storefront: `design/Footer.tsx` (layouts, SVG edges, CTA, badges, brand, blocks with icons,
+  today's hours in bold, branches with open now, folding buttons, bottom line with back to top);
+  social links in three styles.
+- Console: Footer tab rebuilt (`features/design/FooterEditor.tsx`): ready footers, recommendations
+  with progress and one-tap fixes, layout gallery, look, brand, CTA, badges, sortable blocks with a
+  type picker, social, bottom line, phones. The preview scrolls to the footer while the tab is
+  open.
+- Tests: store-web +2 (24), online-web +2 (27); one storefront and one e2e query scoped to the
+  page body (the footer now also says "Open now" / "Fast delivery"). Screens checked in Chromium:
+  the seven layouts on desktop and phone, a folded and an opened block on a phone, the editor
+  with the preview at the footer.
+- Verified (cloud sandbox): `pnpm verify` 363 unit/web (56 files), `pnpm test:integration` 308
+  (44 files), `pnpm test:e2e` 43.
+
 ### 2026-10-20 — Design preview at true device width (ADR-0128 amendment 1)
 Owner's report: header settings did not show in the preview, and the desktop preview looked like
 a phone. Cause: the preview frame was only as wide as its column (≈ 600 px), so the store used its

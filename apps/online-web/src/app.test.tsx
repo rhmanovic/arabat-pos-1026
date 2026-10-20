@@ -1046,9 +1046,12 @@ describe('online store console', () => {
       await user.type(address, 'https://offers.example.com');
       await user.type(screen.getByLabelText('Instagram'), '@demo.shop');
       await user.click(screen.getByRole('tab', { name: 'Footer' }));
-      await user.click(screen.getByRole('radio', { name: 'Dark' }));
-      await user.selectOptions(screen.getByLabelText('Block'), 'social');
-      await user.click(screen.getByRole('button', { name: 'Add block' }));
+      await user.click(
+        within(screen.getByRole('radiogroup', { name: 'Footer colour' })).getByRole('radio', {
+          name: 'Dark',
+        }),
+      );
+      await user.click(screen.getByRole('button', { name: 'Social accounts' }));
       await user.click(screen.getByRole('button', { name: 'Save draft' }));
       await waitFor(() => expect(fetch.calls.some((c) => c.method === 'PUT')).toBe(true));
       const design = (fetch.calls.find((c) => c.method === 'PUT')!.body as { design: unknown })
@@ -1056,7 +1059,7 @@ describe('online store console', () => {
         header: { layout: string };
         navbar: { style: string; items: { label: { en: string }; link: unknown }[] };
         social: { instagram: string };
-        footer: { style: string; blocks: { type: string }[] };
+        footer: { background: string; blocks: { type: string }[] };
       };
       expect(design.header.layout).toBe('centered');
       expect(design.navbar.style).toBe('pills');
@@ -1067,7 +1070,7 @@ describe('online store console', () => {
         }),
       ]);
       expect(design.social.instagram).toBe('demo.shop');
-      expect(design.footer.style).toBe('dark');
+      expect(design.footer.background).toBe('dark');
       expect(design.footer.blocks.map((b) => b.type)).toEqual(['contact', 'social']);
     });
 
@@ -1142,6 +1145,97 @@ describe('online store console', () => {
       expect(Object.fromEntries(design.header.actions.map((a) => [a.type, a.visible]))).toEqual(
         expect.objectContaining({ account: false, whatsapp: true, cart: true }),
       );
+    });
+
+    describe('footer editor (ADR-0128 amendment 2)', () => {
+      const saved = async (
+        fetch: ReturnType<typeof fakeApiFetch>,
+        user: ReturnType<typeof userEvent.setup>,
+      ) => {
+        await user.click(screen.getByRole('button', { name: 'Save draft' }));
+        await waitFor(() => expect(fetch.calls.some((c) => c.method === 'PUT')).toBe(true));
+        return (fetch.calls.find((c) => c.method === 'PUT')!.body as { design: unknown })
+          .design as {
+          footer: {
+            layout: string;
+            background: string;
+            topEdge: string;
+            badges: { title: { en: string } }[];
+            cta: { enabled: boolean; button: { en: string } };
+            blocks: { type: string; title: { en: string | null } }[];
+            bottom: { showPayments: boolean; links: { label: { en: string } }[] };
+            mobileCollapse: boolean;
+          };
+        };
+      };
+
+      it('applies a preset, follows the recommendations and builds the footer', async () => {
+        const user = userEvent.setup();
+        const fetch = fakeApiFetch({ session: session(), routes: designRoutes() });
+        renderApp({ routes, appInterface: 'manager', i18n, path: '/design', fetch });
+        await user.click(await screen.findByRole('tab', { name: 'Footer' }));
+        const layouts = screen.getByRole('radiogroup', { name: 'Layout' });
+        expect(within(layouts).getAllByRole('radio')).toHaveLength(7);
+        // The legacy footer: a contact block only; the recommendations offer fixes.
+        expect(screen.getByTestId('footer-score')).toHaveTextContent('1 of 6 done');
+        await user.click(screen.getByRole('button', { name: 'Show them' }));
+        await user.click(screen.getByRole('button', { name: 'Add suggested' }));
+        await user.click(screen.getByRole('button', { name: 'Add one' }));
+        expect(screen.getByTestId('footer-score')).toHaveTextContent('4 of 6 done');
+        // Layout, colour and edge.
+        await user.click(within(layouts).getByRole('radio', { name: 'Brand + columns' }));
+        await user.click(
+          within(screen.getByRole('radiogroup', { name: 'Top edge' })).getByRole('radio', {
+            name: 'Wave',
+          }),
+        );
+        // A new block opens for editing with a ready title; it can carry links.
+        await user.click(screen.getByRole('button', { name: 'Links' }));
+        expect(screen.getByRole('button', { name: 'Edit Links' })).toHaveAttribute(
+          'aria-expanded',
+          'true',
+        );
+        await user.click(screen.getAllByRole('button', { name: 'Add link' })[0]!);
+        // A policy link in the bottom line.
+        await user.click(screen.getAllByRole('button', { name: 'Add link' }).at(-1)!);
+        const labels = screen.getAllByLabelText('Label (English)');
+        await user.type(labels.at(-1)!, 'Return policy');
+        await user.click(
+          screen.getByRole('checkbox', { name: 'Fold the blocks into tappable rows on phones' }),
+        );
+        const design = await saved(fetch, user);
+        expect(design.footer.layout).toBe('split');
+        expect(design.footer.topEdge).toBe('wave');
+        expect(design.footer.bottom.showPayments).toBe(true);
+        expect(design.footer.badges.map((b) => b.title.en)).toEqual([
+          'Fast delivery',
+          'Secure payment',
+          'We are here to help',
+        ]);
+        expect(design.footer.cta).toEqual(
+          expect.objectContaining({ enabled: true, button: { en: 'Shop now', ar: 'تسوّق الآن' } }),
+        );
+        expect(design.footer.blocks.map((b) => b.type)).toEqual(['contact', 'links']);
+        expect(design.footer.blocks[1]!.title).toEqual({ en: 'Quick links', ar: 'روابط سريعة' });
+        expect(design.footer.bottom.links.map((l) => l.label.en)).toEqual(['Return policy']);
+        // The legacy footer did not fold; the switch turns folding on.
+        expect(design.footer.mobileCollapse).toBe(true);
+      });
+
+      it('replaces the footer with the restaurant preset', async () => {
+        const user = userEvent.setup();
+        const fetch = fakeApiFetch({ session: session(), routes: designRoutes() });
+        renderApp({ routes, appInterface: 'manager', i18n, path: '/design', fetch });
+        await user.click(await screen.findByRole('tab', { name: 'Footer' }));
+        await user.click(screen.getByRole('button', { name: 'Apply Restaurant' }));
+        expect(screen.getByRole('radio', { name: 'Brand band on top' })).toBeChecked();
+        await user.click(screen.getByRole('button', { name: 'Remove Branches' }));
+        const design = await saved(fetch, user);
+        expect(design.footer.layout).toBe('stacked');
+        expect(design.footer.background).toBe('dark');
+        expect(design.footer.cta.enabled).toBe(true);
+        expect(design.footer.blocks.map((b) => b.type)).toEqual(['hours', 'contact']);
+      });
     });
   });
 

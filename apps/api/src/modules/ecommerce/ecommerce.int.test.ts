@@ -2165,7 +2165,8 @@ describe('store design (ADR-0128)', () => {
       ],
     };
     design.footer = {
-      style: 'columns',
+      ...design.footer,
+      layout: 'columns',
       showPoweredBy: true,
       blocks: [
         {

@@ -26,7 +26,8 @@ import {
   useSectionSummary,
 } from './SectionEditor.js';
 import { HeaderEditor } from './HeaderEditor.js';
-import { FooterEditor, ThemeEditor } from './ShellEditors.js';
+import { FooterEditor } from './FooterEditor.js';
+import { ThemeEditor } from './ShellEditors.js';
 
 /** The preview frame's name: the storefront shows the draft when it runs inside it. */
 const PREVIEW_FRAME_NAME = 'arabat-design-preview';
@@ -165,18 +166,30 @@ function Editor({
   useEffect(() => {
     latest.current = draft;
   }, [draft]);
+  // The footer sits at the bottom of the store: while it is edited, the preview shows it.
+  const onFooter = useRef(false);
+  useEffect(() => {
+    onFooter.current = tab === 'footer';
+    if (tab === 'footer' || tab === 'header')
+      post({ type: 'arabat:scroll', to: tab === 'footer' ? 'footer' : 'top' });
+  }, [tab, post]);
   useEffect(() => {
     const onMessage = (event: MessageEvent<{ type?: string }>) => {
       if (event.origin !== window.location.origin) return;
       if (event.source !== frame.current?.contentWindow) return;
-      if (event.data?.type === 'arabat:design-ready')
+      if (event.data?.type === 'arabat:design-ready') {
         post({ type: 'arabat:design', design: latest.current });
+        if (onFooter.current) post({ type: 'arabat:scroll', to: 'footer' });
+      }
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, [post]);
   useEffect(() => {
-    const timer = setTimeout(() => post({ type: 'arabat:design', design: draft }), 150);
+    const timer = setTimeout(() => {
+      post({ type: 'arabat:design', design: draft });
+      if (onFooter.current) post({ type: 'arabat:scroll', to: 'footer' });
+    }, 150);
     return () => clearTimeout(timer);
   }, [draft, post]);
   useEffect(() => post({ type: 'arabat:navigate', page }), [page, post]);

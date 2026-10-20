@@ -70,7 +70,12 @@ export const storeAr: typeof storeEn = {
     youtube: 'يوتيوب',
     whatsapp: 'واتساب',
   },
-  footer: { poweredBy: 'مدعوم من عربات' },
+  footer: {
+    poweredBy: 'مدعوم من عربات',
+    copyright: '© {{year}} {{name}}',
+    backToTop: 'العودة للأعلى',
+    payments: 'طرق الدفع',
+  },
   account: {
     title: 'حسابي',
     hello: 'مرحبًا {{name}}',

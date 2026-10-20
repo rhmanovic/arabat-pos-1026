@@ -2,6 +2,7 @@ import type {
   DesignLink,
   Localized,
   StoreAsset,
+  StoreDesign,
   StoreProduct,
   Storefront,
 } from '@arabat/contracts';
@@ -412,6 +413,74 @@ export function MultiPick({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** A collapsible group of the header and footer editors (open by default). */
+export function Panel({
+  title,
+  hint,
+  icon,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  icon: string;
+  children: ReactNode;
+}) {
+  return (
+    <details open className="group rounded-xl border border-border bg-surface">
+      <summary className="flex cursor-pointer list-none items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
+        <span
+          aria-hidden
+          className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary-soft text-lg"
+        >
+          {icon}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-bold">{title}</span>
+          {hint ? <span className="block text-xs text-fg-muted">{hint}</span> : null}
+        </span>
+        <span aria-hidden className="text-fg-subtle transition-transform group-open:rotate-180">
+          ▾
+        </span>
+      </summary>
+      <div className="flex flex-col gap-4 border-t border-border p-4">{children}</div>
+    </details>
+  );
+}
+
+/** The store's social accounts (handles without @, WhatsApp with the country code). */
+export function SocialFields({
+  design,
+  set,
+}: {
+  design: StoreDesign;
+  set: (next: StoreDesign) => void;
+}) {
+  const { t } = useTranslation();
+  const keys = ['instagram', 'tiktok', 'snapchat', 'x', 'youtube', 'whatsapp'] as const;
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {keys.map((k) => (
+        <Field key={k} label={t(`design.social_${k}`)}>
+          {(p) => (
+            <Input
+              {...p}
+              dir="ltr"
+              placeholder={k === 'whatsapp' ? '+96550000000' : 'username'}
+              value={design.social[k]}
+              onChange={(e) =>
+                set({
+                  ...design,
+                  social: { ...design.social, [k]: e.target.value.replace(/^@/, '').trim() },
+                })
+              }
+            />
+          )}
+        </Field>
+      ))}
     </div>
   );
 }

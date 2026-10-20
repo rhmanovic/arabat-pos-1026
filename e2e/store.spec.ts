@@ -519,7 +519,7 @@ test('the owner designs the store as a restaurant, previews it live and publishe
 
   await shopper.reload();
   await expect(shopper.getByText('Karak all day')).toBeVisible();
-  await expect(shopper.getByText('Open now')).toBeVisible();
+  await expect(shopper.getByRole('main').getByText('Open now')).toBeVisible();
   const menu = shopper.getByRole('region', { name: 'Menu' });
   await expect(menu.getByRole('heading', { name: 'Hot drinks' })).toBeVisible();
   await expect(menu.getByText('With cardamom')).toBeVisible();

@@ -259,6 +259,6 @@ Online store (`docs/ONLINE_STORE_PLAN.md`): pay on receipt and store address (AD
 (ADR-0119), merchandising (ADR-0121), fulfilment (ADR-0123: delivery areas, serving branches, hours / slots, order
 e-mails after commit, packing slips, till hand-over through `/pos/online-orders`), shopper accounts (ADR-0124: e-mail +
 password realm `customer_accounts`, bearer `st_…` tokens, reset by e-mail, no SMS), promotions (ADR-0125: one per order,
-`POST /store/:slug/quote`, discount recorded on the sale), Phases 8–10 frontend only (ADR-0126); the console has its own palette and dark mode (ADR-0127); store design with draft / publish and live preview (ADR-0128; header system v2 with seven layouts, top bar, sub-menus / categories menu and ordered header buttons: amendment 1). Composite FKs must never carry
+`POST /store/:slug/quote`, discount recorded on the sale), Phases 8–10 frontend only (ADR-0126); the console has its own palette and dark mode (ADR-0127); store design with draft / publish and live preview (ADR-0128; header system v2 with seven layouts, top bar, sub-menus / categories menu and ordered header buttons: amendment 1; footer system v2 with seven layouts, presets, recommendations, CTA, badges and folding blocks: amendment 2). Composite FKs must never carry
 `on delete set null` (it nulls `merchant_id`); reference the parent `id` alone.
 See `docs/PROGRESS.md` for the current state and `docs/ROADMAP.md` for next steps.

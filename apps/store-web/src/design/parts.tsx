@@ -28,6 +28,11 @@ const ICONS = {
   x: 'M4 4l16 16M20 4 4 20',
   youtube: 'M2 8a4 4 0 0 1 4-4h12a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4zM10 9l5 3-5 3z',
   whatsapp: 'M21 12a9 9 0 0 1-13.5 7.8L3 21l1.2-4.5A9 9 0 1 1 21 12zM9 9.5c.5 2 2.5 4 4.5 4.5',
+  arrowUp: 'M12 19V5M5 12l7-7 7 7',
+  mail: 'M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM3 7l9 6 9-6',
+  pin: 'M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12zM12 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
+  clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2',
+  card: 'M3 6h18v12H3zM3 10h18M7 15h3',
 } as const;
 export type StoreIconName = keyof typeof ICONS;
 
@@ -99,13 +104,18 @@ export function useSocialLinks() {
     .map((k) => ({ key: k, href: SOCIAL[k](social[k]), label: t(`social.${k}`) }));
 }
 
-/** The store's social accounts as round icon buttons (their names are the accessible names). */
+/**
+ * The store's social accounts: round outlined icons, filled icons, or icons with their names
+ * (the platform name is always the accessible name).
+ */
 export function SocialLinks({
   className,
   size = 'md',
+  variant = 'icons',
 }: {
   className?: string;
   size?: 'sm' | 'md';
+  variant?: 'icons' | 'filled' | 'labels';
 }) {
   const links = useSocialLinks();
   if (links.length === 0) return null;
@@ -117,14 +127,26 @@ export function SocialLinks({
             href={s.href}
             target="_blank"
             rel="noreferrer noopener"
-            aria-label={s.label}
+            aria-label={variant === 'labels' ? undefined : s.label}
             title={s.label}
             className={cn(
-              'grid place-items-center rounded-full border border-current/15 transition-colors hover:bg-current/10',
-              size === 'sm' ? 'size-7' : 'size-10',
+              'transition-colors',
+              variant === 'labels'
+                ? 'inline-flex h-9 items-center gap-2 rounded-full border border-current/15 px-3 text-sm font-semibold hover:bg-current/10'
+                : cn(
+                    'grid place-items-center rounded-full',
+                    size === 'sm' ? 'size-7' : 'size-10',
+                    variant === 'filled'
+                      ? 'bg-current/10 hover:bg-current/20'
+                      : 'border border-current/15 hover:bg-current/10',
+                  ),
             )}
           >
-            <StoreIcon name={s.key} className={size === 'sm' ? 'size-3.5' : 'size-[1.15rem]'} />
+            <StoreIcon
+              name={s.key}
+              className={size === 'sm' && variant !== 'labels' ? 'size-3.5' : 'size-[1.15rem]'}
+            />
+            {variant === 'labels' ? s.label : null}
           </a>
         </li>
       ))}

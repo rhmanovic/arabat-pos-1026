@@ -356,17 +356,125 @@ const headerSchema = z.preprocess(
   }),
 );
 export type HeaderDesign = z.output<typeof headerSchema>;
+// ---------------------------------------------------------------------------- footer
+/** Footer arrangements (ADR-0128 amendment 2); each one also works on phones. */
+export const FOOTER_LAYOUTS = [
+  'columns',
+  'split',
+  'stacked',
+  'centered',
+  'cards',
+  'simple',
+  'minimal',
+] as const;
+export type FooterLayout = (typeof FOOTER_LAYOUTS)[number];
+export const FOOTER_BLOCK_TYPES = [
+  'about',
+  'links',
+  'categories',
+  'contact',
+  'hours',
+  'branches',
+  'social',
+  'payments',
+  'text',
+] as const;
+export type FooterBlockType = (typeof FOOTER_BLOCK_TYPES)[number];
+
+const footerLinkSchema = z.object({ id, label: localized(30), link: designLinkSchema });
+export type FooterLink = z.infer<typeof footerLinkSchema>;
+
 const footerBlockSchema = z.object({
   id,
-  type: z.enum(['about', 'links', 'categories', 'contact', 'hours', 'social', 'payments']),
+  type: z.enum(FOOTER_BLOCK_TYPES),
   title: localized(40),
   text: localized(400),
-  links: z
-    .array(z.object({ id, label: localized(30), link: designLinkSchema }))
-    .max(8)
-    .default([]),
+  links: z.array(footerLinkSchema).max(10).default([]),
 });
 export type FooterBlock = z.infer<typeof footerBlockSchema>;
+
+const footerBadgeSchema = z.object({
+  id,
+  icon: z.string().trim().max(8).default(''),
+  title: localized(40),
+  text: localized(80),
+});
+export type FooterBadge = z.infer<typeof footerBadgeSchema>;
+
+/**
+ * The first designs had one `style` (simple / columns / centred / dark); it maps onto the layout
+ * and the colour, and those footers keep their bottom line as it was (no back-to-top button,
+ * no copyright in the simple one).
+ */
+function footerCompat(input: unknown): unknown {
+  if (!input || typeof input !== 'object') return input;
+  const old = input as Record<string, unknown> & { style?: unknown };
+  if (old.layout !== undefined || typeof old.style !== 'string') return input;
+  const { style, ...rest } = old;
+  const simple = style === 'simple';
+  return {
+    layout: style === 'dark' ? 'columns' : style,
+    background: style === 'dark' ? 'dark' : 'light',
+    topEdge: simple ? 'none' : 'line',
+    mobileCollapse: false,
+    bottom: { showCopyright: !simple, showBackToTop: false },
+    ...rest,
+  };
+}
+
+const footerSchema = z.preprocess(
+  footerCompat,
+  z.object({
+    layout: z.enum(FOOTER_LAYOUTS).default('columns'),
+    background: z.enum(['light', 'tinted', 'brand', 'dark']).default('light'),
+    /** The edge between the page and the footer. */
+    topEdge: z.enum(['none', 'line', 'wave', 'curve']).default('line'),
+    width: z.enum(['contained', 'full']).default('contained'),
+    spacing: z.enum(['compact', 'regular', 'roomy']).default('regular'),
+    /** Columns of blocks on large screens; auto = one per block, at most four. */
+    columns: z.enum(['auto', '2', '3', '4']).default('auto'),
+    /** The store's logo, name and words (split, stacked, centred and cards layouts). */
+    brand: z
+      .object({
+        showLogo: z.boolean().default(true),
+        showName: z.boolean().default(true),
+        showTagline: z.boolean().default(true),
+        /** Replaces the tagline when set. */
+        text: localized(300),
+      })
+      .prefault({}),
+    /** A call-to-action band at the top of the footer. */
+    cta: z
+      .object({
+        enabled: z.boolean().default(false),
+        title: localized(80),
+        text: localized(200),
+        button: localized(30),
+        link: designLinkSchema.nullable().default(null),
+      })
+      .prefault({}),
+    /** Reassurance strip: emoji + short words (fast delivery, secure payment…). */
+    badges: z.array(footerBadgeSchema).max(4).default([]),
+    socialStyle: z.enum(['icons', 'filled', 'labels']).default('icons'),
+    blocks: z.array(footerBlockSchema).max(6).default([]),
+    bottom: z
+      .object({
+        showCopyright: z.boolean().default(true),
+        /** Replaces "© year store name" when set. */
+        copyright: localized(120),
+        /** Policies and other small links (returns, privacy, terms…). */
+        links: z.array(footerLinkSchema).max(6).default([]),
+        showPayments: z.boolean().default(false),
+        showLanguage: z.boolean().default(false),
+        showBackToTop: z.boolean().default(true),
+      })
+      .prefault({}),
+    showPoweredBy: z.boolean().default(true),
+    /** On phones the titled blocks fold into tappable rows. */
+    mobileCollapse: z.boolean().default(true),
+  }),
+);
+export type FooterDesign = z.output<typeof footerSchema>;
 
 const handle = z
   .string()
@@ -413,13 +521,7 @@ export const storeDesignSchema = z
         showSocial: z.boolean().default(true),
       })
       .prefault({}),
-    footer: z
-      .object({
-        style: z.enum(['simple', 'columns', 'centered', 'dark']).default('simple'),
-        blocks: z.array(footerBlockSchema).max(6).default([]),
-        showPoweredBy: z.boolean().default(true),
-      })
-      .default({ style: 'simple', blocks: [], showPoweredBy: true }),
+    footer: footerSchema.prefault({}),
     social: z
       .object({
         instagram: handle,
@@ -491,7 +593,14 @@ const parse = (d: StoreDesignInput) => storeDesignSchema.parse(d);
 export function legacyDesign(template: DesignTemplate = 'retail'): StoreDesign {
   return parse({
     template,
-    footer: { style: 'simple', blocks: [{ id: 'contact', type: 'contact' }], showPoweredBy: false },
+    footer: {
+      layout: 'simple',
+      topEdge: 'none',
+      mobileCollapse: false,
+      blocks: [{ id: 'contact', type: 'contact' }],
+      bottom: { showCopyright: false, showBackToTop: false },
+      showPoweredBy: false,
+    },
     drawer: { enabled: false },
     mobileBar: { enabled: false },
     navbar: { style: 'links', items: [] },
@@ -505,6 +614,134 @@ export function legacyDesign(template: DesignTemplate = 'retail'): StoreDesign {
       categories: [{ id: 'categories', type: 'categories', variant: 'tiles' }],
     },
   });
+}
+
+/** One-click footers offered in the console (ADR-0128 amendment 2). */
+export const FOOTER_PRESETS = ['shop', 'restaurant', 'brand', 'minimal'] as const;
+export type FooterPreset = (typeof FOOTER_PRESETS)[number];
+
+/** Reassurance badges suggested to every store (the merchant edits or removes them). */
+export function suggestedBadges(template: DesignTemplate = 'retail'): FooterBadge[] {
+  const badge = (id: string, icon: string, title: Localized, text: Localized): FooterBadge => ({
+    id,
+    icon,
+    title,
+    text,
+  });
+  return template === 'restaurant'
+    ? [
+        badge(
+          'badge-fresh',
+          '🍳',
+          l('Made fresh', 'يُحضّر طازجًا'),
+          l('Cooked when you order', 'نجهّزه عند طلبك'),
+        ),
+        badge(
+          'badge-fast',
+          '🛵',
+          l('Fast delivery', 'توصيل سريع'),
+          l('Hot to your door', 'يصلك ساخنًا'),
+        ),
+        badge(
+          'badge-pay',
+          '💳',
+          l('Pay your way', 'ادفع بطريقتك'),
+          l('Card, link or on receipt', 'بطاقة أو رابط أو عند الاستلام'),
+        ),
+      ]
+    : [
+        badge(
+          'badge-delivery',
+          '🚚',
+          l('Fast delivery', 'توصيل سريع'),
+          l('To your door', 'لين باب البيت'),
+        ),
+        badge(
+          'badge-secure',
+          '🔒',
+          l('Secure payment', 'دفع آمن'),
+          l('Your data is protected', 'بياناتك محمية'),
+        ),
+        badge(
+          'badge-support',
+          '💬',
+          l('We are here to help', 'جاهزين نساعدك'),
+          l('Message us any time', 'راسلنا في أي وقت'),
+        ),
+      ];
+}
+
+export function footerPreset(preset: FooterPreset): FooterDesign {
+  const block = (id: string, type: FooterBlockType, title: Localized) => ({ id, type, title });
+  const quickLinks = {
+    ...block('links', 'links', l('Quick links', 'روابط سريعة')),
+    links: [
+      {
+        id: 'link-products',
+        label: l('All products', 'كل المنتجات'),
+        link: { kind: 'page', page: 'products' },
+      },
+      {
+        id: 'link-categories',
+        label: l('Categories', 'التصنيفات'),
+        link: { kind: 'page', page: 'categories' },
+      },
+      {
+        id: 'link-account',
+        label: l('My account', 'حسابي'),
+        link: { kind: 'page', page: 'account' },
+      },
+    ],
+  };
+  const input = {
+    shop: {
+      layout: 'split',
+      background: 'tinted',
+      topEdge: 'line',
+      badges: suggestedBadges('retail'),
+      blocks: [
+        block('categories', 'categories', l('Shop', 'تسوّق')),
+        quickLinks,
+        block('contact', 'contact', l('Contact us', 'تواصل معنا')),
+      ],
+      bottom: { showPayments: true },
+    },
+    restaurant: {
+      layout: 'stacked',
+      background: 'dark',
+      topEdge: 'curve',
+      cta: {
+        enabled: true,
+        title: l('Hungry?', 'جوعان؟'),
+        text: l('Order now for pickup or delivery.', 'اطلب الحين استلام أو توصيل.'),
+        button: l('Order now', 'اطلب الآن'),
+        link: { kind: 'page', page: 'products' },
+      },
+      blocks: [
+        block('hours', 'hours', l('Opening hours', 'أوقات العمل')),
+        block('branches', 'branches', l('Our branches', 'فروعنا')),
+        block('contact', 'contact', l('Contact us', 'تواصل معنا')),
+      ],
+      bottom: { showPayments: true },
+    },
+    brand: {
+      layout: 'centered',
+      background: 'brand',
+      topEdge: 'wave',
+      spacing: 'roomy',
+      socialStyle: 'filled',
+      blocks: [],
+      bottom: { links: [] },
+    },
+    minimal: {
+      layout: 'minimal',
+      background: 'light',
+      topEdge: 'line',
+      spacing: 'compact',
+      blocks: [],
+    },
+  }[preset];
+  return footerSchema.parse(input);
 }
 
 /** Starting points offered in the console (ADR-0128): shops and restaurants differ. */
@@ -523,16 +760,6 @@ export function templateDesign(template: DesignTemplate): StoreDesign {
       kind: 'categories',
     },
   ] as const;
-  const footer = {
-    style: 'columns' as const,
-    showPoweredBy: true,
-    blocks: [
-      { id: 'about', type: 'about' as const, title: l('About us', 'من نحن') },
-      { id: 'categories', type: 'categories' as const, title: l('Categories', 'التصنيفات') },
-      { id: 'contact', type: 'contact' as const, title: l('Contact', 'تواصل معنا') },
-      { id: 'social', type: 'social' as const, title: l('Follow us', 'تابعنا') },
-    ],
-  };
   if (template === 'restaurant')
     return parse({
       template,
@@ -552,14 +779,7 @@ export function templateDesign(template: DesignTemplate): StoreDesign {
         ],
       },
       navbar: { style: 'pills', align: 'center', items: [...nav] },
-      footer: {
-        ...footer,
-        blocks: [
-          ...footer.blocks.slice(0, 1),
-          { id: 'hours', type: 'hours', title: l('Opening hours', 'أوقات العمل') },
-          ...footer.blocks.slice(2),
-        ],
-      },
+      footer: footerPreset('restaurant'),
       pages: {
         home: [
           {
@@ -602,7 +822,7 @@ export function templateDesign(template: DesignTemplate): StoreDesign {
       mobileSearch: true,
     },
     navbar: { style: 'underline', align: 'start', menuStyle: 'mega', items: [...nav] },
-    footer,
+    footer: footerPreset('shop'),
     pages: {
       home: [
         {

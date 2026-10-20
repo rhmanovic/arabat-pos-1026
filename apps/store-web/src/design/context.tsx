@@ -24,7 +24,8 @@ export const isPreview = () => typeof window !== 'undefined' && window.name === 
 type PreviewMessage =
   | { type: 'arabat:design'; design: unknown }
   | { type: 'arabat:navigate'; page: DesignPage }
-  | { type: 'arabat:focus'; sectionId: string };
+  | { type: 'arabat:focus'; sectionId: string }
+  | { type: 'arabat:scroll'; to: 'top' | 'footer' };
 
 const DesignContext = createContext<StoreDesign | null>(null);
 
@@ -52,6 +53,15 @@ export function DesignProvider({ slug, children }: { slug: string; children: Rea
       } else if (msg?.type === 'arabat:navigate') {
         const path = { home: '', products: '/products', categories: '/categories' }[msg.page];
         void navigate(`/${slug}${path}`);
+      } else if (msg?.type === 'arabat:scroll') {
+        // The editor's header and footer tabs bring their part of the store into view.
+        requestAnimationFrame(() => {
+          if (msg.to === 'footer')
+            document
+              .querySelector('[data-testid="store-footer"]')
+              ?.scrollIntoView?.({ behavior: 'smooth', block: 'end' });
+          else window.scrollTo?.({ top: 0, behavior: 'smooth' });
+        });
       } else if (msg?.type === 'arabat:focus') {
         document
           .getElementById(`section-${msg.sectionId}`)

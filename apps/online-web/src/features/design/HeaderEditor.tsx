@@ -5,48 +5,14 @@ import {
   type NavItem,
   type StoreDesign,
 } from '@arabat/contracts';
-import { Button, Field, Input, cn } from '@arabat/ui';
-import { type ReactNode, useState } from 'react';
+import { Button, cn } from '@arabat/ui';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { SortableList, SortableRow } from '../sortable.js';
-import { Choice, LinkPicker, LocalizedField, Toggle } from './fields.js';
+import { Choice, LinkPicker, LocalizedField, Panel, SocialFields, Toggle } from './fields.js';
 import { newId } from './SectionEditor.js';
 
 type Set = (next: StoreDesign) => void;
-
-/** A collapsible group of the header editor (open by default). */
-function Panel({
-  title,
-  hint,
-  icon,
-  children,
-}: {
-  title: string;
-  hint?: string;
-  icon: string;
-  children: ReactNode;
-}) {
-  return (
-    <details open className="group rounded-xl border border-border bg-surface">
-      <summary className="flex cursor-pointer list-none items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
-        <span
-          aria-hidden
-          className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary-soft text-lg"
-        >
-          {icon}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-bold">{title}</span>
-          {hint ? <span className="block text-xs text-fg-muted">{hint}</span> : null}
-        </span>
-        <span aria-hidden className="text-fg-subtle transition-transform group-open:rotate-180">
-          ▾
-        </span>
-      </summary>
-      <div className="flex flex-col gap-4 border-t border-border p-4">{children}</div>
-    </details>
-  );
-}
 
 // ------------------------------------------------------------- layout thumbnails
 /** A small drawing of each header layout, so the merchant picks by looks. */
@@ -683,33 +649,6 @@ function NavItemsEditor({
           {t('design.addNavItem')}
         </Button>
       ) : null}
-    </div>
-  );
-}
-
-function SocialFields({ design, set }: { design: StoreDesign; set: Set }) {
-  const { t } = useTranslation();
-  const keys = ['instagram', 'tiktok', 'snapchat', 'x', 'youtube', 'whatsapp'] as const;
-  return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {keys.map((k) => (
-        <Field key={k} label={t(`design.social_${k}`)}>
-          {(p) => (
-            <Input
-              {...p}
-              dir="ltr"
-              placeholder={k === 'whatsapp' ? '+96550000000' : 'username'}
-              value={design.social[k]}
-              onChange={(e) =>
-                set({
-                  ...design,
-                  social: { ...design.social, [k]: e.target.value.replace(/^@/, '').trim() },
-                })
-              }
-            />
-          )}
-        </Field>
-      ))}
     </div>
   );
 }

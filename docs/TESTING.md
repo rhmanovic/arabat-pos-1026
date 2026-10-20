@@ -66,6 +66,21 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-20 (store footer system v2, ADR-0128 amendment 2, cloud sandbox run)
+- `apps/store-web/src/app.test.tsx` (+2, 24): a split footer in the brand colour shows its call to
+  action (heading, "Order now" to the products page), a badge, the social account in the brand
+  area, a links block that folds on phones (button `aria-expanded` false → true), the branch
+  address, its own copyright, a policy link in a new tab, the payment methods list (Card, Pay on
+  receipt) and back to top (`scrollTo` called); a footer saved in the first format (`style:
+  'dark'`) renders as columns with its text and copyright and without back to top.
+- `apps/online-web/src/app.test.tsx` (+2, 27): the layout gallery has seven layouts; on the
+  legacy footer the recommendations read 1 of 6, three one-tap fixes (payments, suggested badges,
+  call to action) make it 4 of 6; split layout, wave edge, a new links block opened for editing
+  with its ready bilingual title, a policy link and folding are saved; the restaurant preset
+  replaces the footer (stacked, dark, call to action) and a block is removed.
+- Totals: `pnpm verify` 363 unit/web (56 files), `pnpm test:integration` 308 (44 files),
+  `pnpm test:e2e` 43.
+
 ### Results 2026-10-20 (store header system v2, ADR-0128 amendment 1, cloud sandbox run)
 - `apps/store-web/src/app.test.tsx` (+1, 22): a split header with a top bar message, an icon cart
   "Cart (0)", hidden account and branch buttons and a shown WhatsApp link; the About menu opens

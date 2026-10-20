@@ -68,7 +68,12 @@ export const storeEn = {
     youtube: 'YouTube',
     whatsapp: 'WhatsApp',
   },
-  footer: { poweredBy: 'Powered by Arabat' },
+  footer: {
+    poweredBy: 'Powered by Arabat',
+    copyright: '© {{year}} {{name}}',
+    backToTop: 'Back to top',
+    payments: 'Payment methods',
+  },
   account: {
     title: 'My account',
     hello: 'Hello, {{name}}',

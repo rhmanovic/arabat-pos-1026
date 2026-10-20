@@ -2235,3 +2235,33 @@ ADR; supersede it.
     (≈ 600 px), so the store used its phone layout and every large-screen header setting was
     invisible. The frame now lays the store out at 1280 px (desktop) or 390 px (phone) and is
     scaled down to fit the column (`PreviewFrame` in `DesignPage.tsx`).
+- **Amendment 2 (2026-10-20) — footer system v2.** Owner's request: the same depth for the
+  footer, with every option, setting and recommendation. BR-233. No migration (jsonb); a footer
+  saved in the first format (`style` simple / columns / centred / dark) is mapped by
+  `z.preprocess` onto layout + colour and keeps its bottom line (no back-to-top button, no
+  copyright in the simple one); never-published stores keep the legacy look.
+  - **Seven layouts** (`footer.layout`): columns, split (brand beside the blocks), stacked (brand
+    band on top), centred, cards (each block in a soft card), simple (the old compact row) and
+    minimal (one line). **Look:** light / tinted / brand / dark, top edge none / line / wave /
+    curve (an SVG in the footer's colour), contained or full width, compact / regular / roomy,
+    columns auto / 2 / 3 / 4.
+  - **Brand area:** logo, name, tagline or own words, and the social accounts when no social
+    block exists (icons outlined / filled / with names). **Call-to-action band** (title, text,
+    button, link). **Reassurance badges** (≤ 4, emoji + title + line; suggested sets for shops and
+    restaurants).
+  - **Blocks** (≤ 6, ordered by drag): about, links (≤ 10), categories, contact (phone, WhatsApp,
+    e-mail, address with icons), opening hours (today in bold), branches (address, phone, open
+    now), social, payment methods, free text. Empty blocks stay hidden. On phones titled blocks
+    fold into buttons with `aria-expanded` (`mobileCollapse`).
+  - **Bottom line:** copyright (own text or "© year store name"), up to 6 policy links, payment
+    methods, language button, back-to-top button, "Powered by Arabat".
+  - **Console:** the Footer tab is a set of panels: four ready footers (shop, restaurant, brand,
+    minimal: `footerPreset`), **recommendations** with a progress bar and one-tap fixes (contact,
+    social accounts, payment methods, badges, policy links, call to action, and opening hours for
+    restaurants), a layout gallery with drawings, look, brand, call to action, badges, blocks
+    (sortable, a picker per type), social accounts, bottom line and phones. The preview scrolls
+    to the footer while the Footer tab is open (`arabat:scroll` message) and back to the top on
+    the Header tab.
+  - Templates: retail = the shop preset (split, tinted, badges, categories / quick links /
+    contact, payments in the bottom line); restaurant = the restaurant preset (stacked, dark,
+    curve, "Order now" band, hours / branches / contact).
