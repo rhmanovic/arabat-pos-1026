@@ -102,6 +102,7 @@ export function YourApps() {
   const ar = i18n.language.startsWith('ar');
   const has = (f: ManagerSubscription['plan']['features'][number]) => s.plan.features.includes(f);
   const linksTo = NAV.find((n) => n.key === 'links')?.to;
+  const onlineTo = NAV.find((n) => n.key === 'online')?.to;
   const tiles: AppTile[] = [
     { key: 'manager', state: 'included', to: '/' },
     { key: 'pos', state: 'included', to: can('registers.manage') ? '/registers' : undefined },
@@ -114,7 +115,8 @@ export function YourApps() {
     {
       key: 'online',
       state: has('ecommerce') ? 'included' : 'notIncluded',
-      to: has('ecommerce') && can('online.manage') ? '/online' : undefined,
+      to: has('ecommerce') && can('online.manage') ? onlineTo : undefined,
+      external: true,
     },
     {
       key: 'restaurant',

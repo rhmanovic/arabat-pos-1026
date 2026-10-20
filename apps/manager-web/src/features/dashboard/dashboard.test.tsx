@@ -75,14 +75,14 @@ describe('dashboard "your apps" card', () => {
     expect(state('restaurant')).toBe('notIncluded');
     expect(state('website')).toBe('soon');
 
-    // The link page is a separate application; the store a route of this one.
+    // The link page and the online store console are separate applications (ADR-0119).
     expect(within(card).getByRole('link', { name: /Link page/ })).toHaveAttribute(
       'href',
       expect.stringMatching(/\/links\/$/),
     );
     expect(within(card).getByRole('link', { name: /Online store/ })).toHaveAttribute(
       'href',
-      '/online',
+      expect.stringMatching(/\/online\/$/),
     );
     // A product the plan lacks leads to the subscription page.
     expect(within(card).getByRole('link', { name: /Restaurant/ })).toHaveAttribute(

@@ -57,13 +57,13 @@ test('a shopper buys online with the sandbox gateway; the order, stock and repor
 
   // The owner lists the product and publishes the store in the manager.
   const slug = `e2e-${Date.now().toString(36)}`;
-  await page.goto('/manager/online');
+  await page.goto('/online/');
   await expect(page.getByRole('heading', { name: 'Online store' })).toBeVisible();
-  await page.getByRole('button', { name: 'Products online' }).click();
+  await page.getByRole('link', { name: 'Products online' }).click();
   await page.getByRole('checkbox', { name: 'Saffron tea' }).check();
   await page.getByRole('button', { name: 'List online (1)' }).click();
   await expect(page.getByText('Listed', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Store settings' }).click();
+  await page.getByRole('link', { name: 'Store settings' }).click();
   await page.getByLabel('Store address').fill(slug);
   await page.getByLabel('Store name (English)').fill('Saffron House');
   await page.getByLabel('Fulfilment branch').selectOption(main);
@@ -108,8 +108,8 @@ test('a shopper buys online with the sandbox gateway; the order, stock and repor
     '3.000',
   );
 
-  // The manager sees the paid order and moves it forward.
-  await page.goto('/manager/online');
+  // The manager sees the paid order in the online console and moves it forward.
+  await page.goto('/online/orders');
   await page.getByText('W-000001').click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByText('Mariam')).toBeVisible();
@@ -166,12 +166,14 @@ test('a shopper orders without any gateway and pays at pickup; staff confirm, re
 
   // No payment method is touched: the store publishes with "pay on receipt" only.
   const slug = `cod-${Date.now().toString(36)}`;
+  // The management app hands over to the online console (same session).
   await page.goto('/manager/online');
-  await page.getByRole('button', { name: 'Products online' }).click();
+  await expect(page).toHaveURL(/\/online\/$/);
+  await page.getByRole('link', { name: 'Products online' }).click();
   await page.getByRole('checkbox', { name: 'Date box' }).check();
   await page.getByRole('button', { name: 'List online (1)' }).click();
   await expect(page.getByText('Listed', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Store settings' }).click();
+  await page.getByRole('link', { name: 'Store settings' }).click();
   const address = page.getByLabel('Store address');
   await address.fill(slug);
   await expect(page.getByText('Available', { exact: true })).toBeVisible();
@@ -208,7 +210,7 @@ test('a shopper orders without any gateway and pays at pickup; staff confirm, re
   expect(await level()).toBe('4.000');
 
   // Staff confirm, record the cash on hand-over (the sale is created now) and complete.
-  await page.goto('/manager/online');
+  await page.goto('/online/orders');
   await expect(page.getByText('Unpaid')).toBeVisible();
   await page.getByText('W-000001').click();
   const dialog = page.getByRole('dialog');

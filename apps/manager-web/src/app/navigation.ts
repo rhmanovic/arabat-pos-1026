@@ -121,10 +121,12 @@ export const NAV: readonly NavItem[] = [
     section: 'operations',
   },
   {
+    // The online store has its own console at /online (ADR-0119): same account and session.
     key: 'online',
-    to: '/online',
+    to: import.meta.env.DEV ? 'http://localhost:5178/online/' : '/online/',
     anyOf: ['online.manage', 'online.orders'],
     available: true,
+    external: true,
     section: 'operations',
   },
   {

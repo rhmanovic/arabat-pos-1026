@@ -30,7 +30,7 @@ the permission.
 | `/reports` | Reports (tabs per report permission: sales, payments & cash incl. cash by type, expenses, shifts, inventory, purchasing) | any `reports.*` |
 | `/customers`, `/customers/:customerId` | Customers, history, notes | `customers.read` |
 | `/restaurant` | Restaurant setup (module, floor, stations, modifiers, menu) | `restaurant.manage` |
-| `/online` | Online store: orders, settings, products online | `online.orders` / `online.manage` |
+| `/online` | Redirects to the online store console `/online/` (ADR-0119) | — |
 | `/payments` | Payment methods and internal balances | `payments.settings` |
 | `/cash` | Cash custody: treasury and register balances per branch, counts, statements, transfers, expenses and supplier payments, bank deposits, transfers between branches | `cash.custody` (deposits: `cash.deposit`) |
 | `/registers` | Registers | `registers.manage` |
@@ -102,6 +102,22 @@ No session; every call goes to the public store API. Cart kept per store in the 
 | `/store/<former slug>/…` | A renamed store's old address redirects to the current one for 90 days (ADR-0118) |
 | `/store/pay/:reference` | Sandbox gateway page (mock adapter only) |
 | `/store/links/:slug` | Link page of a merchant ("link in bio", ADR-0116) |
+
+## 2d. `/online` — online-web (online store console, ADR-0119)
+
+Its own application, layout and navigation. Signs in with the **manager** session (same account
+and cookie as `/manager`). Backend, catalog, stock, customers and permissions are shared with the
+POS; the console only changes where the online store is managed. The manager menu and the
+dashboard's "Online store" tile open it (↗); `/manager/online` redirects here.
+
+| Route | Screen | Permission |
+|---|---|---|
+| `/online/login`, `/online/forgot-password` | Sign in with the management account | — |
+| `/online/` | Overview: store state and address, order counts (new, awaiting payment, to prepare, in progress, need attention), shared functions | `online.manage` or `online.orders` |
+| `/online/orders` (`?status=`) | Orders list, detail, steps, "Record payment" for pay-on-receipt orders, check pending payments | `online.orders` (branch of the order) |
+| `/online/products` | Which catalog products are sold online | `online.manage` |
+| `/online/settings` | Address (live check), status, branding, fulfilment, payment options | `online.manage` |
+| Sidebar "Shared with the POS" | Opens `/manager/products`, `/manager/customers`, `/manager/reports`, `/manager/payments` with their own permissions | — |
 
 ## 2c. `/links` — links-web (link-page editor, ADR-0116 amendment 1)
 
@@ -476,7 +492,7 @@ Example — the same `SalesService` behind two adapters:
 - `GET  /api/v1/manager/sales?branchId=&from=&to=` (history, filtered to accessible branches)
 
 ## 5. Serving & URLs
-- Production: one origin; the proxy serves `/manager/*`, `/pos/*`,
-  `/platform/*`, `/store/*` from each app's static build with SPA fallback to that app's
-  `index.html`, and forwards `/api/*` to the API.
-- `/` redirects to `/manager` (marketing site is out of scope).
+- Production: one origin; the API (`serve-web.ts`) serves `/manager/*`, `/pos/*`,
+  `/platform/*`, `/store/*`, `/links/*` and `/online/*` from each app's static build with SPA
+  fallback to that app's `index.html`; `/api/*` is the API.
+- `/` is the landing page (ADR-0113); `/pricing` and `/start` belong to it too.

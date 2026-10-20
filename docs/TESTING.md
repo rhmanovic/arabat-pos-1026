@@ -66,6 +66,21 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-20 (online store console at /online, ADR-0119, cloud sandbox run)
+- `apps/online-web/src/app.test.tsx` (10): the console's sign-in page; its own navigation with
+  the management links shown by permission (reports hidden without `reports.sales`), the
+  "Business management" switch and the overview counts (new 2, to prepare 4, attention 1,
+  store address); a management account without `online.*` sees the access message; a plan
+  without `ecommerce` shows the notice; orders list → step with the version and the sale link
+  into the management app; pay-on-receipt payment dialog; address check, suggestion and refused
+  fields on save; listings; Arabic / English key parity; `nextActions`.
+- Manager: the online page tests moved to the console; the dashboard test expects the tile to
+  open `/online/`.
+- `e2e/store.spec.ts` (2): both flows run through `/online` (products, settings, orders), and
+  the pay-at-pickup flow checks that `/manager/online` hands over to the console.
+- Totals: `pnpm verify` 334 unit/web in 56 files ✅, `pnpm test:integration` 297 in 44 files ✅,
+  `pnpm test:e2e` 41 ✅.
+
 ### Results 2026-10-20 (online store Phase 1: pay on receipt, store address, ADR-0118, cloud sandbox run)
 - `ecommerce.int.test.ts` (+3, 9 in the file): a store without any gateway publishes and takes an
   unpaid pickup order (`placed`, no reservation row, the store still offers all 5, ordering 6 is
