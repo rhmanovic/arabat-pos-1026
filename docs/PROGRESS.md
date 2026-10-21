@@ -1299,6 +1299,14 @@ collections, quick add from the store console, and protections against silent sw
   e2e follow the new console.
 - Verified (cloud sandbox): `pnpm verify` 381 unit/web, `pnpm test:integration` 311 (44 files),
   `pnpm test:e2e` 45.
+- Released (ADR-0122): production `7378c9751a32` (revision `arabat-web-00050-vgs`, previous
+  `arabat-web-00049-q4d`; migration job `arabat-migrate-gxm2m` completed: migrations 0071 and 0072
+  applied). Cloud Build check `77f64b35`: `/api/v1/health/ready` 200 with that version and
+  database ok (3 ms); `live`, `/store/`, `/manager/` and `/online/` 200. Signed out afterwards,
+  `config.env` removed; no key, account or secret deleted. Rollback of the code if ever needed:
+  `--to-revisions=arabat-web-00049-q4d=100` (the old code does not know the new tables; the data
+  of the old store categories is kept as collections). **Staging not updated:** Railway still
+  answers "Deploys have been paused temporarily".
 
 ### 2026-10-21 — Pictures stored as WebP; store category dialog (ADR-0129)
 Owner's requests: the "Add category" dialog must close after saving; say that the store's
