@@ -1282,6 +1282,11 @@ no migration, no API rule changed (the save audit counts the cart's sections).
   sample cart, the restaurant's "Continue", kitchen notes, no email and "Send my order").
 - Verified (cloud sandbox): `pnpm verify` 400 unit/web, `pnpm test:integration` 311 (44 files),
   `pnpm test:e2e` 45; cart and checkout checked at 1440 and 390 px (Arabic), nothing wider than the screen.
+- Released (ADR-0122): production `e696a72a56f1` (revision `arabat-web-00055-6nj`, previous
+  `arabat-web-00054-4d7`; migration job `arabat-migrate-k486c`, no new migration). Cloud Build
+  check `1b6abb72`: `/api/v1/health/ready` 200 with that version and database ok (3 ms); `live`,
+  `/store/`, `/manager/` and `/online/` 200. Signed out afterwards, `config.env` removed; no key,
+  account or secret deleted. Staging still waits for Railway to resume deploys.
 
 ### 2026-10-21 — Product page designer (ADR-0128 amendment 4, BR-237)
 Owner's request: options, ready pages and settings to design the product page. No migration.
