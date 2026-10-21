@@ -23,7 +23,7 @@ export const isPreview = () => typeof window !== 'undefined' && window.name === 
 
 type PreviewMessage =
   | { type: 'arabat:design'; design: unknown }
-  | { type: 'arabat:navigate'; page: DesignPage; productId?: string | null }
+  | { type: 'arabat:navigate'; page: DesignPage | 'checkout'; productId?: string | null }
   | { type: 'arabat:focus'; sectionId: string }
   | { type: 'arabat:scroll'; to: 'top' | 'footer' };
 
@@ -57,6 +57,8 @@ export function DesignProvider({ slug, children }: { slug: string; children: Rea
           products: '/products',
           categories: '/categories',
           product: msg.productId ? `/products/${encodeURIComponent(msg.productId)}` : '/products',
+          cart: '/cart',
+          checkout: '/checkout',
         }[msg.page];
         void navigate(`/${slug}${path}`);
       } else if (msg?.type === 'arabat:scroll') {

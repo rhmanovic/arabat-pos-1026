@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CART_PRESETS,
   HOME_LAYOUTS,
   PRODUCT_PAGE_PRESETS,
   READY_SECTIONS,
   designImageIds,
   homeLayout,
+  cartPreset,
   legacyDesign,
   productPagePreset,
   readySection,
@@ -123,5 +125,60 @@ describe('product page (ADR-0128 amendment 4)', () => {
     expect(ok({ layout: 'carousel' })).toBe(false);
     expect(ok({ highlights: Array.from({ length: 5 }, (_, i) => ({ id: `h${i}` })) })).toBe(false);
     expect(ok({ description: { style: 'tabs', blocks: [{ id: 'b' }] } })).toBe(true);
+  });
+});
+
+describe('cart and checkout pages (ADR-0128 amendment 5)', () => {
+  it('gives designs saved before the amendment default cart and checkout pages', () => {
+    const { cartPage: _c, checkoutPage: _k, ...old } = legacyDesign();
+    const { cart: _s, ...pages } = old.pages;
+    const parsed = storeDesignSchema.parse({ ...old, pages });
+    expect(parsed.pages.cart).toEqual([]);
+    expect(parsed.cartPage).toMatchObject({
+      layout: 'split',
+      images: true,
+      minimumBar: true,
+      upsell: { enabled: true, source: 'featured', limit: 4 },
+      empty: { showProducts: true },
+    });
+    expect(parsed.checkoutPage).toMatchObject({
+      steps: true,
+      choices: 'cards',
+      email: 'optional',
+      promo: true,
+      terms: { enabled: false, link: null },
+    });
+  });
+
+  it('offers presets that set both pages, and templates start from one', () => {
+    for (const p of CART_PRESETS) {
+      const { cartPage, checkoutPage } = cartPreset(p);
+      expect(cartPage && checkoutPage).toBeTruthy();
+    }
+    expect(cartPreset('express').checkoutPage.email).toBe('hidden');
+    expect(templateDesign('restaurant').checkoutPage.note.label.en).toBe('Notes for the kitchen');
+    expect(templateDesign('retail').cartPage.highlights).toHaveLength(3);
+  });
+
+  it('keeps catalogs and menus off the cart and bounds the settings', () => {
+    const base = legacyDesign();
+    const ok = (patch: Record<string, unknown>) =>
+      storeDesignSchema.safeParse({ ...base, ...patch }).success;
+    expect(ok({ pages: { ...base.pages, cart: [{ id: 'faq', type: 'faq' }] } })).toBe(true);
+    expect(ok({ pages: { ...base.pages, cart: [{ id: 'c', type: 'catalog' }] } })).toBe(false);
+    expect(ok({ cartPage: { upsell: { limit: 9 } } })).toBe(false);
+    expect(ok({ checkoutPage: { email: 'never' } })).toBe(false);
+    expect(
+      ok({
+        checkoutPage: { terms: { enabled: true, link: { kind: 'url', url: 'javascript:x' } } },
+      }),
+    ).toBe(false);
+    expect(
+      ok({
+        checkoutPage: {
+          terms: { enabled: true, link: { kind: 'url', url: 'https://example.com/terms' } },
+        },
+      }),
+    ).toBe(true);
   });
 });

@@ -259,7 +259,7 @@ function Recommendations({
 
 // ---------------------------------------------------------------- list items
 /** Rows of small editable items (highlights, info blocks) with add and remove. */
-function ItemList<T extends { id: string }>({
+export function ItemList<T extends { id: string }>({
   items,
   max,
   addLabel,
@@ -304,6 +304,73 @@ function ItemList<T extends { id: string }>({
         </Button>
       ) : null}
     </div>
+  );
+}
+
+/** Up to four reassurance items (emoji, title, words), with suggested ones to start from. */
+export function HighlightsField({
+  items,
+  suggested,
+  onChange,
+}: {
+  items: ProductHighlight[];
+  suggested: () => ProductHighlight[];
+  onChange: (next: ProductHighlight[]) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <>
+      {items.length === 0 ? (
+        <Button
+          size="sm"
+          variant="secondary"
+          className="w-fit"
+          onClick={() => onChange(suggested())}
+        >
+          {t('productDesign.useSuggested')}
+        </Button>
+      ) : null}
+      <ItemList<ProductHighlight>
+        items={items}
+        max={4}
+        addLabel={t('productDesign.addHighlight')}
+        onChange={onChange}
+        label={(h, i) => h.title.ar || h.title.en || String(i + 1)}
+        blank={() => ({
+          id: newId('highlight'),
+          icon: '⭐',
+          title: { en: null, ar: null },
+          text: { en: null, ar: null },
+        })}
+        render={(h, setItem) => (
+          <>
+            <Field label={t('productDesign.icon')} hint={t('productDesign.iconHint')}>
+              {(props) => (
+                <Input
+                  {...props}
+                  className="max-w-24"
+                  maxLength={8}
+                  value={h.icon}
+                  onChange={(e) => setItem({ icon: e.target.value })}
+                />
+              )}
+            </Field>
+            <LocalizedField
+              label={t('design.title')}
+              value={h.title}
+              max={40}
+              onChange={(title) => setItem({ title })}
+            />
+            <LocalizedField
+              label={t('design.text')}
+              value={h.text}
+              max={80}
+              onChange={(text) => setItem({ text })}
+            />
+          </>
+        )}
+      />
+    </>
   );
 }
 
@@ -559,55 +626,10 @@ export function ProductPageEditor({
         hint={t('productDesign.highlightsHint')}
         defaultOpen={false}
       >
-        {p.highlights.length === 0 ? (
-          <Button
-            size="sm"
-            variant="secondary"
-            className="w-fit"
-            onClick={() => update({ highlights: suggestedHighlights(kind) })}
-          >
-            {t('productDesign.useSuggested')}
-          </Button>
-        ) : null}
-        <ItemList<ProductHighlight>
+        <HighlightsField
           items={p.highlights}
-          max={4}
-          addLabel={t('productDesign.addHighlight')}
+          suggested={() => suggestedHighlights(kind)}
           onChange={(highlights) => update({ highlights })}
-          label={(h, i) => h.title.ar || h.title.en || String(i + 1)}
-          blank={() => ({
-            id: newId('highlight'),
-            icon: '⭐',
-            title: { en: null, ar: null },
-            text: { en: null, ar: null },
-          })}
-          render={(h, setItem) => (
-            <>
-              <Field label={t('productDesign.icon')} hint={t('productDesign.iconHint')}>
-                {(props) => (
-                  <Input
-                    {...props}
-                    className="max-w-24"
-                    maxLength={8}
-                    value={h.icon}
-                    onChange={(e) => setItem({ icon: e.target.value })}
-                  />
-                )}
-              </Field>
-              <LocalizedField
-                label={t('design.title')}
-                value={h.title}
-                max={40}
-                onChange={(title) => setItem({ title })}
-              />
-              <LocalizedField
-                label={t('design.text')}
-                value={h.text}
-                max={80}
-                onChange={(text) => setItem({ text })}
-              />
-            </>
-          )}
         />
       </Panel>
 

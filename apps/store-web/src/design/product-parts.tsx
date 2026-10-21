@@ -1,6 +1,6 @@
-import type { ProductPageDesign, StoreProduct } from '@arabat/contracts';
+import type { ProductHighlight, ProductPageDesign, StoreProduct } from '@arabat/contracts';
 import { cn } from '@arabat/ui';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, type RefObject, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useText } from './context.js';
 import { StoreIcon } from './parts.js';
@@ -471,4 +471,57 @@ function readRecent(storageKey: string): string[] {
   } catch {
     return [];
   }
+}
+
+/** Reassurance items: emoji, a short title and words (product, cart and checkout pages). */
+export function Highlights({ items, testId }: { items: ProductHighlight[]; testId: string }) {
+  const text = useText();
+  if (items.length === 0) return null;
+  return (
+    <ul className="grid w-full gap-2 sm:grid-cols-2" data-testid={testId}>
+      {items.map((h) => (
+        <li
+          key={h.id}
+          className="flex items-start gap-3 rounded-lg bg-surface-muted p-3 text-start"
+        >
+          {h.icon ? (
+            <span aria-hidden className="text-xl leading-none">
+              {h.icon}
+            </span>
+          ) : null}
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold">{text(h.title)}</span>
+            {text(h.text) ? (
+              <span className="block text-xs text-fg-muted">{text(h.text)}</span>
+            ) : null}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Whether an element is out of the screen, for the phone's bottom bars: `above` only once it
+ * has scrolled above the screen (the product page's add button), else whenever it is not seen
+ * (the cart's checkout button, often below the lines). Browsers without the observer: never.
+ */
+export function useOutOfView(
+  ref: RefObject<HTMLElement | null>,
+  enabled: boolean,
+  above = false,
+): boolean {
+  const [away, setAway] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!enabled || !el || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(([entry]) =>
+      setAway(
+        Boolean(entry && !entry.isIntersecting && (!above || entry.boundingClientRect.top < 0)),
+      ),
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref, enabled, above]);
+  return enabled && away;
 }

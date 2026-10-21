@@ -2444,3 +2444,24 @@ ADR; supersede it.
     from the catalog, zoom, highlights, related, phone bar, WhatsApp), an arrangement gallery
     with drawings, and panels for pictures, details, buy box, highlights, description,
     related and recently viewed; the sections under the product are edited below it.
+- **Amendment 5 (2026-10-21) — cart and checkout designer.** Owner's request: the same for the
+  cart and the checkout. BR-238. No migration (jsonb); designs saved before parse with defaults
+  and no sections under the cart. Only the look and the questions are designed: prices, fees,
+  promotions, stock and the order itself stay with the server and are checked there as before.
+  - **Contract:** `cartPage` (total beside the products or one column, pictures, a note on top,
+    progress to the minimum order with the exact amount missing, own checkout-button words,
+    phone bottom bar, "continue shopping", up to 4 highlights, suggestions — featured or all,
+    never in the cart or sold out — and the empty cart's words with products to start from) and
+    `checkoutPage` (summary beside the form or one column, numbered steps, pickup / delivery and
+    payment as large cards or a plain list, a note on top, email optional / required / not
+    asked, the note field on or off with its own title, the promotion-code box on or off —
+    automatic offers apply either way —, pictures in the summary, terms to agree to with a safe
+    link, own order-button words, up to 4 highlights). `pages.cart` holds up to 10 sections
+    (catalog and menu refused); the checkout has no sections so nothing distracts from ordering.
+    Four presets set both pages (`cartPreset`: classic, express, food, minimal); templates
+    start from one.
+  - **Preview:** an empty cart in the console's preview shows two sample products (with a
+    note), so the cart and the checkout can be designed; nothing can be ordered from the
+    preview (the order button is disabled and submitting does nothing).
+  - **Console:** «السلة» and «إتمام الطلب» page chips; ready pages, recommendations with fixes,
+    and panels for every setting; the cart's sections are edited below its settings.

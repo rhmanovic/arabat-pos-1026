@@ -7,10 +7,12 @@ import { useCart } from '../cart.js';
 import { useDesign, useText } from '../design/context.js';
 import { StoreIcon } from '../design/parts.js';
 import {
+  Highlights,
   ProductDetails,
   ProductGallery,
   ProductRow,
   relatedProducts,
+  useOutOfView,
   useRecentlyViewed,
 } from '../design/product-parts.js';
 import { DesignedPage } from '../design/sections.js';
@@ -103,7 +105,6 @@ function ProductView({ product, all }: { product: StoreProduct; all: StoreProduc
   const href = useHref(useLocation().pathname);
   const recentIds = useRecentlyViewed(slug, product.productId, page.recent.enabled);
   const buyRef = useRef<HTMLDivElement>(null);
-  const [buyAway, setBuyAway] = useState(false);
 
   const variant =
     product.variants.find((v) => v.variantId === variantId) ??
@@ -111,15 +112,7 @@ function ProductView({ product, all }: { product: StoreProduct; all: StoreProduc
     product.variants[0]!;
   const sticky = page.buy.stickyBar && variant.available;
   // The phone's bottom bar appears once the main add button has scrolled above the screen.
-  useEffect(() => {
-    const el = buyRef.current;
-    if (!sticky || !el || typeof IntersectionObserver === 'undefined') return;
-    const observer = new IntersectionObserver(([entry]) =>
-      setBuyAway(Boolean(entry && !entry.isIntersecting && entry.boundingClientRect.top < 0)),
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [sticky]);
+  const buyAway = useOutOfView(buyRef, sticky, true);
 
   const title = name(product);
   const description = i18n.language.startsWith('ar')
@@ -432,28 +425,7 @@ function ProductView({ product, all }: { product: StoreProduct; all: StoreProduc
           {t('product.askWhatsapp')}
         </a>
       ) : null}
-      {page.highlights.length > 0 ? (
-        <ul className="grid w-full gap-2 sm:grid-cols-2" data-testid="product-highlights">
-          {page.highlights.map((h) => (
-            <li
-              key={h.id}
-              className="flex items-start gap-3 rounded-lg bg-surface-muted p-3 text-start"
-            >
-              {h.icon ? (
-                <span aria-hidden className="text-xl leading-none">
-                  {h.icon}
-                </span>
-              ) : null}
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold">{text(h.title)}</span>
-                {text(h.text) ? (
-                  <span className="block text-xs text-fg-muted">{text(h.text)}</span>
-                ) : null}
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      <Highlights items={page.highlights} testId="product-highlights" />
       {page.description.style !== 'plain' || page.description.blocks.length > 0 ? (
         <div className="w-full text-start">
           <ProductDetails description={description ?? ''} settings={page.description} />

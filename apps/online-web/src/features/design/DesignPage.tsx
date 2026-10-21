@@ -28,6 +28,7 @@ import { HeaderEditor } from './HeaderEditor.js';
 import { FooterEditor } from './FooterEditor.js';
 import { ThemeEditor } from './ShellEditors.js';
 import { ProductPageEditor } from './ProductPageEditor.js';
+import { CartPageEditor, CheckoutPageEditor } from './CartEditors.js';
 
 /** The preview frame's name: the storefront shows the draft when it runs inside it. */
 const PREVIEW_FRAME_NAME = 'arabat-design-preview';
@@ -91,6 +92,9 @@ function PreviewFrame({
   );
 }
 type Tab = 'pages' | 'theme' | 'header' | 'footer';
+/** The pages the editor shows: the designed ones, and the checkout (settings only, no sections). */
+type EditorPage = PageKey | 'checkout';
+const EDITOR_PAGES: readonly EditorPage[] = [...DESIGN_PAGES, 'checkout'];
 
 /**
  * Store design (ADR-0128): the merchant shapes the header, navigation, side menu, footer and the
@@ -151,7 +155,7 @@ function Editor({
     setDraft(state.draft);
   }
   const [tab, setTab] = useState<Tab>('pages');
-  const [page, setPage] = useState<PageKey>('home');
+  const [page, setPage] = useState<EditorPage>('home');
   // The product the preview opens while the product page is edited (the first one by default).
   const { products } = useStoreCatalog();
   const [chosenProduct, setChosenProduct] = useState<string | null>(null);
@@ -396,8 +400,8 @@ function PagesEditor({
 }: {
   design: StoreDesign;
   set: (d: StoreDesign) => void;
-  page: PageKey;
-  setPage: (p: PageKey) => void;
+  page: EditorPage;
+  setPage: (p: EditorPage) => void;
   previewProduct: string | null;
   onPreviewProduct: (id: string) => void;
   onFocus: (id: string) => void;
@@ -406,9 +410,9 @@ function PagesEditor({
   const summary = useSectionSummary();
   const [editing, setEditing] = useState<string | null>(null);
   const [picker, setPicker] = useState(false);
-  const sections = design.pages[page];
+  const sections = page === 'checkout' ? [] : design.pages[page];
   const setSections = (next: DesignSection[]) =>
-    set({ ...design, pages: { ...design.pages, [page]: next } });
+    page === 'checkout' ? undefined : set({ ...design, pages: { ...design.pages, [page]: next } });
   const replace = (id: string, next: DesignSection) =>
     setSections(sections.map((s) => (s.id === id ? next : s)));
   const current = sections.find((s) => s.id === editing) ?? null;
@@ -429,12 +433,8 @@ function PagesEditor({
 
   return (
     <div className="flex flex-col gap-4">
-      <div
-        role="radiogroup"
-        aria-label={t('design.page')}
-        className="grid grid-cols-2 gap-2 sm:grid-cols-4"
-      >
-        {DESIGN_PAGES.map((p) => (
+      <div role="radiogroup" aria-label={t('design.page')} className="grid grid-cols-3 gap-2">
+        {EDITOR_PAGES.map((p) => (
           <button
             key={p}
             type="button"
@@ -464,6 +464,16 @@ function PagesEditor({
             <p className="text-xs text-fg-muted">{t('productDesign.sectionsHint')}</p>
           </div>
         </>
+      ) : page === 'cart' ? (
+        <>
+          <CartPageEditor design={design} set={set} />
+          <div>
+            <h3 className="text-sm font-bold">{t('cartDesign.sections')}</h3>
+            <p className="text-xs text-fg-muted">{t('cartDesign.sectionsHint')}</p>
+          </div>
+        </>
+      ) : page === 'checkout' ? (
+        <CheckoutPageEditor design={design} set={set} />
       ) : null}
       {page === 'home' ? (
         <>
@@ -489,7 +499,7 @@ function PagesEditor({
           </Panel>
         </>
       ) : null}
-      {sections.length === 0 ? (
+      {page === 'checkout' ? null : sections.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-fg-muted">
           {t('design.noSections')}
         </p>
@@ -584,13 +594,14 @@ function PagesEditor({
           })}
         </SortableList>
       )}
-      {sections.length < (page === 'home' ? 30 : 15) ? (
+      {page !== 'checkout' &&
+      sections.length < (page === 'home' ? 30 : page === 'cart' ? 10 : 15) ? (
         <Button onClick={() => setPicker(true)}>{t('design.addSection')}</Button>
       ) : null}
       {picker ? (
         <SectionPicker
           design={design}
-          exclude={page === 'product' ? ['catalog', 'menu'] : []}
+          exclude={page === 'product' || page === 'cart' ? ['catalog', 'menu'] : []}
           onClose={() => setPicker(false)}
           onPick={(s) => {
             setSections([...sections, s]);

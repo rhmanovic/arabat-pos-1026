@@ -1265,6 +1265,24 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-21 — Cart and checkout designer (ADR-0128 amendment 5, BR-238)
+Owner's request: the same designer for the cart and the checkout. Frontend and contract only;
+no migration, no API rule changed (the save audit counts the cart's sections).
+- Contract: `cartPage`, `checkoutPage`, `pages.cart` (up to 10 sections, no catalog or menu),
+  `cartPreset` (classic, express, food, minimal) setting both pages; templates start from one.
+- Storefront: the cart follows the design (arrangement, pictures, note, exact progress to the
+  minimum order, own button words, phone bottom bar, continue shopping, highlights, suggestions,
+  designed empty cart with products, sections); the checkout follows it (arrangement, numbered
+  steps, large choice cards or a list, note, email optional / required / not asked, note field
+  and its title, code box, pictures in the summary, terms with a link, own button words,
+  highlights). The preview fills an empty cart with two sample products and orders nothing.
+- Console: «السلة» and «إتمام الطلب» chips with ready pages, recommendations and every setting;
+  shared `HighlightsField`, `Highlights` and `useOutOfView` pieces.
+- Tests: contracts +3, store-web +4, online-web +1, e2e design test extended (the preview's
+  sample cart, the restaurant's "Continue", kitchen notes, no email and "Send my order").
+- Verified (cloud sandbox): `pnpm verify` 400 unit/web, `pnpm test:integration` 311 (44 files),
+  `pnpm test:e2e` 45; cart and checkout checked at 1440 and 390 px (Arabic), nothing wider than the screen.
+
 ### 2026-10-21 — Product page designer (ADR-0128 amendment 4, BR-237)
 Owner's request: options, ready pages and settings to design the product page. No migration.
 - Contract: `productPage` (six arrangements, pictures, details, buy box, highlights, description

@@ -525,6 +525,12 @@ test('the owner designs the store as a restaurant, previews it live and publishe
   await page.getByText('Buy box', { exact: true }).click();
   await page.getByLabel('Add button (English)').fill('Order it');
   await expect(preview.getByRole('button', { name: 'Order it' })).toBeVisible();
+  // The cart (ADR-0128 amendment 5): the preview fills an empty cart with sample products.
+  await page.getByRole('radio', { name: 'Cart' }).click();
+  await expect(
+    preview.getByText('Preview: two sample products stand in for an empty cart.'),
+  ).toBeVisible();
+  await expect(preview.getByRole('button', { name: 'Continue', exact: true })).toBeVisible();
   // Shoppers still see the old layout until the design is published.
   const shopperContext = await browser.newContext();
   await shopperContext.addInitScript(() => localStorage.setItem('arabat.language', 'en'));
@@ -552,6 +558,12 @@ test('the owner designs the store as a restaurant, previews it live and publishe
   await shopper.getByRole('button', { name: 'Increase quantity' }).click();
   await shopper.getByRole('button', { name: 'Order it' }).click();
   await expect(shopper.getByRole('link', { name: 'Cart (3)' })).toBeVisible();
+  // The restaurant's cart and checkout: "Continue", kitchen notes, no email, own order button.
+  await shopper.getByRole('link', { name: 'Cart (3)' }).click();
+  await shopper.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expect(shopper.getByLabel('Notes for the kitchen')).toBeVisible();
+  await expect(shopper.getByLabel('Email (optional)')).toHaveCount(0);
+  await expect(shopper.getByRole('button', { name: 'Send my order' })).toBeVisible();
   await shopperContext.close();
 });
 

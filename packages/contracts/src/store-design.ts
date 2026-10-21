@@ -10,7 +10,7 @@ import { z } from 'zod';
 
 export const DESIGN_TEMPLATES = ['retail', 'restaurant'] as const;
 export type DesignTemplate = (typeof DESIGN_TEMPLATES)[number];
-export const DESIGN_PAGES = ['home', 'products', 'categories', 'product'] as const;
+export const DESIGN_PAGES = ['home', 'products', 'categories', 'product', 'cart'] as const;
 export type DesignPage = (typeof DESIGN_PAGES)[number];
 
 export const SECTION_TYPES = [
@@ -741,6 +741,82 @@ export const productPageSchema = z.object({
 });
 export type ProductPageDesign = z.output<typeof productPageSchema>;
 
+// ------------------------------------------------------------- cart and checkout pages
+/**
+ * The cart and checkout pages (ADR-0128 amendment 5). Only how they look and what they ask is
+ * designed: prices, fees, promotions and stock always come from the server.
+ */
+export const cartPageSchema = z.object({
+  /** `split` = the summary beside the lines on large screens; `stacked` = under them. */
+  layout: z.enum(['split', 'stacked']).default('split'),
+  /** Product pictures beside the lines. */
+  images: z.boolean().default(true),
+  /** A short note above the lines (delivery times, a gift note…). */
+  message: localized(200),
+  /** How far the cart is from the store's minimum order. */
+  minimumBar: z.boolean().default(true),
+  /** Replaces "Checkout" when set. */
+  checkoutLabel: localized(30),
+  /** On phones the total and the checkout button stay at the bottom of the screen. */
+  stickyCheckout: z.boolean().default(true),
+  continueShopping: z.boolean().default(true),
+  /** Reassurance under the checkout button. */
+  highlights: z.array(productHighlightSchema).max(4).default([]),
+  /** Products offered with the cart (never one already in it, never a sold-out one). */
+  upsell: z
+    .object({
+      enabled: z.boolean().default(true),
+      title: localized(80),
+      source: z.enum(['featured', 'all']).default('featured'),
+      limit: z.number().int().min(2).max(8).default(4),
+      variant: z.enum(['grid', 'carousel']).default('carousel'),
+    })
+    .prefault({}),
+  /** The empty cart: own words and products to start from. */
+  empty: z
+    .object({
+      title: localized(80),
+      text: localized(200),
+      showProducts: z.boolean().default(true),
+    })
+    .prefault({}),
+});
+export type CartPageDesign = z.output<typeof cartPageSchema>;
+
+export const checkoutPageSchema = z.object({
+  /** `split` = the order summary beside the form on large screens; `stacked` = one column. */
+  layout: z.enum(['split', 'stacked']).default('split'),
+  /** Numbered steps: details, receiving, payment. */
+  steps: z.boolean().default(true),
+  /** Pickup / delivery and the payment methods as large cards or a plain list. */
+  choices: z.enum(['cards', 'list']).default('cards'),
+  message: localized(200),
+  email: z.enum(['optional', 'required', 'hidden']).default('optional'),
+  note: z
+    .object({
+      enabled: z.boolean().default(true),
+      /** Replaces "Note" when set ("Notes for the kitchen"…). */
+      label: localized(60),
+    })
+    .prefault({}),
+  /** The promotion code box; automatic offers apply either way. */
+  promo: z.boolean().default(true),
+  /** Product pictures in the order summary. */
+  images: z.boolean().default(true),
+  /** "I agree to the terms" before ordering, with a link to them. */
+  terms: z
+    .object({
+      enabled: z.boolean().default(false),
+      text: localized(200),
+      link: designLinkSchema.nullable().default(null),
+    })
+    .prefault({}),
+  /** Replaces "Place order and pay" when set. */
+  submitLabel: localized(30),
+  highlights: z.array(productHighlightSchema).max(4).default([]),
+});
+export type CheckoutPageDesign = z.output<typeof checkoutPageSchema>;
+
 const handle = z
   .string()
   .trim()
@@ -788,6 +864,8 @@ export const storeDesignSchema = z
       .prefault({}),
     footer: footerSchema.prefault({}),
     productPage: productPageSchema.prefault({}),
+    cartPage: cartPageSchema.prefault({}),
+    checkoutPage: checkoutPageSchema.prefault({}),
     social: z
       .object({
         instagram: handle,
@@ -810,6 +888,8 @@ export const storeDesignSchema = z
       categories: z.array(sectionSchema).max(15),
       /** Sections under the details of every product (reviews, questions, banners…). */
       product: z.array(sectionSchema).max(15).default([]),
+      /** Sections under the cart (reassurance, questions, an offer…). */
+      cart: z.array(sectionSchema).max(10).default([]),
     }),
   })
   .superRefine((d, ctx) => {
@@ -827,12 +907,13 @@ export const storeDesignSchema = z
         message: 'The categories page needs a categories section.',
       });
     // The product page shows one product: lists with their own search do not belong there.
-    if (d.pages.product.some((s) => s.type === 'catalog' || s.type === 'menu'))
-      ctx.addIssue({
-        code: 'custom',
-        path: ['pages', 'product'],
-        message: 'The product page cannot hold a catalog or a menu.',
-      });
+    for (const page of ['product', 'cart'] as const)
+      if (d.pages[page].some((s) => s.type === 'catalog' || s.type === 'menu'))
+        ctx.addIssue({
+          code: 'custom',
+          path: ['pages', page],
+          message: `The ${page} page cannot hold a catalog or a menu.`,
+        });
     for (const page of DESIGN_PAGES) {
       const ids = d.pages[page].map((s) => s.id);
       if (new Set(ids).size !== ids.length)
@@ -1139,6 +1220,72 @@ export function productPagePreset(preset: ProductPagePreset): ProductPageDesign 
   return productPageSchema.parse(input);
 }
 
+/** One-click cart and checkout pages, set together (ADR-0128 amendment 5). */
+export const CART_PRESETS = ['classic', 'express', 'food', 'minimal'] as const;
+export type CartPreset = (typeof CART_PRESETS)[number];
+
+export function cartPreset(preset: CartPreset): {
+  cartPage: CartPageDesign;
+  checkoutPage: CheckoutPageDesign;
+} {
+  const secure = [
+    {
+      id: 'secure',
+      icon: '🔒',
+      title: l('Secure checkout', 'دفع آمن'),
+      text: l('Your details stay private', 'بياناتك محمية'),
+    },
+    {
+      id: 'help',
+      icon: '💬',
+      title: l('Here to help', 'جاهزين نساعدك'),
+      text: l('Message us any time', 'راسلنا في أي وقت'),
+    },
+  ];
+  const input = {
+    classic: {
+      cartPage: {
+        highlights: suggestedHighlights('shop'),
+        upsell: { title: l('You may also like', 'قد يعجبك أيضًا') },
+      },
+      checkoutPage: { highlights: secure },
+    },
+    express: {
+      cartPage: {
+        layout: 'stacked',
+        upsell: { enabled: false },
+        checkoutLabel: l('Checkout now', 'ادفع الآن'),
+      },
+      checkoutPage: { steps: false, email: 'hidden', note: { enabled: false } },
+    },
+    food: {
+      cartPage: {
+        highlights: suggestedHighlights('food'),
+        upsell: { title: l('Complete your order', 'كمّل طلبك'), source: 'all' },
+        checkoutLabel: l('Continue', 'متابعة'),
+      },
+      checkoutPage: {
+        email: 'hidden',
+        note: { label: l('Notes for the kitchen', 'ملاحظات للمطبخ') },
+        submitLabel: l('Send my order', 'أرسل طلبي'),
+      },
+    },
+    minimal: {
+      cartPage: {
+        images: false,
+        minimumBar: false,
+        upsell: { enabled: false },
+        empty: { showProducts: false },
+      },
+      checkoutPage: { steps: false, choices: 'list', images: false },
+    },
+  }[preset];
+  return {
+    cartPage: cartPageSchema.parse(input.cartPage),
+    checkoutPage: checkoutPageSchema.parse(input.checkoutPage),
+  };
+}
+
 /** Starting points offered in the console (ADR-0128): shops and restaurants differ. */
 export function templateDesign(template: DesignTemplate): StoreDesign {
   const nav = [
@@ -1176,6 +1323,7 @@ export function templateDesign(template: DesignTemplate): StoreDesign {
       navbar: { style: 'pills', align: 'center', items: [...nav] },
       footer: footerPreset('restaurant'),
       productPage: productPagePreset('food'),
+      ...cartPreset('food'),
       pages: {
         home: [
           {
@@ -1220,6 +1368,7 @@ export function templateDesign(template: DesignTemplate): StoreDesign {
     navbar: { style: 'underline', align: 'start', menuStyle: 'mega', items: [...nav] },
     footer: footerPreset('shop'),
     productPage: productPagePreset('classic'),
+    ...cartPreset('classic'),
     pages: {
       home: [
         {

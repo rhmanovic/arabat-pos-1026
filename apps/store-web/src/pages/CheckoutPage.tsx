@@ -1,12 +1,15 @@
 import { ApiError } from '@arabat/api-client';
 import { formatDateTime } from '@arabat/i18n';
-import { Alert, Button, Checkbox, Field, Input, Select, Spinner, Textarea } from '@arabat/ui';
+import { Alert, Button, Checkbox, Field, Input, Select, Spinner, Textarea, cn } from '@arabat/ui';
 import { useApi, useErrorMessage } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, type ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, useNavigate } from 'react-router';
-import { priceLines, toMoney, useCart } from '../cart.js';
+import { priceLines, sampleLines, toMoney, useCart } from '../cart.js';
+import { isPreview, linkTarget, useDesign, useText } from '../design/context.js';
+import { StoreIcon } from '../design/parts.js';
+import { Highlights } from '../design/product-parts.js';
 import {
   useAccount,
   useBranchChoice,
@@ -26,6 +29,40 @@ const newKey = () => globalThis.crypto.randomUUID();
  * submission (network errors) and renewed when the server refused it.
  */
 const ON_RECEIPT = 'on_receipt';
+
+/** A pickup / delivery or payment choice: a large card or a plain line (the design decides). */
+function Choice({ cards, children }: { cards: boolean; children: ReactNode }) {
+  return (
+    <label
+      className={cn(
+        'flex cursor-pointer items-center gap-2',
+        cards &&
+          'min-h-12 rounded-lg border border-border bg-surface px-4 py-3 font-medium transition-colors hover:border-border-strong has-[:checked]:border-primary has-[:checked]:bg-primary-soft has-[:checked]:ring-1 has-[:checked]:ring-primary',
+      )}
+    >
+      {children}
+    </label>
+  );
+}
+
+/** A part of the form, numbered when the design shows steps. */
+function Step({ n, steps, children }: { n: number; steps: boolean; children: ReactNode }) {
+  return (
+    <legend className="mb-2 flex items-center gap-2 font-semibold">
+      {steps ? (
+        <span
+          aria-hidden
+          className="grid size-7 place-items-center rounded-full bg-primary text-sm text-primary-fg"
+        >
+          {n}
+        </span>
+      ) : null}
+      {children}
+    </legend>
+  );
+}
+
+/** The checkout, drawn by the store design's checkout page (ADR-0128 amendment 5). */
 export function CheckoutPage() {
   const api = useApi();
   const slug = useSlug();
@@ -38,6 +75,9 @@ export function CheckoutPage() {
   const money = useMoney();
   const errorMessage = useErrorMessage();
   const { t } = useTranslation();
+  const page = useDesign().checkoutPage;
+  const text = useText();
+  const preview = isPreview();
   const [key, setKey] = useState(newKey);
   const [form, setForm] = useState({
     /** Null = not typed yet: a signed-in shopper's account value shows instead (ADR-0124). */
@@ -59,6 +99,7 @@ export function CheckoutPage() {
     /** A saved address of the account (ADR-0124): null = untouched (the default one), '' = a new one. */
     savedAddressId: null as string | null,
     saveAddress: false,
+    terms: false,
   });
   const [touched, setTouched] = useState(false);
   const { branch: pickupBranch, setBranchId } = useBranchChoice();
@@ -96,8 +137,13 @@ export function CheckoutPage() {
   const deliveryAreas = store?.deliveryAreas ?? [];
   const area =
     fulfillment === 'delivery' ? (deliveryAreas.find((a) => a.id === values.areaId) ?? null) : null;
+  // Inside the console's preview an empty cart shows two sample products (never ordered).
+  const sample =
+    preview && cart.lines.length === 0 && products.data
+      ? sampleLines(products.data.products)
+      : null;
   const { priced, subtotal, deliveryFee, total } = priceLines(
-    cart.lines,
+    sample ?? cart.lines,
     products.data?.products ?? [],
     store ?? { deliveryFee: { amount: '0.000', currency: 'KWD' } },
     fulfillment,
@@ -138,7 +184,7 @@ export function CheckoutPage() {
   const shownTotal = quoted ? toMoney(quoted.total) : total;
 
   if (!store || products.isPending) return <Spinner label={t('common:status.loading')} />;
-  if (!products.data || (cart.lines.length === 0 && !checkout.isSuccess))
+  if (!products.data || (cart.lines.length === 0 && !checkout.isSuccess && !sample))
     return <Navigate to={`/${slug}/cart`} replace />;
 
   const payment =
@@ -147,6 +193,8 @@ export function CheckoutPage() {
   const missing = {
     name: !values.name.trim(),
     phone: values.phone.trim().length < 6,
+    email: page.email === 'required' && !/^\S+@\S+\.\S+$/.test(values.email.trim()),
+    terms: page.terms.enabled && !form.terms,
     address: fulfillment === 'delivery' && !values.deliveryAddress.trim(),
     area: fulfillment === 'delivery' && store.deliveryAreas.length > 0 && area === null,
   };
@@ -162,17 +210,23 @@ export function CheckoutPage() {
     event.preventDefault();
     setTouched(true);
     if (missing.name || missing.phone || missing.address || !payment) return;
-    if (missing.area) return;
+    if (missing.area || missing.email || missing.terms) return;
+    // The preview shows the page only: nothing is ordered from it.
+    if (preview) return;
     checkout.mutate({
       idempotencyKey: key,
       lines: priced.map((l) => ({ variantId: l.variantId, quantity: String(l.quantity) })),
       fulfillment,
-      customer: { name: values.name, phone: values.phone, email: values.email || null },
+      customer: {
+        name: values.name,
+        phone: values.phone,
+        email: page.email === 'hidden' ? null : values.email || null,
+      },
       deliveryAddress: fulfillment === 'delivery' ? values.deliveryAddress : null,
       branchId: fulfillment === 'pickup' ? (pickupBranch?.id ?? null) : null,
       deliveryAreaId: area?.id ?? null,
       scheduledFor: form.scheduledFor,
-      note: form.note || null,
+      note: page.note.enabled ? form.note || null : null,
       promotionCode: quoted?.promotion?.code ?? null,
       saveAddress: Boolean(token) && form.saveAddress && savedAddressId === '',
       paymentMethodId: payOnReceipt ? null : payment,
@@ -180,13 +234,38 @@ export function CheckoutPage() {
     });
   };
   const required = (bad: boolean) => (touched && bad ? t('checkout.required') : undefined);
+  const cards = page.choices === 'cards';
+  const showWhen = store.scheduling.enabled || closedNow;
+  const termsLink = linkTarget(slug, page.terms.link);
+  const submitLabel =
+    text(page.submitLabel) || (payOnReceipt ? t('checkout.submitOnReceipt') : t('checkout.submit'));
 
   return (
-    <form onSubmit={submit} className="grid gap-6 md:grid-cols-[1fr_20rem]" noValidate>
-      <div className="flex flex-col gap-4">
+    <form
+      onSubmit={submit}
+      className={cn(
+        'grid grid-cols-[minmax(0,1fr)] gap-6',
+        page.layout === 'split' ? 'md:grid-cols-[minmax(0,1fr)_20rem]' : 'mx-auto w-full max-w-2xl',
+      )}
+      data-testid="checkout-page"
+      data-layout={page.layout}
+      noValidate
+    >
+      <div className="flex min-w-0 flex-col gap-6">
         <h1 className="text-2xl font-semibold">{t('checkout.title')}</h1>
+        {preview ? <Alert tone="info">{t('checkout.previewOnly')}</Alert> : null}
+        {text(page.message) ? (
+          <p
+            className="rounded-lg bg-primary-soft px-4 py-3 text-sm"
+            data-testid="checkout-message"
+          >
+            {text(page.message)}
+          </p>
+        ) : null}
         <fieldset className="flex flex-col gap-3">
-          <legend className="mb-2 font-semibold">{t('checkout.contact')}</legend>
+          <Step n={1} steps={page.steps}>
+            {t('checkout.contact')}
+          </Step>
           {store.accountsEnabled && !token ? (
             <p className="text-sm text-fg-muted">
               <Link to={`/${slug}/account`} className="text-primary hover:underline">
@@ -217,23 +296,30 @@ export function CheckoutPage() {
               />
             )}
           </Field>
-          <Field label={t('checkout.email')}>
-            {(p) => (
-              <Input
-                {...p}
-                type="email"
-                autoComplete="email"
-                dir="ltr"
-                value={values.email}
-                onChange={(e) => set({ email: e.target.value })}
-              />
-            )}
-          </Field>
+          {page.email !== 'hidden' ? (
+            <Field
+              label={page.email === 'required' ? t('checkout.emailRequired') : t('checkout.email')}
+              error={required(missing.email)}
+            >
+              {(p) => (
+                <Input
+                  {...p}
+                  type="email"
+                  autoComplete="email"
+                  dir="ltr"
+                  value={values.email}
+                  onChange={(e) => set({ email: e.target.value })}
+                />
+              )}
+            </Field>
+          ) : null}
         </fieldset>
         <fieldset className="flex flex-col gap-2">
-          <legend className="mb-2 font-semibold">{t('checkout.fulfillment')}</legend>
+          <Step n={2} steps={page.steps}>
+            {t('checkout.fulfillment')}
+          </Step>
           {store.pickupEnabled ? (
-            <label className="flex items-center gap-2">
+            <Choice cards={cards}>
               <input
                 type="radio"
                 name="fulfillment"
@@ -241,8 +327,9 @@ export function CheckoutPage() {
                 checked={fulfillment === 'pickup'}
                 onChange={() => set({ fulfillment: 'pickup', scheduledFor: null })}
               />
+              {cards ? <StoreIcon name="store" className="size-5 text-fg-muted" /> : null}
               {t('checkout.pickup')}
-            </label>
+            </Choice>
           ) : null}
           {fulfillment === 'pickup' && pickupBranches.length > 1 ? (
             <Field label={t('checkout.branch')}>
@@ -264,7 +351,7 @@ export function CheckoutPage() {
             <p className="text-sm text-fg-muted">{[name(branch), branch.address].join(' — ')}</p>
           ) : null}
           {store.deliveryEnabled ? (
-            <label className="flex items-center gap-2">
+            <Choice cards={cards}>
               <input
                 type="radio"
                 name="fulfillment"
@@ -272,9 +359,10 @@ export function CheckoutPage() {
                 checked={fulfillment === 'delivery'}
                 onChange={() => set({ fulfillment: 'delivery', scheduledFor: null })}
               />
+              {cards ? <StoreIcon name="pin" className="size-5 text-fg-muted" /> : null}
               {t('checkout.delivery')}
               {store.deliveryAreas.length === 0 ? ` (${money(store.deliveryFee)})` : ''}
-            </label>
+            </Choice>
           ) : null}
           {fulfillment === 'delivery' && store.deliveryAreas.length > 0 ? (
             <Field label={t('checkout.area')} error={required(missing.area)}>
@@ -346,15 +434,23 @@ export function CheckoutPage() {
               onChange={(e) => set({ saveAddress: e.target.checked })}
             />
           ) : null}
-          <Field label={t('checkout.note')}>
-            {(p) => (
-              <Textarea {...p} value={form.note} onChange={(e) => set({ note: e.target.value })} />
-            )}
-          </Field>
+          {page.note.enabled ? (
+            <Field label={text(page.note.label) || t('checkout.note')}>
+              {(p) => (
+                <Textarea
+                  {...p}
+                  value={form.note}
+                  onChange={(e) => set({ note: e.target.value })}
+                />
+              )}
+            </Field>
+          ) : null}
         </fieldset>
-        {store.scheduling.enabled || closedNow ? (
+        {showWhen ? (
           <fieldset className="flex flex-col gap-2">
-            <legend className="mb-2 font-semibold">{t('checkout.when')}</legend>
+            <Step n={3} steps={page.steps}>
+              {t('checkout.when')}
+            </Step>
             {closedNow ? <Alert tone="warning">{t('checkout.closedNow')}</Alert> : null}
             {store.scheduling.enabled ? (
               <SlotPicker
@@ -368,12 +464,14 @@ export function CheckoutPage() {
           </fieldset>
         ) : null}
         <fieldset className="flex flex-col gap-2">
-          <legend className="mb-2 font-semibold">{t('checkout.payment')}</legend>
+          <Step n={showWhen ? 4 : 3} steps={page.steps}>
+            {t('checkout.payment')}
+          </Step>
           {store.paymentMethods.length === 0 && !store.payOnReceipt ? (
             <Alert tone="warning">{t('checkout.noMethods')}</Alert>
           ) : null}
           {store.paymentMethods.map((m) => (
-            <label key={m.id} className="flex items-center gap-2">
+            <Choice key={m.id} cards={cards}>
               <input
                 type="radio"
                 name="payment"
@@ -381,11 +479,12 @@ export function CheckoutPage() {
                 checked={payment === m.id}
                 onChange={() => set({ payment: m.id })}
               />
+              {cards ? <StoreIcon name="card" className="size-5 text-fg-muted" /> : null}
               {name(m)}
-            </label>
+            </Choice>
           ))}
           {store.payOnReceipt ? (
-            <label className="flex items-center gap-2">
+            <Choice cards={cards}>
               <input
                 type="radio"
                 name="payment"
@@ -393,57 +492,78 @@ export function CheckoutPage() {
                 checked={payOnReceipt}
                 onChange={() => set({ payment: ON_RECEIPT })}
               />
+              {cards ? <StoreIcon name="bag" className="size-5 text-fg-muted" /> : null}
               {t(`checkout.payOnReceipt_${fulfillment}`)}
-            </label>
+            </Choice>
           ) : null}
           {payOnReceipt ? (
             <p className="text-sm text-fg-muted">{t('checkout.payOnReceiptHint')}</p>
           ) : null}
         </fieldset>
       </div>
-      <aside className="flex h-fit flex-col gap-3 rounded-lg border border-border bg-surface p-4">
+      <aside
+        className={cn(
+          'flex h-fit flex-col gap-3 rounded-lg border border-border bg-surface p-4',
+          page.layout === 'split' && 'md:sticky md:top-24',
+        )}
+      >
         <h2 className="font-semibold">{t('checkout.summary')}</h2>
         <ul className="flex flex-col gap-1 text-sm">
           {priced.map((l) => (
-            <li key={l.variantId} className="flex justify-between gap-2">
-              <span>
+            <li key={l.variantId} className="flex items-center justify-between gap-2">
+              {page.images ? (
+                <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-md bg-surface-muted text-fg-subtle">
+                  {l.product.imageUrl ? (
+                    <img src={l.product.imageUrl} alt="" className="size-full object-cover" />
+                  ) : (
+                    <StoreIcon name="bag" className="size-4 opacity-50" />
+                  )}
+                </span>
+              ) : null}
+              <span className="min-w-0 flex-1">
                 {l.quantity} × {[name(l.product), name(l.variant)].filter(Boolean).join(' — ')}
               </span>
               <span className="tabular-nums">{money(l.lineTotal)}</span>
             </li>
           ))}
         </ul>
-        <div className="flex flex-col gap-1">
-          <Field label={t('checkout.promoCode')}>
-            {(p) => (
-              <div className="flex gap-2">
-                <Input
-                  {...p}
-                  dir="ltr"
-                  autoComplete="off"
-                  value={form.promoInput}
-                  onChange={(e) => set({ promoInput: e.target.value.toUpperCase() })}
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => set({ promotionCode: form.promoInput.trim() || null })}
-                >
-                  {t('checkout.apply')}
-                </Button>
-              </div>
-            )}
-          </Field>
-          {quoted?.codeIssue ? (
-            <p className="text-sm text-danger" data-testid="promo-issue">
-              {t(`checkout.codeIssue_${quoted.codeIssue}`)}
-            </p>
-          ) : quoted?.promotion ? (
-            <p className="text-sm text-success" data-testid="promo-applied">
-              {t('checkout.promoApplied', { name: name(quoted.promotion) })}
-            </p>
-          ) : null}
-        </div>
+        {page.promo ? (
+          <div className="flex flex-col gap-1">
+            <Field label={t('checkout.promoCode')}>
+              {(p) => (
+                <div className="flex gap-2">
+                  <Input
+                    {...p}
+                    dir="ltr"
+                    autoComplete="off"
+                    value={form.promoInput}
+                    onChange={(e) => set({ promoInput: e.target.value.toUpperCase() })}
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => set({ promotionCode: form.promoInput.trim() || null })}
+                  >
+                    {t('checkout.apply')}
+                  </Button>
+                </div>
+              )}
+            </Field>
+            {quoted?.codeIssue ? (
+              <p className="text-sm text-danger" data-testid="promo-issue">
+                {t(`checkout.codeIssue_${quoted.codeIssue}`)}
+              </p>
+            ) : quoted?.promotion ? (
+              <p className="text-sm text-success" data-testid="promo-applied">
+                {t('checkout.promoApplied', { name: name(quoted.promotion) })}
+              </p>
+            ) : null}
+          </div>
+        ) : quoted?.promotion ? (
+          <p className="text-sm text-success" data-testid="promo-applied">
+            {t('checkout.promoApplied', { name: name(quoted.promotion) })}
+          </p>
+        ) : null}
         <dl className="flex flex-col gap-1 border-t border-border pt-2 text-sm">
           <div className="flex justify-between">
             <dt>{t('cart.subtotal')}</dt>
@@ -470,20 +590,50 @@ export function CheckoutPage() {
             </dd>
           </div>
         </dl>
+        {page.terms.enabled ? (
+          <div className="flex flex-col gap-1">
+            <Checkbox
+              label={text(page.terms.text) || t('checkout.terms')}
+              checked={form.terms}
+              onChange={(e) => set({ terms: e.target.checked })}
+            />
+            {termsLink ? (
+              termsLink.external ? (
+                <a
+                  href={termsLink.to}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-primary hover:underline"
+                >
+                  {t('checkout.readTerms')}
+                </a>
+              ) : (
+                <Link to={termsLink.to} className="text-xs text-primary hover:underline">
+                  {t('checkout.readTerms')}
+                </Link>
+              )
+            ) : null}
+            {touched && missing.terms ? (
+              <p className="text-sm text-danger">{t('checkout.termsRequired')}</p>
+            ) : null}
+          </div>
+        ) : null}
         {checkout.isError ? <Alert tone="danger">{errorMessage(checkout.error)}</Alert> : null}
         <Button
           type="submit"
           size="lg"
           disabled={
+            preview ||
             checkout.isPending ||
             !store.acceptingOrders ||
             !payment ||
             (closedNow && form.scheduledFor === null)
           }
         >
-          {payOnReceipt ? t('checkout.submitOnReceipt') : t('checkout.submit')}
+          {submitLabel}
         </Button>
         {!payOnReceipt ? <p className="text-xs text-fg-muted">{t('checkout.reserved')}</p> : null}
+        <Highlights items={page.highlights} testId="checkout-highlights" />
       </aside>
     </form>
   );

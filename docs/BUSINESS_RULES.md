@@ -117,6 +117,13 @@ engineering defaults pending owner confirmation.
   (the main register's first), and cannot sell while none is open. A device shift is never refused because
   the person left a shift open elsewhere; that shift is listed for the managers to close. Records
   that reach the server after the branch shift closed are booked to it and flagged "late".
+- **BR-238** Cart and checkout design (ADR-0128 amendment 5, owner 2026-10-21): the cart and
+  the checkout follow the store design (arrangement, pictures, notes, button words, highlights,
+  suggestions, the empty cart, steps, choice style, terms). The design never changes a price, a
+  fee, a promotion or a stock rule. Email may be optional, required or not asked; name and phone
+  are always asked. When terms are switched on, the order cannot be placed before the shopper
+  agrees. Suggestions never offer a product already in the cart or sold out. Hiding the code
+  box does not stop automatic offers. Nothing can be ordered from the console's preview.
 - **BR-237** Product page design (ADR-0128 amendment 4, owner 2026-10-21): every product's page
   follows one store-wide design: arrangement, pictures, details, buy box, highlights,
   description blocks, related and recently viewed products, and up to 15 sections under the

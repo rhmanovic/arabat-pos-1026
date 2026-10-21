@@ -148,3 +148,14 @@ export function priceLines(
             : toMoney(area.fee);
   return { priced, missing, subtotal, deliveryFee, total: subtotal.add(deliveryFee) };
 }
+
+/** Two products standing in for an empty cart inside the console's preview (never ordered). */
+export function sampleLines(products: StoreProduct[]): CartLine[] {
+  return products
+    .filter((p) => p.variants.some((v) => v.available))
+    .slice(0, 2)
+    .map((p) => {
+      const v = p.variants.find((x) => x.available)!;
+      return { variantId: v.variantId, productId: p.productId, quantity: 1 };
+    });
+}

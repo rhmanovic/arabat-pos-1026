@@ -66,6 +66,17 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-21 (cart and checkout designer, ADR-0128 amendment 5, cloud sandbox run)
+- Contracts +3 (old designs get default cart / checkout pages; presets set both; catalog refused
+  under the cart, settings bounded, unsafe terms link refused). store-web +4 (designed cart with
+  exact progress to the minimum, own button, highlights, sections and suggestions without cart or
+  sold-out items; designed empty cart; checkout with required email, kitchen notes, terms with a
+  link and no code box, sent fields checked; the preview's sample cart orders nothing).
+  online-web +1 (both chips, preview navigation, recommendations, presets, settings, cart
+  sections without catalog / menu, checkout without sections, no untranslated key, saved design).
+  e2e design test extended (preview sample cart and the restaurant's cart and checkout words).
+- Totals: `pnpm verify` 400, `pnpm test:integration` 311, `pnpm test:e2e` 45.
+
 ### Results 2026-10-21 (product page designer, ADR-0128 amendment 4, cloud sandbox run)
 - `packages/contracts/src/store-design.test.ts` +4: designs saved before parse with a default
   product page and no sections under it; presets parse and templates start from one; catalog,

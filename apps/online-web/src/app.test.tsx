@@ -1798,6 +1798,77 @@ describe('online store console', () => {
         expect(design.pages.product.map((x) => x.type)).toEqual(['faq']);
       });
     });
+
+    describe('cart and checkout pages (ADR-0128 amendment 5)', () => {
+      it('designs the cart and the checkout: presets, recommendations, settings and cart sections', async () => {
+        const user = userEvent.setup();
+        const fetch = fakeApiFetch({ session: session(), routes: designRoutes() });
+        renderApp({ routes, appInterface: 'manager', i18n, path: '/design', fetch });
+        const frame = (await screen.findByTestId('design-preview')) as HTMLIFrameElement;
+        const posted = vi.spyOn(frame.contentWindow!, 'postMessage');
+        await user.click(screen.getByRole('radio', { name: 'Cart' }));
+        await waitFor(() =>
+          expect(posted).toHaveBeenCalledWith(
+            expect.objectContaining({ type: 'arabat:navigate', page: 'cart' }),
+            window.location.origin,
+          ),
+        );
+        // The legacy cart: suggestions, phone bar, minimum and empty-cart products are on.
+        expect(screen.getByTestId('cart-page-score')).toHaveTextContent('4 of 5 done');
+        await user.click(screen.getByRole('button', { name: 'Turn on' }));
+        expect(screen.getByTestId('cart-page-score')).toHaveTextContent('5 of 5 done');
+        await user.click(screen.getByRole('button', { name: 'Apply Food and drinks' }));
+        await user.click(screen.getByRole('radio', { name: 'One column' }));
+        await user.type(screen.getByLabelText('Note at the top (English)'), 'Ready in 20 minutes');
+        // A section under the cart: no product list or menu offered there.
+        await user.click(screen.getByRole('button', { name: 'Add section' }));
+        const picker = await screen.findByRole('dialog', { name: 'Add section' });
+        expect(within(picker).queryByRole('button', { name: /^Restaurant menu/ })).toBeNull();
+        await user.click(within(picker).getByRole('button', { name: /^Questions & answers/ }));
+        await user.click(await screen.findByRole('button', { name: /Back to sections/ }));
+        // The checkout: settings only, no sections.
+        await user.click(screen.getByRole('radio', { name: 'Checkout' }));
+        expect(posted).toHaveBeenLastCalledWith(
+          expect.objectContaining({ type: 'arabat:navigate', page: 'checkout' }),
+          window.location.origin,
+        );
+        expect(screen.queryByRole('button', { name: 'Add section' })).toBeNull();
+        expect(screen.getByTestId('checkout-page-score')).toHaveTextContent('3 of 4 done');
+        await user.click(screen.getByRole('radio', { name: 'Required' }));
+        await user.click(screen.getByRole('checkbox', { name: 'Promotion code box' }));
+        await user.click(screen.getByRole('checkbox', { name: 'Ask to agree to the terms' }));
+        await user.type(
+          screen.getByLabelText('Agreement words (English)'),
+          'I accept the delivery terms',
+        );
+        expect(document.body.textContent).not.toMatch(/cartDesign\./);
+        await user.click(screen.getByRole('button', { name: 'Save draft' }));
+        await waitFor(() => expect(fetch.calls.some((c) => c.method === 'PUT')).toBe(true));
+        const design = (
+          fetch.calls.find((c) => c.method === 'PUT')!.body as {
+            design: {
+              cartPage: Record<string, unknown>;
+              checkoutPage: Record<string, unknown>;
+              pages: { cart: { type: string }[] };
+            };
+          }
+        ).design;
+        expect(design.cartPage).toMatchObject({
+          layout: 'stacked',
+          message: { en: 'Ready in 20 minutes' },
+          checkoutLabel: { en: 'Continue', ar: 'متابعة' },
+          upsell: { source: 'all' },
+        });
+        expect(design.checkoutPage).toMatchObject({
+          email: 'required',
+          promo: false,
+          note: { label: { en: 'Notes for the kitchen' } },
+          terms: { enabled: true, text: { en: 'I accept the delivery terms' } },
+          submitLabel: { en: 'Send my order' },
+        });
+        expect(design.pages.cart.map((x) => x.type)).toEqual(['faq']);
+      });
+    });
   });
 
   it('defines the same translation keys in Arabic and English', () => {

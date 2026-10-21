@@ -1,6 +1,7 @@
 import { createApiClient } from '@arabat/api-client';
 import {
   type DesignSection,
+  cartPreset,
   newSection,
   productPagePreset,
   templateDesign,
@@ -1526,6 +1527,145 @@ describe('storefront', () => {
     expect(screen.queryByLabelText('Quantity')).toBeNull();
     expect(screen.queryByTestId('related-products')).toBeNull();
     expect(screen.getByText('Medium roast')).toBeInTheDocument();
+  });
+
+  it('draws the cart from the design: note, minimum bar, own button, reassurance, sections and suggestions', async () => {
+    const TEA = '0190a000-0000-7000-8000-000000000004';
+    const tea = {
+      ...PRODUCTS.products[0]!,
+      productId: TEA,
+      nameEn: 'Mint tea',
+      featured: true,
+      variants: [{ ...PRODUCTS.products[0]!.variants[0]!, variantId: `${TEA.slice(0, -2)}41` }],
+    };
+    const design = templateDesign('retail');
+    design.cartPage.message = { en: 'Orders before 2 pm leave today.', ar: null };
+    design.cartPage.checkoutLabel = { en: 'Go to payment', ar: null };
+    design.pages.cart = [
+      {
+        ...newSection('faq', 'cart-faq'),
+        items: [
+          {
+            id: 'q',
+            question: { en: 'Can I change my order?', ar: null },
+            answer: { en: 'Yes.', ar: null },
+          },
+        ],
+      } as DesignSection,
+    ];
+    localStorage.setItem(
+      'arabat.cart.demo',
+      JSON.stringify([{ variantId: COFFEE_V, productId: COFFEE, quantity: 1 }]),
+    );
+    renderStore('/demo/cart', {
+      'GET /store/demo/products': () => ({
+        status: 200,
+        body: { products: [...PRODUCTS.products, tea] },
+      }),
+      'GET /store/demo/design': () => ({ status: 200, body: { design } }),
+    });
+    expect(await screen.findByTestId('cart-message')).toHaveTextContent(
+      'Orders before 2 pm leave today.',
+    );
+    // 1.250 of a 2.000 minimum: 62 %, and how much is missing, exactly.
+    expect(screen.getByRole('progressbar', { name: 'Minimum order' })).toHaveAttribute(
+      'aria-valuenow',
+      '62',
+    );
+    expect(screen.getByText('Add KWD 0.750 more to reach the minimum order.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Go to payment' })).toBeDisabled();
+    expect(within(screen.getByTestId('cart-highlights')).getByText('Fast delivery')).toBeTruthy();
+    expect(screen.getByText('Can I change my order?')).toBeInTheDocument();
+    // Suggestions leave out what is in the cart and what is sold out.
+    const upsell = screen.getByTestId('cart-upsell');
+    expect(within(upsell).getByText('Mint tea')).toBeInTheDocument();
+    expect(within(upsell).queryByText('Coffee beans')).toBeNull();
+    expect(within(upsell).queryByText('Mug')).toBeNull();
+  });
+
+  it('shows the designed empty cart with products to start from', async () => {
+    const design = templateDesign('retail');
+    design.cartPage.empty.title = { en: 'Nothing here yet', ar: null };
+    design.cartPage.empty.text = { en: 'Our best sellers are a good start.', ar: null };
+    renderStore('/demo/cart', {
+      'GET /store/demo/design': () => ({ status: 200, body: { design } }),
+    });
+    expect(await screen.findByRole('heading', { name: 'Nothing here yet' })).toBeInTheDocument();
+    expect(screen.getByText('Our best sellers are a good start.')).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId('cart-empty-products')).getByText('Coffee beans'),
+    ).toBeTruthy();
+  });
+
+  it('asks what the designed checkout asks: required email, kitchen notes, terms, no code box', async () => {
+    localStorage.setItem(
+      'arabat.cart.demo',
+      JSON.stringify([{ variantId: COFFEE_V, productId: COFFEE, quantity: 2 }]),
+    );
+    const design = templateDesign('retail');
+    Object.assign(design, cartPreset('food'));
+    design.checkoutPage.email = 'required';
+    design.checkoutPage.promo = false;
+    design.checkoutPage.terms = {
+      enabled: true,
+      text: { en: 'I accept the delivery terms', ar: null },
+      link: { kind: 'url', url: 'https://example.com/terms' },
+    };
+    const user = userEvent.setup();
+    const { fetch } = renderStore('/demo/checkout', {
+      'GET /store/demo/design': () => ({ status: 200, body: { design } }),
+      'POST /store/demo/checkout': () => ({ status: 201, body: { order: ORDER } }),
+    });
+    const submit = await screen.findByRole('button', { name: 'Send my order' });
+    expect(screen.getByTestId('checkout-page')).toHaveAttribute('data-layout', 'split');
+    expect(screen.queryByLabelText('Promotion code')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Read the terms' })).toHaveAttribute(
+      'href',
+      'https://example.com/terms',
+    );
+    await user.click(submit);
+    // Name, phone and the required email; the terms are asked for too.
+    expect(await screen.findAllByText('Required')).toHaveLength(3);
+    expect(screen.getByText('Agree to the terms to place the order.')).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Full name'), 'Sara');
+    await user.type(screen.getByLabelText('Phone'), '+96550000001');
+    await user.type(screen.getByLabelText('Email'), 'sara@example.com');
+    await user.type(screen.getByLabelText('Notes for the kitchen'), 'No onions');
+    await user.click(screen.getByRole('checkbox', { name: 'I accept the delivery terms' }));
+    await user.click(submit);
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(ORDER.paymentUrl));
+    const call = fetch.calls.find((c) => c.method === 'POST' && c.path === '/store/demo/checkout')!;
+    expect(call.body).toMatchObject({
+      customer: { name: 'Sara', email: 'sara@example.com' },
+      note: 'No onions',
+      fulfillment: 'pickup',
+    });
+  });
+
+  it('orders nothing from the checkout preview, which shows sample products', async () => {
+    window.name = 'arabat-design-preview';
+    try {
+      renderStore('/demo/checkout', {
+        'GET /manager/online/preview/storefront': () => ({ status: 200, body: STORE }),
+        'GET /manager/online/preview/products': () => ({ status: 200, body: PRODUCTS }),
+        'GET /manager/online/design': () => ({
+          status: 200,
+          body: {
+            draft: templateDesign('retail'),
+            published: null,
+            publishedAt: null,
+            dirty: true,
+            suggestedTemplate: 'retail',
+            version: 1,
+          },
+        }),
+      });
+      expect(await screen.findByText('Preview: nothing can be ordered from here.')).toBeTruthy();
+      expect(screen.getByText(/1 × Coffee beans/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Place order and pay' })).toBeDisabled();
+    } finally {
+      window.name = '';
+    }
   });
 
   it('defines the same translation keys in Arabic and English', () => {
