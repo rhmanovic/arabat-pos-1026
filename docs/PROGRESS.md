@@ -1280,6 +1280,11 @@ page and all its sections. Contract and frontend only; no migration.
   extended (the categories section restyled as cards shows counts in the preview).
 - Verified (cloud sandbox): `pnpm verify` 406 unit/web, `pnpm test:integration` 311 (44 files),
   `pnpm test:e2e` 45; editor checked at 390 px (Arabic), nothing wider than the screen.
+- Released (ADR-0122): production `94a12b8a18ac` (revision `arabat-web-00056-ldd`, previous
+  `arabat-web-00055-6nj`; migration job `arabat-migrate-z2klk`, no new migration). Cloud Build
+  check `69ef3921`: `/api/v1/health/ready` 200 with that version and database ok (3 ms); `live`,
+  `/store/`, `/manager/` and `/online/` 200. Signed out afterwards, `config.env` removed; no key,
+  account or secret deleted. Staging still waits for Railway to resume deploys.
 
 ### 2026-10-21 — Cart and checkout designer (ADR-0128 amendment 5, BR-238)
 Owner's request: the same designer for the cart and the checkout. Frontend and contract only;
