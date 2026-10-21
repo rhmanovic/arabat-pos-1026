@@ -67,6 +67,7 @@ import {
   onlineStoreSlugHistory,
   onlineStores,
 } from './ecommerce.schema.js';
+import { onlineStoreDesigns } from './design.schema.js';
 import { OnlinePaymentsService, historyEntry } from './online-payments.service.js';
 import { FulfilmentService, type ServingBranch } from './fulfilment.service.js';
 import { type OrderEvent, OrderNotificationsService } from './order-notifications.service.js';
@@ -1454,8 +1455,18 @@ export class EcommerceService {
     urls: StoreUrls,
     branchId: string,
     where: SQL,
+    design: 'published' | 'draft' = 'published',
   ): Promise<StoreProduct[]> {
     const [store] = await tx.select({ hide: onlineStores.hideOutOfStock }).from(onlineStores);
+    // "Only N left" is shown, and the count disclosed, only under the merchant's own setting
+    // (ADR-0128 amendment 4): the published one for shoppers, the draft in the preview.
+    const setting = design === 'draft' ? onlineStoreDesigns.draft : onlineStoreDesigns.published;
+    const [low] = await tx
+      .select({
+        at: sql<number>`coalesce((${setting}->'productPage'->'info'->>'lowStockAt')::int, 0)`,
+      })
+      .from(onlineStoreDesigns);
+    const lowStockAt = Number(low?.at ?? 0);
     const rows = (
       await tx.execute(sql`
         select p.id as product_id, p.name_en, p.name_ar, p.description_en, p.description_ar, p.category_id,
@@ -1512,6 +1523,7 @@ export class EcommerceService {
         price: money(r['price'] as string),
         available: !tracked || units > 0,
         maxQuantity: tracked ? Math.min(cap, units) : cap,
+        fewLeft: tracked && units > 0 && units <= lowStockAt ? units : null,
       });
       out.set(id, product);
     }
@@ -1551,7 +1563,15 @@ export class EcommerceService {
       const branch = await this.browsingBranch(tx, store, branchId);
       const urls = preview ? PREVIEW_URLS : publicUrls(store.slug);
       const where = productId ? sql`p.id = ${productId}` : sql`true`;
-      return { products: await this.storeProducts(tx, urls, branch.id, where) };
+      return {
+        products: await this.storeProducts(
+          tx,
+          urls,
+          branch.id,
+          where,
+          preview ? 'draft' : 'published',
+        ),
+      };
     });
   }
 

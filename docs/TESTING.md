@@ -66,6 +66,27 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-21 (product page designer, ADR-0128 amendment 4, cloud sandbox run)
+- `packages/contracts/src/store-design.test.ts` +4: designs saved before parse with a default
+  product page and no sections under it; presets parse and templates start from one; catalog,
+  menu and repeated ids refused on the product page; settings bounded.
+- `apps/store-web` +2: the tech page (large picture, path with category, SKU, "only 2 left",
+  option buttons with a sold-out one disabled, − / + capped at what can be ordered, highlights,
+  WhatsApp link, description tabs with store blocks, sections under the product, related without
+  sold-out products, recently viewed in local storage, arrows, full-screen view closed by Escape,
+  buy now to checkout with the quantity); the minimal page (centred, no path, share, quantity or
+  related, own button words).
+- `apps/online-web` +1: product page chip, preview opens the first product then the picked one,
+  recommendations score and fix, preset, arrangement gallery, every panel, section picker without
+  catalog / menu, no untranslated key, saved design.
+- API integration (design test extended): product page settings and sections saved and published,
+  catalog refused under the product, `fewLeft` from the draft in the preview and from the
+  published design for shoppers.
+- e2e `store.spec.ts`: the design test opens the product page in the preview and changes the add
+  button; the published page orders with − / +. Quantity steps elsewhere use − / +.
+- Totals: `pnpm verify` 392 unit/web, `pnpm test:integration` 311 (44 files), `pnpm test:e2e` 45.
+  Visual check at 1440 and 390 px (Arabic): editor and product page no wider than the screen.
+
 ### Results 2026-10-21 (Business management in the young look, ADR-0131)
 - `apps/manager-web/src/app.test.tsx` (+2): the theme switch sets `<html data-theme>` and
   remembers the choice under `arabat.theme` ("Auto" clears it); on a phone (matchMedia) the

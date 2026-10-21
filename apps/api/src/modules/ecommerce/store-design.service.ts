@@ -138,6 +138,7 @@ export class StoreDesignService {
           home: input.design.pages.home.length,
           products: input.design.pages.products.length,
           categories: input.design.pages.categories.length,
+          product: input.design.pages.product.length,
         },
       });
       return this.stateIn(tx);

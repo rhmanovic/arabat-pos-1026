@@ -116,10 +116,13 @@ export function SectionPicker({
   design,
   onClose,
   onPick,
+  exclude = [],
 }: {
   design: StoreDesign;
   onClose: () => void;
   onPick: (section: DesignSection) => void;
+  /** Types the page cannot hold (the product page has no catalog or menu). */
+  exclude?: SectionType[];
 }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<'types' | 'ready'>('types');
@@ -127,8 +130,9 @@ export function SectionPicker({
   const suggested = sectionOrder(design.template).slice(0, 3);
   const term = search.trim().toLowerCase();
   const matches = (type: SectionType) =>
-    !term ||
-    `${t(`design.type_${type}`)} ${t(`design.typeHint_${type}`)}`.toLowerCase().includes(term);
+    !exclude.includes(type) &&
+    (!term ||
+      `${t(`design.type_${type}`)} ${t(`design.typeHint_${type}`)}`.toLowerCase().includes(term));
   const fromReady = (name: ReadySection) => {
     const section = readySection(name, newId(READY_TYPE[name]));
     // The contact call to action goes to the store's WhatsApp when it has one.
@@ -214,7 +218,7 @@ export function SectionPicker({
           </>
         ) : (
           <ul className="grid gap-2 sm:grid-cols-2">
-            {READY_SECTIONS.map((name) => (
+            {READY_SECTIONS.filter((name) => !exclude.includes(READY_TYPE[name])).map((name) => (
               <li key={name}>
                 <button
                   type="button"

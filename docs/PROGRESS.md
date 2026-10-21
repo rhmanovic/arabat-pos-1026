@@ -1265,6 +1265,30 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-21 — Product page designer (ADR-0128 amendment 4, BR-237)
+Owner's request: options, ready pages and settings to design the product page. No migration.
+- Contract: `productPage` (six arrangements, pictures, details, buy box, highlights, description
+  tabs / folding rows with store-wide information blocks, related and recently viewed),
+  `pages.product` sections (no catalog or menu), five presets and suggested highlights; designs
+  saved before parse unchanged with defaults.
+- API: a variant's `fewLeft` discloses the units left only at or under the merchant's own "only
+  N left" setting (published design for shoppers, draft in the preview); design-saved audit counts
+  the product page's sections.
+- Storefront: the product page follows the design: layouts, gallery with small pictures / dots /
+  arrows, swipe and full-screen view, path and category, SKU, stock and "only N left", option
+  buttons, − / + quantity, own button words, buy now, WhatsApp question, phone bottom bar,
+  highlights, description tabs / folding rows, sections under the product, related and recently
+  viewed (kept in the browser only).
+- Console: «صفحة المنتج» chip with a preview product picker (the preview opens it), ready pages,
+  recommendations with fixes, an arrangement gallery and panels for every setting; the section
+  picker leaves out the catalog and the menu there.
+- Tests: contracts +4, store-web +2, online-web +1, API design integration test extended
+  (settings saved and published, catalog refused on the product page, `fewLeft` draft vs
+  published), e2e design test extended (preview opens the product, buy-box words follow the
+  editor, the published page orders with the − / + quantity); e2e quantity steps use − / +.
+- Verified (cloud sandbox): `pnpm verify` 392 unit/web, `pnpm test:integration` 311 (44 files),
+  `pnpm test:e2e` 45; editor and product page checked at 1440 and 390 px.
+
 ### 2026-10-21 — Business management in the young look, phone-first (ADR-0131)
 Owner's request: make Business management suit Gen Z and fit phones. Frontend only.
 - Shared layer: `@arabat/ui/vibe.css` (palette, dark mode, effects, shrinkable grid column,

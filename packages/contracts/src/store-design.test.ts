@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   HOME_LAYOUTS,
+  PRODUCT_PAGE_PRESETS,
   READY_SECTIONS,
   designImageIds,
   homeLayout,
   legacyDesign,
+  productPagePreset,
   readySection,
   sectionSchema,
   storeDesignSchema,
+  templateDesign,
 } from './store-design.js';
 
 const PIC = (n: number) => `0198f0a2-5c3e-7d41-9a3b-2f6c8e1d4b7${n}`;
@@ -71,5 +74,54 @@ describe('home page sections (ADR-0128 amendment 3)', () => {
     const faq = readySection('faq', 'f');
     expect(faq.type === 'faq' && faq.items.every((i) => !i.answer.en && !i.answer.ar)).toBe(true);
     expect(readySection('offerCountdown', 'o')).toMatchObject({ endsAt: null });
+  });
+});
+
+describe('product page (ADR-0128 amendment 4)', () => {
+  it('gives designs saved before the amendment a product page and no sections under it', () => {
+    const { productPage: _, ...old } = legacyDesign();
+    const { product: __, ...pages } = old.pages;
+    const parsed = storeDesignSchema.parse({ ...old, pages });
+    expect(parsed.pages.product).toEqual([]);
+    expect(parsed.productPage).toMatchObject({
+      layout: 'classic',
+      gallery: { thumbs: 'below', ratio: 'square', zoom: true },
+      buy: { options: 'buttons', quantity: 'stepper', stickyBar: true, buyNow: false },
+      related: { enabled: true, source: 'category', limit: 4 },
+      recent: { enabled: false },
+    });
+  });
+
+  it('offers presets that parse, and template designs start from one', () => {
+    for (const p of PRODUCT_PAGE_PRESETS) expect(productPagePreset(p)).toBeTruthy();
+    expect(productPagePreset('food').layout).toBe('compact');
+    expect(templateDesign('restaurant').productPage.layout).toBe('compact');
+    expect(templateDesign('retail').productPage.highlights).toHaveLength(3);
+  });
+
+  it('keeps catalogs, menus and repeated ids off the product page', () => {
+    const base = legacyDesign();
+    const withProduct = (product: unknown[]) =>
+      storeDesignSchema.safeParse({ ...base, pages: { ...base.pages, product } }).success;
+    expect(withProduct([{ id: 'faq', type: 'faq' }])).toBe(true);
+    expect(withProduct([{ id: 'c', type: 'catalog' }])).toBe(false);
+    expect(withProduct([{ id: 'm', type: 'menu' }])).toBe(false);
+    expect(
+      withProduct([
+        { id: 'x', type: 'faq' },
+        { id: 'x', type: 'spacer' },
+      ]),
+    ).toBe(false);
+  });
+
+  it('bounds the settings', () => {
+    const base = legacyDesign();
+    const ok = (productPage: unknown) =>
+      storeDesignSchema.safeParse({ ...base, productPage }).success;
+    expect(ok({ info: { lowStockAt: 11 } })).toBe(false);
+    expect(ok({ related: { limit: 1 } })).toBe(false);
+    expect(ok({ layout: 'carousel' })).toBe(false);
+    expect(ok({ highlights: Array.from({ length: 5 }, (_, i) => ({ id: `h${i}` })) })).toBe(false);
+    expect(ok({ description: { style: 'tabs', blocks: [{ id: 'b' }] } })).toBe(true);
   });
 });

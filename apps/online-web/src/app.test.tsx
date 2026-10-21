@@ -3,7 +3,7 @@ import { flattenKeys } from '@arabat/i18n';
 import { fakeApiFetch, makeSession, renderApp } from '@arabat/web-core/testing';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { managerUrl } from './app/context.js';
 import { nextActions } from './features/shared.js';
 import { i18n, resources } from './i18n/index.js';
@@ -1648,6 +1648,154 @@ describe('online store console', () => {
         expect(design.footer.background).toBe('dark');
         expect(design.footer.cta.enabled).toBe(true);
         expect(design.footer.blocks.map((b) => b.type)).toEqual(['hours', 'contact']);
+      });
+    });
+
+    describe('product page (ADR-0128 amendment 4)', () => {
+      const TEA = '0190a000-0000-7000-8000-0000000000f1';
+      const MUG = '0190a000-0000-7000-8000-0000000000f2';
+      const product = (id: string, nameEn: string, withContent: boolean) => ({
+        productId: id,
+        nameEn,
+        nameAr: null,
+        descriptionEn: withContent ? 'Brewed daily' : null,
+        descriptionAr: null,
+        categoryId: null,
+        collectionIds: [],
+        imageUrl: withContent ? '/img/tea' : null,
+        images: withContent ? ['/img/tea'] : [],
+        featured: false,
+        position: 0,
+        variants: [
+          {
+            variantId: `${id.slice(0, -2)}aa`,
+            nameEn: null,
+            nameAr: null,
+            sku: null,
+            price: { amount: '1.000', currency: 'KWD' },
+            available: true,
+            maxQuantity: 5,
+            fewLeft: null,
+          },
+        ],
+      });
+      const preview = {
+        'GET /manager/online/preview/storefront': () => ({
+          status: 200,
+          body: {
+            slug: 'demo',
+            nameEn: 'Demo',
+            nameAr: null,
+            taglineEn: null,
+            taglineAr: null,
+            announcementEn: null,
+            announcementAr: null,
+            primaryColor: '#0f766e',
+            contactPhone: null,
+            contactEmail: null,
+            acceptingOrders: true,
+            pickupEnabled: true,
+            deliveryEnabled: false,
+            deliveryFee: { amount: '0.000', currency: 'KWD' },
+            minimumOrder: { amount: '0.000', currency: 'KWD' },
+            paymentMethods: [],
+            payOnReceipt: true,
+            logoUrl: null,
+            bannerUrl: null,
+            categories: [],
+            collections: [],
+            branches: [],
+            defaultBranchId: BRANCH,
+            deliveryAreas: [],
+            scheduling: { enabled: false, slotMinutes: 30 },
+            timezone: 'Asia/Kuwait',
+            accountsEnabled: false,
+          },
+        }),
+        'GET /manager/online/preview/products': () => ({
+          status: 200,
+          body: { products: [product(TEA, 'Saffron tea', true), product(MUG, 'Mug', false)] },
+        }),
+      };
+
+      it('designs the product page: presets, recommendations, arrangement, buy box, description, related and sections', async () => {
+        const user = userEvent.setup();
+        const fetch = fakeApiFetch({
+          session: session(),
+          routes: { ...designRoutes(), ...preview },
+        });
+        renderApp({ routes, appInterface: 'manager', i18n, path: '/design', fetch });
+        const frame = (await screen.findByTestId('design-preview')) as HTMLIFrameElement;
+        const posted = vi.spyOn(frame.contentWindow!, 'postMessage');
+        await user.click(screen.getByRole('radio', { name: 'Product page' }));
+        // The preview opens the first product; another one can be picked.
+        await waitFor(() =>
+          expect(posted).toHaveBeenCalledWith(
+            { type: 'arabat:navigate', page: 'product', productId: TEA },
+            window.location.origin,
+          ),
+        );
+        await user.selectOptions(await screen.findByLabelText('Preview with'), MUG);
+        expect(posted).toHaveBeenLastCalledWith(
+          { type: 'arabat:navigate', page: 'product', productId: MUG },
+          window.location.origin,
+        );
+        // Recommendations: the mug lacks a picture and words; no WhatsApp number yet.
+        expect(screen.getByTestId('product-page-score')).toHaveTextContent('3 of 7 done');
+        expect(
+          screen.getByText('Shoppers buy what they can see. Products without a picture: 1.'),
+        ).toBeInTheDocument();
+        await user.click(screen.getByRole('button', { name: 'Add suggested' }));
+        expect(screen.getByTestId('product-page-score')).toHaveTextContent('4 of 7 done');
+        // A ready page, then the merchant's own changes.
+        await user.click(screen.getByRole('button', { name: 'Apply Food and drinks' }));
+        const layouts = screen.getByRole('radiogroup', { name: 'Arrangement' });
+        expect(within(layouts).getAllByRole('radio')).toHaveLength(6);
+        expect(within(layouts).getByRole('radio', { name: 'Compact' })).toBeChecked();
+        await user.click(within(layouts).getByRole('radio', { name: 'All pictures' }));
+        await user.click(screen.getByRole('radio', { name: 'Tall' }));
+        await user.click(screen.getByRole('checkbox', { name: /Buy now/ }));
+        const addLabel = screen.getByLabelText('Add button (English)');
+        await user.clear(addLabel);
+        await user.type(addLabel, 'Add to bag');
+        await user.selectOptions(screen.getByLabelText('"Only a few left"'), '3');
+        await user.click(screen.getByRole('radio', { name: 'Tabs' }));
+        await user.click(screen.getByRole('button', { name: 'Add information' }));
+        const words = screen.getByText('Description and information').closest('details')!;
+        await user.type(within(words).getByLabelText('Title (English)'), 'Returns');
+        await user.click(screen.getByRole('radio', { name: 'Featured' }));
+        await user.click(screen.getByRole('checkbox', { name: 'Show recently viewed products' }));
+        // Sections under the product: no product list or menu there.
+        await user.click(screen.getByRole('button', { name: 'Add section' }));
+        const picker = await screen.findByRole('dialog', { name: 'Add section' });
+        expect(
+          within(picker).queryByRole('button', { name: /^Product list \(search & filter\)/ }),
+        ).toBeNull();
+        expect(within(picker).queryByRole('button', { name: /^Restaurant menu/ })).toBeNull();
+        await user.click(within(picker).getByRole('button', { name: /^Questions & answers/ }));
+        await user.click(await screen.findByRole('button', { name: /Back to sections/ }));
+        expect(document.body.textContent).not.toMatch(/productDesign\./);
+        await user.click(screen.getByRole('button', { name: 'Save draft' }));
+        await waitFor(() => expect(fetch.calls.some((c) => c.method === 'PUT')).toBe(true));
+        const design = (
+          fetch.calls.find((c) => c.method === 'PUT')!.body as {
+            design: {
+              productPage: Record<string, unknown>;
+              pages: { product: { type: string }[] };
+            };
+          }
+        ).design;
+        expect(design.productPage).toMatchObject({
+          layout: 'scroll',
+          gallery: { ratio: 'portrait', thumbs: 'dots' },
+          info: { lowStockAt: 3, breadcrumb: false, titleSize: 'large' },
+          buy: { buyNow: true, addLabel: { en: 'Add to bag', ar: 'أضف للطلب' } },
+          description: { style: 'tabs', blocks: [{ title: { en: 'Returns', ar: null } }] },
+          related: { source: 'featured', showAdd: true },
+          recent: { enabled: true },
+        });
+        expect(design.productPage['highlights']).toHaveLength(2);
+        expect(design.pages.product.map((x) => x.type)).toEqual(['faq']);
       });
     });
   });

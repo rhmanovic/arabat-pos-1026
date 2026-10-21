@@ -84,7 +84,7 @@ test('a shopper buys online with the sandbox gateway; the order, stock and repor
   await shopper.goto(`/store/${slug}`);
   await expect(shopper.getByText('Saffron House')).toBeVisible();
   await shopper.getByRole('link', { name: /Saffron tea/ }).click();
-  await shopper.getByLabel('Quantity').selectOption('2');
+  await shopper.getByRole('button', { name: 'Increase quantity' }).click();
   await shopper.getByRole('button', { name: 'Add to cart' }).click();
   await shopper.getByRole('link', { name: 'Cart (2)' }).click();
   await expect(shopper.getByText('KWD 2.500').first()).toBeVisible();
@@ -224,7 +224,7 @@ test('a shopper orders without any gateway and pays at pickup; staff confirm, re
     .first()
     .click();
   await expect(shopper).toHaveTitle('Date box, 500 g · Date House');
-  await shopper.getByLabel('Quantity').selectOption('2');
+  await shopper.getByRole('button', { name: 'Increase quantity' }).click();
   await shopper.getByRole('button', { name: 'Add to cart' }).click();
   await shopper.getByRole('link', { name: 'Cart (2)' }).click();
   await shopper.getByRole('button', { name: 'Checkout' }).click();
@@ -368,7 +368,7 @@ test('delivery areas at checkout, and a pickup order handed over at the till (AD
 
   await shopper.goto(`/store/${slug}`);
   await shopper.getByRole('link', { name: /Honey jar/ }).click();
-  await shopper.getByLabel('Quantity').selectOption('2');
+  await shopper.getByRole('button', { name: 'Increase quantity' }).click();
   await shopper.getByRole('button', { name: 'Add to cart' }).click();
   await shopper.getByRole('link', { name: 'Cart (2)' }).click();
   await shopper.getByRole('button', { name: 'Checkout' }).click();
@@ -516,6 +516,15 @@ test('the owner designs the store as a restaurant, previews it live and publishe
   await page.getByRole('button', { name: 'Edit Banner' }).click();
   await page.getByLabel('Title (English)', { exact: true }).fill('Karak all day');
   await expect(preview.getByText('Karak all day')).toBeVisible();
+  // The product page (ADR-0128 amendment 4): the preview opens the product, and the buy box
+  // follows the editor (the restaurant template brought the food page).
+  await page.getByRole('button', { name: /Back to sections/ }).click();
+  await page.getByRole('radio', { name: 'Product page' }).click();
+  await expect(preview.getByRole('heading', { name: 'Karak tea' })).toBeVisible();
+  await expect(preview.getByText('Made fresh')).toBeVisible();
+  await page.getByText('Buy box', { exact: true }).click();
+  await page.getByLabel('Add button (English)').fill('Order it');
+  await expect(preview.getByRole('button', { name: 'Order it' })).toBeVisible();
   // Shoppers still see the old layout until the design is published.
   const shopperContext = await browser.newContext();
   await shopperContext.addInitScript(() => localStorage.setItem('arabat.language', 'en'));
@@ -538,6 +547,11 @@ test('the owner designs the store as a restaurant, previews it live and publishe
   await expect(shopper.getByRole('link', { name: 'Cart (1)' })).toBeVisible();
   await shopper.getByRole('link', { name: 'Menu' }).first().click();
   await expect(shopper).toHaveURL(new RegExp(`/store/${slug}/products$`));
+  await shopper.goto(`/store/${slug}/products/${product.id as string}`);
+  await expect(shopper.getByTestId('product-page')).toHaveAttribute('data-layout', 'compact');
+  await shopper.getByRole('button', { name: 'Increase quantity' }).click();
+  await shopper.getByRole('button', { name: 'Order it' }).click();
+  await expect(shopper.getByRole('link', { name: 'Cart (3)' })).toBeVisible();
   await shopperContext.close();
 });
 

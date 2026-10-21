@@ -697,6 +697,11 @@ export const storeProductSchema = z.object({
       available: z.boolean(),
       /** Upper bound offered in the cart (never the exact stock). */
       maxQuantity: z.number().int(),
+      /**
+       * Units left, only when at or under the store's "only N left" setting (ADR-0128
+       * amendment 4); null otherwise, so the stock stays private unless the merchant shows it.
+       */
+      fewLeft: z.number().int().nullable().default(null),
     }),
   ),
 });

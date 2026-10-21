@@ -10,7 +10,7 @@ import { z } from 'zod';
 
 export const DESIGN_TEMPLATES = ['retail', 'restaurant'] as const;
 export type DesignTemplate = (typeof DESIGN_TEMPLATES)[number];
-export const DESIGN_PAGES = ['home', 'products', 'categories'] as const;
+export const DESIGN_PAGES = ['home', 'products', 'categories', 'product'] as const;
 export type DesignPage = (typeof DESIGN_PAGES)[number];
 
 export const SECTION_TYPES = [
@@ -646,6 +646,101 @@ const footerSchema = z.preprocess(
 );
 export type FooterDesign = z.output<typeof footerSchema>;
 
+// ---------------------------------------------------------------------- product page
+/**
+ * How the page of one product is drawn (ADR-0128 amendment 4). Each arrangement also works
+ * on phones, where the pictures always come first.
+ */
+export const PRODUCT_LAYOUTS = [
+  'classic',
+  'wide',
+  'reverse',
+  'stacked',
+  'scroll',
+  'compact',
+] as const;
+export type ProductLayout = (typeof PRODUCT_LAYOUTS)[number];
+
+const productHighlightSchema = z.object({
+  id,
+  icon: z.string().trim().max(8).default(''),
+  title: localized(40),
+  text: localized(80),
+});
+export type ProductHighlight = z.infer<typeof productHighlightSchema>;
+
+/** Store-wide words shown with every product's description (delivery, returns, care…). */
+const productInfoBlockSchema = z.object({ id, title: localized(40), text: localized(1000) });
+export type ProductInfoBlock = z.infer<typeof productInfoBlockSchema>;
+
+export const productPageSchema = z.object({
+  layout: z.enum(PRODUCT_LAYOUTS).default('classic'),
+  gallery: z
+    .object({
+      /** Where the small pictures go; `side` falls back to `below` on phones. */
+      thumbs: z.enum(['below', 'side', 'dots', 'none']).default('below'),
+      ratio: z.enum(['square', 'portrait', 'landscape']).default('square'),
+      fit: z.enum(['cover', 'contain']).default('cover'),
+      /** Tap a picture to see it full screen. */
+      zoom: z.boolean().default(true),
+    })
+    .prefault({}),
+  info: z
+    .object({
+      /** Home › category › product, above the name. */
+      breadcrumb: z.boolean().default(true),
+      /** The product's category as a chip above the name. */
+      category: z.boolean().default(false),
+      sku: z.boolean().default(false),
+      share: z.boolean().default(true),
+      /** "In stock" / "Sold out" beside the price. */
+      stock: z.boolean().default(true),
+      /** "Only N left" when fewer can be ordered; 0 = never. */
+      lowStockAt: z.number().int().min(0).max(10).default(0),
+      titleSize: z.enum(['regular', 'large']).default('regular'),
+      priceSize: z.enum(['regular', 'large']).default('large'),
+      align: z.enum(['start', 'center']).default('start'),
+    })
+    .prefault({}),
+  buy: z
+    .object({
+      /** How a product's options are chosen. */
+      options: z.enum(['buttons', 'dropdown']).default('buttons'),
+      quantity: z.enum(['stepper', 'dropdown', 'hidden']).default('stepper'),
+      /** Replaces "Add to cart" when set. */
+      addLabel: localized(30),
+      /** A second button that adds the product and opens the cart. */
+      buyNow: z.boolean().default(false),
+      /** On phones the add button stays at the bottom of the screen. */
+      stickyBar: z.boolean().default(true),
+      /** "Ask on WhatsApp" with the product's name and link (needs the store's WhatsApp number). */
+      whatsapp: z.boolean().default(false),
+    })
+    .prefault({}),
+  /** Reassurance under the buttons: emoji + short words. */
+  highlights: z.array(productHighlightSchema).max(4).default([]),
+  description: z
+    .object({
+      style: z.enum(['plain', 'tabs', 'accordion']).default('plain'),
+      blocks: z.array(productInfoBlockSchema).max(4).default([]),
+    })
+    .prefault({}),
+  related: z
+    .object({
+      enabled: z.boolean().default(true),
+      title: localized(80),
+      /** Same category first; the featured, then any, fill the rest. */
+      source: z.enum(['category', 'featured', 'all']).default('category'),
+      limit: z.number().int().min(2).max(12).default(4),
+      variant: z.enum(['grid', 'carousel']).default('carousel'),
+      showAdd: z.boolean().default(false),
+    })
+    .prefault({}),
+  /** The products this shopper opened before, kept on the shopper's device only. */
+  recent: z.object({ enabled: z.boolean().default(false), title: localized(80) }).prefault({}),
+});
+export type ProductPageDesign = z.output<typeof productPageSchema>;
+
 const handle = z
   .string()
   .trim()
@@ -692,6 +787,7 @@ export const storeDesignSchema = z
       })
       .prefault({}),
     footer: footerSchema.prefault({}),
+    productPage: productPageSchema.prefault({}),
     social: z
       .object({
         instagram: handle,
@@ -712,6 +808,8 @@ export const storeDesignSchema = z
       home: z.array(sectionSchema).max(30),
       products: z.array(sectionSchema).max(15),
       categories: z.array(sectionSchema).max(15),
+      /** Sections under the details of every product (reviews, questions, banners…). */
+      product: z.array(sectionSchema).max(15).default([]),
     }),
   })
   .superRefine((d, ctx) => {
@@ -727,6 +825,13 @@ export const storeDesignSchema = z
         code: 'custom',
         path: ['pages', 'categories'],
         message: 'The categories page needs a categories section.',
+      });
+    // The product page shows one product: lists with their own search do not belong there.
+    if (d.pages.product.some((s) => s.type === 'catalog' || s.type === 'menu'))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['pages', 'product'],
+        message: 'The product page cannot hold a catalog or a menu.',
       });
     for (const page of DESIGN_PAGES) {
       const ids = d.pages[page].map((s) => s.id);
@@ -916,6 +1021,124 @@ export function footerPreset(preset: FooterPreset): FooterDesign {
   return footerSchema.parse(input);
 }
 
+/** One-click product pages offered in the console (ADR-0128 amendment 4). */
+export const PRODUCT_PAGE_PRESETS = ['classic', 'fashion', 'food', 'tech', 'minimal'] as const;
+export type ProductPagePreset = (typeof PRODUCT_PAGE_PRESETS)[number];
+
+/** Reassurance under the buttons suggested to a product page (the merchant edits them). */
+export function suggestedHighlights(kind: 'shop' | 'food' | 'tech' = 'shop'): ProductHighlight[] {
+  const h = (id: string, icon: string, title: Localized, text: Localized): ProductHighlight => ({
+    id,
+    icon,
+    title,
+    text,
+  });
+  if (kind === 'food')
+    return [
+      h(
+        'fresh',
+        '🔥',
+        l('Made fresh', 'يُحضّر طازج'),
+        l('Prepared when you order', 'نجهزه وقت طلبك'),
+      ),
+      h(
+        'delivery',
+        '🛵',
+        l('Pickup or delivery', 'استلام أو توصيل'),
+        l('Your choice', 'على راحتك'),
+      ),
+    ];
+  if (kind === 'tech')
+    return [
+      h(
+        'genuine',
+        '✅',
+        l('Genuine products', 'منتجات أصلية'),
+        l('From trusted sources', 'من مصادر موثوقة'),
+      ),
+      h('warranty', '🛡️', l('Warranty', 'ضمان'), l('Ask us about the terms', 'اسألنا عن الشروط')),
+      h('delivery', '🚚', l('Fast delivery', 'توصيل سريع'), l('To your door', 'لين باب بيتك')),
+    ];
+  return [
+    h('delivery', '🚚', l('Fast delivery', 'توصيل سريع'), l('To your door', 'لين باب بيتك')),
+    h('secure', '🔒', l('Secure payment', 'دفع آمن'), l('Pay your way', 'ادفع بطريقتك')),
+    h(
+      'help',
+      '💬',
+      l('Here to help', 'جاهزين نساعدك'),
+      l('Message us any time', 'راسلنا في أي وقت'),
+    ),
+  ];
+}
+
+const deliveryBlock = {
+  id: 'delivery',
+  title: l('Delivery and returns', 'التوصيل والإرجاع'),
+  text: l(
+    'Orders are prepared quickly and delivered to your door. Message us if anything is not right.',
+    'نجهز الطلب بسرعة ونوصله لين بابك. إذا فيه أي ملاحظة راسلنا ونحلها.',
+  ),
+};
+
+export function productPagePreset(preset: ProductPagePreset): ProductPageDesign {
+  const input = {
+    classic: {
+      layout: 'classic',
+      highlights: suggestedHighlights('shop'),
+      related: { title: l('You may also like', 'قد يعجبك أيضًا') },
+    },
+    fashion: {
+      layout: 'scroll',
+      gallery: { thumbs: 'none', ratio: 'portrait' },
+      info: { category: true, lowStockAt: 3 },
+      buy: { options: 'buttons', buyNow: true },
+      highlights: suggestedHighlights('shop'),
+      description: { style: 'accordion', blocks: [deliveryBlock] },
+      related: { title: l('Complete the look', 'كمّل اللوك'), variant: 'grid' },
+      recent: { enabled: true, title: l('Recently viewed', 'شاهدتها مؤخرًا') },
+    },
+    food: {
+      layout: 'compact',
+      gallery: { thumbs: 'dots', ratio: 'landscape' },
+      info: { breadcrumb: false, stock: false, titleSize: 'large' },
+      buy: { quantity: 'stepper', addLabel: l('Add to order', 'أضف للطلب') },
+      highlights: suggestedHighlights('food'),
+      related: { title: l('Goes well with', 'يتناسب معه'), showAdd: true },
+    },
+    tech: {
+      layout: 'wide',
+      gallery: { thumbs: 'side', fit: 'contain' },
+      info: { sku: true, category: true, lowStockAt: 5 },
+      buy: { buyNow: true, whatsapp: true },
+      highlights: suggestedHighlights('tech'),
+      description: {
+        style: 'tabs',
+        blocks: [
+          deliveryBlock,
+          {
+            id: 'warranty',
+            title: l('Warranty', 'الضمان'),
+            text: l(
+              'Every product comes with its maker’s warranty. Keep your receipt.',
+              'كل منتج عليه ضمان الشركة المصنعة. احتفظ بالفاتورة.',
+            ),
+          },
+        ],
+      },
+      related: { title: l('Similar products', 'منتجات مشابهة'), variant: 'grid' },
+      recent: { enabled: true, title: l('Recently viewed', 'شاهدتها مؤخرًا') },
+    },
+    minimal: {
+      layout: 'stacked',
+      gallery: { thumbs: 'dots' },
+      info: { breadcrumb: false, share: false, align: 'center' },
+      buy: { stickyBar: false },
+      related: { title: l('More to explore', 'اكتشف المزيد'), variant: 'grid' },
+    },
+  }[preset];
+  return productPageSchema.parse(input);
+}
+
 /** Starting points offered in the console (ADR-0128): shops and restaurants differ. */
 export function templateDesign(template: DesignTemplate): StoreDesign {
   const nav = [
@@ -952,6 +1175,7 @@ export function templateDesign(template: DesignTemplate): StoreDesign {
       },
       navbar: { style: 'pills', align: 'center', items: [...nav] },
       footer: footerPreset('restaurant'),
+      productPage: productPagePreset('food'),
       pages: {
         home: [
           {
@@ -995,6 +1219,7 @@ export function templateDesign(template: DesignTemplate): StoreDesign {
     },
     navbar: { style: 'underline', align: 'start', menuStyle: 'mega', items: [...nav] },
     footer: footerPreset('shop'),
+    productPage: productPagePreset('classic'),
     pages: {
       home: [
         {

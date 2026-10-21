@@ -2220,6 +2220,9 @@ describe('store design (ADR-0128)', () => {
       { id: 'video', type: 'video', url: 'https://youtu.be/dQw4w9WgXcQ' },
       { id: 'catalog', type: 'catalog' },
     ];
+    // The product page (ADR-0128 amendment 4): its settings and the sections under it.
+    design.productPage = { layout: 'wide', info: { lowStockAt: 5 }, related: { limit: 6 } };
+    design.pages.product = [{ id: 'questions', type: 'faq' }];
     const saved = await s.ok('PUT', '/manager/online/design', { design, version: 0 });
     expect(saved).toMatchObject({ version: 1, dirty: true, published: null });
     expect(saved.draft.pages.home[1]).toMatchObject({
@@ -2229,6 +2232,12 @@ describe('store design (ADR-0128)', () => {
     });
     // Shoppers still see the legacy layout until it is published.
     expect((await pub(s, 'GET', '/design')).json().design.pages.home[0].type).toBe('banner');
+    // "Only N left" discloses the count under the merchant's setting: the draft's in the
+    // preview, the published one (none yet) for shoppers.
+    const fewLeft = (products: { variants: { variantId: string; fewLeft: number | null }[] }[]) =>
+      products.flatMap((p) => p.variants).find((v) => v.variantId === s.tea)?.fewLeft;
+    expect(fewLeft((await s.ok('GET', '/manager/online/preview/products')).products)).toBe(5);
+    expect(fewLeft((await pub(s, 'GET', '/products')).json().products)).toBeNull();
 
     // Refused: stale version, an unknown picture, a script link, a products page without a list.
     expect((await s.req('PUT', '/manager/online/design', { design, version: 0 })).json().code).toBe(
@@ -2249,6 +2258,12 @@ describe('store design (ADR-0128)', () => {
     expect(
       (await s.req('PUT', '/manager/online/design', { design: empty, version: 1 })).statusCode,
     ).toBe(400);
+    const listOnProduct = structuredClone(design);
+    listOnProduct.pages.product = [{ id: 'catalog', type: 'catalog' }];
+    expect(
+      (await s.req('PUT', '/manager/online/design', { design: listOnProduct, version: 1 }))
+        .statusCode,
+    ).toBe(400);
     const badVideo = structuredClone(design);
     badVideo.pages.home[1].url = 'https://example.com/movie.mp4';
     expect(
@@ -2267,6 +2282,12 @@ describe('store design (ADR-0128)', () => {
     ]);
     expect(live.header).toMatchObject({ layout: 'centered', background: 'brand' });
     expect(live.social.instagram).toBe('saffron.house');
+    expect(live.productPage).toMatchObject({
+      layout: 'wide',
+      related: { limit: 6, enabled: true },
+    });
+    expect(live.pages.product.map((x: { type: string }) => x.type)).toEqual(['faq']);
+    expect(fewLeft((await pub(s, 'GET', '/products')).json().products)).toBe(5);
     const picture = await pub(s, 'GET', `/assets/${asset.id}`);
     expect(picture.statusCode).toBe(200);
     expect(picture.headers['content-type']).toBe('image/webp');

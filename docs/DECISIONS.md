@@ -2417,3 +2417,30 @@ ADR; supersede it.
     for content, 12 sections or fewer). Each section's editor has three panels: content, look,
     visibility (screens and schedule); the list flags sections that need content, coloured,
     device-only and scheduled ones.
+- **Amendment 4 (2026-10-21) — product page designer.** Owner's request: "options, templates,
+  settings and everything a store owner needs to design the product page". BR-237. No migration
+  (jsonb); designs saved before parse with a `productPage` of defaults and no sections under the
+  product.
+  - **Contract:** `productPage` in the design (`productPageSchema`): six arrangements (classic,
+    large picture, details first, centred, all pictures with sticky details, compact); pictures
+    (small pictures below / beside / dots / arrows only, square / tall / wide, fill or whole
+    picture, full-screen view); details (path, category label, share, SKU, "in stock", "only N
+    left" at 1–10, name and price sizes, alignment); buy box (option buttons or list, quantity
+    − / + or list or hidden, own add-button words, "Buy now" to checkout, phone bottom bar, "Ask
+    on WhatsApp" with the product name and link); up to 4 reassurance highlights; description
+    as text / tabs / folding rows with up to 4 store-wide information blocks; related products
+    (same category, then featured, then any; 2–12; swipe row or grid; quick add); recently
+    viewed (kept in the shopper's own browser, `arabat.recent.<slug>`, recorded only while
+    shown). `pages.product` holds up to 15 sections drawn under every product (catalog and menu
+    refused). Five presets (`productPagePreset`: classic, fashion, food, tech, minimal) and
+    `suggestedHighlights`; the restaurant template starts from the food page.
+  - **Stock privacy:** `maxQuantity` never discloses stock. A variant's new `fewLeft` carries the
+    units left only when they are at or under the merchant's own "only N left" setting — the
+    published design's for shoppers, the draft's in the preview — and is null otherwise, so the
+    count stays private unless the merchant chose to show it.
+  - **Console:** a fourth page chip, «صفحة المنتج». Its editor has a product picker for the
+    preview (the preview opens that product through `arabat:navigate` with `productId`), ready
+    pages, recommendations with a score and one-tap fixes (pictures and descriptions counted
+    from the catalog, zoom, highlights, related, phone bar, WhatsApp), an arrangement gallery
+    with drawings, and panels for pictures, details, buy box, highlights, description,
+    related and recently viewed; the sections under the product are edited below it.

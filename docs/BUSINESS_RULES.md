@@ -117,6 +117,14 @@ engineering defaults pending owner confirmation.
   (the main register's first), and cannot sell while none is open. A device shift is never refused because
   the person left a shift open elsewhere; that shift is listed for the managers to close. Records
   that reach the server after the branch shift closed are booked to it and flagged "late".
+- **BR-237** Product page design (ADR-0128 amendment 4, owner 2026-10-21): every product's page
+  follows one store-wide design: arrangement, pictures, details, buy box, highlights,
+  description blocks, related and recently viewed products, and up to 15 sections under the
+  product (no catalog or menu there). A product page shows how many are left only when the
+  merchant turned "only N left" on and the units left are at or under that number; otherwise
+  the stock is never disclosed. "Buy now" adds the product and opens the checkout. Recently
+  viewed products are kept in the shopper's own browser and never sent to the store. Sold-out
+  products are not offered as related products.
 - **BR-236** One catalog for the point of sale and the store (ADR-0130, owner 2026-10-21): a
   product added anywhere (Business management, the store console, an import) is in both places
   at once and shown on the website; it may be hidden from the website only in the store console

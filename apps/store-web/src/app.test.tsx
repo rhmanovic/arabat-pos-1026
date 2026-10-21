@@ -1,5 +1,10 @@
 import { createApiClient } from '@arabat/api-client';
-import { type DesignSection, newSection, templateDesign } from '@arabat/contracts';
+import {
+  type DesignSection,
+  newSection,
+  productPagePreset,
+  templateDesign,
+} from '@arabat/contracts';
 import { flattenKeys } from '@arabat/i18n';
 import { createQueryClient } from '@arabat/web-core';
 import { fakeApiFetch, type FakeRoute } from '@arabat/web-core/testing';
@@ -1383,6 +1388,144 @@ describe('storefront', () => {
     } finally {
       window.name = '';
     }
+  });
+
+  it('draws the product page from the design: layout, options, stepper, few left, tabs, related, recently viewed and sections', async () => {
+    const user = userEvent.setup();
+    const SHIRT = '0190a000-0000-7000-8000-000000000003';
+    const CAT = '0190a000-0000-7000-8000-0000000000c1';
+    const shirt = {
+      ...PRODUCTS.products[0]!,
+      productId: SHIRT,
+      nameEn: 'Linen shirt',
+      nameAr: null,
+      descriptionEn: 'Cool in summer',
+      categoryId: CAT,
+      imageUrl: '/img/1',
+      images: ['/img/1', '/img/2'],
+      variants: [
+        {
+          variantId: '0190a000-0000-7000-8000-000000000031',
+          nameEn: 'Small',
+          nameAr: null,
+          sku: 'SH-S',
+          price: kwd('9.000'),
+          available: true,
+          maxQuantity: 3,
+          fewLeft: 2,
+        },
+        {
+          variantId: '0190a000-0000-7000-8000-000000000032',
+          nameEn: 'Medium',
+          nameAr: null,
+          sku: 'SH-M',
+          price: kwd('9.500'),
+          available: false,
+          maxQuantity: 0,
+          fewLeft: null,
+        },
+      ],
+    };
+    const design = templateDesign('retail');
+    design.productPage = productPagePreset('tech');
+    design.social.whatsapp = '+96550000000';
+    design.pages.product = [
+      {
+        ...newSection('faq', 'questions'),
+        items: [
+          {
+            id: 'q1',
+            question: { en: 'Can I exchange it?', ar: null },
+            answer: { en: 'Within a week.', ar: null },
+          },
+        ],
+      } as DesignSection,
+    ];
+    localStorage.setItem('arabat.recent.demo', JSON.stringify([COFFEE]));
+    const { router } = renderStore(`/demo/products/${SHIRT}`, {
+      'GET /store/demo': () => ({
+        status: 200,
+        body: {
+          ...STORE,
+          categories: [{ id: CAT, nameEn: 'Shirts', nameAr: null, parentId: null, imageUrl: null }],
+        },
+      }),
+      'GET /store/demo/products': () => ({
+        status: 200,
+        body: { products: [shirt, ...PRODUCTS.products] },
+      }),
+      'GET /store/demo/design': () => ({ status: 200, body: { design } }),
+    });
+    expect(await screen.findByRole('heading', { name: 'Linen shirt' })).toBeInTheDocument();
+    expect(screen.getByTestId('product-page')).toHaveAttribute('data-layout', 'wide');
+    // Breadcrumb with the category, the category chip, the SKU and "only N left".
+    const crumbs = screen.getByRole('navigation', { name: 'You are here' });
+    expect(within(crumbs).getByRole('link', { name: 'Shirts' })).toHaveAttribute(
+      'href',
+      `/demo/products?category=${CAT}`,
+    );
+    expect(screen.getByText('SKU: SH-S')).toBeInTheDocument();
+    expect(screen.getByText('Only 2 left')).toBeInTheDocument();
+    // Options as buttons: a sold-out one cannot be picked.
+    expect(screen.getByRole('radio', { name: 'Small' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('radio', { name: 'Medium' })).toBeDisabled();
+    // The stepper stops at what can be ordered.
+    const more = screen.getByRole('button', { name: 'Increase quantity' });
+    await user.click(more);
+    await user.click(more);
+    expect(more).toBeDisabled();
+    // Highlights, WhatsApp, description tabs with the store's blocks.
+    expect(screen.getByText('Genuine products')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Ask on WhatsApp' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('https://wa.me/96550000000?text='),
+    );
+    expect(screen.getByRole('tab', { name: 'Description' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(screen.getByText('Cool in summer')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: 'Warranty' }));
+    expect(screen.getByText(/maker’s warranty/)).toBeInTheDocument();
+    // Sections under the product, then related (sold-out ones left out) and recently viewed.
+    expect(screen.getByText('Can I exchange it?')).toBeInTheDocument();
+    const related = screen.getByTestId('related-products');
+    expect(within(related).getByText('Coffee beans')).toBeInTheDocument();
+    expect(within(related).queryByText('Mug')).toBeNull();
+    expect(within(screen.getByTestId('recent-products')).getByText('Coffee beans')).toBeTruthy();
+    expect(JSON.parse(localStorage.getItem('arabat.recent.demo')!)).toEqual([SHIRT, COFFEE]);
+    // The picture opens full screen and closes with Escape.
+    await user.click(screen.getByRole('button', { name: 'Next picture' }));
+    expect(screen.getByTestId('product-image')).toHaveAttribute('src', '/img/2');
+    await user.click(screen.getByRole('button', { name: 'Enlarge picture' }));
+    expect(screen.getByTestId('zoomed-image')).toHaveAttribute('src', '/img/2');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByTestId('zoomed-image')).toBeNull();
+    // "Buy now" adds the chosen quantity and goes to the checkout.
+    await user.click(screen.getByRole('button', { name: 'Buy now' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/demo/checkout'));
+    expect(JSON.parse(localStorage.getItem('arabat.cart.demo')!)).toEqual([
+      { variantId: shirt.variants[0]!.variantId, productId: SHIRT, quantity: 3 },
+    ]);
+  });
+
+  it('keeps a quiet product page when the design says so', async () => {
+    const design = templateDesign('retail');
+    design.productPage = productPagePreset('minimal');
+    design.productPage.related.enabled = false;
+    design.productPage.buy.quantity = 'hidden';
+    design.productPage.buy.addLabel = { en: 'Add to bag', ar: null };
+    renderStore(`/demo/products/${COFFEE}`, {
+      'GET /store/demo/design': () => ({ status: 200, body: { design } }),
+    });
+    expect(await screen.findByRole('button', { name: 'Add to bag' })).toBeInTheDocument();
+    expect(screen.getByTestId('product-page')).toHaveAttribute('data-layout', 'stacked');
+    expect(screen.queryByRole('navigation', { name: 'You are here' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Share' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Increase quantity' })).toBeNull();
+    expect(screen.queryByLabelText('Quantity')).toBeNull();
+    expect(screen.queryByTestId('related-products')).toBeNull();
+    expect(screen.getByText('Medium roast')).toBeInTheDocument();
   });
 
   it('defines the same translation keys in Arabic and English', () => {

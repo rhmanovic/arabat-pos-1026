@@ -1,4 +1,5 @@
 import {
+  DESIGN_PAGES,
   type DesignPage as PageKey,
   type DesignSection,
   type StoreDesign,
@@ -14,7 +15,7 @@ import { Link } from 'react-router';
 import { useSession } from '../../app/context.js';
 import { key } from '../shared.js';
 import { SortableList, SortableRow } from '../sortable.js';
-import { Panel, designKey } from './fields.js';
+import { Panel, designKey, useStoreCatalog } from './fields.js';
 import { PageLayouts, PageTips, SectionPicker, isEmptySection } from './PageTools.js';
 import {
   SECTION_ICON,
@@ -26,6 +27,7 @@ import {
 import { HeaderEditor } from './HeaderEditor.js';
 import { FooterEditor } from './FooterEditor.js';
 import { ThemeEditor } from './ShellEditors.js';
+import { ProductPageEditor } from './ProductPageEditor.js';
 
 /** The preview frame's name: the storefront shows the draft when it runs inside it. */
 const PREVIEW_FRAME_NAME = 'arabat-design-preview';
@@ -150,6 +152,10 @@ function Editor({
   }
   const [tab, setTab] = useState<Tab>('pages');
   const [page, setPage] = useState<PageKey>('home');
+  // The product the preview opens while the product page is edited (the first one by default).
+  const { products } = useStoreCatalog();
+  const [chosenProduct, setChosenProduct] = useState<string | null>(null);
+  const previewProduct = chosenProduct ?? products[0]?.productId ?? null;
   const [device, setDevice] = useState<'desktop' | 'phone'>('desktop');
   const [mobileView, setMobileView] = useState<'edit' | 'preview'>('edit');
   const frame = useRef<HTMLIFrameElement>(null);
@@ -164,6 +170,10 @@ function Editor({
   useEffect(() => {
     latest.current = draft;
   }, [draft]);
+  const where = useRef({ page, productId: previewProduct });
+  useEffect(() => {
+    where.current = { page, productId: previewProduct };
+  }, [page, previewProduct]);
   // The footer sits at the bottom of the store: while it is edited, the preview shows it.
   const onFooter = useRef(false);
   useEffect(() => {
@@ -178,6 +188,8 @@ function Editor({
       if (event.data?.type === 'arabat:design-ready') {
         post({ type: 'arabat:design', design: latest.current });
         if (onFooter.current) post({ type: 'arabat:scroll', to: 'footer' });
+        // A reloaded frame goes back to the page being edited.
+        if (where.current.page !== 'home') post({ type: 'arabat:navigate', ...where.current });
       }
     };
     window.addEventListener('message', onMessage);
@@ -190,7 +202,10 @@ function Editor({
     }, 150);
     return () => clearTimeout(timer);
   }, [draft, post]);
-  useEffect(() => post({ type: 'arabat:navigate', page }), [page, post]);
+  useEffect(
+    () => post({ type: 'arabat:navigate', page, productId: previewProduct }),
+    [page, previewProduct, post],
+  );
 
   // -------------------------------------------------------------------- saving
   const done = async (next: StoreDesignState, message: string) => {
@@ -317,6 +332,8 @@ function Editor({
                 set={setDraft}
                 page={page}
                 setPage={setPage}
+                previewProduct={previewProduct}
+                onPreviewProduct={setChosenProduct}
                 onFocus={(id) => post({ type: 'arabat:focus', sectionId: id })}
               />
             ) : tab === 'theme' ? (
@@ -373,12 +390,16 @@ function PagesEditor({
   set,
   page,
   setPage,
+  previewProduct,
+  onPreviewProduct,
   onFocus,
 }: {
   design: StoreDesign;
   set: (d: StoreDesign) => void;
   page: PageKey;
   setPage: (p: PageKey) => void;
+  previewProduct: string | null;
+  onPreviewProduct: (id: string) => void;
   onFocus: (id: string) => void;
 }) {
   const { t } = useTranslation();
@@ -408,8 +429,12 @@ function PagesEditor({
 
   return (
     <div className="flex flex-col gap-4">
-      <div role="radiogroup" aria-label={t('design.page')} className="flex gap-2">
-        {(['home', 'products', 'categories'] as const).map((p) => (
+      <div
+        role="radiogroup"
+        aria-label={t('design.page')}
+        className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+      >
+        {DESIGN_PAGES.map((p) => (
           <button
             key={p}
             type="button"
@@ -417,7 +442,7 @@ function PagesEditor({
             aria-checked={page === p}
             onClick={() => setPage(p)}
             className={cn(
-              'flex-1 rounded-lg border px-3 py-2 text-sm font-semibold',
+              'whitespace-nowrap rounded-lg border px-1.5 py-2 text-sm font-semibold',
               page === p ? 'vibe-gradient border-transparent' : 'border-border bg-surface',
             )}
           >
@@ -426,6 +451,20 @@ function PagesEditor({
         ))}
       </div>
       <p className="text-sm text-fg-muted">{t(`design.pageHint_${page}`)}</p>
+      {page === 'product' ? (
+        <>
+          <ProductPageEditor
+            design={design}
+            set={set}
+            previewProductId={previewProduct}
+            onPreviewProduct={onPreviewProduct}
+          />
+          <div>
+            <h3 className="text-sm font-bold">{t('productDesign.sections')}</h3>
+            <p className="text-xs text-fg-muted">{t('productDesign.sectionsHint')}</p>
+          </div>
+        </>
+      ) : null}
       {page === 'home' ? (
         <>
           <Panel
@@ -551,6 +590,7 @@ function PagesEditor({
       {picker ? (
         <SectionPicker
           design={design}
+          exclude={page === 'product' ? ['catalog', 'menu'] : []}
           onClose={() => setPicker(false)}
           onPick={(s) => {
             setSections([...sections, s]);
