@@ -1281,6 +1281,11 @@ Owner's request: make Business management suit Gen Z and fit phones. Frontend on
   permitted pages and "More" opens the menu); online-web theme test follows the shared key.
 - Verified (cloud sandbox): `pnpm verify` 385 unit/web, `pnpm test:integration` 311 (44 files),
   `pnpm test:e2e` 45.
+- Released (ADR-0122): production `dfaf95a7cf73` (revision `arabat-web-00053-j2c`, previous
+  `arabat-web-00052-xhq`; migration job `arabat-migrate-2lvr9`, no new migration). Cloud Build
+  check `f9432612`: `/api/v1/health/ready` 200 with that version and database ok (3 ms); `live`,
+  `/store/`, `/manager/` and `/online/` 200. Signed out afterwards, `config.env` removed; no key,
+  account or secret deleted. Staging still waits for Railway to resume deploys.
 
 ### 2026-10-21 — Store console on the phone: rows, dialogs and sideways overflow
 Owner's report with phone screenshots: in the store console's products, categories and lists
