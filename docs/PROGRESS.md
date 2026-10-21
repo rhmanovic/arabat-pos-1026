@@ -1276,6 +1276,11 @@ there is a gap between the item and the menu, and leaving the item closed it at 
   the menu, then closes); it fails on the previous code.
 - Verified (cloud sandbox): `pnpm verify` 407 unit/web, `pnpm test:integration` 311 (44 files),
   `pnpm test:e2e` 45.
+- Released (ADR-0122): production `796fab022f85` (revision `arabat-web-00058-9b4`, previous
+  `arabat-web-00057-smq`; migration job `arabat-migrate-nqrn6`, no new migration). Cloud Build
+  check `e9c20f77`: `/api/v1/health/ready` 200 with that version and database ok (2 ms); `live`,
+  `/store/`, `/manager/` and `/online/` 200. Signed out afterwards, `config.env` removed; no key,
+  account or secret deleted.
 
 ### 2026-10-21 — Store design: publish bar and device switch always at hand
 Owner's report: on scrolling, the status, view-store, save and publish buttons and the
