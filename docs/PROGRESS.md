@@ -1276,6 +1276,10 @@ desktop / phone switch went out of view. Frontend only.
   expecting it last (the draft follows the preview a moment later, which made them flaky).
 - Verified (cloud sandbox): `pnpm verify` 406, `pnpm test:integration` 311, `pnpm test:e2e` 45;
   checked at 1440 and 390 px (Arabic) while scrolled, nothing wider than the screen.
+- Released (ADR-0122): production `907286dc791f` (revision `arabat-web-00057-smq`, previous
+  `arabat-web-00056-ldd`; migration job `arabat-migrate-sc647`, no new migration). Cloud Build
+  check `be3a7c8c`: ready 200 with that version, database ok; `live`, `/store/`, `/manager/`,
+  `/online/` 200. Signed out afterwards, `config.env` removed; no key, account or secret deleted.
 
 ### 2026-10-21 — Ready section styles and the categories page (ADR-0128 amendment 6, BR-239)
 Owner's request: the same depth for the home page and all its sections, and for the categories
