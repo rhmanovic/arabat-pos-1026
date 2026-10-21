@@ -1,4 +1,11 @@
-import type { Listing, OnlineCollection, SaveListing, StoreCategory } from '@arabat/contracts';
+import type {
+  Listing,
+  OnlineCollection,
+  Product,
+  SaveListing,
+  SaveProduct,
+  StoreCategory,
+} from '@arabat/contracts';
 import {
   Alert,
   Badge,
@@ -21,7 +28,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useSearchParams } from 'react-router';
 import { managerUrl, useSession } from '../../app/context.js';
 import { storeCategoryName } from '../categories/CategoriesPage.js';
-import { PictureField, usePendingPicture } from '../picture.js';
+import { GalleryField, PictureField, usePendingGallery, usePendingPicture } from '../picture.js';
 import { formatAmount, key } from '../shared.js';
 import { SortableList, SortableRow } from '../sortable.js';
 
@@ -499,15 +506,42 @@ function EditDialog({
   });
   const [categoryId, setCategoryId] = useState(listing.category?.id ?? '');
   const set = (patch: Partial<SaveListing>) => setV((x) => ({ ...x, ...patch }));
+  // The catalog's name, price and pictures are edited here too, like when adding a product.
+  const canCatalog = can('catalog.manage');
+  const product = useQuery({
+    queryKey: [...key, 'product', listing.productId],
+    queryFn: () => api.catalog.product(listing.productId),
+    enabled: canCatalog,
+  });
+  const [names, setNames] = useState<{ nameAr: string; nameEn: string; price: string } | null>(
+    null,
+  );
+  const loaded = product.data;
+  const base = loaded
+    ? {
+        nameAr: loaded.nameAr ?? '',
+        nameEn: loaded.nameEn ?? '',
+        price: loaded.variants.find((x) => x.status === 'active')?.price.amount ?? '',
+      }
+    : null;
+  const shown = names ?? base;
+  const setName = (patch: Partial<{ nameAr: string; nameEn: string; price: string }>) =>
+    base ? setNames({ ...(names ?? base), ...patch }) : undefined;
+  const gallery = usePendingGallery();
   const save = useMutation({
-    mutationFn: () =>
-      api.online.saveListing(listing.productId, {
+    mutationFn: async () => {
+      if (loaded && names && base && JSON.stringify(names) !== JSON.stringify(base))
+        await api.catalog.updateProduct(loaded.id, catalogUpdate(loaded, names));
+      for (const imageId of gallery.removed) await api.catalog.deleteImage(listing.productId, imageId);
+      for (const file of gallery.added) await api.catalog.uploadImage(listing.productId, file);
+      return api.online.saveListing(listing.productId, {
         ...v,
         // Only a change is sent: moving a product needs "Manage products" (POS too).
         ...((categoryId || null) !== (listing.category?.id ?? null)
           ? { categoryId: categoryId || null }
           : {}),
-      }),
+      });
+    },
     onSuccess: async () => {
       notify.ok(t('common.saved'));
       await onSaved();
@@ -559,6 +593,48 @@ function EditDialog({
       }
     >
       <div className="grid gap-4 sm:grid-cols-2">
+        {canCatalog && shown && loaded ? (
+          <>
+            <Field label={t('products.nameAr')}>
+              {(p) => (
+                <Input
+                  {...p}
+                  value={shown.nameAr}
+                  onChange={(e) => setName({ nameAr: e.target.value })}
+                />
+              )}
+            </Field>
+            <Field label={t('products.nameEn')}>
+              {(p) => (
+                <Input
+                  {...p}
+                  dir="ltr"
+                  value={shown.nameEn}
+                  onChange={(e) => setName({ nameEn: e.target.value })}
+                />
+              )}
+            </Field>
+            {loaded.hasVariants ? (
+              <p className="text-sm text-fg-muted sm:col-span-2">{t('products.optionPrices')}</p>
+            ) : (
+              <Field
+                label={t('products.price')}
+                hint={can('catalog.prices.manage') ? undefined : t('products.priceNeedsRight')}
+              >
+                {(p) => (
+                  <Input
+                    {...p}
+                    dir="ltr"
+                    inputMode="decimal"
+                    disabled={!can('catalog.prices.manage')}
+                    value={shown.price}
+                    onChange={(e) => setName({ price: e.target.value })}
+                  />
+                )}
+              </Field>
+            )}
+          </>
+        ) : null}
         {/* Where the product lives first, then where it is also featured (ADR-0130 amendment 1). */}
         <Field
           className="sm:col-span-2"
@@ -640,7 +716,14 @@ function EditDialog({
         />
         <div className="sm:col-span-2">
           <p className="mb-1 text-sm font-medium">{t('products.images')}</p>
-          {listing.images.length > 0 ? (
+          {canCatalog ? (
+            <GalleryField
+              pending={gallery}
+              current={listing.images}
+              max={MAX_PICTURES}
+              testId="product-gallery"
+            />
+          ) : listing.images.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {listing.images.map((img) => (
                 <img
@@ -654,19 +737,45 @@ function EditDialog({
           ) : (
             <Alert>{t('products.noImages')}</Alert>
           )}
-          <p className="mt-1 text-xs text-fg-muted">
-            {t('products.imagesHint')}{' '}
-            <a
-              className="text-primary hover:underline"
-              href={managerUrl(`products/${listing.productId}`)}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {t('products.openInCatalog')} ↗
-            </a>
-          </p>
         </div>
       </div>
     </Dialog>
   );
+}
+
+/** Pictures per product (the catalog's limit). */
+const MAX_PICTURES = 8;
+
+/**
+ * The full catalog form for a product with a new name and (simple product) price: everything
+ * else is sent back as it is, so options, barcodes and costs stay untouched.
+ */
+function catalogUpdate(
+  product: Product,
+  next: { nameAr: string; nameEn: string; price: string },
+): SaveProduct {
+  const active = product.variants.filter((x) => x.status === 'active');
+  return {
+    nameAr: next.nameAr.trim() || null,
+    nameEn: next.nameEn.trim() || null,
+    descriptionAr: product.descriptionAr,
+    descriptionEn: product.descriptionEn,
+    categoryId: product.categoryId,
+    type: product.type,
+    hasVariants: product.hasVariants,
+    trackInventory: product.trackInventory,
+    availableInAllBranches: product.availableInAllBranches,
+    branchIds: product.branchIds,
+    posVisible: product.posVisible,
+    variants: active.map((x, n) => ({
+      id: x.id,
+      nameAr: x.nameAr,
+      nameEn: x.nameEn,
+      sku: x.sku,
+      barcodes: x.barcodes,
+      price: !product.hasVariants && n === 0 ? next.price.trim() : x.price.amount,
+      cost: x.cost ? x.cost.amount : null,
+    })),
+    version: product.version,
+  };
 }

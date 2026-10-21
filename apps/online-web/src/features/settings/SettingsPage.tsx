@@ -19,7 +19,7 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { managerUrl, useBranches, useSession } from '../../app/context.js';
 import { HoursEditor } from '../fulfilment/HoursEditor.js';
-import { key } from '../shared.js';
+import { FloatingBar, key } from '../shared.js';
 
 /** Store address, status, branding, fulfilment and payment options. */
 export function SettingsPage() {
@@ -110,6 +110,7 @@ function SettingsForm({ store }: { store: OnlineStore }) {
   const queryClient = useQueryClient();
   const branches = useBranches();
   const [v, setV] = useState<SaveOnlineStore>(() => toForm(store));
+  const dirty = JSON.stringify(v) !== JSON.stringify(toForm(store));
   const set = (patch: Partial<SaveOnlineStore>) => setV((x) => ({ ...x, ...patch }));
   /** Field problems the server reported on the last save, by field name. */
   const [issues, setIssues] = useState<Record<string, string>>({});
@@ -200,7 +201,7 @@ function SettingsForm({ store }: { store: OnlineStore }) {
     unknown: null,
   };
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 pb-24 lg:pb-16">
       <Section title={t('store.addressSection')} description={t('store.addressHint')}>
         <div className="grid gap-4 sm:grid-cols-2">
           <div data-field="slug">
@@ -539,11 +540,16 @@ function SettingsForm({ store }: { store: OnlineStore }) {
           </ul>
         </Alert>
       ) : null}
-      <div>
-        <Button loading={save.isPending} onClick={() => save.mutate()}>
+      <FloatingBar label={t('store.actions')}>
+        {dirty ? (
+          <Badge tone="warning" data-testid="settings-unsaved">
+            {t('store.unsaved')}
+          </Badge>
+        ) : null}
+        <Button loading={save.isPending} disabled={!dirty} onClick={() => save.mutate()}>
           {t('common.save')}
         </Button>
-      </div>
+      </FloatingBar>
     </div>
   );
 }

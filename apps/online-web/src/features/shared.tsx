@@ -3,6 +3,8 @@ import { formatMoney } from '@arabat/i18n';
 import { Money } from '@arabat/money';
 import { useApi } from '@arabat/web-core';
 import { useQuery } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
 /** Query key prefix of everything the console loads. */
@@ -128,4 +130,23 @@ export function useOrderOverview(enabled: boolean) {
     enabled,
     refetchInterval: 30_000,
   });
+}
+
+/**
+ * Actions that float over the window (above the phone tab bar), so Save never needs a scroll
+ * to the end of a long form. Rendered in the body: page entrance animations would otherwise
+ * pin it inside the page.
+ */
+export function FloatingBar({ label, children }: { label: string; children: ReactNode }) {
+  return createPortal(
+    <div
+      role="toolbar"
+      aria-label={label}
+      data-testid="floating-bar"
+      className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-30 mx-auto flex w-fit max-w-[calc(100%-1.5rem)] flex-wrap items-center justify-center gap-2 rounded-2xl border border-border bg-surface/90 p-2 shadow-xl backdrop-blur-md lg:bottom-6"
+    >
+      {children}
+    </div>,
+    document.body,
+  );
 }

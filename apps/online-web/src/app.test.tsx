@@ -465,12 +465,16 @@ describe('online store console', () => {
     });
     renderApp({ routes, appInterface: 'manager', i18n, path: '/settings', fetch });
     const slug = await screen.findByLabelText('Store address');
+    // Save floats over the window; it wakes up with the first change.
+    const bar = screen.getByRole('toolbar', { name: 'Save settings' });
+    expect(within(bar).getByRole('button', { name: 'Save' })).toBeDisabled();
     await user.clear(slug);
     await user.type(slug, 'saffron');
     expect(await screen.findByText('Taken by another store or link page.')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'saffron-store' }));
     expect(slug).toHaveValue('saffron-store');
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(within(bar).getByText('Unsaved changes')).toBeInTheDocument();
+    await user.click(within(bar).getByRole('button', { name: 'Save' }));
     expect(
       await screen.findByText('The store was not saved. Fix these fields:'),
     ).toBeInTheDocument();
@@ -590,6 +594,129 @@ describe('online store console', () => {
         categoryId: CATEGORY.id,
       }),
     );
+  });
+
+  it('edits the name, price and pictures of a product like adding one', async () => {
+    const user = userEvent.setup();
+    URL.createObjectURL = () => 'blob:preview';
+    URL.revokeObjectURL = () => undefined;
+    const VARIANT = '0190a000-0000-7000-8000-0000000000e1';
+    const IMG = '0190a000-0000-7000-8000-0000000000f1';
+    const product = {
+      id: P1,
+      categoryId: null,
+      nameEn: 'Coffee beans',
+      nameAr: null,
+      descriptionEn: 'Fresh',
+      descriptionAr: null,
+      type: 'standard',
+      hasVariants: false,
+      trackInventory: true,
+      availableInAllBranches: true,
+      branchIds: [],
+      posVisible: true,
+      status: 'active',
+      variants: [
+        {
+          id: VARIANT,
+          nameEn: null,
+          nameAr: null,
+          sku: 'CB-1',
+          barcodes: ['12345678'],
+          price: { amount: '2.000', currency: 'KWD' },
+          cost: { amount: '1.000', currency: 'KWD' },
+          isDefault: true,
+          status: 'active',
+          position: 0,
+        },
+      ],
+      images: [{ id: IMG, contentType: 'image/webp', sizeBytes: 10, url: '/img/1' }],
+      version: 3,
+      createdAt: '2026-10-21T10:00:00.000Z',
+      updatedAt: '2026-10-21T10:00:00.000Z',
+    };
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', [
+        'manager.access',
+        'online.manage',
+        'catalog.manage',
+        'catalog.prices.manage',
+      ]),
+      routes: {
+        'GET /manager/online/listings': () => ({
+          status: 200,
+          body: {
+            products: [
+              listing({
+                productId: P1,
+                nameEn: 'Coffee beans',
+                images: [{ id: IMG, url: '/img/1' }],
+              }),
+            ],
+          },
+        }),
+        'GET /manager/online/categories': () => ({
+          status: 200,
+          body: { categories: [CATEGORY], uncategorized: 1 },
+        }),
+        'GET /manager/online/collections': () => ({ status: 200, body: { collections: [] } }),
+        [`GET /manager/products/${P1}`]: () => ({ status: 200, body: product }),
+        [`PATCH /manager/products/${P1}`]: () => ({ status: 200, body: product }),
+        [`DELETE /manager/products/${P1}/images/${IMG}`]: () => ({ status: 200, body: product }),
+        [`POST /manager/products/${P1}/images`]: () => ({ status: 201, body: product }),
+        [`PUT /manager/online/listings/${P1}`]: () => ({ status: 200, body: { products: [] } }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/products', fetch });
+    await user.click(await screen.findByRole('button', { name: 'Edit' }));
+    const dialog = await screen.findByRole('dialog', { name: 'In the store: Coffee beans' });
+    // The catalog's name and price are here, no trip to the catalog.
+    const name = await within(dialog).findByLabelText('Name (English)');
+    expect(name).toHaveValue('Coffee beans');
+    await user.clear(name);
+    await user.type(name, 'Arabica beans');
+    const price = within(dialog).getByLabelText('Price (KWD)');
+    await user.clear(price);
+    await user.type(price, '2.750');
+    // Pictures: remove the saved one, paste a new one.
+    await user.click(within(dialog).getByRole('button', { name: 'Remove picture 1' }));
+    const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'new.png', {
+      type: 'image/png',
+    });
+    await user.paste({ files: [file], items: [], types: ['Files'] } as unknown as DataTransfer);
+    expect(within(dialog).getByRole('img', { name: 'new.png' })).toBeInTheDocument();
+    expect(within(dialog).queryByText('Open in the catalog')).toBeNull();
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    // Everything else of the catalog product goes back unchanged.
+    expect(fetch.calls.find((c) => c.method === 'PATCH')?.body).toEqual({
+      nameAr: null,
+      nameEn: 'Arabica beans',
+      descriptionAr: null,
+      descriptionEn: 'Fresh',
+      categoryId: null,
+      type: 'standard',
+      hasVariants: false,
+      trackInventory: true,
+      availableInAllBranches: true,
+      branchIds: [],
+      posVisible: true,
+      variants: [
+        {
+          id: VARIANT,
+          nameAr: null,
+          nameEn: null,
+          sku: 'CB-1',
+          barcodes: ['12345678'],
+          price: '2.750',
+          cost: '1.000',
+        },
+      ],
+      version: 3,
+    });
+    expect(fetch.calls.some((c) => c.method === 'DELETE' && c.path.endsWith(IMG))).toBe(true);
+    expect(fetch.calls.some((c) => c.method === 'POST' && c.path.endsWith('/images'))).toBe(true);
+    expect(fetch.calls.some((c) => c.path === `/manager/online/listings/${P1}`)).toBe(true);
   });
 
   it('adds a product from the store console with a pasted picture: it is in both places', async () => {

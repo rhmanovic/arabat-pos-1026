@@ -151,7 +151,7 @@ export const onlineEn = {
     edit: 'Edit',
     editTitle: 'In the store: {{name}}',
     editHint:
-      'What the store shows for this product. Empty fields use the catalog’s name and description; the price and stock are always the catalog’s.',
+      'Name, price and pictures are shared with the point of sale. The store title and description are optional: they change only what shoppers see; empty ones use the product name.',
     titleAr: 'Store title (Arabic)',
     titleEn: 'Store title (English)',
     titleHint: 'Leave empty to use the catalog name.',
@@ -161,8 +161,8 @@ export const onlineEn = {
     maxPerOrderHint: '1–20 units of one option per order; empty = 20.',
     images: 'Pictures',
     noImages: 'This product has no pictures yet; the store shows a blank tile.',
-    imagesHint: 'Pictures are managed in the catalog and shared with the POS.',
-    openInCatalog: 'Open in the catalog',
+    optionPrices: 'This product has options: their prices are set in the full catalog form.',
+    priceNeedsRight: 'Changing prices needs “Manage prices and costs”.',
   },
   categories: {
     hint: 'The categories of your products, with how the store shows each one: shown or not, order, a store name and a picture.',
@@ -224,6 +224,11 @@ export const onlineEn = {
     remove: 'Remove picture',
     pasteHint:
       'Paste a picture here (Ctrl+V), drop one, or upload it. It is saved with the rest, as WebP.',
+    add: 'Add pictures',
+    main: 'Main',
+    removeOne: 'Remove picture {{n}}',
+    galleryHint:
+      '{{count}} of {{max}} pictures. Paste (Ctrl+V), drop or add pictures; the first is the main one. Saved with the rest, as WebP, and shared with the point of sale.',
   },
   appearance: {
     title: 'Appearance',
@@ -1402,6 +1407,8 @@ export const onlineEn = {
     copyLink: 'Copy link',
     copied: 'Copied',
     fixFields: 'The store was not saved. Fix these fields:',
+    actions: 'Save settings',
+    unsaved: 'Unsaved changes',
     issue_nameAr: 'Enter a store name (Arabic or English).',
     issue_fulfillmentBranchId: 'Choose the branch that fulfils online orders.',
     issue_pickupEnabled: 'Enable pickup or delivery.',

@@ -120,3 +120,153 @@ export function PictureField({
     </div>
   );
 }
+
+/** Every picture in a paste or a drop. */
+export function picturesFrom(data: DataTransfer | null): File[] {
+  if (!data) return [];
+  const files = Array.from(data.files).filter((f) => f.type.startsWith('image/'));
+  if (files.length > 0) return files;
+  return Array.from(data.items ?? [])
+    .filter((i) => i.kind === 'file' && i.type.startsWith('image/'))
+    .map((i) => i.getAsFile())
+    .filter((f): f is File => f !== null);
+}
+
+/** Pictures of a product waiting to be saved with a dialog: added ones and removed saved ones. */
+export function usePendingGallery() {
+  const [added, setAdded] = useState<File[]>([]);
+  const [removed, setRemoved] = useState<string[]>([]);
+  const add = (files: File[]) => (files.length > 0 ? setAdded((x) => [...x, ...files]) : null);
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      const files = picturesFrom(event.clipboardData);
+      if (files.length === 0) return;
+      event.preventDefault();
+      setAdded((x) => [...x, ...files]);
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, []);
+  return {
+    added,
+    removed,
+    add,
+    dropAdded: (index: number) => setAdded((x) => x.filter((_, i) => i !== index)),
+    removeSaved: (id: string) => setRemoved((x) => [...x, id]),
+    changed: added.length > 0 || removed.length > 0,
+  };
+}
+
+/**
+ * A product's pictures (the first is the main one): saved ones with a remove button, new ones
+ * chosen, pasted or dropped, all saved with the dialog as WebP.
+ */
+export function GalleryField({
+  pending,
+  current,
+  max,
+  testId,
+}: {
+  pending: ReturnType<typeof usePendingGallery>;
+  current: { id: string; url: string }[];
+  max: number;
+  testId: string;
+}) {
+  const { t } = useTranslation();
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const previews = useMemo(
+    () =>
+      pending.added.map((f) =>
+        typeof URL.createObjectURL === 'function' ? URL.createObjectURL(f) : '',
+      ),
+    [pending.added],
+  );
+  useEffect(
+    () => () => previews.forEach((p) => (p ? URL.revokeObjectURL(p) : undefined)),
+    [previews],
+  );
+  const kept = current.filter((c) => !pending.removed.includes(c.id));
+  const count = kept.length + pending.added.length;
+  const tile = 'relative size-20 shrink-0 overflow-hidden rounded-lg border border-border';
+  const removeButton = (label: string, onClick: () => void) => (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="absolute end-1 top-1 grid size-6 place-items-center rounded-full bg-black/60 text-xs text-white hover:bg-black/80"
+    >
+      ✕
+    </button>
+  );
+  return (
+    <div
+      className={cn(
+        'flex flex-col gap-3 rounded-xl border-2 border-dashed p-3 sm:col-span-2',
+        dragging ? 'border-primary bg-primary-soft' : 'border-border',
+      )}
+      data-testid={testId}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragging(false);
+        pending.add(picturesFrom(e.dataTransfer).slice(0, Math.max(0, max - count)));
+      }}
+    >
+      <div className="flex flex-wrap gap-2">
+        {kept.map((img, n) => (
+          <span key={img.id} className={tile}>
+            <img src={img.url} alt="" className="size-full object-cover" />
+            {n === 0 ? (
+              <span className="absolute inset-x-0 bottom-0 bg-black/55 py-0.5 text-center text-[0.65rem] font-semibold text-white">
+                {t('picture.main')}
+              </span>
+            ) : null}
+            {removeButton(t('picture.removeOne', { n: n + 1 }), () => pending.removeSaved(img.id))}
+          </span>
+        ))}
+        {pending.added.map((file, n) => (
+          <span key={`${file.name}-${n}`} className={cn(tile, 'ring-2 ring-primary')}>
+            {previews[n] ? (
+              <img src={previews[n]} alt={file.name} className="size-full object-cover" />
+            ) : null}
+            {removeButton(t('picture.removeOne', { n: kept.length + n + 1 }), () =>
+              pending.dropAdded(n),
+            )}
+          </span>
+        ))}
+        {count < max ? (
+          <button
+            type="button"
+            onClick={() => fileInput.current?.click()}
+            className="grid size-20 shrink-0 place-items-center rounded-lg border border-dashed border-border text-2xl text-fg-muted hover:border-primary hover:text-primary"
+            aria-label={t('picture.add')}
+            title={t('picture.add')}
+          >
+            +
+          </button>
+        ) : null}
+      </div>
+      <input
+        ref={fileInput}
+        type="file"
+        accept="image/*"
+        multiple
+        className="sr-only"
+        aria-label={t('picture.upload')}
+        onChange={(e) => {
+          pending.add(Array.from(e.target.files ?? []).slice(0, Math.max(0, max - count)));
+          e.target.value = '';
+        }}
+      />
+      <p className="text-xs text-fg-muted">
+        {t('picture.galleryHint', { count, max })}
+      </p>
+    </div>
+  );
+}
