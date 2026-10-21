@@ -395,6 +395,8 @@ function Brand({
 }
 
 // ------------------------------------------------------------------------ navigation
+const MENU_CLOSE_DELAY_MS = 400;
+
 function Nav({ items, className }: { items: Item[]; className?: string }) {
   const slug = useSlug();
   const { navbar } = useDesign();
@@ -402,6 +404,25 @@ function Nav({ items, className }: { items: Item[]; className?: string }) {
   // Hover shows a menu; a click pins it open until clicked again, Escape or a page change.
   const [hovered, setHovered] = useState<string | null>(null);
   const [pinned, setPinned] = useState<string | null>(null);
+  // Leaving an item closes its menu only after a short grace, so the pointer can cross the gap
+  // between the item and its menu (the mega-menu hangs from the bottom of the header row).
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelClose = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+  };
+  const enter = (id: string) => {
+    cancelClose();
+    setHovered(id);
+  };
+  const leave = (id: string) => {
+    cancelClose();
+    closeTimer.current = setTimeout(() => {
+      closeTimer.current = null;
+      setHovered((o) => (o === id ? null : o));
+    }, MENU_CLOSE_DELAY_MS);
+  };
+  useEffect(() => cancelClose, []);
   const [path, setPath] = useState(location.pathname + location.search);
   if (path !== location.pathname + location.search) {
     setPath(location.pathname + location.search);
@@ -460,8 +481,8 @@ function Nav({ items, className }: { items: Item[]; className?: string }) {
           <li
             key={item.id}
             className={cn('flex items-center', !mega && 'relative')}
-            onMouseEnter={() => setHovered(item.id)}
-            onMouseLeave={() => setHovered((o) => (o === item.id ? null : o))}
+            onMouseEnter={() => enter(item.id)}
+            onMouseLeave={() => leave(item.id)}
           >
             {label}
             <SubmenuToggle

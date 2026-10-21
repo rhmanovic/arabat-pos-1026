@@ -898,6 +898,42 @@ describe('storefront', () => {
     ).toBeInTheDocument();
   });
 
+  it('keeps a hovered menu open while the pointer crosses to it, then closes it', async () => {
+    const user = userEvent.setup();
+    const design = templateDesign('retail');
+    design.navbar = {
+      style: 'links',
+      align: 'center',
+      menuStyle: 'mega',
+      items: [
+        {
+          id: 'shop',
+          label: { en: 'Shop', ar: null },
+          link: { kind: 'page', page: 'products' },
+          kind: 'categories',
+          children: [],
+        },
+      ],
+    };
+    renderStore('/demo', {
+      'GET /store/demo': () => ({ status: 200, body: STORE }),
+      'GET /store/demo/design': () => ({ status: 200, body: { design } }),
+    });
+    const header = await screen.findByTestId('store-header');
+    const item = within(header).getAllByRole('link', { name: 'Shop' })[0]!.closest('li')!;
+    await user.hover(item);
+    expect(within(header).getByTestId('mega-menu')).toBeInTheDocument();
+    // Leaving the item (the gap above the menu) does not close it at once; reaching it keeps it.
+    await user.unhover(item);
+    expect(within(header).getByTestId('mega-menu')).toBeInTheDocument();
+    await user.hover(within(header).getByTestId('mega-menu'));
+    await new Promise((r) => setTimeout(r, 500));
+    expect(within(header).getByTestId('mega-menu')).toBeInTheDocument();
+    // Leaving for good closes it after the grace.
+    await user.unhover(item);
+    await waitFor(() => expect(within(header).queryByTestId('mega-menu')).toBeNull());
+  });
+
   it('builds the header from the design: top bar, layout, menus, mega-menu, ordered items and search', async () => {
     const user = userEvent.setup();
     const DRINKS = '0190a000-0000-7000-8000-0000000000c1';

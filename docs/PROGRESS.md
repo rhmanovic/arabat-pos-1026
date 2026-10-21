@@ -1265,6 +1265,18 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-21 — Storefront header: menus wait for the pointer
+Owner's report: the categories menu under the header closed as soon as the pointer left the
+item on its way down to the menu. The mega-menu hangs from the bottom of the header row, so
+there is a gap between the item and the menu, and leaving the item closed it at once.
+- `Nav` (`apps/store-web/src/design/Header.tsx`) closes a hovered menu only after a 400 ms grace;
+  entering the item or its menu again cancels it. Sub-menus get the same behaviour; a click still
+  pins a menu open, Escape and a page change still close it.
+- Tests: store-web +1 (`app.test.tsx`: the menu stays open after leaving the item and while over
+  the menu, then closes); it fails on the previous code.
+- Verified (cloud sandbox): `pnpm verify` 407 unit/web, `pnpm test:integration` 311 (44 files),
+  `pnpm test:e2e` 45.
+
 ### 2026-10-21 — Store design: publish bar and device switch always at hand
 Owner's report: on scrolling, the status, view-store, save and publish buttons and the
 desktop / phone switch went out of view. Frontend only.
