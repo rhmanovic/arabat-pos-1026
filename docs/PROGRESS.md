@@ -1288,6 +1288,11 @@ store designer for Gen Z merchants. Frontend and contract only; no migration.
   the floating bar. Checked in a browser at 1280 and 390 px (Arabic).
 - Verified (cloud sandbox): `pnpm verify` 413 unit/web, `pnpm test:integration` 311 (44 files),
   `pnpm test:e2e` 45.
+- Released (ADR-0122): production `099b173fe8bf` (revision `arabat-web-00060-2d7`, previous
+  `arabat-web-00059-gf4`; migration job `arabat-migrate-wpcdl`, no new migration). Cloud Build
+  check `c14407c0`: `/api/v1/health/ready` 200 with that version and database ok (3 ms); `live`,
+  `/store/`, `/manager/` and `/online/` 200. Signed out afterwards, `config.env` removed; no key,
+  account or secret deleted.
 
 ### 2026-10-21 — Storefront header: one search on phones
 Owner's report: with search as a button and «شريط بحث تحت الهيدر على الجوال» on, phones showed
