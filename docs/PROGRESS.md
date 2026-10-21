@@ -1280,6 +1280,13 @@ which widened the whole page so dialogs were cut off. Frontend only.
   category, list and promotion dialogs): no page is wider than the screen.
 - e2e: the one-catalog test now also checks, at 390 px, that the products, categories and lists
   pages do not scroll sideways and the product dialog fits the screen.
+- Verified (cloud sandbox): `pnpm verify` 383 unit/web, `pnpm test:integration` 311 (44 files),
+  `pnpm test:e2e` 45.
+- Released (ADR-0122): production `adadfc5bf4e7` (revision `arabat-web-00052-xhq`, previous
+  `arabat-web-00051-np8`; migration job `arabat-migrate-jg8z2`, no new migration). Cloud Build
+  check `b1c543db`: `/api/v1/health/ready` 200 with that version and database ok (3 ms); `live`,
+  `/store/`, `/manager/` and `/online/` 200. Signed out afterwards, `config.env` removed; no key,
+  account or secret deleted. Staging still waits for Railway to resume deploys.
 
 ### 2026-10-21 — Categories and special lists made simple (ADR-0130 amendment 1)
 Owner: shoppers do not understand "collections"; simplify and explain. Frontend only (no
