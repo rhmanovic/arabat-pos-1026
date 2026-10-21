@@ -66,6 +66,13 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-21 (categories and special lists simplified, ADR-0130 amendment 1)
+- `apps/online-web/src/app.test.tsx` (+1, 35): categories and special lists are two tabs of one
+  page with one navigation entry; the product dialog shows the category before "Also show it in:".
+- `apps/store-web/src/app.test.tsx` (+1, 27): the products page shows categories as buttons, not
+  special lists; a list opened from a link still shows as the chosen button.
+- Totals: `pnpm verify` 383 unit/web, `pnpm test:integration` 311 (44 files), `pnpm test:e2e` 45.
+
 ### Results 2026-10-21 (one catalog for the POS and the store, ADR-0130, cloud sandbox run)
 - `ecommerce.int.test.ts` (+3, 27): every new product is listed and shown; hidden from the website
   it still sells at the till, hidden from the POS (`posVisible: false`) it leaves `/pos/catalog`,

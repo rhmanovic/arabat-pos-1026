@@ -1203,11 +1203,13 @@ export function CatalogSection({ s }: { s: SectionOf<'catalog'> }) {
   );
   // Featured products open the page while nothing is filtered (ADR-0121).
   const featured = s.showFeatured && !category && !term ? visible.filter((p) => p.featured) : [];
-  const used = new Set(products.data.products.map((p) => p.categoryId));
-  const categories: StoreGroup[] = [
-    ...(store?.categories ?? []).filter((c) => used.has(c.id)),
-    ...(store?.collections ?? []),
-  ];
+  // The buttons are the store's sections (its categories). A special list (collection) is not a
+  // button of its own (ADR-0130 amendment 1); one opened from a link is shown while it is chosen.
+  const all = products.data.products;
+  const groups = navGroups(store).filter((c) => all.some((p) => inGroup(p, c.id)));
+  const chosen = category && store ? findGroup(store, category) : undefined;
+  const categories: StoreGroup[] =
+    chosen && !groups.some((c) => c.id === chosen.id) ? [...groups, chosen] : groups;
 
   if (products.data.products.length === 0) return <EmptyState title={t('catalog.empty')} />;
   return (

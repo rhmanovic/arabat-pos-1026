@@ -50,13 +50,6 @@ export const NAV: NavItem[] = [
     section: 'store',
   },
   {
-    key: 'collections',
-    icon: 'collections',
-    to: '/collections',
-    anyOf: ['online.manage'],
-    section: 'store',
-  },
-  {
     key: 'areas',
     icon: 'areas',
     to: '/delivery-areas',

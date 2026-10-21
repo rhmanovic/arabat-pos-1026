@@ -10,13 +10,16 @@ import {
   Input,
   PageHeader,
   Section,
+  TabPanel,
+  Tabs,
 } from '@arabat/ui';
 import { AccessDenied, ErrorState, localizedName, useApi, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { useSession } from '../../app/context.js';
+import { CollectionList } from '../collections/CollectionsPage.js';
 import { PictureField, usePendingPicture } from '../picture.js';
 import { key } from '../shared.js';
 import { SortableList, SortableRow } from '../sortable.js';
@@ -30,20 +33,40 @@ export function storeCategoryName(c: StoreCategory, language: string) {
 }
 
 /**
- * One category tree for the point of sale and the store (ADR-0130). The store keeps its own
- * presentation of each category: shown or not, order, an optional store name and a picture.
+ * One page, two tabs (ADR-0130 amendment 1): the categories are where a product lives — one
+ * tree shared with the point of sale, with the store's own presentation of each (shown or not,
+ * order, an optional store name and a picture); the special lists ("Offers", "New in"…) are an
+ * optional extra to feature products, and never change a product's category.
  */
 export function CategoriesPage() {
   const { t } = useTranslation();
   const { can } = useSession();
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') === 'lists' ? 'lists' : 'categories';
   if (!can('online.manage')) return <AccessDenied />;
   return (
     <div>
-      <PageHeader title={t('nav.categories')} description={t('categories.hint')} />
-      <Alert tone="info" className="mb-4" data-testid="categories-shared">
-        {t('categories.sharedNote')}
-      </Alert>
-      <CategoryList />
+      <PageHeader title={t('nav.categories')} description={t('categories.pageHint')} />
+      <Tabs
+        value={tab}
+        onValueChange={(value) => setParams(value === 'lists' ? { tab: 'lists' } : {})}
+        tabs={[
+          { value: 'categories', label: t('categories.tab_categories') },
+          { value: 'lists', label: t('categories.tab_lists') },
+        ]}
+      >
+        <TabPanel value="categories">
+          <p className="mb-3 text-sm text-fg-muted">{t('categories.hint')}</p>
+          <Alert tone="info" className="mb-4" data-testid="categories-shared">
+            {t('categories.sharedNote')}
+          </Alert>
+          <CategoryList />
+        </TabPanel>
+        <TabPanel value="lists">
+          <p className="mb-4 text-sm text-fg-muted">{t('collections.hint')}</p>
+          <CollectionList />
+        </TabPanel>
+      </Tabs>
     </div>
   );
 }

@@ -130,7 +130,9 @@ engineering defaults pending owner confirmation.
   promotions that named them keep working. Products without a category are counted and the
   console offers to link them; collections holding such products can be turned into categories
   in one click (a category of the same name is reused). While no category is shown, the store's
-  menus use the collections.
+  menus use the collections. The console calls collections "special lists" and shows them as
+  the second, optional tab of the categories page; on the storefront's products page only the
+  categories are buttons (a list appears where the merchant places it, ADR-0130 amendment 1).
 - **BR-235** Pictures (ADR-0129): every uploaded picture is stored as WebP, upright, without
   metadata, at most 2400 px on its longest side; JPEG, PNG and WebP up to 2 MB are accepted. (The note
   that store categories are separate was replaced by BR-236.) A category's picture can be pasted, dropped or chosen before the first save, and one

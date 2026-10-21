@@ -7,36 +7,28 @@ import {
   EmptyState,
   Field,
   Input,
-  PageHeader,
   Section,
   Select,
 } from '@arabat/ui';
-import { AccessDenied, ErrorState, localizedName, useApi, useNotify } from '@arabat/web-core';
+import { ErrorState, localizedName, useApi, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSession } from '../../app/context.js';
+import { Navigate } from 'react-router';
 import { PictureField, usePendingPicture } from '../picture.js';
 import { key } from '../shared.js';
 import { SortableList, SortableRow } from '../sortable.js';
 
-/**
- * Marketing collections of the store (ADR-0130): "Offers", "New in", "Ramadan"… A product may
- * be in several; they are shown next to the categories and never replace them.
- */
+/** The former address of the special lists: now the second tab of the categories page. */
 export function CollectionsPage() {
-  const { t } = useTranslation();
-  const { can } = useSession();
-  if (!can('online.manage')) return <AccessDenied />;
-  return (
-    <div>
-      <PageHeader title={t('nav.collections')} description={t('collections.hint')} />
-      <CollectionList />
-    </div>
-  );
+  return <Navigate to="/categories?tab=lists" replace />;
 }
 
-function CollectionList() {
+/**
+ * The store's special lists (collections in the code, ADR-0130 amendment 1): "Offers", "New
+ * in", "Ramadan"… to feature products; a product may be in several and keeps its category.
+ */
+export function CollectionList() {
   const { t, i18n } = useTranslation();
   const api = useApi();
   const notify = useNotify();

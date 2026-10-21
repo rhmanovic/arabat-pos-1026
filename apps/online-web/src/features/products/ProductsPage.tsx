@@ -555,16 +555,9 @@ function EditDialog({
       }
     >
       <div className="grid gap-4 sm:grid-cols-2">
-        <Checkbox
-          className="sm:col-span-2"
-          label={t('products.onWebsite')}
-          description={
-            listing.posVisible ? t('products.onWebsiteHint') : t('products.hiddenInPosHint')
-          }
-          checked={v.visible ?? true}
-          onChange={(e) => set({ visible: e.target.checked })}
-        />
+        {/* Where the product lives first, then where it is also featured (ADR-0130 amendment 1). */}
         <Field
+          className="sm:col-span-2"
           label={t('products.categoryShared')}
           hint={
             can('catalog.manage') ? t('products.categorySharedHint') : t('categories.needsCatalog')
@@ -584,21 +577,6 @@ function EditDialog({
                 </option>
               ))}
             </Select>
-          )}
-        </Field>
-        <Field label={t('products.maxPerOrder')} hint={t('products.maxPerOrderHint')}>
-          {(p) => (
-            <Input
-              {...p}
-              type="number"
-              min={1}
-              max={20}
-              dir="ltr"
-              value={v.maxPerOrder === null ? '' : String(v.maxPerOrder)}
-              onChange={(e) =>
-                set({ maxPerOrder: e.target.value === '' ? null : Number(e.target.value) })
-              }
-            />
           )}
         </Field>
         {collections.length > 0 ? (
@@ -622,6 +600,30 @@ function EditDialog({
             </div>
           </div>
         ) : null}
+        <Checkbox
+          className="sm:col-span-2"
+          label={t('products.onWebsite')}
+          description={
+            listing.posVisible ? t('products.onWebsiteHint') : t('products.hiddenInPosHint')
+          }
+          checked={v.visible ?? true}
+          onChange={(e) => set({ visible: e.target.checked })}
+        />
+        <Field label={t('products.maxPerOrder')} hint={t('products.maxPerOrderHint')}>
+          {(p) => (
+            <Input
+              {...p}
+              type="number"
+              min={1}
+              max={20}
+              dir="ltr"
+              value={v.maxPerOrder === null ? '' : String(v.maxPerOrder)}
+              onChange={(e) =>
+                set({ maxPerOrder: e.target.value === '' ? null : Number(e.target.value) })
+              }
+            />
+          )}
+        </Field>
         {text('titleAr', t('products.titleAr'))}
         {text('titleEn', t('products.titleEn'), 'ltr')}
         {area('descriptionAr', t('products.descriptionAr'))}

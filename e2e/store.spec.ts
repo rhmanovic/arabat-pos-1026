@@ -182,7 +182,7 @@ test('a shopper orders without any gateway and pays at pickup; staff confirm, re
   ).toBeChecked();
 
   // Merchandising (ADR-0121, ADR-0130): a shared category, then a store title and "featured".
-  await page.getByRole('link', { name: 'Categories', exact: true }).click();
+  await page.getByRole('link', { name: 'Categories & lists', exact: true }).click();
   await page.getByRole('button', { name: 'Add category' }).click();
   await page.getByLabel('Name (English)', { exact: true }).fill('Sweets');
   // One save stores the category and closes the dialog.

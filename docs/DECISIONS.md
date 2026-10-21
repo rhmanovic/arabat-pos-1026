@@ -2216,6 +2216,23 @@ ADR; supersede it.
   that relied on store categories keep their grouping as collections and are offered to turn
   them into categories. Seeds and imports need nothing special: the trigger lists products.
 
+- **Amendment 1 (2026-10-21, owner: "shoppers don't understand collections; simplify"):**
+  - Shoppers never see the words "category" or "collection", only names; the complexity was the
+    merchant's. Rule given to merchants: **a category is where a product lives; a special list is
+    where you want to feature it.**
+  - In the console, collections are called **special lists** ("Offers and special lists",
+    «العروض والقوائم الخاصة»), and categories and lists are **one page with two tabs**:
+    "Categories (your store sections)" and "Offers and special lists (optional)"
+    (`/online/categories`, `?tab=lists`); `/online/collections` redirects there and the
+    navigation has a single "Categories & lists" entry. The code, API and tables keep the name
+    collection.
+  - The storefront's products page shows only the categories as buttons; a special list is
+    shown only where the merchant places it (a home-page section, a link) and, when a link
+    opens one, as the chosen button while it is selected. The fallback of the menus to the lists
+    while no category is shown stays.
+  - The product's edit dialog shows its category first, then "Also show it in:" with the lists,
+    then the website switch; pickers in promotions and the design say "Special list: …".
+
 ## ADR-0128 — Storefront design: header, navigation, side menu, footer and page sections, with a live preview
 - **Status:** Accepted (2026-10-20). Owner's request: the store looked primitive; the owner wants
   to choose the navigation bar, header, footer (styles and blocks), side menu, and to build the

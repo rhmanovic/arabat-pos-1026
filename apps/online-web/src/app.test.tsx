@@ -564,6 +564,10 @@ describe('online store console', () => {
     );
     await user.click(screen.getAllByRole('button', { name: 'Edit' })[1]!);
     const dialog = await screen.findByRole('dialog', { name: 'In the store: Mug' });
+    // Where the product lives comes first, then where it is also shown.
+    const category = within(dialog).getByLabelText('Category (shared with the point of sale)');
+    const lists = within(dialog).getByText('Also show it in:');
+    expect(category.compareDocumentPosition(lists) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await user.type(within(dialog).getByLabelText('Store title (English)'), 'Big mug');
     await user.selectOptions(
       within(dialog).getByLabelText('Category (shared with the point of sale)'),
@@ -763,6 +767,36 @@ describe('online store console', () => {
     expect(within(dialog).getByLabelText('Store name (English)')).toBeEnabled();
   });
 
+  it('shows categories and special lists as two tabs of one page', async () => {
+    const user = userEvent.setup();
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'online.manage', 'catalog.manage']),
+      routes: {
+        'GET /manager/online/categories': () => ({
+          status: 200,
+          body: { categories: [CATEGORY], uncategorized: 0 },
+        }),
+        'GET /manager/online/collections': () => ({
+          status: 200,
+          body: { collections: [COLLECTION] },
+        }),
+        'GET /manager/online/listings': () => ({ status: 200, body: { products: [] } }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/categories', fetch });
+    expect(await screen.findByRole('heading', { name: 'Categories & lists' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Categories (your store sections)' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(await screen.findByText('Drinks')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: 'Offers and special lists (optional)' }));
+    expect(await screen.findByText(/a list never changes its category/)).toBeInTheDocument();
+    expect(await screen.findByText('Offers')).toBeInTheDocument();
+    // The navigation has one entry for both.
+    expect(screen.queryByRole('link', { name: 'Collections' })).toBeNull();
+  });
+
   it('turns collections holding products without a category into shared categories', async () => {
     const user = userEvent.setup();
     const fetch = fakeApiFetch({
@@ -799,7 +833,7 @@ describe('online store console', () => {
     });
     renderApp({ routes, appInterface: 'manager', i18n, path: '/categories', fetch });
     await user.click(
-      await screen.findByRole('button', { name: 'Make categories from collections' }),
+      await screen.findByRole('button', { name: 'Make categories from these lists' }),
     );
     await waitFor(() =>
       expect(fetch.calls.filter((c) => c.method === 'PUT').map((c) => c.body)).toEqual([
@@ -813,7 +847,7 @@ describe('online store console', () => {
     ]);
   });
 
-  it('creates a collection with chosen products', async () => {
+  it('creates a special list with chosen products from the second tab of the categories page', async () => {
     const user = userEvent.setup();
     const fetch = fakeApiFetch({
       session: makeSession('manager', ['manager.access', 'online.manage']),
@@ -832,8 +866,8 @@ describe('online store console', () => {
       },
     });
     renderApp({ routes, appInterface: 'manager', i18n, path: '/collections', fetch });
-    expect(await screen.findByText('No collections yet.')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Add collection' }));
+    expect(await screen.findByText('No special lists yet.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Add a list' }));
     const dialog = await screen.findByRole('dialog');
     await user.type(within(dialog).getByLabelText('Name (English)'), 'Offers');
     await user.click(within(dialog).getByRole('checkbox', { name: /Mug/ }));

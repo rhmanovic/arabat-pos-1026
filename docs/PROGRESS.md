@@ -1265,6 +1265,20 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-21 — Categories and special lists made simple (ADR-0130 amendment 1)
+Owner: shoppers do not understand "collections"; simplify and explain. Frontend only (no
+migration, no API change).
+- Console: collections are called "special lists" («العروض والقوائم الخاصة»); categories and lists
+  are one page "Categories & lists" with two tabs (`/online/categories`, `?tab=lists`);
+  `/online/collections` redirects there; one navigation entry. The product dialog shows the
+  category first, then "Also show it in:" with the lists; pickers say "Special list: …".
+- Storefront: on the products page only the categories are buttons; a list appears where the
+  merchant places it, and as the chosen button when a link opened it.
+- Tests: online-web +1 (two tabs, one navigation entry) and the dialog order checked; store-web
+  +1 (lists are not buttons); e2e follows the renamed navigation.
+- Verified (cloud sandbox): `pnpm verify` 383 unit/web, `pnpm test:integration` 311 (44 files),
+  `pnpm test:e2e` 45.
+
 ### 2026-10-21 — One catalog for the point of sale and the store (ADR-0130)
 Owner's decision after a merchant's bad experience (a product and category made at the POS were
 not in the store's categories; no "add product" in the store console; the catalog form did not

@@ -235,6 +235,35 @@ describe('storefront', () => {
     expect(screen.getByText('KWD 1.250')).toBeInTheDocument();
   });
 
+  it('shows the categories as buttons, not the special lists', async () => {
+    const DRINKS_ID = '0190a000-0000-7000-8000-0000000000c9';
+    const OFFERS = '0190a000-0000-7000-8000-0000000000d1';
+    renderStore('/demo/products', {
+      'GET /store/demo': () => ({
+        status: 200,
+        body: {
+          ...STORE,
+          categories: [
+            { id: DRINKS_ID, nameEn: 'Drinks', nameAr: null, parentId: null, imageUrl: null },
+          ],
+          collections: [{ id: OFFERS, nameEn: 'Offers', nameAr: null, imageUrl: null }],
+        },
+      }),
+      'GET /store/demo/products': () => ({
+        status: 200,
+        body: {
+          products: PRODUCTS.products.map((p) => ({
+            ...p,
+            categoryId: DRINKS_ID,
+            collectionIds: [OFFERS],
+          })),
+        },
+      }),
+    });
+    expect(await screen.findByRole('button', { name: 'Drinks' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Offers' })).toBeNull();
+  });
+
   it('filters by a collection, also through an address made for a former store category', async () => {
     const OFFERS = '0190a000-0000-7000-8000-0000000000d1';
     renderStore(`/demo/products?category=${OFFERS}`, {
