@@ -3,7 +3,7 @@ import { cn } from '@arabat/ui';
 import { type ReactNode, useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
-import { useBranchChoice, useLocalName, useSlug, useStorefront } from '../shared.js';
+import { navGroups, useBranchChoice, useLocalName, useSlug, useStorefront } from '../shared.js';
 import { useDesign, useText } from './context.js';
 import { DesignAnchor, LanguageButton, SocialLinks, StoreIcon, useSocialLinks } from './parts.js';
 
@@ -431,16 +431,18 @@ function BlockView({
         </ul>,
       );
     case 'categories':
-      if (store.categories.length === 0) return null;
+      if (navGroups(store).length === 0) return null;
       return frame(
         <ul className={list}>
-          {store.categories.slice(0, 8).map((c) => (
-            <li key={c.id}>
-              <Link to={`/${slug}/products?category=${c.id}`} className="hover:underline">
-                {name(c)}
-              </Link>
-            </li>
-          ))}
+          {navGroups(store)
+            .slice(0, 8)
+            .map((c) => (
+              <li key={c.id}>
+                <Link to={`/${slug}/products?category=${c.id}`} className="hover:underline">
+                  {name(c)}
+                </Link>
+              </li>
+            ))}
         </ul>,
       );
     case 'contact': {

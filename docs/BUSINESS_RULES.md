@@ -117,10 +117,23 @@ engineering defaults pending owner confirmation.
   (the main register's first), and cannot sell while none is open. A device shift is never refused because
   the person left a shift open elsewhere; that shift is listed for the managers to close. Records
   that reach the server after the branch shift closed are booked to it and flagged "late".
+- **BR-236** One catalog for the point of sale and the store (ADR-0130, owner 2026-10-21): a
+  product added anywhere (Business management, the store console, an import) is in both places
+  at once and shown on the website; it may be hidden from the website only in the store console
+  and from the point of sale only in Business management (a product hidden from the till cannot
+  be sold there, held or exchanged into; the website keeps selling it, and the reverse). A
+  product has one category, shared by both; the store keeps per category whether it is shown,
+  its store order, an optional store name and a picture. Creating or renaming a category, or
+  moving a product to another one, needs "Manage products" also from the store console. Store
+  collections ("Offers", "New in"…) group products for marketing, a product may be in several;
+  the store categories of ADR-0121 became collections with the same ids, so links, designs and
+  promotions that named them keep working. Products without a category are counted and the
+  console offers to link them; collections holding such products can be turned into categories
+  in one click (a category of the same name is reused). While no category is shown, the store's
+  menus use the collections.
 - **BR-235** Pictures (ADR-0129): every uploaded picture is stored as WebP, upright, without
-  metadata, at most 2400 px on its longest side; JPEG, PNG and WebP up to 2 MB are accepted. The
-  store's categories (ADR-0121) are separate from the point-of-sale categories, and the console
-  says so; a category's picture can be pasted, dropped or chosen before the first save, and one
+  metadata, at most 2400 px on its longest side; JPEG, PNG and WebP up to 2 MB are accepted. (The note
+  that store categories are separate was replaced by BR-236.) A category's picture can be pasted, dropped or chosen before the first save, and one
   save stores the category with its picture and closes the dialog.
 - **BR-234** Page sections (ADR-0128 amendment 3): any section can have a background, spacing,
   width, a centred heading with a line under it, be limited to phones or large screens, and be

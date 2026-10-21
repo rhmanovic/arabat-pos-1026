@@ -256,7 +256,8 @@ Free-trial funnel `/start` and `/platform/trials` (`trials` module, ADR-0115): t
 code in this phase, amendment 1), through `RegistrationService.createAccount`; every trial number is an operator setting.
 The landing navbar's "Our apps" dropdown reads `site_apps` (`site` module, `/platform/site-apps`, ADR-0117).
 Online store (`docs/ONLINE_STORE_PLAN.md`): pay on receipt and store address (ADR-0118), the `/online` console
-(ADR-0119), merchandising (ADR-0121), fulfilment (ADR-0123: delivery areas, serving branches, hours / slots, order
+(ADR-0119), merchandising (ADR-0121; one catalog with shared categories, a website switch on the listing, a POS switch
+`products.pos_visible`, collections and a trigger that lists every new product: ADR-0130), fulfilment (ADR-0123: delivery areas, serving branches, hours / slots, order
 e-mails after commit, packing slips, till hand-over through `/pos/online-orders`), shopper accounts (ADR-0124: e-mail +
 password realm `customer_accounts`, bearer `st_…` tokens, reset by e-mail, no SMS), promotions (ADR-0125: one per order,
 `POST /store/:slug/quote`, discount recorded on the sale), Phases 8–10 frontend only (ADR-0126); the console has its own palette and dark mode (ADR-0127); store design with draft / publish and live preview (ADR-0128; header system v2 with seven layouts, top bar, sub-menus / categories menu and ordered header buttons: amendment 1; footer system v2 with seven layouts, presets, recommendations, CTA, badges and folding blocks: amendment 2; page sections v2 with a look / screens / schedule per section, 8 new types, ready sections, ready home pages and recommendations: amendment 3). Composite FKs must never carry

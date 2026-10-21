@@ -100,10 +100,8 @@ async function setup({ gateway = true } = {}) {
       })
     : null;
   const slug = `shop-${Date.now().toString(36)}-${(seq += 1)}`;
-  await ok('PUT', '/manager/online/listings', {
-    productIds: [teaProduct.id, mug.id],
-    listed: true,
-  });
+  // Every new product is in the store and shown on the website (ADR-0130); this one is hidden.
+  await ok('PUT', '/manager/online/listings', { productIds: [hidden.id], visible: false });
   await ok('PUT', '/manager/online/store', {
     slug,
     status: 'published',
@@ -1096,34 +1094,43 @@ const upload = (s: S, path: string, data = png) =>
   s.c.client.request('POST', path, { cookies: s.c.cookies, ...multipart(data) });
 
 describe('merchandising (ADR-0121)', () => {
-  it('keeps the catalog as the source and lets the store add its own title, order, categories and cap', async () => {
+  it('keeps the catalog as the source and lets the store add its own title, order, category settings and cap', async () => {
     const s = await setup({ gateway: false });
-    // Listings carry the catalog name, images and position; new listings go to the end.
+    // Every active product has a listing, in creation order; the hidden one is off the website.
     let listings = (await s.ok('GET', '/manager/online/listings')).products as Record<
       string,
       unknown
     >[];
-    const listed = listings.filter((p) => p['listed']);
-    expect(listed.map((p) => p['nameEn'])).toEqual(['Gift card', 'Saffron tea']);
-    expect(listed.map((p) => p['position'])).toEqual([0, 1]);
-    expect(listed[0]).toMatchObject({
+    expect(listings.map((p) => [p['nameEn'], p['visible'], p['position']])).toEqual([
+      ['Saffron tea', true, 0],
+      ['Gift card', true, 1],
+      ['Staff only', false, 2],
+    ]);
+    expect(listings[0]).toMatchObject({
       featured: false,
       maxPerOrder: null,
-      onlineCategoryId: null,
+      posVisible: true,
+      category: null,
+      collectionIds: [],
       images: [],
     });
 
-    // A store category with a picture; a catalog product put in it with the store's own title.
+    // A shared category created from the store console, with the store's picture; the catalog
+    // product moved into it with the store's own title.
     const drinks = await s.ok('POST', '/manager/online/categories', {
       nameAr: 'مشروبات',
       nameEn: 'Drinks',
     });
     expect(drinks).toMatchObject({
-      position: 0,
-      status: 'active',
+      visible: true,
       imageUrl: null,
       productCount: 0,
+      onlineNameEn: null,
     });
+    // It is the point of sale's category too.
+    expect(
+      (await s.ok('GET', '/manager/categories')).categories.map((c: { id: string }) => c.id),
+    ).toContain(drinks.id);
     const withImage = (await upload(s, `/manager/online/categories/${drinks.id}/image`)).json();
     expect(withImage.imageUrl).toMatch(/\/manager\/online\/categories\/.*\/image\?v=2$/);
     expect(
@@ -1137,43 +1144,42 @@ describe('merchandising (ADR-0121)', () => {
       descriptionAr: null,
       featured: true,
       maxPerOrder: 2,
-      onlineCategoryId: drinks.id,
+      categoryId: drinks.id,
     });
+    expect((await s.ok('GET', `/manager/products/${s.teaProduct}`)).categoryId).toBe(drinks.id);
     expect(
       (
-        await s.req('PUT', `/manager/online/listings/${s.hidden}`, {
+        await s.req('PUT', `/manager/online/listings/${newId()}`, {
           titleEn: null,
           titleAr: null,
           descriptionEn: null,
           descriptionAr: null,
           featured: false,
           maxPerOrder: null,
-          onlineCategoryId: null,
         })
       ).statusCode,
     ).toBe(404);
-    // Display order: every listed product exactly once.
-    const giftProduct = listed.find((p) => p['nameEn'] === 'Gift card')!['productId'] as string;
+    // Display order: every active product exactly once.
+    const ids = listings.map((p) => p['productId'] as string);
     expect(
       (await s.req('PUT', '/manager/online/listings/order', { productIds: [s.teaProduct] })).json()
         .code,
     ).toBe('VALIDATION_FAILED');
     listings = (
       await s.ok('PUT', '/manager/online/listings/order', {
-        productIds: [s.teaProduct, giftProduct],
+        productIds: [ids[1], ids[0], ids[2]],
       })
     ).products as Record<string, unknown>[];
-    expect(listings.filter((p) => p['listed']).map((p) => p['nameEn'])).toEqual([
-      'Saffron tea',
-      'Gift card',
-    ]);
-    expect((await s.ok('GET', '/manager/online/categories')).categories[0].productCount).toBe(1);
+    expect(listings.map((p) => p['nameEn'])).toEqual(['Gift card', 'Saffron tea', 'Staff only']);
+    const cats = await s.ok('GET', '/manager/online/categories');
+    expect(cats.categories[0].productCount).toBe(1);
+    expect(cats.uncategorized).toBe(2);
 
-    // The storefront: the store's title and description win, the category navigation is the
-    // store's own, the category picture is public, featured and position come through, and
-    // the per-order cap bounds the offered quantity (5 on hand, cap 2).
+    // The storefront: the store's title and description win, the navigation is the shared
+    // category with the store's picture, featured and position come through, and the
+    // per-order cap bounds the offered quantity (5 on hand, cap 2).
     const front = (await pub(s, 'GET', '')).json();
-    expect(front).toMatchObject({ categorySource: 'online', logoUrl: null, bannerUrl: null });
+    expect(front).toMatchObject({ logoUrl: null, bannerUrl: null, collections: [] });
     expect(front.categories).toEqual([
       expect.objectContaining({
         id: drinks.id,
@@ -1193,19 +1199,20 @@ describe('merchandising (ADR-0121)', () => {
     ).toBe(200);
     const products = (await pub(s, 'GET', '/products')).json().products;
     expect(products.map((p: { nameEn: string }) => p.nameEn)).toEqual([
-      'Saffron tea, 50 g tin',
       'Gift card',
+      'Saffron tea, 50 g tin',
     ]);
-    expect(products[0]).toMatchObject({
+    expect(products[1]).toMatchObject({
       nameAr: 'شاي زعفران',
       descriptionEn: 'Store says: brewed daily',
       categoryId: drinks.id,
+      collectionIds: [],
       featured: true,
-      position: 0,
+      position: 1,
       images: [],
     });
-    expect(products[0].variants[0].maxQuantity).toBe(2);
-    expect(products[1]).toMatchObject({ categoryId: null, featured: false, position: 1 });
+    expect(products[1].variants[0].maxQuantity).toBe(2);
+    expect(products[0]).toMatchObject({ categoryId: null, featured: false, position: 0 });
     // Ordering 3 of a capped product is refused.
     expect(
       (
@@ -1217,21 +1224,33 @@ describe('merchandising (ADR-0121)', () => {
       ).json().code,
     ).toBe('INSUFFICIENT_STOCK');
 
-    // Hidden category: the product stays in the store without a category. Deleting it keeps the product.
+    // The store's name for the category, then hiding it from the store: the product stays in
+    // the store without a category, and the point of sale keeps the category.
+    const renamed = await s.ok('PUT', `/manager/online/categories/${drinks.id}`, {
+      nameAr: 'مشروبات',
+      nameEn: 'Drinks',
+      onlineNameEn: 'Hot drinks',
+      version: withImage.version,
+    });
+    expect((await pub(s, 'GET', '')).json().categories[0].nameEn).toBe('Hot drinks');
+    expect(
+      (await s.ok('GET', '/manager/categories')).categories.find(
+        (c: { id: string }) => c.id === drinks.id,
+      ).nameEn,
+    ).toBe('Drinks');
     await s.ok('PUT', `/manager/online/categories/${drinks.id}`, {
       nameAr: 'مشروبات',
       nameEn: 'Drinks',
-      status: 'hidden',
-      version: 2,
+      onlineNameEn: 'Hot drinks',
+      visible: false,
+      version: renamed.version,
     });
     expect((await pub(s, 'GET', '')).json().categories).toEqual([]);
-    expect((await pub(s, 'GET', '/products')).json().products[0].categoryId).toBeNull();
-    const afterDelete = await s.ok('DELETE', `/manager/online/categories/${drinks.id}`);
-    expect(afterDelete.categories).toEqual([]);
-    expect((await pub(s, 'GET', '')).json().categorySource).toBe('pos');
-    expect((await pub(s, 'GET', '/products')).json().products[0].nameEn).toBe(
-      'Saffron tea, 50 g tin',
-    );
+    expect(
+      (await pub(s, 'GET', '/products'))
+        .json()
+        .products.find((p: { productId: string }) => p.productId === s.teaProduct).categoryId,
+    ).toBeNull();
 
     // Logo and banner: uploaded through the console, public on the storefront, removable.
     const withLogo = (await upload(s, '/manager/online/store/logo')).json();
@@ -2343,5 +2362,279 @@ describe('store design (ADR-0128)', () => {
       ),
     );
     expect((await s.ok('GET', '/manager/online/design')).suggestedTemplate).toBe('restaurant');
+  });
+});
+
+describe('one catalog for the point of sale and the store (ADR-0130)', () => {
+  const ids = (list: { productId: string }[]) => list.map((p) => p.productId);
+  const sell = (s: S, pos: Cookies, variantId: string) =>
+    s.req(
+      'POST',
+      '/pos/sales',
+      {
+        idempotencyKey: newId(),
+        lines: [{ variantId, quantity: '1' }],
+        payments: [{ methodId: s.cash, amount: '0.750' }],
+        expectedTotal: '0.750',
+      },
+      pos,
+    );
+
+  it('puts every new product in both places, with a website switch and a point-of-sale switch', async () => {
+    const s = await setup({ gateway: false });
+    const pos = await till(s);
+    // A product added in the catalog is in the store at once, shown on the website, last.
+    const juice = await s.ok('POST', '/manager/products', {
+      nameEn: 'Lemon juice',
+      trackInventory: false,
+      variants: [{ sku: 'JUICE', price: '0.750' }],
+    });
+    const variant = juice.variants[0].id as string;
+    expect(juice.posVisible).toBe(true);
+    let listing = (await s.ok('GET', '/manager/online/listings')).products.find(
+      (p: { productId: string }) => p.productId === juice.id,
+    );
+    expect(listing).toMatchObject({ visible: true, posVisible: true, position: 3 });
+    expect(ids((await pub(s, 'GET', '/products')).json().products)).toContain(juice.id);
+
+    // Hidden from the website (the store console's switch): still sold at the till.
+    await s.ok('PUT', '/manager/online/listings', { productIds: [juice.id], visible: false });
+    expect(ids((await pub(s, 'GET', '/products')).json().products)).not.toContain(juice.id);
+    expect((await pub(s, 'GET', `/products/${juice.id}`)).statusCode).toBe(404);
+    expect(
+      (await s.ok('GET', '/pos/catalog', undefined, pos)).items.map(
+        (i: { productId: string }) => i.productId,
+      ),
+    ).toContain(juice.id);
+    expect((await sell(s, pos, variant)).statusCode).toBe(201);
+
+    // Hidden at the point of sale (the catalog's switch): out of the till, still online.
+    await s.ok('PUT', '/manager/online/listings', { productIds: [juice.id], visible: true });
+    const hiddenAtPos = await s.ok('PATCH', `/manager/products/${juice.id}`, {
+      nameEn: 'Lemon juice',
+      trackInventory: false,
+      posVisible: false,
+      variants: [{ id: variant, sku: 'JUICE', price: '0.750' }],
+      version: juice.version,
+    });
+    expect(hiddenAtPos.posVisible).toBe(false);
+    expect(
+      (await s.ok('GET', '/pos/catalog', undefined, pos)).items.map(
+        (i: { productId: string }) => i.productId,
+      ),
+    ).not.toContain(juice.id);
+    expect((await sell(s, pos, variant)).json().code).toBe('ITEM_UNAVAILABLE');
+    listing = (await s.ok('GET', '/manager/online/listings')).products.find(
+      (p: { productId: string }) => p.productId === juice.id,
+    );
+    expect(listing).toMatchObject({ visible: true, posVisible: false });
+    const placed = await checkout(s, {
+      paymentMethodId: null,
+      fulfillment: 'pickup',
+      deliveryAddress: null,
+      lines: [{ variantId: variant, quantity: '2' }],
+      expectedTotal: '1.500',
+    });
+    expect(placed.statusCode, placed.body).toBe(201);
+    // The manager list says so.
+    const summary = (await s.ok('GET', '/manager/products?q=Lemon')).products[0];
+    expect(summary).toMatchObject({ id: juice.id, posVisible: false });
+  });
+
+  it('shares categories: the store sets how they show; renaming or moving needs catalog rights', async () => {
+    const s = await setup({ gateway: false });
+    // A category made in Business management is the store's category too.
+    const hot = await s.ok('POST', '/manager/categories', { nameEn: 'Hot', nameAr: 'ساخن' });
+    let store = await s.ok('GET', '/manager/online/categories');
+    expect(store.categories).toEqual([
+      expect.objectContaining({ id: hot.id, nameEn: 'Hot', visible: true, productCount: 0 }),
+    ]);
+    expect(store.uncategorized).toBe(3);
+    // Bulk: move two products into it and hide one from the website.
+    const gift = (await s.ok('GET', '/manager/online/listings')).products.find(
+      (p: { nameEn: string }) => p.nameEn === 'Gift card',
+    ).productId as string;
+    await s.ok('PUT', '/manager/online/listings', {
+      productIds: [s.teaProduct, gift],
+      categoryId: hot.id,
+    });
+    expect((await s.ok('GET', `/manager/products/${gift}`)).categoryId).toBe(hot.id);
+    store = await s.ok('GET', '/manager/online/categories');
+    expect(store.categories[0].productCount).toBe(2);
+    expect(store.uncategorized).toBe(1);
+    const front = (await pub(s, 'GET', '')).json();
+    expect(front.categories.map((c: { id: string }) => c.id)).toEqual([hot.id]);
+    // The store's order is its own; the point of sale keeps its sort order.
+    const cold = await s.ok('POST', '/manager/online/categories', { nameEn: 'Cold' });
+    expect(
+      (
+        await s.ok('PUT', '/manager/online/categories/order', { ids: [cold.id, hot.id] })
+      ).categories.map((c: { id: string }) => c.id),
+    ).toEqual([cold.id, hot.id]);
+    expect(
+      (await s.ok('GET', '/manager/categories')).categories.find(
+        (c: { id: string }) => c.id === hot.id,
+      ).sortOrder,
+    ).toBe(0);
+
+    // An online-only manager may show / hide categories and products but not create, rename
+    // or move: those change the point of sale too.
+    const role = (
+      await s.c.client.request('POST', '/manager/roles', {
+        cookies: s.c.cookies,
+        body: { nameEn: 'Store editor', permissions: ['manager.access', 'online.manage'] },
+      })
+    ).json();
+    const editor = (await s.c.hire([{ roleId: role.id, branchId: null }], 'manager')).cookies;
+    expect(
+      (await s.req('POST', '/manager/online/categories', { nameEn: 'X' }, editor)).statusCode,
+    ).toBe(403);
+    const current = (await s.ok('GET', '/manager/online/categories')).categories.find(
+      (c: { id: string }) => c.id === hot.id,
+    );
+    const body = {
+      nameEn: 'Hot',
+      nameAr: 'ساخن',
+      onlineNameEn: 'Hot drinks',
+      visible: false,
+      version: current.version,
+    };
+    expect(
+      (
+        await s.req(
+          'PUT',
+          `/manager/online/categories/${hot.id}`,
+          { ...body, nameEn: 'Warm' },
+          editor,
+        )
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (await s.req('PUT', `/manager/online/categories/${hot.id}`, body, editor)).json(),
+    ).toMatchObject({ visible: false, onlineNameEn: 'Hot drinks', nameEn: 'Hot' });
+    expect(
+      (
+        await s.req(
+          'PUT',
+          '/manager/online/listings',
+          { productIds: [gift], categoryId: null },
+          editor,
+        )
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await s.req(
+          'PUT',
+          '/manager/online/listings',
+          { productIds: [gift], visible: false },
+          editor,
+        )
+      ).statusCode,
+    ).toBe(200);
+    // Hidden category: out of the navigation, its products stay in the store without one.
+    const after = (await pub(s, 'GET', '')).json();
+    expect(after.categories.map((c: { id: string }) => c.id)).toEqual([]);
+    expect(
+      (await pub(s, 'GET', '/products'))
+        .json()
+        .products.map((p: { productId: string; categoryId: string | null }) => [
+          p.productId,
+          p.categoryId,
+        ]),
+    ).toEqual([[s.teaProduct, null]]);
+  });
+
+  it('groups products in collections, for links, pictures and promotions', async () => {
+    const s = await setup({ gateway: false });
+    const gift = (await s.ok('GET', '/manager/online/listings')).products.find(
+      (p: { nameEn: string }) => p.nameEn === 'Gift card',
+    ).productId as string;
+    const offers = await s.ok('POST', '/manager/online/collections', {
+      nameEn: 'Offers',
+      nameAr: 'عروض',
+      productIds: [s.teaProduct],
+    });
+    expect(offers).toMatchObject({
+      position: 0,
+      status: 'active',
+      productIds: [s.teaProduct],
+      imageUrl: null,
+    });
+    const pictured = (await upload(s, `/manager/online/collections/${offers.id}/image`)).json();
+    expect(pictured.imageUrl).toMatch(/\/manager\/online\/collections\/.*\/image\?v=2$/);
+    await s.ok('PUT', '/manager/online/listings', {
+      productIds: [gift],
+      addToCollectionId: offers.id,
+    });
+    expect((await s.ok('GET', '/manager/online/collections')).collections[0].productIds).toEqual([
+      s.teaProduct,
+      gift,
+    ]);
+    // The storefront lists it with its public picture; the address of a store category of
+    // ADR-0121 (now this collection) answers too.
+    const front = (await pub(s, 'GET', '')).json();
+    expect(front.collections).toEqual([
+      expect.objectContaining({
+        id: offers.id,
+        nameEn: 'Offers',
+        imageUrl: expect.stringContaining(`/store/${s.slug}/collections/${offers.id}/image`),
+      }),
+    ]);
+    for (const path of [`/collections/${offers.id}/image`, `/categories/${offers.id}/image`])
+      expect((await pub(s, 'GET', path)).headers['content-type']).toBe('image/webp');
+    const products = (await pub(s, 'GET', '/products')).json().products;
+    expect(
+      products.map((p: { productId: string; collectionIds: string[] }) => [
+        p.productId,
+        p.collectionIds,
+      ]),
+    ).toEqual([
+      [s.teaProduct, [offers.id]],
+      [gift, [offers.id]],
+    ]);
+    // A promotion on the collection discounts its products only.
+    await s.ok('POST', '/manager/online/promotions', {
+      nameEn: 'Offers 10%',
+      kind: 'automatic',
+      discountType: 'percentage',
+      percent: '10',
+      appliesTo: 'category',
+      targetIds: [offers.id],
+    });
+    await s.ok('PUT', `/manager/online/listings/${gift}`, {
+      titleEn: null,
+      titleAr: null,
+      descriptionEn: null,
+      descriptionAr: null,
+      featured: false,
+      maxPerOrder: null,
+      collectionIds: [],
+    });
+    const q = (
+      await pub(s, 'POST', '/quote', {
+        lines: [
+          { variantId: s.tea, quantity: '2' },
+          { variantId: s.gift, quantity: '1' },
+        ],
+        fulfillment: 'pickup',
+      })
+    ).json();
+    expect(q).toMatchObject({ subtotal: { amount: '7.500' }, discount: { amount: '0.250' } });
+    // Hidden, then deleted: the products stay as they are.
+    await s.ok('PUT', `/manager/online/collections/${offers.id}`, {
+      nameEn: 'Offers',
+      status: 'hidden',
+      version: pictured.version,
+    });
+    expect((await pub(s, 'GET', '')).json().collections).toEqual([]);
+    expect((await pub(s, 'GET', '/products')).json().products[0].collectionIds).toEqual([]);
+    expect((await s.ok('DELETE', `/manager/online/collections/${offers.id}`)).collections).toEqual(
+      [],
+    );
+    expect((await pub(s, 'GET', '/products')).json().products).toHaveLength(2);
+    // Another merchant sees nothing of it.
+    const other = await setup({ gateway: false });
+    expect((await other.ok('GET', '/manager/online/collections')).collections).toEqual([]);
   });
 });

@@ -1,11 +1,13 @@
 import type {
   Listing,
-  OnlineCategory,
+  OnlineCollection,
   OnlineOrder,
   OnlineOrderStatus,
   OnlineStore,
   PublicOrder,
   SlugAvailability,
+  StoreCategory,
+  StoreCategoryList,
   StoreHours,
   StoreProduct,
   StoreQuoteResult,
@@ -14,8 +16,10 @@ import type {
   onlineOrderActionSchema,
   onlineOrderListQuerySchema,
   saveListingSchema,
-  saveOnlineCategorySchema,
+  saveListingsSchema,
+  saveOnlineCollectionSchema,
   saveOnlineStoreSchema,
+  saveStoreCategorySchema,
   storeCheckoutSchema,
   storeQuoteSchema,
 } from '@arabat/contracts';
@@ -29,7 +33,7 @@ import { type FeeType, Money, formatQuantity, parseQuantity, priceCart } from '@
 import { can, permissionBranchScope } from '@arabat/permissions';
 import { type PosPaymentMethod, checkPayments } from '@arabat/pos-core';
 import { Inject, Injectable } from '@nestjs/common';
-import { type SQL, eq, sql } from 'drizzle-orm';
+import { type SQL, and, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import { createHash, randomBytes } from 'node:crypto';
 import type { z } from 'zod';
 import { ENV } from '../../config/config.module.js';
@@ -38,6 +42,7 @@ import { DatabaseService, type Transaction } from '../../database/database.servi
 import { nextDocumentNumber } from '../../database/schema/sequences.schema.js';
 import { assertCan } from '../../kernel/access/assert.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
+import { diffFields } from '../../kernel/audit-diff.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { rules } from '../../kernel/errors/pos-rule.js';
 import { newId } from '../../kernel/ids.js';
@@ -51,8 +56,10 @@ import { stockConsumption } from '../inventory/consumption.js';
 import { StockLedgerService } from '../inventory/stock-ledger.service.js';
 import { parseAmount } from '../payments/payments.service.js';
 import { SalesService } from '../sales/sales.service.js';
+import { categories, products } from '../catalog/catalog.schema.js';
 import {
-  onlineCategories,
+  onlineCollectionProducts,
+  onlineCollections,
   onlineListings,
   onlineOrderLines,
   onlineOrders,
@@ -103,18 +110,21 @@ interface StoreUrls {
   logo: (version: number) => string;
   banner: (version: number) => string;
   category: (id: string, version: number) => string;
+  collection: (id: string, version: number) => string;
   productImage: (productId: string, imageId: string) => string;
 }
 const publicUrls = (slug: string): StoreUrls => ({
   logo: (v) => imageUrl(`store/${slug}/logo`, v),
   banner: (v) => imageUrl(`store/${slug}/banner`, v),
   category: (id, v) => imageUrl(`store/${slug}/categories/${id}/image`, v),
+  collection: (id, v) => imageUrl(`store/${slug}/collections/${id}/image`, v),
   productImage: (productId, imageId) => `/api/v1/store/${slug}/images/${productId}/${imageId}`,
 });
 const PREVIEW_URLS: StoreUrls = {
   logo: (v) => imageUrl('manager/online/store/logo', v),
   banner: (v) => imageUrl('manager/online/store/banner', v),
   category: (id, v) => imageUrl(`manager/online/categories/${id}/image`, v),
+  collection: (id, v) => imageUrl(`manager/online/collections/${id}/image`, v),
   productImage: (productId, imageId) => `/api/v1/manager/products/${productId}/images/${imageId}`,
 };
 
@@ -429,20 +439,22 @@ export class EcommerceService {
     }));
   }
 
-  /** Every active product with its online attributes; listed ones first, in display order. */
+  /** Every active product with its online attributes, in the store's display order. */
   private async listingRows(tx: Transaction): Promise<Listing[]> {
     const rows = (
       await tx.execute(sql`
-        select p.id, p.name_en, p.name_ar, p.category_id, c.name_en as c_en, c.name_ar as c_ar,
-               l.product_id is not null as listed, coalesce(l.position, 0) as position,
+        select p.id, p.name_en, p.name_ar, p.category_id, p.pos_visible, p.track_inventory,
+               c.name_en as c_en, c.name_ar as c_ar,
+               coalesce(l.visible, false) as visible, coalesce(l.position, 0) as position,
                l.title_en, l.title_ar, l.description_en, l.description_ar, coalesce(l.featured, false) as featured,
-               l.max_per_order, l.online_category_id,
+               l.max_per_order,
+               coalesce((select json_agg(cp.collection_id order by cp.created_at) from online_collection_products cp where cp.product_id = p.id), '[]'::json) as collections,
                (select count(*)::int from product_variants v where v.product_id = p.id and v.status = 'active') as variants,
                (select min(v.price_minor)::text from product_variants v where v.product_id = p.id and v.status = 'active') as price,
                coalesce((select json_agg(i.id order by i.position, i.created_at) from product_images i where i.product_id = p.id), '[]'::json) as images
         from products p
         left join online_listings l on l.product_id = p.id
-        left join categories c on c.id = p.category_id
+        left join categories c on c.id = p.category_id and c.status = 'active'
         where p.status = 'active'
         order by (l.product_id is null), l.position, coalesce(lower(p.name_en), p.name_ar)`)
     ).rows as Row[];
@@ -450,9 +462,11 @@ export class EcommerceService {
       productId: r['id'] as string,
       nameEn: (r['name_en'] as string | null) ?? null,
       nameAr: (r['name_ar'] as string | null) ?? null,
-      listed: r['listed'] as boolean,
+      visible: r['visible'] as boolean,
+      posVisible: r['pos_visible'] as boolean,
       variants: r['variants'] as number,
       price: r['price'] === null ? null : money(r['price'] as string),
+      trackInventory: r['track_inventory'] as boolean,
       position: r['position'] as number,
       titleEn: (r['title_en'] as string | null) ?? null,
       titleAr: (r['title_ar'] as string | null) ?? null,
@@ -460,14 +474,16 @@ export class EcommerceService {
       descriptionAr: (r['description_ar'] as string | null) ?? null,
       featured: r['featured'] as boolean,
       maxPerOrder: (r['max_per_order'] as number | null) ?? null,
-      onlineCategoryId: (r['online_category_id'] as string | null) ?? null,
-      posCategory: r['category_id']
-        ? {
-            id: r['category_id'] as string,
-            nameEn: (r['c_en'] as string | null) ?? null,
-            nameAr: (r['c_ar'] as string | null) ?? null,
-          }
-        : null,
+      // A product in an archived category is shown without one, as at the point of sale.
+      category:
+        r['category_id'] && (r['c_en'] !== null || r['c_ar'] !== null)
+          ? {
+              id: r['category_id'] as string,
+              nameEn: (r['c_en'] as string | null) ?? null,
+              nameAr: (r['c_ar'] as string | null) ?? null,
+            }
+          : null,
+      collectionIds: r['collections'] as string[],
       images: (r['images'] as string[]).map((id) => ({
         id,
         url: `/api/v1/manager/products/${r['id'] as string}/images/${id}`,
@@ -475,7 +491,7 @@ export class EcommerceService {
     }));
   }
 
-  /** The store's own text and options for one listed product (ADR-0121). */
+  /** The store's own text and options for one product (ADR-0121), its category and collections. */
   async saveListing(
     actor: MerchantActor,
     productId: string,
@@ -489,8 +505,11 @@ export class EcommerceService {
         .from(onlineListings)
         .where(eq(onlineListings.productId, productId))
         .for('update');
-      if (!row) throw AppError.notFound('This product is not listed online.');
-      if (input.onlineCategoryId) await this.lockCategory(tx, input.onlineCategoryId);
+      if (!row) throw AppError.notFound('Product not found.');
+      if (input.categoryId !== undefined)
+        await this.moveToCategory(tx, actor, [productId], input.categoryId, ip);
+      if (input.collectionIds)
+        await this.setProductCollections(tx, actor.merchantId, productId, input.collectionIds);
       await tx
         .update(onlineListings)
         .set({
@@ -500,7 +519,7 @@ export class EcommerceService {
           descriptionAr: input.descriptionAr,
           featured: input.featured,
           maxPerOrder: input.maxPerOrder,
-          onlineCategoryId: input.onlineCategoryId,
+          ...(input.visible === undefined ? {} : { visible: input.visible }),
           updatedAt: sql`now()`,
         })
         .where(eq(onlineListings.productId, productId));
@@ -513,21 +532,108 @@ export class EcommerceService {
         ip,
         {
           featured: input.featured,
-          onlineCategoryId: input.onlineCategoryId,
+          ...(input.visible === undefined ? {} : { visible: input.visible }),
+          ...(input.collectionIds ? { collectionIds: input.collectionIds } : {}),
         },
       );
     });
     return this.listings(actor);
   }
 
-  /** Display order: every listed product exactly once. */
+  /**
+   * Puts products in a shared category (ADR-0130). The category is the point of sale's too, so
+   * this needs `catalog.manage`; products already there are left untouched.
+   */
+  private async moveToCategory(
+    tx: Transaction,
+    actor: MerchantActor,
+    productIds: string[],
+    categoryId: string | null,
+    ip: string,
+  ) {
+    const list = sql.join(
+      productIds.map((i) => sql`${i}`),
+      sql`, `,
+    );
+    const moving = (
+      await tx.execute(sql`
+        select id, category_id from products
+        where id in (${list}) and category_id is distinct from ${categoryId} for update`)
+    ).rows as Row[];
+    if (moving.length === 0) return;
+    assertCan(actor, 'catalog.manage', null);
+    if (categoryId) {
+      const [category] = await tx
+        .select({ id: categories.id })
+        .from(categories)
+        .where(and(eq(categories.id, categoryId), eq(categories.status, 'active')));
+      if (!category) throw AppError.notFound('Category not found.');
+    }
+    for (const p of moving) {
+      await tx
+        .update(products)
+        .set({
+          categoryId,
+          version: sql`${products.version} + 1`,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(products.id, p['id'] as string));
+      await this.audit.recordIn(tx, {
+        merchantId: actor.merchantId,
+        actorType: 'user',
+        actorId: actor.userId,
+        action: 'product.updated',
+        targetType: 'product',
+        targetId: p['id'] as string,
+        ip,
+        details: {
+          changes: { categoryId: { from: p['category_id'] ?? null, to: categoryId } },
+          via: 'online',
+        },
+      });
+    }
+  }
+
+  /** A product's collections, replaced by `collectionIds`; new ones put it at their end. */
+  private async setProductCollections(
+    tx: Transaction,
+    merchantId: string,
+    productId: string,
+    collectionIds: string[],
+  ) {
+    const ids = [...new Set(collectionIds)];
+    if (ids.length) {
+      const found = await tx
+        .select({ id: onlineCollections.id })
+        .from(onlineCollections)
+        .where(inArray(onlineCollections.id, ids));
+      if (found.length !== ids.length) throw AppError.notFound('Collection not found.');
+    }
+    await tx
+      .delete(onlineCollectionProducts)
+      .where(
+        and(
+          eq(onlineCollectionProducts.productId, productId),
+          ids.length ? notInArray(onlineCollectionProducts.collectionId, ids) : undefined,
+        ),
+      );
+    for (const collectionId of ids)
+      await tx.execute(sql`
+        insert into online_collection_products (merchant_id, collection_id, product_id, position)
+        values (${merchantId}, ${collectionId}, ${productId},
+          (select coalesce(max(position), -1) + 1 from online_collection_products where collection_id = ${collectionId}))
+        on conflict do nothing`);
+  }
+
+  /** Display order: every active product exactly once. */
   async orderListings(actor: MerchantActor, productIds: string[], ip: string) {
     this.assertManage(actor);
     await this.database.withMerchantTx(actor.merchantId, async (tx) => {
-      const rows = await tx
-        .select({ id: onlineListings.productId })
-        .from(onlineListings)
-        .for('update');
+      const rows = (
+        await tx.execute(sql`
+          select l.product_id as id from online_listings l join products p on p.id = l.product_id
+          where p.status = 'active' for update of l`)
+      ).rows as { id: string }[];
       const known = new Set(rows.map((r) => r.id));
       if (
         new Set(productIds).size !== productIds.length ||
@@ -538,7 +644,7 @@ export class EcommerceService {
           {
             path: 'productIds',
             code: 'invalid',
-            message: 'List every product sold online exactly once.',
+            message: 'List every product of the store exactly once.',
           },
         ]);
       for (const [position, productId] of productIds.entries())
@@ -559,130 +665,194 @@ export class EcommerceService {
     return this.listings(actor);
   }
 
-  // ------------------------------------------------------------ manager: categories (ADR-0121)
-  private categoryView(r: Row): OnlineCategory {
+  /** Bulk actions on selected products: show / hide on the website, category, collection. */
+  async setListings(actor: MerchantActor, input: z.output<typeof saveListingsSchema>, ip: string) {
+    this.assertManage(actor);
+    await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const ids = [...new Set(input.productIds)];
+      if (!ids.length) return;
+      const list = sql.join(
+        ids.map((i) => sql`${i}`),
+        sql`, `,
+      );
+      const found = (await tx.execute(sql`select id from products where id in (${list})`)).rows;
+      if (found.length !== ids.length) throw AppError.notFound('Product not found.');
+      if (input.visible !== undefined)
+        await tx.execute(sql`
+          update online_listings set visible = ${input.visible}, updated_at = now()
+          where product_id in (${list}) and visible <> ${input.visible}`);
+      if (input.categoryId !== undefined)
+        await this.moveToCategory(tx, actor, ids, input.categoryId, ip);
+      if (input.addToCollectionId) {
+        await this.lockCollection(tx, input.addToCollectionId);
+        await tx.execute(sql`
+          insert into online_collection_products (merchant_id, collection_id, product_id, position)
+          select ${actor.merchantId}, ${input.addToCollectionId}, p.id,
+            (select coalesce(max(position), -1) from online_collection_products where collection_id = ${input.addToCollectionId})
+              + row_number() over (order by coalesce(lower(p.name_en), p.name_ar))
+          from products p where p.id in (${list}) on conflict do nothing`);
+      }
+      await this.record(
+        tx,
+        actor.merchantId,
+        actor.userId,
+        input.visible === true
+          ? 'online.products_shown'
+          : input.visible === false
+            ? 'online.products_hidden'
+            : 'online.products_updated',
+        actor.merchantId,
+        ip,
+        {
+          count: ids.length,
+          ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
+          ...(input.addToCollectionId ? { collectionId: input.addToCollectionId } : {}),
+        },
+      );
+    });
+    return this.listings(actor);
+  }
+
+  // ------------------------------------------------------------ manager: categories (ADR-0130)
+  /**
+   * The shared catalog categories with the store's settings, in the store's order: its own
+   * order once set, else the point of sale's.
+   */
+  private async storeCategoryList(tx: Transaction): Promise<StoreCategoryList> {
+    const rows = (
+      await tx.execute(sql`
+        select c.*, (select count(*)::int from products p where p.category_id = c.id and p.status = 'active') as product_count
+        from categories c where c.status = 'active'
+        order by coalesce(c.online_position, c.sort_order), c.sort_order, coalesce(lower(c.name_en), c.name_ar), c.id`)
+    ).rows as Row[];
+    const [loose] = (
+      await tx.execute(sql`
+        select count(*)::int as n from products p
+        where p.status = 'active' and not exists (
+          select 1 from categories c where c.id = p.category_id and c.status = 'active')`)
+    ).rows as { n: number }[];
     return {
-      id: r['id'] as string,
-      nameEn: (r['name_en'] as string | null) ?? null,
-      nameAr: (r['name_ar'] as string | null) ?? null,
-      position: r['position'] as number,
-      status: r['status'] as OnlineCategory['status'],
-      imageUrl: r['image_key']
-        ? imageUrl(`manager/online/categories/${r['id'] as string}/image`, r['version'] as number)
-        : null,
-      productCount: r['product_count'] as number,
-      version: r['version'] as number,
+      categories: rows.map((r, position) => ({
+        id: r['id'] as string,
+        nameEn: (r['name_en'] as string | null) ?? null,
+        nameAr: (r['name_ar'] as string | null) ?? null,
+        parentId: (r['parent_id'] as string | null) ?? null,
+        onlineNameEn: (r['online_name_en'] as string | null) ?? null,
+        onlineNameAr: (r['online_name_ar'] as string | null) ?? null,
+        visible: r['online_visible'] as boolean,
+        position,
+        imageUrl: r['online_image_key']
+          ? imageUrl(`manager/online/categories/${r['id'] as string}/image`, r['version'] as number)
+          : null,
+        productCount: r['product_count'] as number,
+        version: r['version'] as number,
+      })),
+      uncategorized: loose?.n ?? 0,
     };
   }
 
-  private async categoryRows(tx: Transaction): Promise<OnlineCategory[]> {
-    const rows = (
-      await tx.execute(sql`
-        select c.*, (select count(*)::int from online_listings l where l.online_category_id = c.id) as product_count
-        from online_categories c order by c.position, c.created_at`)
-    ).rows as Row[];
-    return rows.map((r) => this.categoryView(r));
-  }
-
-  private async lockCategory(tx: Transaction, id: string) {
+  private async lockStoreCategory(tx: Transaction, id: string) {
     const [row] = await tx
       .select()
-      .from(onlineCategories)
-      .where(eq(onlineCategories.id, id))
+      .from(categories)
+      .where(and(eq(categories.id, id), eq(categories.status, 'active')))
       .for('update');
     if (!row) throw AppError.notFound('Category not found.');
     return row;
   }
 
-  async categories(actor: MerchantActor): Promise<{ categories: OnlineCategory[] }> {
+  async categories(actor: MerchantActor): Promise<StoreCategoryList> {
     this.assertManage(actor);
-    return this.database.withMerchantTx(actor.merchantId, async (tx) => ({
-      categories: await this.categoryRows(tx),
-    }));
+    return this.database.withMerchantTx(actor.merchantId, (tx) => this.storeCategoryList(tx));
   }
 
+  private async storeCategory(actor: MerchantActor, id: string): Promise<StoreCategory> {
+    const { categories: list } = await this.categories(actor);
+    const found = list.find((c) => c.id === id);
+    if (!found) throw AppError.notFound('Category not found.');
+    return found;
+  }
+
+  /** A new shared category from the store console: the point of sale gets it too. */
   async createCategory(
     actor: MerchantActor,
-    input: z.output<typeof saveOnlineCategorySchema>,
+    input: z.output<typeof saveStoreCategorySchema>,
     ip: string,
-  ): Promise<OnlineCategory> {
+  ): Promise<StoreCategory> {
     this.assertManage(actor);
+    assertCan(actor, 'catalog.manage', null);
     const id = newId();
     await this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const [last] = (
-        await tx.execute(sql`select coalesce(max(position), -1) + 1 as next from online_categories`)
-      ).rows as { next: number }[];
-      await tx.insert(onlineCategories).values({
+        await tx.execute(sql`
+          select coalesce(max(sort_order), -1) + 1 as pos_next,
+                 coalesce(max(coalesce(online_position, sort_order)), -1) + 1 as online_next
+          from categories where status = 'active'`)
+      ).rows as { pos_next: number; online_next: number }[];
+      await tx.insert(categories).values({
         id,
         merchantId: actor.merchantId,
         nameEn: input.nameEn,
         nameAr: input.nameAr,
-        status: input.status,
-        position: Number(last?.next ?? 0),
+        sortOrder: Math.min(Number(last?.pos_next ?? 0), 10000),
+        onlineVisible: input.visible,
+        onlinePosition: Number(last?.online_next ?? 0),
+        onlineNameEn: input.onlineNameEn,
+        onlineNameAr: input.onlineNameAr,
       });
-      await this.record(tx, actor.merchantId, actor.userId, 'online.category_created', id, ip, {
-        nameEn: input.nameEn,
-        nameAr: input.nameAr,
+      await this.audit.recordIn(tx, {
+        merchantId: actor.merchantId,
+        actorType: 'user',
+        actorId: actor.userId,
+        action: 'category.created',
+        targetType: 'category',
+        targetId: id,
+        ip,
+        details: { nameEn: input.nameEn, nameAr: input.nameAr, via: 'online' },
       });
     });
-    return this.category(actor, id);
+    return this.storeCategory(actor, id);
   }
 
+  /** Store settings of a shared category; renaming it needs `catalog.manage` (POS too). */
   async updateCategory(
     actor: MerchantActor,
     id: string,
-    input: z.output<typeof saveOnlineCategorySchema>,
+    input: z.output<typeof saveStoreCategorySchema>,
     ip: string,
-  ): Promise<OnlineCategory> {
+  ): Promise<StoreCategory> {
     this.assertManage(actor);
     await this.database.withMerchantTx(actor.merchantId, async (tx) => {
-      const row = await this.lockCategory(tx, id);
+      const row = await this.lockStoreCategory(tx, id);
       if (input.version !== undefined && row.version !== input.version) throw versionConflict();
-      await tx
-        .update(onlineCategories)
-        .set({
-          nameEn: input.nameEn,
-          nameAr: input.nameAr,
-          status: input.status,
-          version: sql`${onlineCategories.version} + 1`,
-          updatedAt: sql`now()`,
-        })
-        .where(eq(onlineCategories.id, id));
-      await this.record(tx, actor.merchantId, actor.userId, 'online.category_updated', id, ip, {
+      const renamed = input.nameEn !== row.nameEn || input.nameAr !== row.nameAr;
+      if (renamed) assertCan(actor, 'catalog.manage', null);
+      const next = {
         nameEn: input.nameEn,
         nameAr: input.nameAr,
-        status: input.status,
-      });
-    });
-    return this.category(actor, id);
-  }
-
-  /** A store category is navigation, not a record: deleting it leaves its products uncategorised. */
-  async deleteCategory(actor: MerchantActor, id: string, ip: string) {
-    this.assertManage(actor);
-    const imageKey = await this.database.withMerchantTx(actor.merchantId, async (tx) => {
-      const row = await this.lockCategory(tx, id);
+        onlineNameEn: input.onlineNameEn,
+        onlineNameAr: input.onlineNameAr,
+        onlineVisible: input.visible,
+      };
       await tx
-        .update(onlineListings)
-        .set({ onlineCategoryId: null, updatedAt: sql`now()` })
-        .where(eq(onlineListings.onlineCategoryId, id));
-      await tx.delete(onlineCategories).where(eq(onlineCategories.id, id));
-      await this.record(tx, actor.merchantId, actor.userId, 'online.category_deleted', id, ip, {
-        nameEn: row.nameEn,
-        nameAr: row.nameAr,
+        .update(categories)
+        .set({ ...next, version: sql`${categories.version} + 1`, updatedAt: sql`now()` })
+        .where(eq(categories.id, id));
+      await this.record(tx, actor.merchantId, actor.userId, 'online.category_updated', id, ip, {
+        changes: diffFields(row, next, Object.keys(next) as (keyof typeof next)[]),
       });
-      return row.imageKey;
     });
-    if (imageKey) await this.forgetFile(imageKey);
-    return this.categories(actor);
+    return this.storeCategory(actor, id);
   }
 
+  /** The store's order of the shared categories (the point of sale keeps its own). */
   async orderCategories(actor: MerchantActor, ids: string[], ip: string) {
     this.assertManage(actor);
     await this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const rows = await tx
-        .select({ id: onlineCategories.id })
-        .from(onlineCategories)
+        .select({ id: categories.id })
+        .from(categories)
+        .where(eq(categories.status, 'active'))
         .for('update');
       const known = new Set(rows.map((r) => r.id));
       if (
@@ -695,9 +865,9 @@ export class EcommerceService {
         ]);
       for (const [position, id] of ids.entries())
         await tx
-          .update(onlineCategories)
-          .set({ position, updatedAt: sql`now()` })
-          .where(eq(onlineCategories.id, id));
+          .update(categories)
+          .set({ onlinePosition: position, updatedAt: sql`now()` })
+          .where(eq(categories.id, id));
       await this.record(
         tx,
         actor.merchantId,
@@ -711,30 +881,22 @@ export class EcommerceService {
     return this.categories(actor);
   }
 
-  private async category(actor: MerchantActor, id: string): Promise<OnlineCategory> {
-    return this.database.withMerchantTx(actor.merchantId, async (tx) => {
-      const found = (await this.categoryRows(tx)).find((c) => c.id === id);
-      if (!found) throw AppError.notFound('Category not found.');
-      return found;
-    });
-  }
-
   async setCategoryImage(actor: MerchantActor, id: string, data: Buffer | null, ip: string) {
     this.assertManage(actor);
     const upload = data
       ? await this.checkImage(data, `${actor.merchantId}/online/categories/${id}`)
       : null;
     const previous = await this.database.withMerchantTx(actor.merchantId, async (tx) => {
-      const row = await this.lockCategory(tx, id);
+      const row = await this.lockStoreCategory(tx, id);
       await tx
-        .update(onlineCategories)
+        .update(categories)
         .set({
-          imageKey: upload?.key ?? null,
-          imageContentType: upload?.contentType ?? null,
-          version: sql`${onlineCategories.version} + 1`,
+          onlineImageKey: upload?.key ?? null,
+          onlineImageContentType: upload?.contentType ?? null,
+          version: sql`${categories.version} + 1`,
           updatedAt: sql`now()`,
         })
-        .where(eq(onlineCategories.id, id));
+        .where(eq(categories.id, id));
       // Written last inside the transaction: a storage failure rolls the row back.
       if (upload) await this.storage.put(upload.key, upload.data);
       await this.record(
@@ -746,16 +908,241 @@ export class EcommerceService {
         ip,
         {},
       );
-      return row.imageKey;
+      return row.onlineImageKey;
     });
     if (previous) await this.forgetFile(previous);
-    return this.category(actor, id);
+    return this.storeCategory(actor, id);
   }
 
   async categoryImage(actor: MerchantActor, id: string) {
     this.assertManage(actor);
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
-      const [row] = await tx.select().from(onlineCategories).where(eq(onlineCategories.id, id));
+      const [row] = await tx.select().from(categories).where(eq(categories.id, id));
+      return this.readImage(row?.onlineImageKey ?? null, row?.onlineImageContentType ?? null);
+    });
+  }
+
+  // ------------------------------------------------------------ manager: collections (ADR-0130)
+  private async collectionRows(tx: Transaction): Promise<OnlineCollection[]> {
+    const rows = (
+      await tx.execute(sql`
+        select c.*, coalesce((select json_agg(cp.product_id order by cp.position, cp.created_at)
+                              from online_collection_products cp where cp.collection_id = c.id), '[]'::json) as product_ids
+        from online_collections c order by c.position, c.created_at`)
+    ).rows as Row[];
+    return rows.map((r) => ({
+      id: r['id'] as string,
+      nameEn: (r['name_en'] as string | null) ?? null,
+      nameAr: (r['name_ar'] as string | null) ?? null,
+      position: r['position'] as number,
+      status: r['status'] as OnlineCollection['status'],
+      imageUrl: r['image_key']
+        ? imageUrl(`manager/online/collections/${r['id'] as string}/image`, r['version'] as number)
+        : null,
+      productIds: r['product_ids'] as string[],
+      version: r['version'] as number,
+    }));
+  }
+
+  private async lockCollection(tx: Transaction, id: string) {
+    const [row] = await tx
+      .select()
+      .from(onlineCollections)
+      .where(eq(onlineCollections.id, id))
+      .for('update');
+    if (!row) throw AppError.notFound('Collection not found.');
+    return row;
+  }
+
+  /** Replaces a collection's products, in the given order. */
+  private async setCollectionProducts(
+    tx: Transaction,
+    merchantId: string,
+    collectionId: string,
+    productIds: string[],
+  ) {
+    const ids = [...new Set(productIds)];
+    if (ids.length) {
+      const found = await tx
+        .select({ id: products.id })
+        .from(products)
+        .where(inArray(products.id, ids));
+      if (found.length !== ids.length) throw AppError.notFound('Product not found.');
+    }
+    await tx
+      .delete(onlineCollectionProducts)
+      .where(eq(onlineCollectionProducts.collectionId, collectionId));
+    if (ids.length)
+      await tx
+        .insert(onlineCollectionProducts)
+        .values(
+          ids.map((productId, position) => ({ merchantId, collectionId, productId, position })),
+        );
+  }
+
+  async collections(actor: MerchantActor): Promise<{ collections: OnlineCollection[] }> {
+    this.assertManage(actor);
+    return this.database.withMerchantTx(actor.merchantId, async (tx) => ({
+      collections: await this.collectionRows(tx),
+    }));
+  }
+
+  private async collection(actor: MerchantActor, id: string): Promise<OnlineCollection> {
+    const found = (await this.collections(actor)).collections.find((c) => c.id === id);
+    if (!found) throw AppError.notFound('Collection not found.');
+    return found;
+  }
+
+  async createCollection(
+    actor: MerchantActor,
+    input: z.output<typeof saveOnlineCollectionSchema>,
+    ip: string,
+  ): Promise<OnlineCollection> {
+    this.assertManage(actor);
+    const id = newId();
+    await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const [last] = (
+        await tx.execute(
+          sql`select coalesce(max(position), -1) + 1 as next from online_collections`,
+        )
+      ).rows as { next: number }[];
+      await tx.insert(onlineCollections).values({
+        id,
+        merchantId: actor.merchantId,
+        nameEn: input.nameEn,
+        nameAr: input.nameAr,
+        status: input.status,
+        position: Number(last?.next ?? 0),
+      });
+      if (input.productIds)
+        await this.setCollectionProducts(tx, actor.merchantId, id, input.productIds);
+      await this.record(tx, actor.merchantId, actor.userId, 'online.collection_created', id, ip, {
+        nameEn: input.nameEn,
+        nameAr: input.nameAr,
+        products: input.productIds?.length ?? 0,
+      });
+    });
+    return this.collection(actor, id);
+  }
+
+  async updateCollection(
+    actor: MerchantActor,
+    id: string,
+    input: z.output<typeof saveOnlineCollectionSchema>,
+    ip: string,
+  ): Promise<OnlineCollection> {
+    this.assertManage(actor);
+    await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const row = await this.lockCollection(tx, id);
+      if (input.version !== undefined && row.version !== input.version) throw versionConflict();
+      await tx
+        .update(onlineCollections)
+        .set({
+          nameEn: input.nameEn,
+          nameAr: input.nameAr,
+          status: input.status,
+          version: sql`${onlineCollections.version} + 1`,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(onlineCollections.id, id));
+      if (input.productIds)
+        await this.setCollectionProducts(tx, actor.merchantId, id, input.productIds);
+      await this.record(tx, actor.merchantId, actor.userId, 'online.collection_updated', id, ip, {
+        nameEn: input.nameEn,
+        nameAr: input.nameAr,
+        status: input.status,
+        ...(input.productIds ? { products: input.productIds.length } : {}),
+      });
+    });
+    return this.collection(actor, id);
+  }
+
+  /** A collection is merchandising, not a record: deleting it leaves its products as they are. */
+  async deleteCollection(actor: MerchantActor, id: string, ip: string) {
+    this.assertManage(actor);
+    const imageKey = await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const row = await this.lockCollection(tx, id);
+      await tx.delete(onlineCollections).where(eq(onlineCollections.id, id));
+      await this.record(tx, actor.merchantId, actor.userId, 'online.collection_deleted', id, ip, {
+        nameEn: row.nameEn,
+        nameAr: row.nameAr,
+      });
+      return row.imageKey;
+    });
+    if (imageKey) await this.forgetFile(imageKey);
+    return this.collections(actor);
+  }
+
+  async orderCollections(actor: MerchantActor, ids: string[], ip: string) {
+    this.assertManage(actor);
+    await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const rows = await tx
+        .select({ id: onlineCollections.id })
+        .from(onlineCollections)
+        .for('update');
+      const known = new Set(rows.map((r) => r.id));
+      if (
+        new Set(ids).size !== ids.length ||
+        ids.length !== known.size ||
+        ids.some((i) => !known.has(i))
+      )
+        throw AppError.validation([
+          { path: 'ids', code: 'invalid', message: 'List every collection exactly once.' },
+        ]);
+      for (const [position, id] of ids.entries())
+        await tx
+          .update(onlineCollections)
+          .set({ position, updatedAt: sql`now()` })
+          .where(eq(onlineCollections.id, id));
+      await this.record(
+        tx,
+        actor.merchantId,
+        actor.userId,
+        'online.collections_reordered',
+        actor.merchantId,
+        ip,
+        { count: ids.length },
+      );
+    });
+    return this.collections(actor);
+  }
+
+  async setCollectionImage(actor: MerchantActor, id: string, data: Buffer | null, ip: string) {
+    this.assertManage(actor);
+    const upload = data
+      ? await this.checkImage(data, `${actor.merchantId}/online/collections/${id}`)
+      : null;
+    const previous = await this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const row = await this.lockCollection(tx, id);
+      await tx
+        .update(onlineCollections)
+        .set({
+          imageKey: upload?.key ?? null,
+          imageContentType: upload?.contentType ?? null,
+          version: sql`${onlineCollections.version} + 1`,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(onlineCollections.id, id));
+      if (upload) await this.storage.put(upload.key, upload.data);
+      await this.record(
+        tx,
+        actor.merchantId,
+        actor.userId,
+        upload ? 'online.collection_image_set' : 'online.collection_image_removed',
+        id,
+        ip,
+        {},
+      );
+      return row.imageKey;
+    });
+    if (previous) await this.forgetFile(previous);
+    return this.collection(actor, id);
+  }
+
+  async collectionImage(actor: MerchantActor, id: string) {
+    this.assertManage(actor);
+    return this.database.withMerchantTx(actor.merchantId, async (tx) => {
+      const [row] = await tx.select().from(onlineCollections).where(eq(onlineCollections.id, id));
       return this.readImage(row?.imageKey ?? null, row?.imageContentType ?? null);
     });
   }
@@ -828,48 +1215,6 @@ export class EcommerceService {
     await this.storage.delete(key).catch(() => undefined);
   }
 
-  async setListings(
-    actor: MerchantActor,
-    productIds: string[],
-    listed: boolean,
-    ip: string,
-    onlineCategoryId?: string | null,
-  ) {
-    this.assertManage(actor);
-    await this.database.withMerchantTx(actor.merchantId, async (tx) => {
-      const ids = [...new Set(productIds)];
-      if (!ids.length) return;
-      const list = sql.join(
-        ids.map((i) => sql`${i}`),
-        sql`, `,
-      );
-      const found = (await tx.execute(sql`select id from products where id in (${list})`)).rows;
-      if (found.length !== ids.length) throw AppError.notFound('Product not found.');
-      if (onlineCategoryId) await this.lockCategory(tx, onlineCategoryId);
-      if (listed) {
-        // New listings go to the end of the display order.
-        await tx.execute(sql`
-          insert into online_listings (merchant_id, product_id, position)
-          select ${actor.merchantId}, id, (select coalesce(max(position), -1) from online_listings) + row_number() over (order by coalesce(lower(name_en), name_ar))
-          from products where id in (${list}) on conflict do nothing`);
-        if (onlineCategoryId !== undefined)
-          await tx.execute(sql`
-            update online_listings set online_category_id = ${onlineCategoryId}, updated_at = now()
-            where product_id in (${list})`);
-      } else await tx.execute(sql`delete from online_listings where product_id in (${list})`);
-      await this.record(
-        tx,
-        actor.merchantId,
-        actor.userId,
-        listed ? 'online.products_listed' : 'online.products_unlisted',
-        actor.merchantId,
-        ip,
-        { count: ids.length },
-      );
-    });
-    return this.listings(actor);
-  }
-
   // ------------------------------------------------------------ storefront (public)
   /** Resolves a public store slug to its merchant (published or paused stores only). */
   /** The merchant behind a store address (public routes of the account, ADR-0124). */
@@ -939,8 +1284,8 @@ export class EcommerceService {
         payOnReceipt: store.payOnReceiptEnabled,
         logoUrl: store.logoKey ? urls.logo(store.version) : null,
         bannerUrl: store.bannerKey ? urls.banner(store.version) : null,
-        categorySource: nav.source,
         categories: nav.categories,
+        collections: nav.collections,
         branches: branches.map((b) => ({
           id: b.id,
           nameEn: b.nameEn,
@@ -1030,51 +1375,59 @@ export class EcommerceService {
   }
 
   /**
-   * The storefront's navigation (ADR-0121): the store's own active categories that hold listed
-   * products when the merchant created any, else the catalog categories of the listed products.
+   * The storefront's navigation (ADR-0130): the shared categories the store shows that hold
+   * products shown on the website, in the store's order, with the store's name and picture;
+   * and the active collections that hold such products.
    */
   private async storeCategories(tx: Transaction, urls: StoreUrls) {
-    const own = (
+    const shown = sql`exists (select 1 from online_listings l join products p on p.id = l.product_id
+      where l.visible and p.status = 'active'`;
+    const cats = (
       await tx.execute(sql`
-        select c.id, c.name_en, c.name_ar, c.image_key, c.version from online_categories c
-        where c.status = 'active' and exists (
-          select 1 from online_listings l join products p on p.id = l.product_id
-          where l.online_category_id = c.id and p.status = 'active')
+        select c.id, coalesce(c.online_name_en, c.name_en) as name_en, coalesce(c.online_name_ar, c.name_ar) as name_ar,
+               c.parent_id, c.online_image_key, c.version from categories c
+        where c.status = 'active' and c.online_visible and ${shown} and p.category_id = c.id)
+        order by coalesce(c.online_position, c.sort_order), c.sort_order, coalesce(lower(c.name_en), c.name_ar), c.id`)
+    ).rows as Row[];
+    const cols = (
+      await tx.execute(sql`
+        select c.id, c.name_en, c.name_ar, c.image_key, c.version from online_collections c
+        where c.status = 'active' and ${shown}
+          and exists (select 1 from online_collection_products cp where cp.collection_id = c.id and cp.product_id = p.id))
         order by c.position, c.created_at`)
     ).rows as Row[];
-    const [any] = (await tx.execute(sql`select 1 from online_categories limit 1`)).rows;
-    if (any) {
-      return {
-        source: 'online' as const,
-        categories: own.map((c) => ({
-          id: c['id'] as string,
-          nameEn: (c['name_en'] as string | null) ?? null,
-          nameAr: (c['name_ar'] as string | null) ?? null,
-          imageUrl: c['image_key']
-            ? urls.category(c['id'] as string, c['version'] as number)
-            : null,
-        })),
-      };
-    }
-    const pos = (
-      await tx.execute(sql`
-        select distinct c.id, c.name_en, c.name_ar, c.sort_order from categories c
-        join products p on p.category_id = c.id join online_listings l on l.product_id = p.id
-        where p.status = 'active' order by c.sort_order, c.name_en`)
-    ).rows as Row[];
+    const ids = new Set(cats.map((c) => c['id'] as string));
     return {
-      source: 'pos' as const,
-      categories: pos.map((c) => ({
+      categories: cats.map((c) => ({
         id: c['id'] as string,
         nameEn: (c['name_en'] as string | null) ?? null,
         nameAr: (c['name_ar'] as string | null) ?? null,
-        imageUrl: null,
+        // A sub-category whose parent is not shown is shown at the top level.
+        parentId: ids.has(c['parent_id'] as string) ? (c['parent_id'] as string) : null,
+        imageUrl: c['online_image_key']
+          ? urls.category(c['id'] as string, c['version'] as number)
+          : null,
+      })),
+      collections: cols.map((c) => ({
+        id: c['id'] as string,
+        nameEn: (c['name_en'] as string | null) ?? null,
+        nameAr: (c['name_ar'] as string | null) ?? null,
+        imageUrl: c['image_key']
+          ? urls.collection(c['id'] as string, c['version'] as number)
+          : null,
       })),
     };
   }
 
-  /** Public store images: logo, banner and category pictures. */
-  async publicImage(slug: string, kind: StoreImageKind | { categoryId: string }) {
+  /**
+   * Public store images: logo, banner, category and collection pictures. A category picture
+   * address with a collection id still answers: the store categories of ADR-0121 became
+   * collections with the same ids.
+   */
+  async publicImage(
+    slug: string,
+    kind: StoreImageKind | { categoryId: string } | { collectionId: string },
+  ) {
     const merchantId = await this.merchantOf(slug);
     return this.database.withMerchantTx(merchantId, async (tx) => {
       if (typeof kind === 'string') {
@@ -1083,10 +1436,15 @@ export class EcommerceService {
           ? this.readImage(store.logoKey, store.logoContentType)
           : this.readImage(store.bannerKey, store.bannerContentType);
       }
-      const [row] = await tx
-        .select()
-        .from(onlineCategories)
-        .where(eq(onlineCategories.id, kind.categoryId));
+      if ('categoryId' in kind) {
+        const [row] = await tx
+          .select()
+          .from(categories)
+          .where(and(eq(categories.id, kind.categoryId), eq(categories.status, 'active')));
+        if (row) return this.readImage(row.onlineImageKey, row.onlineImageContentType);
+      }
+      const id = 'categoryId' in kind ? kind.categoryId : kind.collectionId;
+      const [row] = await tx.select().from(onlineCollections).where(eq(onlineCollections.id, id));
       return this.readImage(row?.imageKey ?? null, row?.imageContentType ?? null);
     });
   }
@@ -1097,7 +1455,6 @@ export class EcommerceService {
     branchId: string,
     where: SQL,
   ): Promise<StoreProduct[]> {
-    const [ownCategories] = (await tx.execute(sql`select 1 from online_categories limit 1`)).rows;
     const [store] = await tx.select({ hide: onlineStores.hideOutOfStock }).from(onlineStores);
     const rows = (
       await tx.execute(sql`
@@ -1110,12 +1467,14 @@ export class EcommerceService {
                coalesce((select json_agg(i.id order by i.position, i.created_at) from product_images i where i.product_id = p.id), '[]'::json) as images,
                exists (select 1 from recipe_components rc where rc.variant_id = v.id) as has_recipe,
                ol.position, ol.title_en, ol.title_ar, ol.description_en as od_en, ol.description_ar as od_ar,
-               ol.featured, ol.max_per_order, ol.online_category_id,
-               (oc.id is not null and oc.status = 'active') as online_category_shown
+               ol.featured, ol.max_per_order, (pc.id is not null) as category_shown,
+               coalesce((select json_agg(cp.collection_id order by oc.position) from online_collection_products cp
+                         join online_collections oc on oc.id = cp.collection_id
+                         where cp.product_id = p.id and oc.status = 'active'), '[]'::json) as collections
         from online_listings ol join products p on p.id = ol.product_id
         join product_variants v on v.product_id = p.id
-        left join online_categories oc on oc.id = ol.online_category_id
-        where p.status = 'active' and v.status = 'active'
+        left join categories pc on pc.id = p.category_id and pc.status = 'active' and pc.online_visible
+        where ol.visible and p.status = 'active' and v.status = 'active'
           and (p.available_in_all_branches or exists (select 1 from product_branch_availability a where a.product_id = p.id and a.branch_id = ${branchId}))
           and ${where}
         order by ol.position, coalesce(lower(p.name_en), p.name_ar), v.position`)
@@ -1137,11 +1496,8 @@ export class EcommerceService {
           (r['od_en'] as string | null) || ((r['description_en'] as string | null) ?? null),
         descriptionAr:
           (r['od_ar'] as string | null) || ((r['description_ar'] as string | null) ?? null),
-        categoryId: ownCategories
-          ? r['online_category_shown']
-            ? ((r['online_category_id'] as string | null) ?? null)
-            : null
-          : ((r['category_id'] as string | null) ?? null),
+        categoryId: r['category_shown'] ? ((r['category_id'] as string | null) ?? null) : null,
+        collectionIds: r['collections'] as string[],
         imageUrl: images[0] ?? null,
         images,
         featured: r['featured'] as boolean,
@@ -1205,7 +1561,7 @@ export class EcommerceService {
       const [row] = (
         await tx.execute(sql`
           select i.storage_key, i.content_type from product_images i join online_listings l on l.product_id = i.product_id
-          where i.id = ${imageId} and i.product_id = ${productId}`)
+          where i.id = ${imageId} and i.product_id = ${productId} and l.visible`)
       ).rows as Row[];
       return row;
     });
@@ -1223,8 +1579,8 @@ export class EcommerceService {
    * the same order (BR-141, BR-142).
    */
   /**
-   * The promotion engine's view of priced lines: catalog category and store category per
-   * product, net amount per line (ADR-0125).
+   * The promotion engine's view of priced lines: shared category and collections per product,
+   * net amount per line (ADR-0125, ADR-0130).
    */
   private async promotionLines(
     tx: Transaction,
@@ -1233,8 +1589,9 @@ export class EcommerceService {
     if (lines.length === 0) return [];
     const rows = (
       await tx.execute(sql`
-        select p.id, p.category_id, ol.online_category_id from products p
-        left join online_listings ol on ol.product_id = p.id
+        select p.id, p.category_id,
+               coalesce((select json_agg(cp.collection_id) from online_collection_products cp where cp.product_id = p.id), '[]'::json) as collections
+        from products p
         where p.id in (${sql.join(
           [...new Set(lines.map((l) => l.productId))].map((id) => sql`${id}`),
           sql`, `,
@@ -1244,8 +1601,7 @@ export class EcommerceService {
     return lines.map((l) => ({
       productId: l.productId,
       categoryId: (byProduct.get(l.productId)?.['category_id'] as string | null) ?? null,
-      onlineCategoryId:
-        (byProduct.get(l.productId)?.['online_category_id'] as string | null) ?? null,
+      collectionIds: (byProduct.get(l.productId)?.['collections'] as string[] | undefined) ?? [],
       netMinor: l.netMinor,
     }));
   }
@@ -1487,6 +1843,7 @@ export class EcommerceService {
           tx,
           branchId,
           input.lines.map((l) => l.variantId),
+          'online',
         );
         const issues = input.lines.flatMap((l, i) =>
           variants.has(l.variantId) && items.has(l.variantId)
@@ -2256,10 +2613,12 @@ export class EcommerceService {
       targetType: action.startsWith('online.store')
         ? 'online_store'
         : action.startsWith('online.categor')
-          ? 'online_category'
-          : action.startsWith('online.listing') || action.startsWith('online.products_')
-            ? 'online_listing'
-            : 'online_order',
+          ? 'category'
+          : action.startsWith('online.collection')
+            ? 'online_collection'
+            : action.startsWith('online.listing') || action.startsWith('online.products_')
+              ? 'online_listing'
+              : 'online_order',
       targetId: id,
       ip,
       details,

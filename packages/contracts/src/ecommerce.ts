@@ -229,43 +229,100 @@ export const onlineTenderListSchema = z.object({
   ),
 });
 
-/** Store image limits (logo, banner, category): same as link-page pictures. */
+/** Store image limits (logo, banner, category, collection): same as link-page pictures. */
 export const MAX_STORE_IMAGE_BYTES = 2 * 1024 * 1024;
-export const ONLINE_CATEGORY_STATUSES = ['active', 'hidden'] as const;
 
-export const onlineCategorySchema = z.object({
+/**
+ * The shared catalog category as the store shows it (ADR-0130): one category tree for the point
+ * of sale and the store; the store keeps whether it is shown, its order, an optional store name
+ * and a picture.
+ */
+export const storeCategorySchema = z.object({
   id: z.string(),
+  /** The shared name (point of sale and store). */
   ...named,
+  parentId: z.string().nullable(),
+  /** The store's own name; null = the shared name. */
+  onlineNameEn: z.string().nullable(),
+  onlineNameAr: z.string().nullable(),
+  /** Shown in the store's navigation. */
+  visible: z.boolean(),
   position: z.number().int(),
-  status: z.enum(ONLINE_CATEGORY_STATUSES),
   imageUrl: z.string().nullable(),
-  /** Listed products in this category. */
+  /** Active products in this category. */
   productCount: z.number().int(),
   version: z.number().int(),
 });
-export type OnlineCategory = z.infer<typeof onlineCategorySchema>;
-export const onlineCategoryListSchema = z.object({ categories: z.array(onlineCategorySchema) });
-export const saveOnlineCategorySchema = z
+export type StoreCategory = z.infer<typeof storeCategorySchema>;
+export const storeCategoryListSchema = z.object({
+  categories: z.array(storeCategorySchema),
+  /** Active products without a category: shoppers find them only in "All products". */
+  uncategorized: z.number().int(),
+});
+export type StoreCategoryList = z.infer<typeof storeCategoryListSchema>;
+/**
+ * `POST|PUT /manager/online/categories`: the shared name needs `catalog.manage` (it changes the
+ * point of sale too); the store settings need `online.manage`.
+ */
+export const saveStoreCategorySchema = z
   .object({
     nameEn: text(80),
     nameAr: text(80),
-    status: z.enum(ONLINE_CATEGORY_STATUSES).default('active'),
+    onlineNameEn: text(80),
+    onlineNameAr: text(80),
+    visible: z.boolean().default(true),
     version: z.number().int().positive().optional(),
   })
   .refine((c) => Boolean(c.nameAr || c.nameEn), {
     error: 'A category name is required.',
     path: ['nameAr'],
   });
-export type SaveOnlineCategory = z.input<typeof saveOnlineCategorySchema>;
-export const onlineCategoryOrderSchema = z.object({ ids: z.array(z.uuid()).max(500) });
+export type SaveStoreCategory = z.input<typeof saveStoreCategorySchema>;
+export const storeCategoryOrderSchema = z.object({ ids: z.array(z.uuid()).max(1000) });
+
+/** Marketing collections of the store (ADR-0130): "Offers", "New in"…; a product may be in several. */
+export const ONLINE_COLLECTION_STATUSES = ['active', 'hidden'] as const;
+export const onlineCollectionSchema = z.object({
+  id: z.string(),
+  ...named,
+  position: z.number().int(),
+  status: z.enum(ONLINE_COLLECTION_STATUSES),
+  imageUrl: z.string().nullable(),
+  /** Products in this collection, in the collection's order. */
+  productIds: z.array(z.string()),
+  version: z.number().int(),
+});
+export type OnlineCollection = z.infer<typeof onlineCollectionSchema>;
+export const onlineCollectionListSchema = z.object({
+  collections: z.array(onlineCollectionSchema),
+});
+export const saveOnlineCollectionSchema = z
+  .object({
+    nameEn: text(80),
+    nameAr: text(80),
+    status: z.enum(ONLINE_COLLECTION_STATUSES).default('active'),
+    /** When given, the collection's products in this order (replaces the previous list). */
+    productIds: z.array(z.uuid()).max(5000).optional(),
+    version: z.number().int().positive().optional(),
+  })
+  .refine((c) => Boolean(c.nameAr || c.nameEn), {
+    error: 'A collection name is required.',
+    path: ['nameAr'],
+  });
+export type SaveOnlineCollection = z.input<typeof saveOnlineCollectionSchema>;
+export const onlineCollectionOrderSchema = z.object({ ids: z.array(z.uuid()).max(500) });
 
 export const listingSchema = z.object({
   productId: z.string(),
   ...named,
-  listed: z.boolean(),
+  /** Shown to shoppers on the website (the store console's switch, ADR-0130). */
+  visible: z.boolean(),
+  /** Offered at the point of sale (changed in the point-of-sale management only). */
+  posVisible: z.boolean(),
   variants: z.number().int(),
   price: moneySchema.nullable(),
-  /** Display order in the store (listed products only). */
+  trackInventory: z.boolean(),
+  /** Display order in the store. */
   position: z.number().int(),
   /** What the store says on top of the catalog (ADR-0121); null = the catalog's text. */
   titleEn: z.string().nullable(),
@@ -275,20 +332,31 @@ export const listingSchema = z.object({
   featured: z.boolean(),
   /** Units of one variant per order; null = the store default (20). */
   maxPerOrder: z.number().int().nullable(),
-  onlineCategoryId: z.string().nullable(),
-  /** The catalog category, used by the storefront while the store has no categories of its own. */
-  posCategory: z.object({ id: z.string(), ...named }).nullable(),
+  /** The shared catalog category (ADR-0130). */
+  category: z.object({ id: z.string(), ...named }).nullable(),
+  collectionIds: z.array(z.string()),
   /** Catalog images (managed in the catalog), served by the API. */
   images: z.array(z.object({ id: z.string(), url: z.string() })),
 });
 export type Listing = z.infer<typeof listingSchema>;
 export const listingListSchema = z.object({ products: z.array(listingSchema) });
-export const saveListingsSchema = z.object({
-  productIds: z.array(z.uuid()).max(5000),
-  listed: z.boolean(),
-  /** With `listed`: also put the products in this store category (null = none). */
-  onlineCategoryId: z.uuid().nullable().optional(),
-});
+/** `PUT /manager/online/listings`: bulk actions on selected products. */
+export const saveListingsSchema = z
+  .object({
+    productIds: z.array(z.uuid()).max(5000),
+    /** Show on or hide from the website. */
+    visible: z.boolean().optional(),
+    /** Put the products in this shared category (null = none); needs `catalog.manage`. */
+    categoryId: z.uuid().nullable().optional(),
+    /** Add the products to this collection. */
+    addToCollectionId: z.uuid().optional(),
+  })
+  .refine(
+    (b) =>
+      b.visible !== undefined || b.categoryId !== undefined || b.addToCollectionId !== undefined,
+    { error: 'Choose an action.', path: ['productIds'] },
+  );
+export type SaveListings = z.input<typeof saveListingsSchema>;
 /** `PUT /manager/online/listings/:productId`: the store's own text and options for one product. */
 export const saveListingSchema = z.object({
   titleEn: text(120),
@@ -297,10 +365,13 @@ export const saveListingSchema = z.object({
   descriptionAr: text(2000),
   featured: z.boolean(),
   maxPerOrder: z.number().int().min(1).max(20).nullable(),
-  onlineCategoryId: z.uuid().nullable(),
+  visible: z.boolean().optional(),
+  /** The shared category; a change needs `catalog.manage`. Omitted = unchanged. */
+  categoryId: z.uuid().nullable().optional(),
+  collectionIds: z.array(z.uuid()).max(100).optional(),
 });
 export type SaveListing = z.input<typeof saveListingSchema>;
-/** `PUT /manager/online/listings/order`: every listed product exactly once, in display order. */
+/** `PUT /manager/online/listings/order`: every active product exactly once, in display order. */
 export const listingOrderSchema = z.object({ productIds: z.array(z.uuid()).max(5000) });
 
 // ---------------------------------------------------------------- orders (shared shapes)
@@ -550,9 +621,17 @@ export const storefrontSchema = z.object({
   payOnReceipt: z.boolean(),
   logoUrl: z.string().nullable(),
   bannerUrl: z.string().nullable(),
-  /** The store's own categories when it has any (ADR-0121), else the catalog's. */
-  categorySource: z.enum(['online', 'pos']),
-  categories: z.array(z.object({ id: z.string(), ...named, imageUrl: z.string().nullable() })),
+  /** The shared catalog categories shown in the store, in the store's order (ADR-0130). */
+  categories: z.array(
+    z.object({
+      id: z.string(),
+      ...named,
+      parentId: z.string().nullable(),
+      imageUrl: z.string().nullable(),
+    }),
+  ),
+  /** Active collections that hold products shown on the website. */
+  collections: z.array(z.object({ id: z.string(), ...named, imageUrl: z.string().nullable() })),
   /** Branches serving the store (ADR-0123); one entry = the single fulfilment branch. */
   branches: z.array(
     z.object({
@@ -599,8 +678,10 @@ export const storeProductSchema = z.object({
   ...named,
   descriptionEn: z.string().nullable(),
   descriptionAr: z.string().nullable(),
-  /** Id in the storefront's `categories` (online or catalog category, see `categorySource`). */
+  /** Id in the storefront's `categories`; null = none shown. */
   categoryId: z.string().nullable(),
+  /** Ids in the storefront's `collections`. */
+  collectionIds: z.array(z.string()),
   imageUrl: z.string().nullable(),
   /** Every catalog image, first one = `imageUrl`. */
   images: z.array(z.string()),

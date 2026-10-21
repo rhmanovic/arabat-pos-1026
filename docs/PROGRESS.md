@@ -1265,6 +1265,41 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-21 — One catalog for the point of sale and the store (ADR-0130)
+Owner's decision after a merchant's bad experience (a product and category made at the POS were
+not in the store's categories; no "add product" in the store console; the catalog form did not
+offer the store's categories): one shared category tree, every product in both places with a
+website switch (store console only) and a POS switch (Business management only), marketing
+collections, quick add from the store console, and protections against silent switches. BR-236.
+- Migrations 0071 (`products.pos_visible`, category store settings, `online_listings.visible`,
+  `online_collections` + `online_collection_products` with RLS, data copy of store categories
+  into collections with the same ids, a hidden listing for every unlisted product, trigger
+  `products_online_listing`) and 0072 (drops `online_listings.online_category_id` and
+  `online_categories`). Tried on the demo database inside a rolled-back transaction first (33
+  store categories → 33 collections, 31 memberships, 169 hidden listings) and then applied.
+- API: listings of every product (`visible`, `posVisible`, `category`, `collectionIds`), bulk
+  show / hide / set category / add to collection, category change audited as `product.updated`
+  (`catalog.manage`); shared categories with store settings (create and rename need
+  `catalog.manage`), store order, store picture; collections CRUD, order, picture, members;
+  storefront `categories` (shared, shown, store order / name / picture) and `collections`,
+  `product.collectionIds`; promotions match collections; POS catalog, device snapshot and
+  `loadItems` (channel `pos`) leave out products hidden from the POS; online checkout ignores it.
+- Console: shared Categories page (note, store name, "shown in the store", picture, order,
+  uncategorized warning, "make categories from collections"), new Collections page, Products page
+  (all products, website switch, filters, bulk bar, quick "Add product" with pasted picture,
+  category and collections in the edit dialog), promotions and design pickers list collections.
+- Business management: "Shown at the point of sale" in the product form, "Hidden at the POS" in
+  the product list; categories subtitle says they are shared with the store.
+- Storefront: a link, `?category=`, products and categories sections accept a category or a
+  collection (former store-category ids keep working); collection chips on the products page;
+  menus fall back to collections while no category is shown.
+- Tests: integration +3 (both switches, shared categories and rights, collections with pictures
+  and promotions) and the merchandising test rewritten; web +6 (online-web 34, store-web 26);
+  e2e +1 (product added in the store console reaches the POS, each side's switch) and the store
+  e2e follow the new console.
+- Verified (cloud sandbox): `pnpm verify` 381 unit/web, `pnpm test:integration` 311 (44 files),
+  `pnpm test:e2e` 45.
+
 ### 2026-10-21 — Pictures stored as WebP; store category dialog (ADR-0129)
 Owner's requests: the "Add category" dialog must close after saving; say that the store's
 categories are separate from the POS ones; allow pasting a picture into the category dialog;

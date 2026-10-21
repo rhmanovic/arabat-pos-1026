@@ -11,6 +11,8 @@ const IDENTITY_TABLES = [
   'stock_reservations',
   'online_order_lines',
   'online_orders',
+  'online_collection_products',
+  'online_collections',
   'online_listings',
   'online_stores',
   'kitchen_tickets',

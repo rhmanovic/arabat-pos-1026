@@ -5,7 +5,7 @@ import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'rea
 import { useTranslation } from 'react-i18next';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router';
 import { useCart } from '../cart.js';
-import { useAccount, useLocalName, useSlug, useStorefront } from '../shared.js';
+import { navGroups, useAccount, useLocalName, useSlug, useStorefront } from '../shared.js';
 import { linkTarget, useDesign, useText } from './context.js';
 import { BranchPicker, DesignAnchor, LanguageButton, SocialLinks, StoreIcon } from './parts.js';
 
@@ -528,7 +528,7 @@ function CategoryMenu({ mega }: { mega: boolean }) {
   const { data: store } = useStorefront();
   const name = useLocalName();
   const { t } = useTranslation();
-  const categories = store?.categories ?? [];
+  const categories = navGroups(store);
   if (mega)
     return (
       <div
@@ -833,13 +833,13 @@ export function Drawer({ onClose }: { onClose: () => void }) {
             );
           })}
         </nav>
-        {drawer.showCategories && store.categories.length > 0 ? (
+        {drawer.showCategories && navGroups(store).length > 0 ? (
           <div className="px-3 pb-3">
             <p className="px-3 pb-2 text-xs font-bold tracking-wide text-fg-subtle">
               {t('nav.categories')}
             </p>
             <ul className={cn('grid gap-2', full ? 'grid-cols-3 sm:grid-cols-4' : 'grid-cols-3')}>
-              {store.categories.map((c) => (
+              {navGroups(store).map((c) => (
                 <li key={c.id}>
                   <Link
                     to={`/${slug}/products?category=${c.id}`}

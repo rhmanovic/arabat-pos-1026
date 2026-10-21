@@ -300,8 +300,8 @@ export class DeviceSyncService {
 
   /**
    * Every product (full), or those whose product or variant rows changed since `since` minus
-   * the overlap. `sellable` uses the checkout's rule (`SalesService.loadItems`): active and
-   * available at the branch.
+   * the overlap. `sellable` uses the checkout's rule (`SalesService.loadItems`): active, shown
+   * at the point of sale (ADR-0130) and available at the branch.
    */
   private async products(
     tx: Transaction,
@@ -316,7 +316,7 @@ export class DeviceSyncService {
     const productRows = (
       await tx.execute(sql`
         select p.id, p.category_id, p.name_en, p.name_ar, p.type, p.track_inventory, p.updated_at,
-               (p.status = 'active' and (p.available_in_all_branches or exists (
+               (p.status = 'active' and p.pos_visible and (p.available_in_all_branches or exists (
                  select 1 from product_branch_availability a
                  where a.product_id = p.id and a.branch_id = ${branchId}))) as sellable
         from products p ${changed}

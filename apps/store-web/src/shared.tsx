@@ -1,3 +1,4 @@
+import type { StoreProduct, Storefront } from '@arabat/contracts';
 import { isPreview } from './design/context.js';
 import { formatMoney } from '@arabat/i18n';
 import type { Money } from '@arabat/money';
@@ -207,3 +208,21 @@ export function useMoney() {
   return (value: Money | { amount: string; currency: string }) =>
     formatMoney('toDecimalString' in value ? value : toMoney(value), i18n.language);
 }
+
+/**
+ * Categories and collections (ADR-0130): a `?category=` address, a link or a section may name
+ * either. The store categories of ADR-0121 became collections with the same ids, so designs
+ * and links made before keep working.
+ */
+export const inGroup = (p: StoreProduct, id: string) =>
+  p.categoryId === id || p.collectionIds.includes(id);
+export type StoreGroup = Storefront['collections'][number];
+export const findGroup = (store: Storefront, id: string): StoreGroup | undefined =>
+  store.categories.find((c) => c.id === id) ?? store.collections.find((c) => c.id === id);
+/**
+ * The groups the store's menus and category sections show: its categories, or its collections
+ * while no category is shown (a store whose products only sat in ADR-0121 store categories
+ * keeps its navigation until they are linked to the shared categories).
+ */
+export const navGroups = (store: Storefront | null | undefined): StoreGroup[] =>
+  !store ? [] : store.categories.length > 0 ? store.categories : store.collections;

@@ -13,6 +13,10 @@ import { useTranslation } from 'react-i18next';
 import { Link, useSearchParams } from 'react-router';
 import { toMoney, useCart } from '../cart.js';
 import {
+  type StoreGroup,
+  findGroup,
+  inGroup,
+  navGroups,
   useBranchChoice,
   useLocalName,
   useMoney,
@@ -550,7 +554,7 @@ function ProductsSection({ s }: { s: SectionOf<'products'> }) {
     s.source === 'featured'
       ? all.filter((p) => p.featured)
       : s.source === 'category'
-        ? all.filter((p) => p.categoryId === s.categoryId)
+        ? all.filter((p) => (s.categoryId ? inGroup(p, s.categoryId) : p.categoryId === null))
         : s.source === 'manual'
           ? s.productIds
               .map((id) => all.find((p) => p.productId === id))
@@ -600,13 +604,11 @@ function CategoriesSection({ s }: { s: SectionOf<'categories'> }) {
   const card = useCard();
   const { t } = useTranslation();
   if (!store) return null;
-  const all = store.categories;
-  const list =
+  // Chosen ids may name categories or collections; without a choice, the categories.
+  const list: StoreGroup[] =
     s.categoryIds.length > 0
-      ? s.categoryIds
-          .map((id) => all.find((c) => c.id === id))
-          .filter((c): c is (typeof all)[number] => Boolean(c))
-      : all;
+      ? s.categoryIds.map((id) => findGroup(store, id)).filter((c): c is StoreGroup => Boolean(c))
+      : navGroups(store);
   // On the categories page an empty store says so; elsewhere the section just stays out.
   if (list.length === 0)
     return page === 'categories' ? <EmptyState title={t('design.noCategories')} /> : null;
@@ -877,17 +879,15 @@ function MenuSection({ s }: { s: SectionOf<'menu'> }) {
     return products.isPending ? <Spinner label={t('common:status.loading')} /> : null;
   const all = products.data.products;
   const categories = (
-    s.categoryIds.length > 0
-      ? s.categoryIds.map((id) => store.categories.find((c) => c.id === id))
-      : store.categories
+    s.categoryIds.length > 0 ? s.categoryIds.map((id) => findGroup(store, id)) : navGroups(store)
   )
-    .filter((c): c is (typeof store.categories)[number] => Boolean(c))
-    .map((c) => ({ ...c, items: all.filter((p) => p.categoryId === c.id) }))
+    .filter((c): c is StoreGroup => Boolean(c))
+    .map((c) => ({ ...c, items: all.filter((p) => inGroup(p, c.id)) }))
     .filter((c) => c.items.length > 0);
   const others =
     s.categoryIds.length > 0
       ? []
-      : all.filter((p) => !store.categories.some((c) => c.id === p.categoryId));
+      : all.filter((p) => !navGroups(store).some((c) => inGroup(p, c.id)));
   const groups = [
     ...categories,
     ...(others.length > 0
@@ -1198,13 +1198,16 @@ export function CatalogSection({ s }: { s: SectionOf<'catalog'> }) {
   });
   const visible = sorted.filter(
     (p) =>
-      (!category || p.categoryId === category) &&
+      (!category || inGroup(p, category)) &&
       (!term || `${p.nameEn ?? ''} ${p.nameAr ?? ''}`.toLowerCase().includes(term)),
   );
   // Featured products open the page while nothing is filtered (ADR-0121).
   const featured = s.showFeatured && !category && !term ? visible.filter((p) => p.featured) : [];
   const used = new Set(products.data.products.map((p) => p.categoryId));
-  const categories = (store?.categories ?? []).filter((c) => used.has(c.id));
+  const categories: StoreGroup[] = [
+    ...(store?.categories ?? []).filter((c) => used.has(c.id)),
+    ...(store?.collections ?? []),
+  ];
 
   if (products.data.products.length === 0) return <EmptyState title={t('catalog.empty')} />;
   return (

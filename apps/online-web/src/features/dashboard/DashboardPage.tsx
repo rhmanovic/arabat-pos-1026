@@ -141,7 +141,7 @@ function LaunchChecklist({ store: s }: { store: OnlineStore }) {
     queryKey: [...key, 'listings'],
     queryFn: () => api.online.listings(),
   });
-  const listed = (listings.data?.products ?? []).some((p) => p.listed);
+  const listed = (listings.data?.products ?? []).some((p) => p.visible);
   const steps: { key: string; done: boolean; to: string }[] = [
     { key: 'name', done: Boolean(s.nameAr || s.nameEn), to: '/settings' },
     { key: 'products', done: listed, to: '/products' },

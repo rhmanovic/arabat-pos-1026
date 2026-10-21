@@ -129,11 +129,12 @@ export const onlineStoreSlugHistory = pgTable(
 );
 
 /**
- * The store's own navigation (ADR-0121): categories independent of the POS ones. While a
- * merchant has none, the storefront groups by the catalog categories.
+ * Marketing collections of the store (ADR-0130): "Offers", "New in"… A product may be in several;
+ * they never replace the shared categories. The store categories of ADR-0121 became collections
+ * (same ids, so links, designs and promotions that named them keep working).
  */
-export const onlineCategories = pgTable(
-  'online_categories',
+export const onlineCollections = pgTable(
+  'online_collections',
   {
     id: id(),
     merchantId: merchantId().references(() => merchants.id),
@@ -149,21 +150,46 @@ export const onlineCategories = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [
-    unique('online_categories_merchant_id_id_key').on(t.merchantId, t.id),
-    index('online_categories_merchant_idx').on(t.merchantId, t.position),
-    check('online_categories_name_present', sql`coalesce(${t.nameEn}, ${t.nameAr}) is not null`),
-    check('online_categories_status_valid', sql`${t.status} in ('active', 'hidden')`),
+    unique('online_collections_merchant_id_id_key').on(t.merchantId, t.id),
+    index('online_collections_merchant_idx').on(t.merchantId, t.position),
+    check('online_collections_name_present', sql`coalesce(${t.nameEn}, ${t.nameAr}) is not null`),
+    check('online_collections_status_valid', sql`${t.status} in ('active', 'hidden')`),
     check(
-      'online_categories_image_pair',
+      'online_collections_image_pair',
       sql`(${t.imageKey} is null) = (${t.imageContentType} is null)`,
     ),
   ],
 );
 
+/** Products of a collection, in the collection's own order. */
+export const onlineCollectionProducts = pgTable(
+  'online_collection_products',
+  {
+    merchantId: merchantId(),
+    collectionId: uuid().notNull(),
+    productId: uuid().notNull(),
+    position: integer().notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.merchantId, t.collectionId, t.productId] }),
+    foreignKey({
+      columns: [t.merchantId, t.collectionId],
+      foreignColumns: [onlineCollections.merchantId, onlineCollections.id],
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.merchantId, t.productId],
+      foreignColumns: [products.merchantId, products.id],
+    }),
+    index('online_collection_products_product_idx').on(t.merchantId, t.productId),
+  ],
+);
+
 /**
- * Products shown in the online store (presence = listed), with what the store says about them
- * on top of the catalog (ADR-0121): an online title and description, a store category,
- * featured, a per-order cap and the display order. Prices and stock stay the catalog's.
+ * Every product has a listing (ADR-0130: a product added anywhere is in both places); `visible`
+ * says whether shoppers see it on the website. On top of the catalog, the listing holds what
+ * the store says about the product (ADR-0121): an online title and description, featured, a
+ * per-order cap and the display order. Prices, stock and the category stay the catalog's.
  */
 export const onlineListings = pgTable(
   'online_listings',
@@ -178,10 +204,10 @@ export const onlineListings = pgTable(
     descriptionEn: text(),
     descriptionAr: text(),
     featured: boolean().notNull().default(false),
+    /** Shown on the website (the store console's switch, ADR-0130). */
+    visible: boolean().notNull().default(true),
     /** Units of one variant per order (1–20); null = the store default (20). */
     maxPerOrder: integer(),
-    /** Single-column FK: a composite `set null` would also null `merchant_id` (ADR-0123). */
-    onlineCategoryId: uuid().references(() => onlineCategories.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

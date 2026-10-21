@@ -202,9 +202,14 @@ export function ProductsPage() {
             header: t('common.status'),
             hideBelow: 'sm',
             cell: (p) => (
-              <Badge tone={p.status === 'active' ? 'success' : 'neutral'}>
-                {p.status === 'active' ? t('catalog.statusActive') : t('catalog.statusArchived')}
-              </Badge>
+              <span className="flex flex-wrap gap-1">
+                <Badge tone={p.status === 'active' ? 'success' : 'neutral'}>
+                  {p.status === 'active' ? t('catalog.statusActive') : t('catalog.statusArchived')}
+                </Badge>
+                {p.status === 'active' && !p.posVisible ? (
+                  <Badge tone="warning">{t('catalog.hiddenInPos')}</Badge>
+                ) : null}
+              </span>
             ),
           },
         ]}

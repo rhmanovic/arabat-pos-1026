@@ -46,6 +46,7 @@ interface Draft {
   trackInventory: boolean;
   availableInAllBranches: boolean;
   branchIds: string[];
+  posVisible: boolean;
   variants: VariantDraft[];
 }
 
@@ -71,6 +72,7 @@ function toDraft(p: Product | undefined): Draft {
       trackInventory: true,
       availableInAllBranches: true,
       branchIds: [],
+      posVisible: true,
       variants: [emptyVariant()],
     };
   }
@@ -85,6 +87,7 @@ function toDraft(p: Product | undefined): Draft {
     trackInventory: p.trackInventory,
     availableInAllBranches: p.availableInAllBranches,
     branchIds: p.branchIds,
+    posVisible: p.posVisible,
     variants: p.variants
       .filter((v) => v.status === 'active')
       .map((v) => ({
@@ -155,6 +158,7 @@ function Editor({ product }: { product: Product | undefined }) {
         trackInventory: draft.type === 'service' ? false : draft.trackInventory,
         availableInAllBranches: draft.availableInAllBranches,
         branchIds: draft.availableInAllBranches ? [] : draft.branchIds,
+        posVisible: draft.posVisible,
         variants: (draft.hasVariants ? draft.variants : draft.variants.slice(0, 1)).map((v) => ({
           ...(v.id ? { id: v.id } : {}),
           nameAr: draft.hasVariants ? v.nameAr : null,
@@ -473,6 +477,13 @@ function Editor({ product }: { product: Product | undefined }) {
           </Section>
           <Section title={t('catalog.availability')}>
             <div className="flex flex-col gap-3">
+              {/* The point of sale's switch only; the website has its own in the store console (ADR-0130). */}
+              <Checkbox
+                label={t('catalog.posVisible')}
+                description={t('catalog.posVisibleHint')}
+                checked={draft.posVisible}
+                onChange={(e) => update({ posVisible: e.target.checked })}
+              />
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="radio"

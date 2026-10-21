@@ -9,6 +9,7 @@ import type { RouteObject } from 'react-router';
 import { OnlineLayout } from './app/OnlineLayout.js';
 import { AnalyticsPage } from './features/analytics/AnalyticsPage.js';
 import { CategoriesPage } from './features/categories/CategoriesPage.js';
+import { CollectionsPage } from './features/collections/CollectionsPage.js';
 import { DashboardPage } from './features/dashboard/DashboardPage.js';
 import { BranchesPage } from './features/fulfilment/BranchesPage.js';
 import { DeliveryAreasPage } from './features/fulfilment/DeliveryAreasPage.js';
@@ -47,6 +48,7 @@ export const routes: RouteObject[] = [
       { path: 'orders', element: <OrdersPage /> },
       { path: 'products', element: <ProductsPage /> },
       { path: 'categories', element: <CategoriesPage /> },
+      { path: 'collections', element: <CollectionsPage /> },
       { path: 'delivery-areas', element: <DeliveryAreasPage /> },
       { path: 'branches', element: <BranchesPage /> },
       { path: 'promotions', element: <PromotionsPage /> },

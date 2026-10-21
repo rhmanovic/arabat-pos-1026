@@ -1,7 +1,7 @@
 import {
   MAX_STORE_IMAGE_BYTES,
   type MockPayment,
-  type OnlineCategory,
+  type OnlineCollection,
   type OnlineDeliveryArea,
   type OnlineOrder,
   type OnlineStore,
@@ -15,12 +15,13 @@ import {
   type StoreQuoteResult,
   type Sale,
   type SlugAvailability,
+  type StoreCategory,
   type StoreProduct,
   type StoreSlotList,
   type Storefront,
   listingOrderSchema,
   mockPaymentOutcomeSchema,
-  onlineCategoryOrderSchema,
+  onlineCollectionOrderSchema,
   onlineDeliveryAreaOrderSchema,
   onlineOrderActionSchema,
   onlineOrderListQuerySchema,
@@ -39,7 +40,9 @@ import {
   storeQuoteSchema,
   saveListingSchema,
   saveListingsSchema,
-  saveOnlineCategorySchema,
+  saveOnlineCollectionSchema,
+  saveStoreCategorySchema,
+  storeCategoryOrderSchema,
   saveOnlineDeliveryAreaSchema,
   saveOnlineStoreBranchSchema,
   saveOnlineStoreSchema,
@@ -226,13 +229,7 @@ export class OnlineManagerController {
     @Body(new ZodPipe(saveListingsSchema)) body: O<typeof saveListingsSchema>,
     @Req() req: FastifyRequest,
   ) {
-    return this.store.setListings(
-      actor,
-      body.productIds,
-      body.listed,
-      req.ip,
-      body.onlineCategoryId,
-    );
+    return this.store.setListings(actor, body, req.ip);
   }
 
   @RequirePermission('manager', 'online.manage')
@@ -256,20 +253,22 @@ export class OnlineManagerController {
     return this.store.saveListing(actor, productId, body, req.ip);
   }
 
-  // ---------------------------------------------------------------- categories (ADR-0121)
+  // ---------------------------------------------------------------- categories (ADR-0130)
+  /** The shared catalog categories with the store's settings. */
   @RequirePermission('manager', 'online.manage')
   @Get('categories')
   categories(@CurrentMerchantActor() actor: MerchantActor) {
     return this.store.categories(actor);
   }
 
+  /** A new shared category (also `catalog.manage`, checked in the service). */
   @RequirePermission('manager', 'online.manage')
   @Post('categories')
   createCategory(
     @CurrentMerchantActor() actor: MerchantActor,
-    @Body(new ZodPipe(saveOnlineCategorySchema)) body: O<typeof saveOnlineCategorySchema>,
+    @Body(new ZodPipe(saveStoreCategorySchema)) body: O<typeof saveStoreCategorySchema>,
     @Req() req: FastifyRequest,
-  ): Promise<OnlineCategory> {
+  ): Promise<StoreCategory> {
     return this.store.createCategory(actor, body, req.ip);
   }
 
@@ -277,7 +276,7 @@ export class OnlineManagerController {
   @Put('categories/order')
   orderCategories(
     @CurrentMerchantActor() actor: MerchantActor,
-    @Body(new ZodPipe(onlineCategoryOrderSchema)) body: O<typeof onlineCategoryOrderSchema>,
+    @Body(new ZodPipe(storeCategoryOrderSchema)) body: O<typeof storeCategoryOrderSchema>,
     @Req() req: FastifyRequest,
   ) {
     return this.store.orderCategories(actor, body.ids, req.ip);
@@ -288,20 +287,10 @@ export class OnlineManagerController {
   updateCategory(
     @CurrentMerchantActor() actor: MerchantActor,
     @Param('id', uuid) id: string,
-    @Body(new ZodPipe(saveOnlineCategorySchema)) body: O<typeof saveOnlineCategorySchema>,
+    @Body(new ZodPipe(saveStoreCategorySchema)) body: O<typeof saveStoreCategorySchema>,
     @Req() req: FastifyRequest,
-  ): Promise<OnlineCategory> {
+  ): Promise<StoreCategory> {
     return this.store.updateCategory(actor, id, body, req.ip);
-  }
-
-  @RequirePermission('manager', 'online.manage')
-  @Delete('categories/:id')
-  deleteCategory(
-    @CurrentMerchantActor() actor: MerchantActor,
-    @Param('id', uuid) id: string,
-    @Req() req: FastifyRequest,
-  ) {
-    return this.store.deleteCategory(actor, id, req.ip);
   }
 
   @RequirePermission('manager', 'online.manage')
@@ -321,7 +310,7 @@ export class OnlineManagerController {
     @CurrentMerchantActor() actor: MerchantActor,
     @Param('id', uuid) id: string,
     @Req() req: FastifyRequest,
-  ): Promise<OnlineCategory> {
+  ): Promise<StoreCategory> {
     return this.store.setCategoryImage(actor, id, await readUpload(req), req.ip);
   }
 
@@ -331,8 +320,87 @@ export class OnlineManagerController {
     @CurrentMerchantActor() actor: MerchantActor,
     @Param('id', uuid) id: string,
     @Req() req: FastifyRequest,
-  ): Promise<OnlineCategory> {
+  ): Promise<StoreCategory> {
     return this.store.setCategoryImage(actor, id, null, req.ip);
+  }
+
+  // ---------------------------------------------------------------- collections (ADR-0130)
+  @RequirePermission('manager', 'online.manage')
+  @Get('collections')
+  collections(@CurrentMerchantActor() actor: MerchantActor) {
+    return this.store.collections(actor);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Post('collections')
+  createCollection(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Body(new ZodPipe(saveOnlineCollectionSchema)) body: O<typeof saveOnlineCollectionSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<OnlineCollection> {
+    return this.store.createCollection(actor, body, req.ip);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Put('collections/order')
+  orderCollections(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Body(new ZodPipe(onlineCollectionOrderSchema)) body: O<typeof onlineCollectionOrderSchema>,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.store.orderCollections(actor, body.ids, req.ip);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Put('collections/:id')
+  updateCollection(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Body(new ZodPipe(saveOnlineCollectionSchema)) body: O<typeof saveOnlineCollectionSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<OnlineCollection> {
+    return this.store.updateCollection(actor, id, body, req.ip);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Delete('collections/:id')
+  deleteCollection(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.store.deleteCollection(actor, id, req.ip);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Get('collections/:id/image')
+  async collectionImage(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Res() reply: FastifyReply,
+  ) {
+    await sendImage(reply, await this.store.collectionImage(actor, id), 'private, no-cache');
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Post('collections/:id/image')
+  @HttpCode(200)
+  async uploadCollectionImage(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Req() req: FastifyRequest,
+  ): Promise<OnlineCollection> {
+    return this.store.setCollectionImage(actor, id, await readUpload(req), req.ip);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Delete('collections/:id/image')
+  removeCollectionImage(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('id', uuid) id: string,
+    @Req() req: FastifyRequest,
+  ): Promise<OnlineCollection> {
+    return this.store.setCollectionImage(actor, id, null, req.ip);
   }
 
   // ---------------------------------------------------------------- store images (ADR-0121)
@@ -582,6 +650,20 @@ export class StorefrontController {
     await sendImage(
       reply,
       await this.store.publicImage(slug, { categoryId: id }),
+      'public, max-age=86400',
+    );
+  }
+
+  @Public()
+  @Get('collections/:id/image')
+  async collectionImage(
+    @Param('slug') slug: string,
+    @Param('id', uuid) id: string,
+    @Res() reply: FastifyReply,
+  ) {
+    await sendImage(
+      reply,
+      await this.store.publicImage(slug, { collectionId: id }),
       'public, max-age=86400',
     );
   }

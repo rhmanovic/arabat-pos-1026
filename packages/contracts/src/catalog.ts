@@ -101,6 +101,8 @@ export const productSchema = z.object({
   trackInventory: z.boolean(),
   availableInAllBranches: z.boolean(),
   branchIds: z.array(z.string()),
+  /** Offered at the point of sale (ADR-0130); the website has its own switch in the store console. */
+  posVisible: z.boolean(),
   status: z.enum(['active', 'archived']),
   variants: z.array(variantSchema),
   images: z.array(productImageSchema),
@@ -118,6 +120,7 @@ export const productSummarySchema = z.object({
   type: z.enum(['standard', 'service']),
   hasVariants: z.boolean(),
   trackInventory: z.boolean(),
+  posVisible: z.boolean(),
   status: z.enum(['active', 'archived']),
   variantCount: z.number().int(),
   skus: z.array(z.string()),
@@ -172,6 +175,8 @@ export const saveProductSchema = z
     trackInventory: z.boolean().default(true),
     availableInAllBranches: z.boolean().default(true),
     branchIds: z.array(z.uuid()).max(500).default([]),
+    /** Offered at the point of sale (ADR-0130). A new product is also in the store at once. */
+    posVisible: z.boolean().default(true),
     /** Simple product: exactly one variant. With variants: 1–100 named variants. Missing ones are archived. */
     variants: z.array(saveVariantSchema).min(1).max(100),
     version: z.number().int().positive().optional(),

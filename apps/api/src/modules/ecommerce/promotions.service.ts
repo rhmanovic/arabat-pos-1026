@@ -26,7 +26,8 @@ const str = (v: unknown) => (v as string | null) ?? null;
 export type PromotionLine = {
   productId: string;
   categoryId: string | null;
-  onlineCategoryId: string | null;
+  /** Collections of the product (ADR-0130; former store categories keep their ids). */
+  collectionIds: string[];
   netMinor: bigint;
 };
 export type CodeIssue = NonNullable<StoreQuoteResult['codeIssue']>;
@@ -294,7 +295,7 @@ export class PromotionsService {
                 r['applies_to'] === 'product'
                   ? targets.has(l.productId)
                   : (l.categoryId !== null && targets.has(l.categoryId)) ||
-                    (l.onlineCategoryId !== null && targets.has(l.onlineCategoryId)),
+                    l.collectionIds.some((id) => targets.has(id)),
               )
               .reduce((sum, l) => sum + l.netMinor, 0n);
       const type = r['discount_type'] as string;

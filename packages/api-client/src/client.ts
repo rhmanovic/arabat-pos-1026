@@ -255,13 +255,17 @@ import {
   type OnlineOrderListQuery,
   type OnlineOrderActionInput,
   type SaveListing,
-  type SaveOnlineCategory,
+  type SaveListings,
+  type SaveOnlineCollection,
+  type SaveStoreCategory,
   type SaveOnlineStore,
   type StoreCheckout,
   listingListSchema,
   mockPaymentSchema,
-  onlineCategoryListSchema,
-  onlineCategorySchema,
+  onlineCollectionListSchema,
+  onlineCollectionSchema,
+  storeCategoryListSchema,
+  storeCategorySchema,
   onlineOrderListSchema,
   onlineOrderSchema,
   onlineStoreSchema,
@@ -1152,42 +1156,65 @@ export function createApiClient(options: ApiClientOptions = {}) {
       /** Tenders staff may record for a pay-on-receipt order. */
       tenders: () => request('GET', '/manager/online/tenders', { schema: onlineTenderListSchema }),
       listings: () => request('GET', '/manager/online/listings', { schema: listingListSchema }),
-      setListings: (body: {
-        productIds: string[];
-        listed: boolean;
-        onlineCategoryId?: string | null;
-      }) => request('PUT', '/manager/online/listings', { body, schema: listingListSchema }),
-      /** The store's own text and options for one listed product (ADR-0121). */
+      /** Bulk actions: show on / hide from the website, category, add to a collection. */
+      setListings: (body: SaveListings) =>
+        request('PUT', '/manager/online/listings', { body, schema: listingListSchema }),
+      /** The store's own text and options for one product (ADR-0121, ADR-0130). */
       saveListing: (productId: string, body: SaveListing) =>
         request('PUT', `/manager/online/listings/${productId}`, {
           body,
           schema: listingListSchema,
         }),
-      /** Every listed product exactly once, in display order. */
+      /** Every active product exactly once, in display order. */
       orderListings: (productIds: string[]) =>
         request('PUT', '/manager/online/listings/order', {
           body: { productIds },
           schema: listingListSchema,
         }),
+      /** The shared catalog categories with the store's settings (ADR-0130). */
       categories: () =>
-        request('GET', '/manager/online/categories', { schema: onlineCategoryListSchema }),
-      createCategory: (body: SaveOnlineCategory) =>
-        request('POST', '/manager/online/categories', { body, schema: onlineCategorySchema }),
-      updateCategory: (id: string, body: SaveOnlineCategory) =>
-        request('PUT', `/manager/online/categories/${id}`, { body, schema: onlineCategorySchema }),
-      deleteCategory: (id: string) =>
-        request('DELETE', `/manager/online/categories/${id}`, { schema: onlineCategoryListSchema }),
+        request('GET', '/manager/online/categories', { schema: storeCategoryListSchema }),
+      createCategory: (body: SaveStoreCategory) =>
+        request('POST', '/manager/online/categories', { body, schema: storeCategorySchema }),
+      updateCategory: (id: string, body: SaveStoreCategory) =>
+        request('PUT', `/manager/online/categories/${id}`, { body, schema: storeCategorySchema }),
       orderCategories: (ids: string[]) =>
         request('PUT', '/manager/online/categories/order', {
           body: { ids },
-          schema: onlineCategoryListSchema,
+          schema: storeCategoryListSchema,
         }),
       async uploadCategoryImage(id: string, file: Blob) {
-        return uploadImage(`/manager/online/categories/${id}/image`, file, onlineCategorySchema);
+        return uploadImage(`/manager/online/categories/${id}/image`, file, storeCategorySchema);
       },
       removeCategoryImage: (id: string) =>
         request('DELETE', `/manager/online/categories/${id}/image`, {
-          schema: onlineCategorySchema,
+          schema: storeCategorySchema,
+        }),
+      /** Marketing collections (ADR-0130). */
+      collections: () =>
+        request('GET', '/manager/online/collections', { schema: onlineCollectionListSchema }),
+      createCollection: (body: SaveOnlineCollection) =>
+        request('POST', '/manager/online/collections', { body, schema: onlineCollectionSchema }),
+      updateCollection: (id: string, body: SaveOnlineCollection) =>
+        request('PUT', `/manager/online/collections/${id}`, {
+          body,
+          schema: onlineCollectionSchema,
+        }),
+      deleteCollection: (id: string) =>
+        request('DELETE', `/manager/online/collections/${id}`, {
+          schema: onlineCollectionListSchema,
+        }),
+      orderCollections: (ids: string[]) =>
+        request('PUT', '/manager/online/collections/order', {
+          body: { ids },
+          schema: onlineCollectionListSchema,
+        }),
+      async uploadCollectionImage(id: string, file: Blob) {
+        return uploadImage(`/manager/online/collections/${id}/image`, file, onlineCollectionSchema);
+      },
+      removeCollectionImage: (id: string) =>
+        request('DELETE', `/manager/online/collections/${id}/image`, {
+          schema: onlineCollectionSchema,
         }),
       /** Store logo or banner (ADR-0121). */
       async uploadStoreImage(kind: 'logo' | 'banner', file: Blob) {

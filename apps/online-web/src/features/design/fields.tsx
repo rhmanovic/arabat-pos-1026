@@ -35,6 +35,22 @@ export function useStoreCatalog(): {
   return { store: store.data ?? null, products: products.data?.products ?? [] };
 }
 
+/**
+ * Categories, then collections (ADR-0130), as link and section targets: a store link or a
+ * section that names a category may name a collection too.
+ */
+export function useGroupOptions(): { id: string; label: string }[] {
+  const { t, i18n } = useTranslation();
+  const { store } = useStoreCatalog();
+  return [
+    ...(store?.categories ?? []).map((c) => ({ id: c.id, label: localizedName(c, i18n.language) })),
+    ...(store?.collections ?? []).map((c) => ({
+      id: c.id,
+      label: t('promotions.collectionTarget', { name: localizedName(c, i18n.language) }),
+    })),
+  ];
+}
+
 /** A small group of mutually exclusive options shown as chips (radio semantics). */
 export function Choice<T extends string | number>({
   label,
@@ -146,13 +162,13 @@ export function LinkPicker({
   optional?: boolean;
 }) {
   const { t, i18n } = useTranslation();
-  const { store, products } = useStoreCatalog();
+  const { products } = useStoreCatalog();
+  const groups = useGroupOptions();
   const kind = value?.kind ?? 'none';
   const setKind = (k: string) => {
     if (k === 'none') onChange(null);
     else if (k === 'page') onChange({ kind: 'page', page: 'products' });
-    else if (k === 'category')
-      onChange({ kind: 'category', categoryId: store?.categories[0]?.id ?? '' });
+    else if (k === 'category') onChange({ kind: 'category', categoryId: groups[0]?.id ?? '' });
     else if (k === 'product')
       onChange({ kind: 'product', productId: products[0]?.productId ?? '' });
     else onChange({ kind: 'url', url: 'https://' });
@@ -196,9 +212,9 @@ export function LinkPicker({
               value={value.categoryId}
               onChange={(e) => onChange({ kind: 'category', categoryId: e.target.value })}
             >
-              {(store?.categories ?? []).map((c) => (
+              {groups.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {localizedName(c, i18n.language)}
+                  {c.label}
                 </option>
               ))}
             </Select>

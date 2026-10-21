@@ -171,6 +171,10 @@ function PromotionDialog({
     queryKey: [...key, 'listings'],
     queryFn: () => api.online.listings(),
   });
+  const collections = useQuery({
+    queryKey: [...key, 'collections'],
+    queryFn: () => api.online.collections(),
+  });
   const [v, setV] = useState<SaveOnlinePromotion>({
     nameEn: promotion?.nameEn ?? null,
     nameAr: promotion?.nameAr ?? null,
@@ -202,13 +206,21 @@ function PromotionDialog({
   });
   const targets =
     v.appliesTo === 'category'
-      ? (categories.data?.categories ?? []).map((c) => ({
-          id: c.id,
-          label: localizedName(c, i18n.language),
-        }))
+      ? [
+          ...(categories.data?.categories ?? []).map((c) => ({
+            id: c.id,
+            label: localizedName(c, i18n.language),
+          })),
+          // Collections (ADR-0130) are targeted like categories; former store categories are
+          // collections with the same ids, so existing promotions keep their targets.
+          ...(collections.data?.collections ?? []).map((c) => ({
+            id: c.id,
+            label: t('promotions.collectionTarget', { name: localizedName(c, i18n.language) }),
+          })),
+        ]
       : v.appliesTo === 'product'
         ? (listings.data?.products ?? [])
-            .filter((p) => p.listed)
+            .filter((p) => p.visible)
             .map((p) => ({ id: p.productId, label: localizedName(p, i18n.language) }))
         : [];
   const toggleTarget = (id: string, on: boolean) =>

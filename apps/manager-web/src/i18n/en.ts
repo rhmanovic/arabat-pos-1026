@@ -324,7 +324,8 @@ export const managerEn = {
     productsSubtitle: 'Product definitions and prices. Stock quantities are managed in Inventory.',
     newProduct: 'New product',
     categoriesTitle: 'Categories',
-    categoriesSubtitle: 'Group products for the POS and reports.',
+    categoriesSubtitle:
+      'Group products for the POS, the online store and reports: one category tree everywhere (the store console sets how each one is shown on the website).',
     newCategory: 'New category',
     category: 'Category',
     noCategory: 'No category',
@@ -364,6 +365,10 @@ export const managerEn = {
     trackInventory: 'Track stock for this product',
     trackInventoryHint: 'Stock levels are recorded in the Inventory module.',
     availability: 'Branch availability',
+    posVisible: 'Shown at the point of sale',
+    posVisibleHint:
+      'Turn off to stop selling it at the till. A product is always in the online store too; whether shoppers see it on the website is set in the store console.',
+    hiddenInPos: 'Hidden at the POS',
     allBranches: 'Available at all branches',
     selectedBranches: 'Only at selected branches',
     images: 'Images',

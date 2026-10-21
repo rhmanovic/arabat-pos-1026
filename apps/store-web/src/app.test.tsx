@@ -39,8 +39,8 @@ const STORE = {
   payOnReceipt: true,
   logoUrl: null,
   bannerUrl: null,
-  categorySource: 'pos',
   categories: [],
+  collections: [],
   branches: [
     {
       id: '0190a000-0000-7000-8000-0000000000b1',
@@ -73,6 +73,7 @@ const PRODUCTS = {
       descriptionEn: 'Medium roast',
       descriptionAr: null,
       categoryId: null,
+      collectionIds: [],
       imageUrl: null,
       images: [],
       featured: false,
@@ -96,6 +97,7 @@ const PRODUCTS = {
       descriptionEn: null,
       descriptionAr: null,
       categoryId: null,
+      collectionIds: [],
       imageUrl: null,
       images: [],
       featured: false,
@@ -233,6 +235,31 @@ describe('storefront', () => {
     expect(screen.getByText('KWD 1.250')).toBeInTheDocument();
   });
 
+  it('filters by a collection, also through an address made for a former store category', async () => {
+    const OFFERS = '0190a000-0000-7000-8000-0000000000d1';
+    renderStore(`/demo/products?category=${OFFERS}`, {
+      'GET /store/demo': () => ({
+        status: 200,
+        body: {
+          ...STORE,
+          collections: [{ id: OFFERS, nameEn: 'Offers', nameAr: 'عروض', imageUrl: null }],
+        },
+      }),
+      'GET /store/demo/products': () => ({
+        status: 200,
+        body: {
+          products: PRODUCTS.products.map((p) => ({
+            ...p,
+            collectionIds: p.productId === MUG ? [OFFERS] : [],
+          })),
+        },
+      }),
+    });
+    expect(await screen.findByText('Mug')).toBeInTheDocument();
+    expect(screen.queryByText('Coffee beans')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Offers' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
   it('shows the banner, logo, featured products and category pictures, and sorts by price', async () => {
     const user = userEvent.setup();
     const CAT = '0190a000-0000-7000-8000-0000000000c9';
@@ -243,12 +270,12 @@ describe('storefront', () => {
           ...STORE,
           logoUrl: '/api/v1/store/demo/logo?v=3',
           bannerUrl: '/api/v1/store/demo/banner?v=3',
-          categorySource: 'online',
           categories: [
             {
               id: CAT,
               nameEn: 'Drinks',
               nameAr: 'مشروبات',
+              parentId: null,
               imageUrl: '/api/v1/store/demo/categories/x/image?v=1',
             },
           ],
@@ -775,7 +802,9 @@ describe('storefront', () => {
         status: 200,
         body: {
           ...STORE,
-          categories: [{ id: DRINKS, nameEn: 'Drinks', nameAr: null, imageUrl: null }],
+          categories: [
+            { id: DRINKS, nameEn: 'Drinks', nameAr: null, parentId: null, imageUrl: null },
+          ],
         },
       }),
       'GET /store/demo/products': () => ({
@@ -784,6 +813,7 @@ describe('storefront', () => {
           products: PRODUCTS.products.map((p, i) => ({
             ...p,
             categoryId: i === 0 ? DRINKS : null,
+            collectionIds: [],
             featured: i === 0,
           })),
         },
@@ -890,7 +920,9 @@ describe('storefront', () => {
           ...STORE,
           announcementEn: 'Open until midnight',
           contactPhone: '+96522223333',
-          categories: [{ id: DRINKS, nameEn: 'Drinks', nameAr: null, imageUrl: null }],
+          categories: [
+            { id: DRINKS, nameEn: 'Drinks', nameAr: null, parentId: null, imageUrl: null },
+          ],
         },
       }),
       'GET /store/demo/design': () => ({ status: 200, body: { design } }),
@@ -1237,7 +1269,15 @@ describe('storefront', () => {
         status: 200,
         body: {
           ...STORE,
-          categories: [{ id: HOT, nameEn: 'Hot drinks', nameAr: 'مشروبات ساخنة', imageUrl: null }],
+          categories: [
+            {
+              id: HOT,
+              nameEn: 'Hot drinks',
+              nameAr: 'مشروبات ساخنة',
+              parentId: null,
+              imageUrl: null,
+            },
+          ],
         },
       }),
       'GET /store/demo/products': () => ({

@@ -229,6 +229,7 @@ export class CatalogService {
           type: products.type,
           hasVariants: products.hasVariants,
           trackInventory: products.trackInventory,
+          posVisible: products.posVisible,
           status: products.status,
           updatedAt: products.updatedAt,
           minPrice,
@@ -261,6 +262,7 @@ export class CatalogService {
           type: r.type as ProductSummary['type'],
           hasVariants: r.hasVariants,
           trackInventory: r.trackInventory,
+          posVisible: r.posVisible,
           status: r.status as ProductSummary['status'],
           variantCount: r.variantCount,
           skus: r.skus,
@@ -511,6 +513,7 @@ export class CatalogService {
         .where(
           and(
             eq(products.status, 'active'),
+            eq(products.posVisible, true),
             eq(productVariants.status, 'active'),
             availableAt(branchId),
           ),
@@ -852,6 +855,7 @@ export class CatalogService {
       trackInventory: p.trackInventory,
       availableInAllBranches: p.availableInAllBranches,
       branchIds: availability.map((a) => a.branchId),
+      posVisible: p.posVisible,
       status: p.status as Product['status'],
       variants: variants.map((v) => ({
         id: v.id,
@@ -969,6 +973,7 @@ function productFields(input: SaveProductInput) {
     hasVariants: input.hasVariants,
     trackInventory: input.type === 'service' ? false : input.trackInventory,
     availableInAllBranches: input.availableInAllBranches,
+    posVisible: input.posVisible,
   };
 }
 

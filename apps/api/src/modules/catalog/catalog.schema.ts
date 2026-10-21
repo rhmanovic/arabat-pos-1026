@@ -34,12 +34,26 @@ export const categories = pgTable(
     nameAr: text(),
     sortOrder: integer().notNull().default(0),
     status: text().notNull().default('active'),
+    /*
+     * One category tree for the point of sale and the online store (ADR-0130); the store keeps
+     * its own presentation of each category: shown or not, order, an optional name and picture.
+     */
+    onlineVisible: boolean().notNull().default(true),
+    onlinePosition: integer(),
+    onlineNameEn: text(),
+    onlineNameAr: text(),
+    onlineImageKey: text(),
+    onlineImageContentType: text(),
     version: integer().notNull().default(1),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
     unique('categories_merchant_id_id_key').on(t.merchantId, t.id),
+    check(
+      'categories_online_image_pair',
+      sql`(${t.onlineImageKey} is null) = (${t.onlineImageContentType} is null)`,
+    ),
     foreignKey({ columns: [t.merchantId, t.parentId], foreignColumns: [t.merchantId, t.id] }),
     check('categories_name_present', sql`coalesce(${t.nameEn}, ${t.nameAr}) is not null`),
     check('categories_status_valid', sql`${t.status} in ('active', 'archived')`),
@@ -63,6 +77,8 @@ export const products = pgTable(
     trackInventory: boolean().notNull().default(true),
     /** When false, the product is sold only at the branches listed in product_branch_availability. */
     availableInAllBranches: boolean().notNull().default(true),
+    /** Offered at the point of sale (ADR-0130); the website has its own switch on the listing. */
+    posVisible: boolean().notNull().default(true),
     status: text().notNull().default('active'),
     version: integer().notNull().default(1),
     createdAt: createdAt(),

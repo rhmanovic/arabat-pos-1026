@@ -1857,7 +1857,8 @@ ADR; supersede it.
 ## ADR-0121 — Online store Phase 4: catalog and merchandising (store titles, order, categories, pictures)
 
 - **Status:** Accepted (owner request "ابدا خطوه 4", 2026-10-20; Phase 4 of
-  `docs/ONLINE_STORE_PLAN.md`)
+  `docs/ONLINE_STORE_PLAN.md`). The separate store categories were superseded by ADR-0130
+  (2026-10-21): categories are shared with the point of sale and the old ones became collections.
 - **Context:** The store showed the catalog as it is: catalog names and descriptions, POS
   categories, one picture, products in catalog order. A merchant could not say what the store
   shows first, group products the way shoppers browse, or write a store-specific title. The
@@ -2164,6 +2165,56 @@ ADR; supersede it.
   - Pictures stored before stay as they are (no rewrite of existing files).
 - **Consequences:** smaller pictures for shoppers, no personal metadata kept, one place to change
   the format or the size rule.
+
+## ADR-0130 — One catalog for the point of sale and the online store (shared categories, two switches, collections)
+- **Status:** Accepted (2026-10-21). Owner's decision after a merchant's bad experience: a product
+  and a category made at the point of sale were not found in the store's own categories (ADR-0121),
+  the store console had no "add product", and the catalog form did not offer the store's
+  categories. Supersedes the separate store categories of ADR-0121. BR-236.
+- **Decision:**
+  - **Every product is in both places, mandatorily.** Migration 0071 gives every existing
+    product a listing (`visible = false` for those that were not listed, so no storefront
+    changes) and a trigger `products_online_listing` (after insert on `products`) creates the
+    listing of every new product, shown on the website, at the end of the store order — whoever
+    inserts it (manager, store console, import, seed). Listings are no longer deleted.
+  - **Two switches, each in one place.** `online_listings.visible` ("shown on the website") is
+    changed only in the store console (`PUT /manager/online/listings`, bulk or per product);
+    `products.pos_visible` ("shown at the point of sale") only in Business management (the
+    product form, `posVisible` in `saveProductSchema`). A product hidden from the POS is left out
+    of `/pos/catalog`, the device snapshot (`sellable = false`) and `SalesService.loadItems`
+    (checkout, held carts, restaurant orders, exchanges), which takes a channel: online checkout
+    passes `online` and ignores the POS switch.
+  - **One category tree.** The store console's categories are the catalog's: `categories` gains
+    `online_visible`, `online_position` (the store's order; the POS keeps `sort_order`),
+    `online_name_en/ar` (optional store name) and `online_image_key / content_type`. The console
+    creates a shared category (`POST /manager/online/categories`, also needs `catalog.manage`),
+    renames it only with `catalog.manage`, and sets the store settings with `online.manage`.
+    A product's category is changed from the store console only with `catalog.manage` (it moves
+    at the POS too; audited as `product.updated` with `via: online`). There is no category
+    delete in the store console (archiving stays in Business management).
+  - **Collections** (`online_collections`, `online_collection_products`, RLS): marketing groups,
+    many-to-many, with a picture, status and order, a product's own order in the collection, and
+    CRUD at `/manager/online/collections`. Migration 0071 copies every `online_categories` row
+    into a collection **with the same id** and its listings' memberships; 0072 drops
+    `online_listings.online_category_id` and `online_categories`. The storefront returns
+    `collections` and `product.collectionIds`; `categorySource` is gone. Wherever a category id
+    is accepted (links, `?category=`, products and categories sections, promotions with
+    `appliesTo: category`, the category picture address) a collection id works too, so designs,
+    links and promotions made before keep working.
+  - **Protections against silent switches:** the console counts products without a category
+    (`uncategorized`) and links to them with a bulk "Set category…"; collections holding such
+    products can be turned into categories in one click (a category of the same name is
+    reused); and while the store shows no category, its menus and category sections use the
+    collections instead of going empty.
+  - **Store console:** shared Categories page (note "shared with the point of sale"), new
+    Collections page, Products page with all products, a website switch per row, filters (on the
+    website / hidden / without category), bulk show / hide / set category / add to collection, a
+    quick "Add product" (name, price, category, picture by paste or drop, stock tracking; needs
+    `catalog.manage`; the product is created through the catalog API) and an edit dialog with
+    the category and collections.
+- **Consequences:** a merchant manages one catalog; the store decides only presentation. Stores
+  that relied on store categories keep their grouping as collections and are offered to turn
+  them into categories. Seeds and imports need nothing special: the trigger lists products.
 
 ## ADR-0128 — Storefront design: header, navigation, side menu, footer and page sections, with a live preview
 - **Status:** Accepted (2026-10-20). Owner's request: the store looked primitive; the owner wants

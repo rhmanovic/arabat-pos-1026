@@ -20,6 +20,7 @@ import {
   MultiPick,
   Panel,
   Toggle,
+  useGroupOptions,
   useStoreCatalog,
 } from './fields.js';
 
@@ -1067,7 +1068,8 @@ function ProductsEditor({
   set: Patch<SectionOf<'products'>>;
 }) {
   const { t, i18n } = useTranslation();
-  const { store, products } = useStoreCatalog();
+  const { products } = useStoreCatalog();
+  const groups = useGroupOptions();
   return (
     <div className="flex flex-col gap-4">
       <LocalizedField
@@ -1094,9 +1096,9 @@ function ProductsEditor({
               onChange={(e) => set({ categoryId: e.target.value || null })}
             >
               <option value="">{t('design.chooseCategory')}</option>
-              {(store?.categories ?? []).map((c) => (
+              {groups.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {localizedName(c, i18n.language)}
+                  {c.label}
                 </option>
               ))}
             </Select>
@@ -1171,8 +1173,8 @@ function CategoriesEditor({
   s: SectionOf<'categories'>;
   set: Patch<SectionOf<'categories'>>;
 }) {
-  const { t, i18n } = useTranslation();
-  const { store } = useStoreCatalog();
+  const { t } = useTranslation();
+  const groups = useGroupOptions();
   return (
     <div className="flex flex-col gap-4">
       <LocalizedField
@@ -1189,10 +1191,7 @@ function CategoriesEditor({
       />
       <MultiPick
         label={t('design.chooseCategories')}
-        options={(store?.categories ?? []).map((c) => ({
-          id: c.id,
-          label: localizedName(c, i18n.language),
-        }))}
+        options={groups}
         value={s.categoryIds}
         onChange={(v) => set({ categoryIds: v })}
       />
@@ -1420,8 +1419,8 @@ function FeaturesEditor({
 }
 
 function MenuEditor({ s, set }: { s: SectionOf<'menu'>; set: Patch<SectionOf<'menu'>> }) {
-  const { t, i18n } = useTranslation();
-  const { store } = useStoreCatalog();
+  const { t } = useTranslation();
+  const groups = useGroupOptions();
   return (
     <div className="flex flex-col gap-4">
       <LocalizedField
@@ -1453,10 +1452,7 @@ function MenuEditor({ s, set }: { s: SectionOf<'menu'>; set: Patch<SectionOf<'me
       />
       <MultiPick
         label={t('design.chooseCategories')}
-        options={(store?.categories ?? []).map((c) => ({
-          id: c.id,
-          label: localizedName(c, i18n.language),
-        }))}
+        options={groups}
         value={s.categoryIds}
         onChange={(v) => set({ categoryIds: v })}
       />

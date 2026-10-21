@@ -321,7 +321,8 @@ export const managerAr: ManagerResources = {
     productsSubtitle: 'تعريفات المنتجات وأسعارها. تُدار الكميات من وحدة المخزون.',
     newProduct: 'منتج جديد',
     categoriesTitle: 'التصنيفات',
-    categoriesSubtitle: 'لتجميع المنتجات في نقطة البيع والتقارير.',
+    categoriesSubtitle:
+      'لتجميع المنتجات في نقطة البيع والمتجر الإلكتروني والتقارير: شجرة تصنيفات واحدة في كل مكان (وإدارة المتجر تضبط طريقة ظهور كل تصنيف على الموقع).',
     newCategory: 'تصنيف جديد',
     category: 'التصنيف',
     noCategory: 'بدون تصنيف',
@@ -361,6 +362,10 @@ export const managerAr: ManagerResources = {
     trackInventory: 'تتبع مخزون هذا المنتج',
     trackInventoryHint: 'تُسجَّل الكميات في وحدة المخزون.',
     availability: 'التوفر في الفروع',
+    posVisible: 'ظاهر في نقاط البيع',
+    posVisibleHint:
+      'أغلقه لإيقاف بيعه عند الكاشير. المنتج موجود دائمًا في المتجر الإلكتروني أيضًا؛ وإظهاره للزبائن على الموقع يُضبط من إدارة المتجر.',
+    hiddenInPos: 'مخفي في نقاط البيع',
     allBranches: 'متوفر في كل الفروع',
     selectedBranches: 'في فروع محددة فقط',
     images: 'الصور',

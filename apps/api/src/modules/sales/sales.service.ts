@@ -1191,8 +1191,17 @@ export class SalesService {
     return sale ? this.getSale(actor, sale.id, 'pos') : null;
   }
 
-  /** Sellable variants at a branch with their current price and cost. */
-  async loadItems(tx: Transaction, branchId: string, variantIds: string[]) {
+  /**
+   * Sellable variants at a branch with their current price and cost. At the point of sale a
+   * product hidden from it (`pos_visible`, ADR-0130) is not sellable; the online store has its
+   * own switch on the listing.
+   */
+  async loadItems(
+    tx: Transaction,
+    branchId: string,
+    variantIds: string[],
+    channel: 'pos' | 'online' = 'pos',
+  ) {
     const rows = (
       await tx.execute(sql`
         select v.id, v.price_minor::text as price, v.cost_minor::text as cost, v.name_en as variant_name_en,
@@ -1203,6 +1212,7 @@ export class SalesService {
           sql`, `,
         )})
           and v.status = 'active' and p.status = 'active'
+          ${channel === 'pos' ? sql`and p.pos_visible` : sql``}
           and (p.available_in_all_branches or exists (
             select 1 from product_branch_availability a where a.product_id = p.id and a.branch_id = ${branchId}))`)
     ).rows as Record<string, string | null>[];

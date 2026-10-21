@@ -66,6 +66,27 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-21 (one catalog for the POS and the store, ADR-0130, cloud sandbox run)
+- `ecommerce.int.test.ts` (+3, 27): every new product is listed and shown; hidden from the website
+  it still sells at the till, hidden from the POS (`posVisible: false`) it leaves `/pos/catalog`,
+  the till refuses it (`ITEM_UNAVAILABLE`) and the store still takes it; categories are shared
+  (made in Business management or the store console), bulk "set category" moves products at the
+  POS too, the store order is its own, an online-only manager may show / hide but not create,
+  rename or move (403); collections with members, a WebP picture (also at the former category
+  picture address), promotions that target them, hidden and deleted. The merchandising test
+  follows the new model (listings of every product, shared category with store name and picture).
+- `apps/online-web/src/app.test.tsx` (+5, 34): website switch and "link them" with bulk category;
+  edit dialog with shared category and collections; quick add with a pasted picture; no "Add
+  product" without `catalog.manage`; shared category created with a picture in one save; store
+  settings without the catalog right; collections turned into categories (same name reused);
+  a collection created with its products.
+- `apps/store-web/src/app.test.tsx` (+1, 26): `?category=` with a collection id filters by the
+  collection and its chip is pressed.
+- `e2e/store.spec.ts` (+1, 45 in the suite): a product added in the store console reaches the
+  catalog with its category, "link them" categorises the other one, the website switch hides it
+  from shoppers, the POS switch in Business management shows "Hidden at the POS" in both apps.
+- Totals: `pnpm verify` 381 unit/web, `pnpm test:integration` 311 (44 files), `pnpm test:e2e` 45.
+
 ### Results 2026-10-21 (pictures as WebP and the category dialog, ADR-0129, cloud sandbox run)
 - `apps/api/src/kernel/storage/image.test.ts` (new, 4): PNG and JPEG become WebP at their size; a
   4800 × 1200 picture becomes 2400 × 600; EXIF orientation 6 is applied (60 × 20 → 20 × 60) and

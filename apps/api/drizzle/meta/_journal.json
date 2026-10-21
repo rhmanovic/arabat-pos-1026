@@ -498,6 +498,20 @@
       "when": 1792519630281,
       "tag": "0070_online_store_design",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1792578224468,
+      "tag": "0071_unified_catalog",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1792578251948,
+      "tag": "0072_drop_online_categories",
+      "breakpoints": true
     }
   ]
 }

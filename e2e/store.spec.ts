@@ -60,9 +60,13 @@ test('a shopper buys online with the sandbox gateway; the order, stock and repor
   await page.goto('/online/');
   await expect(page.getByRole('heading', { name: 'Online store' })).toBeVisible();
   await page.getByRole('link', { name: 'Products online' }).click();
-  await page.getByRole('checkbox', { name: 'Saffron tea' }).check();
-  await page.getByRole('button', { name: 'List online (1)' }).click();
-  await expect(page.getByText('Sold online (1)')).toBeVisible();
+  // Every catalog product is in the store, shown on the website (ADR-0130).
+  await expect(
+    page
+      .getByRole('listitem')
+      .filter({ hasText: 'Saffron tea' })
+      .getByRole('checkbox', { name: /Shown on the website/ }),
+  ).toBeChecked();
   await page.getByRole('link', { name: 'Store settings' }).click();
   await page.getByLabel('Store address').fill(slug);
   await page.getByLabel('Store name (English)').fill('Saffron House');
@@ -170,14 +174,17 @@ test('a shopper orders without any gateway and pays at pickup; staff confirm, re
   await page.goto('/manager/online');
   await expect(page).toHaveURL(/\/online\/$/);
   await page.getByRole('link', { name: 'Products online' }).click();
-  await page.getByRole('checkbox', { name: 'Date box' }).check();
-  await page.getByRole('button', { name: 'List online (1)' }).click();
-  await expect(page.getByText('Sold online (1)')).toBeVisible();
+  await expect(
+    page
+      .getByRole('listitem')
+      .filter({ hasText: 'Date box' })
+      .getByRole('checkbox', { name: /Shown on the website/ }),
+  ).toBeChecked();
 
-  // Merchandising (ADR-0121): a store category, then a store title and "featured" on the listing.
-  await page.getByRole('link', { name: 'Store categories', exact: true }).click();
+  // Merchandising (ADR-0121, ADR-0130): a shared category, then a store title and "featured".
+  await page.getByRole('link', { name: 'Categories', exact: true }).click();
   await page.getByRole('button', { name: 'Add category' }).click();
-  await page.getByLabel('Name (English)').fill('Sweets');
+  await page.getByLabel('Name (English)', { exact: true }).fill('Sweets');
   // One save stores the category and closes the dialog.
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByRole('dialog')).toBeHidden();
@@ -185,7 +192,9 @@ test('a shopper orders without any gateway and pays at pickup; staff confirm, re
   await page.getByRole('button', { name: 'Edit' }).click();
   const edit = page.getByRole('dialog');
   await edit.getByLabel('Store title (English)').fill('Date box, 500 g');
-  await edit.getByLabel('Store category', { exact: true }).selectOption({ label: 'Sweets' });
+  await edit
+    .getByLabel('Category (shared with the point of sale)')
+    .selectOption({ label: 'Sweets' });
   await edit.getByLabel('Featured').check();
   await edit.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByText('Date box, 500 g')).toBeVisible();
@@ -301,8 +310,9 @@ test('delivery areas at checkout, and a pickup order handed over at the till (AD
       lines: [{ variantId, quantity: '6', unitCost: '1.000' }],
     },
   });
+  // A new product is in the store and shown on the website at once (ADR-0130).
   await page.request.put('/api/v1/manager/online/listings', {
-    data: { productIds: [product.id], listed: true },
+    data: { productIds: [product.id], visible: true },
   });
   const slug = `ful-${Date.now().toString(36)}`;
   expect(
@@ -451,8 +461,9 @@ test('the owner designs the store as a restaurant, previews it live and publishe
       },
     })
   ).json();
+  // A new product is in the store and shown on the website at once (ADR-0130).
   await page.request.put('/api/v1/manager/online/listings', {
-    data: { productIds: [product.id], listed: true },
+    data: { productIds: [product.id], visible: true },
   });
   await page.request.put(`/api/v1/manager/online/listings/${product.id as string}`, {
     data: {
@@ -462,7 +473,7 @@ test('the owner designs the store as a restaurant, previews it live and publishe
       descriptionAr: null,
       featured: true,
       maxPerOrder: null,
-      onlineCategoryId: category.id,
+      categoryId: category.id,
     },
   });
   const slug = `design-${Date.now().toString(36)}`;
@@ -530,7 +541,7 @@ test('the owner designs the store as a restaurant, previews it live and publishe
   await shopperContext.close();
 });
 
-test('a store category is saved with a pasted picture in one step, converted to WebP', async ({
+test('a shared category is saved with a pasted picture in one step, converted to WebP', async ({
   page,
 }) => {
   const email = uniqueEmail('cat-owner');
@@ -545,11 +556,11 @@ test('a store category is saved with a pasted picture in one step, converted to 
     ).status(),
   ).toBe(201);
   await page.goto('/online/categories');
-  await expect(page.getByText('separate from the categories of the point of sale')).toBeVisible();
+  await expect(page.getByText('Categories are shared with the point of sale')).toBeVisible();
   await page.getByRole('button', { name: 'Add category' }).click();
   const dialog = page.getByRole('dialog');
-  await dialog.getByLabel('Name (English)').fill('Dairy & Eggs');
-  await dialog.getByLabel('Name (Arabic)').fill('الألبان والبيض');
+  await dialog.getByLabel('Name (English)', { exact: true }).fill('Dairy & Eggs');
+  await dialog.getByLabel('Name (Arabic)', { exact: true }).fill('الألبان والبيض');
   // Paste a screenshot (a real PNG) into the dialog, as Ctrl+V does.
   await page.evaluate(async () => {
     const canvas = document.createElement('canvas');
@@ -581,4 +592,109 @@ test('a store category is saved with a pasted picture in one step, converted to 
   expect(picture.headers()['content-type']).toBe('image/webp');
   expect((await picture.body()).toString('ascii', 8, 12)).toBe('WEBP');
   await expect(page.getByText('Dairy & Eggs')).toBeVisible();
+  // The point of sale has the same category.
+  const shared = (await (await page.request.get('/api/v1/manager/categories')).json())
+    .categories as { nameEn: string }[];
+  expect(shared.map((c) => c.nameEn)).toEqual(['Dairy & Eggs']);
+});
+
+test('a product added in the store console is at the point of sale too; each side has its own switch (ADR-0130)', async ({
+  page,
+}) => {
+  const email = uniqueEmail('one-catalog');
+  expect(
+    (
+      await page.request.post('/api/v1/auth/register', {
+        data: {
+          company: { nameEn: 'Bakery Co' },
+          owner: { fullName: 'Bakery Owner', email, password: 'Owner-Pass-2026' },
+        },
+      })
+    ).status(),
+  ).toBe(201);
+  const main = (
+    (await (await page.request.get('/api/v1/manager/branches')).json()).branches as {
+      id: string;
+    }[]
+  )[0]!.id;
+  // A category made in Business management, and a product without one.
+  await page.request.post('/api/v1/manager/categories', { data: { nameEn: 'Pastries' } });
+  await page.request.post('/api/v1/manager/products', {
+    data: { nameEn: 'Plain bread', trackInventory: false, variants: [{ price: '0.200' }] },
+  });
+  const slug = `bake-${Date.now().toString(36)}`;
+  expect(
+    (
+      await page.request.put('/api/v1/manager/online/store', {
+        data: {
+          slug,
+          status: 'published',
+          nameEn: 'Bakery',
+          primaryColor: '#92400e',
+          fulfillmentBranchId: main,
+          pickupEnabled: true,
+          deliveryEnabled: false,
+          deliveryFee: '0.000',
+          minimumOrder: '0.000',
+          reservationMinutes: 30,
+          payOnReceiptEnabled: true,
+          version: 0,
+        },
+      })
+    ).status(),
+  ).toBe(200);
+
+  // The store console finds the catalog's product (without a category) and adds one itself.
+  await page.goto('/online/products');
+  await expect(page.getByTestId('uncategorized-warning')).toContainText(
+    'Products without a category: 1',
+  );
+  await page.getByRole('button', { name: 'Add product' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add product' });
+  await dialog.getByLabel('Name (English)', { exact: true }).fill('Cheese croissant');
+  await dialog.getByLabel('Price (KWD)').fill('0.650');
+  await dialog.getByLabel('Category (shared with the point of sale)').selectOption({
+    label: 'Pastries',
+  });
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText('Cheese croissant')).toBeVisible();
+  // Link the bread through the warning.
+  await page.getByRole('button', { name: 'Link them to a category' }).click();
+  await page.getByRole('checkbox', { name: 'Select Plain bread' }).click();
+  await page.getByLabel('Set category…').selectOption({ label: 'Pastries' });
+  await expect(page.getByTestId('uncategorized-warning')).toBeHidden();
+
+  // The point of sale has the croissant in Pastries.
+  const products = (await (await page.request.get('/api/v1/manager/products?q=Cheese')).json())
+    .products as { id: string; categoryId: string | null }[];
+  expect(products[0]!.categoryId).not.toBeNull();
+  const croissant = products[0]!.id;
+
+  // The website switch lives in the store console: the shopper no longer sees the croissant.
+  await page.goto('/online/products');
+  const row = page.getByRole('listitem').filter({ hasText: 'Cheese croissant' });
+  await row.getByRole('checkbox', { name: /Shown on the website/ }).click();
+  await expect(row.getByText('Hidden on the website')).toBeVisible();
+  const shopper = await page.context().newPage();
+  await shopper.goto(`/store/${slug}/products`);
+  await expect(shopper.getByText('Plain bread')).toBeVisible();
+  await expect(shopper.getByText('Cheese croissant')).toHaveCount(0);
+  await shopper.close();
+
+  // The point-of-sale switch lives in Business management only.
+  await page.goto(`/manager/products/${croissant}`);
+  await page.getByLabel('Shown at the point of sale').uncheck();
+  await page.getByRole('button', { name: 'Save' }).first().click();
+  await page.goto('/manager/products');
+  await expect(
+    page.getByRole('row', { name: /Cheese croissant/ }).getByText('Hidden at the POS'),
+  ).toBeVisible();
+  await page.goto('/online/products');
+  await expect(
+    page
+      .getByRole('listitem')
+      .filter({ hasText: 'Cheese croissant' })
+      .getByText('Hidden at the point of sale'),
+  ).toBeVisible();
 });
