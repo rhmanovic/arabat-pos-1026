@@ -1278,6 +1278,12 @@ migration, no API change).
   +1 (lists are not buttons); e2e follows the renamed navigation.
 - Verified (cloud sandbox): `pnpm verify` 383 unit/web, `pnpm test:integration` 311 (44 files),
   `pnpm test:e2e` 45.
+- Released (ADR-0122): production `c74dc7cc1b12` (revision `arabat-web-00051-np8`, previous
+  `arabat-web-00050-vgs`; migration job `arabat-migrate-p24tq`, no new migration). Cloud Build
+  check `d1dc7a46`: `/api/v1/health/ready` 200 with that version and database ok (3 ms); `live`,
+  `/store/`, `/manager/` and `/online/` 200. Signed out afterwards, `config.env` removed; no key,
+  account or secret deleted. Staging: Railway still answered "Deploys have been paused
+  temporarily" at the final retry (12:41 UTC); `main` deploys there once Railway resumes.
 
 ### 2026-10-21 — One catalog for the point of sale and the store (ADR-0130)
 Owner's decision after a merchant's bad experience (a product and category made at the POS were
