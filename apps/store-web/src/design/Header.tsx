@@ -150,11 +150,32 @@ function useHiddenOnScroll(enabled: boolean) {
   return enabled && hidden;
 }
 
+/**
+ * The sticky header's height as `--store-header-h`, so sticky sections and filters stop under
+ * it (ADR-0128 amendment 7); 0 when the header scrolls away.
+ */
+function useHeaderHeight(sticky: boolean) {
+  useEffect(() => {
+    const root = document.documentElement;
+    const el = document.querySelector<HTMLElement>('[data-testid="store-header"]');
+    if (!sticky || !el || typeof ResizeObserver === 'undefined') {
+      root.style.setProperty('--store-header-h', '0px');
+      return;
+    }
+    const update = () => root.style.setProperty('--store-header-h', `${el.offsetHeight}px`);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [sticky]);
+}
+
 // ---------------------------------------------------------------------------- header
 export function Header({ tagline, onMenu }: { tagline: string | null; onMenu: () => void }) {
   const { header, navbar, drawer } = useDesign();
   const { t } = useTranslation();
   const hidden = useHiddenOnScroll(header.sticky && header.hideOnScroll);
+  useHeaderHeight(header.sticky && !hidden);
   const layout = header.layout;
   const bg = layout === 'bold' && header.background === 'light' ? 'brand' : header.background;
   const tone = {

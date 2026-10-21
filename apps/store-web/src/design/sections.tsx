@@ -10,7 +10,7 @@ import { Badge, EmptyState, Input, Select, Spinner, cn } from '@arabat/ui';
 import { ErrorState } from '@arabat/web-core';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useLocation, useSearchParams } from 'react-router';
 import { toMoney, useCart } from '../cart.js';
 import {
   type StoreGroup,
@@ -25,7 +25,15 @@ import {
   useStorefront,
 } from '../shared.js';
 import { DesignAnchor, StoreIcon } from './parts.js';
-import { assetUrl, linkTarget, useCard, useCta, useDesign, useText } from './context.js';
+import {
+  assetUrl,
+  linkTarget,
+  useCard,
+  useCta,
+  useDesign,
+  useStyledCta,
+  useText,
+} from './context.js';
 import { SectionFrame, SectionTitle, full, shownSections } from './frame.js';
 import {
   CollageSection,
@@ -37,6 +45,16 @@ import {
   SpacerSection,
   TestimonialsSection,
 } from './sections-more.js';
+import {
+  CardsSection,
+  ColumnsSection,
+  DividerSection,
+  MarqueeSection,
+  SplitSection,
+  StatsSection,
+  StepsSection,
+  TabsSection,
+} from './sections-layout.js';
 
 /** The designed page a section is drawn on. */
 const PageContext = createContext<DesignPage>('home');
@@ -45,6 +63,14 @@ const PageContext = createContext<DesignPage>('home');
 export function DesignedPage({ page }: { page: DesignPage }) {
   const design = useDesign();
   const sections = shownSections(design.pages[page]);
+  // A link to `/#anchor` scrolls to the section with that anchor (ADR-0128 amendment 7).
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (!hash || hash.length < 2) return;
+    const target = document.getElementById(decodeURIComponent(hash.slice(1)));
+    if (target && typeof target.scrollIntoView === 'function')
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [hash, sections.length]);
   return (
     <PageContext.Provider value={page}>
       <div className="-my-4 flex flex-col" data-page={page}>
@@ -98,6 +124,22 @@ function Section({ section: s }: { section: DesignSection }) {
       return <CtaSection s={s} />;
     case 'spacer':
       return <SpacerSection s={s} />;
+    case 'divider':
+      return <DividerSection s={s} />;
+    case 'columns':
+      return <ColumnsSection s={s} />;
+    case 'split':
+      return <SplitSection s={s} />;
+    case 'cards':
+      return <CardsSection s={s} />;
+    case 'tabs':
+      return <TabsSection s={s} />;
+    case 'marquee':
+      return <MarqueeSection s={s} />;
+    case 'stats':
+      return <StatsSection s={s} />;
+    case 'steps':
+      return <StepsSection s={s} />;
   }
 }
 
@@ -258,126 +300,184 @@ function SliderSection({ s }: { s: SectionOf<'slider'> }) {
 }
 
 // ---------------------------------------------------------------------------- banner
+const BANNER_SHADE = {
+  none: '',
+  light: 'bg-gradient-to-t from-black/40 via-black/5 to-transparent',
+  medium: 'bg-black/35',
+  dark: 'bg-gradient-to-t from-black/70 via-black/20 to-transparent',
+  gradient:
+    'bg-gradient-to-tr from-black/75 via-[color-mix(in_oklch,var(--color-primary)_35%,transparent)] to-transparent',
+} as const;
+const BANNER_HEIGHT = {
+  small: 'min-h-48 sm:min-h-64',
+  medium: 'min-h-64 sm:min-h-96',
+  large: 'min-h-80 sm:min-h-[32rem]',
+  screen: 'min-h-[calc(100svh-4rem)]',
+} as const;
+const BANNER_TITLE = {
+  regular: 'text-2xl sm:text-4xl',
+  large: 'text-3xl sm:text-5xl',
+  huge: 'text-4xl sm:text-7xl tracking-tight',
+} as const;
+const ROUNDED = { none: '', soft: 'rounded-xl', round: 'rounded-[2rem]' } as const;
+
 function BannerSection({ s }: { s: SectionOf<'banner'> }) {
   const slug = useSlug();
   const { data: store } = useStorefront();
   const text = useText();
-  const cta = useCta();
+  const button = useStyledCta();
   const img =
     s.imageSource === 'store'
       ? (store?.bannerUrl ?? null)
       : s.imageSource === 'upload'
         ? assetUrl(slug, s.imageId)
         : null;
+  const mobile = s.imageSource === 'upload' ? assetUrl(slug, s.mobileImageId) : null;
+  const eyebrow = text(s.eyebrow);
   const title = text(s.title);
   const subtitle = text(s.subtitle);
-  const button = text(s.button);
-  const button2 = text(s.button2);
-  const hasText = Boolean(title || subtitle || button || button2);
+  const label = text(s.button);
+  const label2 = text(s.button2);
+  const hasText = Boolean(eyebrow || title || subtitle || label || label2);
   if (!img && !hasText) return null;
   const testId = s.imageSource === 'store' ? 'store-banner' : undefined;
-  const words = (light: boolean) => (
-    <div className={cn('flex flex-col gap-2', s.align === 'center' && 'items-center text-center')}>
-      {title ? <p className="text-2xl font-bold sm:text-4xl">{title}</p> : null}
+  const align = {
+    start: 'items-start text-start',
+    center: 'items-center text-center',
+    end: 'items-end text-end',
+  }[s.align];
+  const words = (light: boolean, onColour = false) => (
+    <div className={cn('flex flex-col gap-2', align)}>
+      {eyebrow ? (
+        <p
+          className={cn(
+            'text-xs font-bold uppercase tracking-[0.2em]',
+            light || onColour ? 'opacity-90' : 'text-primary',
+          )}
+        >
+          {eyebrow}
+        </p>
+      ) : null}
+      {title ? <p className={cn('font-bold', BANNER_TITLE[s.titleSize])}>{title}</p> : null}
       {subtitle ? (
         <p
-          className={cn('max-w-xl text-sm sm:text-base', light ? 'text-white/90' : 'text-fg-muted')}
+          className={cn(
+            'max-w-xl text-sm sm:text-base',
+            light ? 'text-white/90' : onColour ? 'opacity-90' : 'text-fg-muted',
+          )}
         >
           {subtitle}
         </p>
       ) : null}
-      {button || button2 ? (
-        <div className="mt-2 flex flex-wrap gap-2">
-          {button ? (
-            <DesignAnchor link={s.link} className={cn(cta(light ? 'light' : 'primary'), 'w-fit')}>
-              {button}
+      {label || label2 ? (
+        <div
+          className={cn(
+            'mt-2 flex flex-wrap gap-2',
+            s.align === 'center' && 'justify-center',
+            s.align === 'end' && 'justify-end',
+          )}
+        >
+          {label ? (
+            <DesignAnchor
+              link={s.link}
+              className={cn(
+                onColour ? button('outline', false) : button(s.buttonStyle, light),
+                'w-fit',
+              )}
+            >
+              {label}
             </DesignAnchor>
           ) : null}
-          {button2 ? (
-            <DesignAnchor link={s.link2} className={cn(cta('outline'), 'w-fit')}>
-              {button2}
+          {label2 ? (
+            <DesignAnchor
+              link={s.link2}
+              className={cn(
+                onColour
+                  ? 'inline-flex min-h-11 items-center px-3 text-sm font-semibold underline-offset-4 hover:underline'
+                  : button(s.buttonStyle, light, false),
+                'w-fit',
+              )}
+            >
+              {label2}
             </DesignAnchor>
           ) : null}
         </div>
       ) : null}
     </div>
   );
+  // The picture, with another one for phones when chosen.
+  const picture = (className: string) =>
+    img ? (
+      <picture className="contents">
+        {mobile ? <source media="(max-width: 639px)" srcSet={mobile} /> : null}
+        <img src={img} alt="" className={className} data-testid={testId} />
+      </picture>
+    ) : null;
   // The store's picture alone (the legacy banner).
   if (!hasText && img)
     return (
       <DesignAnchor link={s.link} className="block">
-        <img
-          src={img}
-          alt=""
-          className="aspect-[3/1] w-full rounded-lg object-cover"
-          data-testid={testId}
-        />
+        {picture(cn('aspect-[3/1] w-full object-cover', ROUNDED[s.rounded] || 'rounded-none'))}
       </DesignAnchor>
     );
   if (s.variant === 'split')
     return (
-      <section className="grid items-center gap-6 overflow-hidden rounded-xl bg-surface-muted sm:grid-cols-2">
-        {img ? (
-          <img
-            src={img}
-            alt=""
-            className="aspect-[4/3] size-full object-cover"
-            data-testid={testId}
-          />
-        ) : null}
-        <div className="p-6">{words(false)}</div>
+      <section
+        className={cn(
+          'grid items-center gap-6 overflow-hidden bg-surface-muted sm:grid-cols-2',
+          ROUNDED[s.rounded],
+        )}
+      >
+        {picture('aspect-[4/3] size-full object-cover')}
+        <div className="p-6 sm:p-10">{words(false)}</div>
       </section>
     );
   if (s.variant === 'color' || !img)
     return (
-      <section className="rounded-xl bg-primary p-8 text-primary-fg sm:p-12">
-        <div
-          className={cn('flex flex-col gap-2', s.align === 'center' && 'items-center text-center')}
-        >
-          {title ? <p className="text-2xl font-bold sm:text-4xl">{title}</p> : null}
-          {subtitle ? <p className="max-w-xl text-sm opacity-90 sm:text-base">{subtitle}</p> : null}
-          {button || button2 ? (
-            <div className="mt-2 flex flex-wrap gap-2">
-              {button ? (
-                <DesignAnchor link={s.link} className={cn(cta('outline'), 'w-fit')}>
-                  {button}
-                </DesignAnchor>
-              ) : null}
-              {button2 ? (
-                <DesignAnchor
-                  link={s.link2}
-                  className="inline-flex min-h-11 items-center px-3 text-sm font-semibold underline-offset-4 hover:underline"
-                >
-                  {button2}
-                </DesignAnchor>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
+      <section className={cn('bg-primary p-8 text-primary-fg sm:p-12', ROUNDED[s.rounded])}>
+        {words(false, true)}
       </section>
     );
+  const position = {
+    top: 'justify-start',
+    center: 'justify-center',
+    bottom: 'justify-end',
+  }[s.position];
+  const onCard = s.variant === 'card' || s.variant === 'glass';
   return (
-    <section className="relative overflow-hidden rounded-xl">
-      <img
-        src={img}
-        alt=""
-        className="absolute inset-0 size-full object-cover"
-        data-testid={testId}
-      />
+    <section className={cn('relative isolate overflow-hidden', ROUNDED[s.rounded])}>
+      {picture(cn('absolute inset-0 -z-10 size-full object-cover', s.zoom && 'store-zoom'))}
       <div
         className={cn(
-          'relative flex flex-col justify-end p-6 text-white sm:p-12',
-          {
-            small: 'min-h-48 sm:min-h-64',
-            medium: 'min-h-64 sm:min-h-96',
-            large: 'min-h-80 sm:min-h-[32rem]',
-          }[s.height],
-          OVERLAY[s.overlay],
-          s.align === 'center' && 'justify-center',
-          s.align === 'center' && s.overlay !== 'none' && 'bg-black/40',
+          'relative flex flex-col p-6 sm:p-12',
+          !onCard && 'text-white',
+          BANNER_HEIGHT[s.height],
+          position,
+          !onCard && BANNER_SHADE[s.overlay],
+          // Older centred banners keep their even shade.
+          !onCard && s.align === 'center' && s.overlay !== 'none' && s.overlay !== 'medium'
+            ? 'bg-black/40'
+            : null,
+          onCard && s.overlay !== 'none' && 'bg-black/20',
+          s.align === 'center' && 'items-center',
+          s.align === 'end' && 'items-end',
         )}
       >
-        {words(true)}
+        {onCard ? (
+          <div
+            className={cn(
+              'max-w-xl rounded-2xl p-6 sm:p-8',
+              s.variant === 'glass'
+                ? 'border border-white/30 bg-white/15 text-white shadow-2xl backdrop-blur-xl'
+                : 'bg-surface text-fg shadow-2xl',
+            )}
+            data-banner-card
+          >
+            {words(s.variant === 'glass')}
+          </div>
+        ) : (
+          words(true)
+        )}
       </div>
     </section>
   );
@@ -415,14 +515,25 @@ function QuickAdd({ p, className }: { p: StoreProduct; className?: string }) {
   );
 }
 
+/** How product cards look in a section (ADR-0128 amendment 7). */
+export type CardLook = {
+  cardStyle: 'default' | 'minimal' | 'bordered' | 'soft' | 'overlay';
+  aspect: 'square' | 'portrait' | 'landscape';
+  hoverImage: boolean;
+};
+const DEFAULT_LOOK: CardLook = { cardStyle: 'default', aspect: 'square', hoverImage: false };
+const ASPECT = { square: 'aspect-square', portrait: 'aspect-[4/5]', landscape: 'aspect-[4/3]' };
+
 export function ProductCard({
   p,
   variant = 'grid',
   quickAdd = false,
+  look = DEFAULT_LOOK,
 }: {
   p: StoreProduct;
   variant?: 'grid' | 'list';
   quickAdd?: boolean;
+  look?: CardLook;
 }) {
   const slug = useSlug();
   const name = useLocalName();
@@ -440,7 +551,7 @@ export function ProductCard({
   if (quickAdd)
     return (
       <div className="relative h-full">
-        <ProductCard p={p} variant={variant} />
+        <ProductCard p={p} variant={variant} look={look} />
         <QuickAdd
           p={p}
           className={cn('absolute z-10', variant === 'list' ? 'bottom-3 end-3' : 'top-2 end-2')}
@@ -466,25 +577,67 @@ export function ProductCard({
         </div>
       </Link>
     );
+  const second = look.hoverImage ? (p.images[1] ?? null) : null;
+  const pictureBox = (
+    <div className={cn('relative overflow-hidden bg-surface-muted', ASPECT[look.aspect])}>
+      {p.imageUrl ? (
+        <img
+          src={p.imageUrl}
+          alt=""
+          className={cn(
+            'size-full object-cover transition-all duration-500',
+            second ? 'group-hover:opacity-0' : 'group-hover:scale-105',
+          )}
+          loading="lazy"
+        />
+      ) : null}
+      {second ? (
+        <img
+          src={second}
+          alt=""
+          data-hover-image
+          className="absolute inset-0 size-full object-cover opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+          loading="lazy"
+        />
+      ) : null}
+    </div>
+  );
+  if (look.cardStyle === 'overlay')
+    return (
+      <Link
+        to={`/${slug}/products/${p.productId}`}
+        className="group relative flex h-full flex-col overflow-hidden rounded-lg"
+        data-card="overlay"
+      >
+        {pictureBox}
+        <div className="absolute inset-x-0 bottom-0 flex flex-col gap-0.5 bg-gradient-to-t from-black/75 to-transparent p-3 pt-10 text-white">
+          <p className="font-semibold">{name(p)}</p>
+          <p className="text-sm tabular-nums opacity-90">{price}</p>
+          {!available ? <Badge tone="warning">{t('catalog.unavailable')}</Badge> : null}
+        </div>
+      </Link>
+    );
   return (
     <Link
       to={`/${slug}/products/${p.productId}`}
       className={cn(
-        'group flex h-full flex-col overflow-hidden rounded-lg hover:border-primary',
-        card,
+        'group flex h-full flex-col overflow-hidden rounded-lg',
+        look.cardStyle === 'default' && cn(card, 'hover:border-primary'),
+        look.cardStyle === 'bordered' && 'border-2 border-border bg-surface hover:border-primary',
+        look.cardStyle === 'soft' && 'bg-surface-muted transition-transform hover:-translate-y-1',
+        look.cardStyle === 'minimal' && 'bg-transparent',
       )}
+      data-card={look.cardStyle}
     >
-      <div className="aspect-square overflow-hidden bg-surface-muted">
-        {p.imageUrl ? (
-          <img
-            src={p.imageUrl}
-            alt=""
-            className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
-            loading="lazy"
-          />
-        ) : null}
+      <div className={cn(look.cardStyle === 'minimal' && 'overflow-hidden rounded-lg')}>
+        {pictureBox}
       </div>
-      <div className="flex flex-1 flex-col gap-1 p-3">
+      <div
+        className={cn(
+          'flex flex-1 flex-col gap-1',
+          look.cardStyle === 'minimal' ? 'px-0.5 py-2' : 'p-3',
+        )}
+      >
         <p className="font-medium">{name(p)}</p>
         <p className="text-sm tabular-nums text-fg-muted">{price}</p>
         {!available ? <Badge tone="warning">{t('catalog.unavailable')}</Badge> : null}
@@ -494,9 +647,9 @@ export function ProductCard({
 }
 
 const COLS: Record<number, string> = {
-  2: 'grid-cols-2',
-  3: 'grid-cols-2 sm:grid-cols-3',
-  4: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4',
+  2: 'sm:grid-cols-2',
+  3: 'sm:grid-cols-3',
+  4: 'sm:grid-cols-3 lg:grid-cols-4',
 };
 
 export function ProductGrid({
@@ -505,12 +658,16 @@ export function ProductGrid({
   columns = 4,
   variant = 'grid',
   quickAdd = false,
+  look = DEFAULT_LOOK,
+  mobileColumns = 2,
 }: {
   products: StoreProduct[];
   testId?: string;
   columns?: number;
   variant?: 'grid' | 'list' | 'carousel';
   quickAdd?: boolean;
+  look?: CardLook;
+  mobileColumns?: 1 | 2;
 }) {
   if (variant === 'carousel')
     return (
@@ -520,7 +677,7 @@ export function ProductGrid({
       >
         {products.map((p) => (
           <li key={p.productId} className="w-40 shrink-0 snap-start sm:w-52">
-            <ProductCard p={p} quickAdd={quickAdd} />
+            <ProductCard p={p} quickAdd={quickAdd} look={look} />
           </li>
         ))}
       </ul>
@@ -529,13 +686,20 @@ export function ProductGrid({
     <ul
       className={cn(
         'grid gap-3',
-        variant === 'list' ? 'sm:grid-cols-2' : (COLS[columns] ?? COLS[4]),
+        variant === 'list'
+          ? 'sm:grid-cols-2'
+          : cn(mobileColumns === 1 ? 'grid-cols-1' : 'grid-cols-2', COLS[columns] ?? COLS[4]),
       )}
       data-testid={testId}
     >
       {products.map((p) => (
         <li key={p.productId}>
-          <ProductCard p={p} variant={variant === 'list' ? 'list' : 'grid'} quickAdd={quickAdd} />
+          <ProductCard
+            p={p}
+            variant={variant === 'list' ? 'list' : 'grid'}
+            quickAdd={quickAdd}
+            look={look}
+          />
         </li>
       ))}
     </ul>
@@ -589,7 +753,14 @@ function ProductsSection({ s }: { s: SectionOf<'products'> }) {
       >
         {text(s.title)}
       </SectionTitle>
-      <ProductGrid products={shown} columns={s.columns} variant={s.variant} quickAdd={s.showAdd} />
+      <ProductGrid
+        products={shown}
+        columns={s.columns}
+        variant={s.variant}
+        quickAdd={s.showAdd}
+        look={s}
+        mobileColumns={s.mobileColumns}
+      />
     </section>
   );
 }
@@ -672,7 +843,8 @@ function CategoriesSection({ s }: { s: SectionOf<'categories'> }) {
         src={c.imageUrl}
         alt=""
         className={cn(
-          'size-full object-cover transition-transform duration-300 group-hover:scale-105',
+          'size-full object-cover transition-transform duration-300',
+          s.hover === 'zoom' && 'group-hover:scale-105',
           className,
         )}
       />
@@ -680,6 +852,35 @@ function CategoriesSection({ s }: { s: SectionOf<'categories'> }) {
       <span className={cn('grid size-full place-items-center bg-primary-soft', className)}>
         {initial(name(c))}
       </span>
+    );
+  const lift = s.hover === 'lift' && 'transition-transform duration-300 hover:-translate-y-1';
+  // A tile: the name over the picture, or under it.
+  const tile = (c: StoreGroup) =>
+    s.labelPosition === 'below' ? (
+      <Link to={to(c.id)} className={cn('group flex flex-col gap-2', lift)}>
+        <span className={cn('block overflow-hidden rounded-lg bg-surface-muted', ratio)}>
+          {picture(c, '')}
+        </span>
+        <span className="text-sm font-semibold">
+          {name(c)}
+          {countLabel(c.id) ? (
+            <span className="block text-xs font-normal text-fg-muted">{countLabel(c.id)}</span>
+          ) : null}
+        </span>
+      </Link>
+    ) : (
+      <Link
+        to={to(c.id)}
+        className={cn('group relative block overflow-hidden rounded-lg', ratio, card, lift)}
+      >
+        <span className="absolute inset-0">{picture(c, '')}</span>
+        <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-3 text-sm font-semibold text-white">
+          {name(c)}
+          {countLabel(c.id) ? (
+            <span className="block text-xs font-normal opacity-90">{countLabel(c.id)}</span>
+          ) : null}
+        </span>
+      </Link>
     );
   return (
     <section aria-label={text(s.title) || t('nav.categories')} data-variant={s.variant}>
@@ -697,7 +898,15 @@ function CategoriesSection({ s }: { s: SectionOf<'categories'> }) {
       >
         {text(s.title)}
       </SectionTitle>
-      {s.variant === 'circles' ? (
+      {s.variant === 'carousel' ? (
+        <ul className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none]">
+          {list.map((c) => (
+            <li key={c.id} className="w-40 shrink-0 snap-start sm:w-56">
+              {tile(c)}
+            </li>
+          ))}
+        </ul>
+      ) : s.variant === 'circles' ? (
         <ul className="-mx-4 flex gap-4 overflow-x-auto px-4 pb-2 [scrollbar-width:none]">
           {list.map((c) => (
             <li key={c.id} className="shrink-0">
@@ -787,7 +996,7 @@ function CategoriesSection({ s }: { s: SectionOf<'categories'> }) {
       ) : s.variant === 'cards' ? (
         <ul className={cn('grid gap-3', phone, grid)}>
           {list.map((c) => (
-            <li key={c.id} className={cn('flex flex-col overflow-hidden rounded-lg', card)}>
+            <li key={c.id} className={cn('flex flex-col overflow-hidden rounded-lg', card, lift)}>
               <Link to={to(c.id)} className="group flex flex-col">
                 <span className={cn('block overflow-hidden bg-surface-muted', ratio)}>
                   {picture(c, '')}
@@ -807,18 +1016,7 @@ function CategoriesSection({ s }: { s: SectionOf<'categories'> }) {
         <ul className={cn('grid gap-3', phone, grid)}>
           {list.map((c) => (
             <li key={c.id} className="flex flex-col gap-2">
-              <Link
-                to={to(c.id)}
-                className={cn('group relative block overflow-hidden rounded-lg', ratio, card)}
-              >
-                <span className="absolute inset-0">{picture(c, '')}</span>
-                <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-3 text-sm font-semibold text-white">
-                  {name(c)}
-                  {countLabel(c.id) ? (
-                    <span className="block text-xs font-normal opacity-90">{countLabel(c.id)}</span>
-                  ) : null}
-                </span>
-              </Link>
+              {tile(c)}
               {subLinks(c.id)}
             </li>
           ))}
@@ -917,46 +1115,77 @@ function TextSection({ s }: { s: SectionOf<'text'> }) {
   );
 }
 
+const ICON_BOX = { small: 'size-9 text-lg', regular: 'size-11 text-xl', large: 'size-16 text-3xl' };
+
 function FeaturesSection({ s }: { s: SectionOf<'features'> }) {
   const text = useText();
   const card = useCard();
   if (s.items.length === 0) return null;
+  const stacked = s.align === 'center' || (s.align === 'auto' && s.variant === 'grid');
+  const columns =
+    s.columns === 0
+      ? 'grid-cols-2 lg:grid-cols-3'
+      : {
+          2: 'grid-cols-1 sm:grid-cols-2',
+          3: 'grid-cols-2 lg:grid-cols-3',
+          4: 'grid-cols-2 lg:grid-cols-4',
+        }[s.columns];
   return (
     <section aria-label={text(s.title) || undefined}>
       <SectionTitle>{text(s.title)}</SectionTitle>
       <ul
         className={cn(
-          'grid gap-3',
-          s.variant === 'row'
-            ? 'grid-cols-1 sm:grid-flow-col sm:auto-cols-fr'
-            : 'grid-cols-2 lg:grid-cols-3',
+          s.variant === 'list' ? 'flex flex-col divide-y divide-border' : 'grid gap-3',
+          s.variant === 'row' && 'grid-cols-1 sm:grid-flow-col sm:auto-cols-fr',
+          (s.variant === 'grid' || s.variant === 'cards') && columns,
         )}
       >
-        {s.items.map((f) => (
-          <li
-            key={f.id}
-            className={cn(
-              'flex items-center gap-3 rounded-lg p-4',
-              s.variant === 'cards' ? card : 'bg-surface-muted',
-              s.variant === 'grid' && 'flex-col text-center',
-            )}
-          >
-            {f.icon ? (
-              <span
-                aria-hidden
-                className="grid size-11 shrink-0 place-items-center rounded-full bg-surface text-xl"
-              >
-                {f.icon}
-              </span>
-            ) : null}
-            <span className="min-w-0">
-              <span className="block font-semibold">{text(f.title)}</span>
-              {text(f.text) ? (
-                <span className="block text-sm text-fg-muted">{text(f.text)}</span>
+        {s.items.map((f) => {
+          const body = (
+            <>
+              {f.icon ? (
+                <span
+                  aria-hidden
+                  data-icon-style={s.iconStyle}
+                  className={cn(
+                    'grid shrink-0 place-items-center',
+                    s.iconStyle !== 'plain' && ICON_BOX[s.iconSize],
+                    s.iconStyle === 'plain' &&
+                      { small: 'text-xl', regular: 'text-3xl', large: 'text-5xl' }[s.iconSize],
+                    s.iconStyle === 'circle' && 'rounded-full bg-surface',
+                    s.iconStyle === 'square' && 'rounded-xl bg-primary text-primary-fg',
+                    s.iconStyle === 'outline' && 'rounded-full border-2 border-primary',
+                  )}
+                >
+                  {f.icon}
+                </span>
               ) : null}
-            </span>
-          </li>
-        ))}
+              <span className="min-w-0">
+                <span className="block font-semibold">{text(f.title)}</span>
+                {text(f.text) ? (
+                  <span className="block text-sm text-fg-muted">{text(f.text)}</span>
+                ) : null}
+              </span>
+            </>
+          );
+          const box = cn(
+            'flex items-center gap-3',
+            s.variant === 'list' ? 'py-3' : 'rounded-lg p-4',
+            s.variant === 'cards' ? card : s.variant !== 'list' && 'bg-surface-muted',
+            stacked && 'flex-col text-center',
+          );
+          return (
+            <li key={f.id}>
+              {f.link ? (
+                <DesignAnchor link={f.link} className={cn(box, 'h-full hover:text-primary')}>
+                  {body}
+                </DesignAnchor>
+              ) : (
+                <div className={cn(box, 'h-full')}>{body}</div>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
@@ -1259,12 +1488,14 @@ export function CatalogSection({ s }: { s: SectionOf<'catalog'> }) {
   const { data: store } = useStorefront();
   const products = useStoreProducts();
   const name = useLocalName();
+  const text = useText();
   const { t } = useTranslation();
+  const [pages, setPages] = useState(1);
   const [params] = useSearchParams();
   const [category, setCategory] = useState<string | null>(params.get('category'));
   // The header's search bar opens this page with `?q=`.
   const [search, setSearch] = useState(params.get('q') ?? '');
-  const [sort, setSort] = useState<'default' | 'name' | 'priceAsc' | 'priceDesc'>('default');
+  const [sort, setSort] = useState<'default' | 'name' | 'priceAsc' | 'priceDesc'>(s.defaultSort);
   const wantsSearch = params.get('search') === '1';
   useEffect(() => {
     if (wantsSearch) document.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
@@ -1310,17 +1541,94 @@ export function CatalogSection({ s }: { s: SectionOf<'catalog'> }) {
     chosen && !groups.some((c) => c.id === chosen.id) ? [...groups, chosen] : groups;
 
   if (products.data.products.length === 0) return <EmptyState title={t('catalog.empty')} />;
+  const options = [
+    { id: null, label: t('catalog.all'), imageUrl: null },
+    ...categories.map((c) => ({ id: c.id, label: name(c), imageUrl: c.imageUrl })),
+  ] as { id: string | null; label: string; imageUrl: string | null }[];
+  const choose = (id: string | null) => {
+    setCategory(id);
+    setPages(1);
+  };
+  const filters =
+    s.showCategories && categories.length > 0 ? (
+      s.filterStyle === 'dropdown' ? (
+        <Select
+          aria-label={t('catalog.category')}
+          className="w-48"
+          value={category ?? ''}
+          onChange={(e) => choose(e.target.value || null)}
+        >
+          {options.map((c) => (
+            <option key={c.id ?? 'all'} value={c.id ?? ''}>
+              {c.label}
+            </option>
+          ))}
+        </Select>
+      ) : (
+        <div
+          className={cn(
+            'flex gap-2',
+            s.filterStyle === 'tabs'
+              ? '-mb-px w-full overflow-x-auto border-b border-border [scrollbar-width:none]'
+              : 'flex-wrap',
+          )}
+          role="group"
+          data-filter-style={s.filterStyle}
+        >
+          {options.map((c) =>
+            s.filterStyle === 'tabs' ? (
+              <button
+                key={c.id ?? 'all'}
+                type="button"
+                aria-pressed={category === c.id}
+                onClick={() => choose(c.id)}
+                className="shrink-0 border-b-2 border-transparent px-3 py-2 text-sm font-semibold text-fg-muted aria-pressed:border-primary aria-pressed:text-fg"
+              >
+                {c.label}
+              </button>
+            ) : (
+              <button
+                key={c.id ?? 'all'}
+                type="button"
+                aria-pressed={category === c.id}
+                onClick={() => choose(c.id)}
+                className="flex items-center gap-2 rounded-full border border-border bg-surface py-1 pe-3 ps-1 text-sm aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-fg"
+              >
+                {c.imageUrl ? (
+                  <img src={c.imageUrl} alt="" className="size-6 rounded-full object-cover" />
+                ) : (
+                  <span className="w-2" aria-hidden />
+                )}
+                {c.label}
+              </button>
+            ),
+          )}
+        </div>
+      )
+    ) : null;
+  const perPage = s.pageSize === 0 ? visible.length : s.pageSize;
+  const page = visible.slice(0, perPage * pages);
   return (
     <div className="flex flex-col gap-4">
-      {s.showSearch || s.showSort || (s.showCategories && categories.length > 0) ? (
-        <div className="flex flex-wrap items-center gap-2">
+      {s.showSearch || s.showSort || filters ? (
+        <div
+          className={cn(
+            'flex flex-wrap items-center gap-2',
+            s.stickyFilters &&
+              'sticky top-[var(--store-header-h,0px)] z-10 -mx-4 bg-canvas/90 px-4 py-2 backdrop-blur-md',
+          )}
+          data-sticky-filters={s.stickyFilters || undefined}
+        >
           {s.showSearch ? (
             <Input
               type="search"
               aria-label={t('catalog.search')}
-              placeholder={t('catalog.search')}
+              placeholder={text(s.searchPlaceholder) || t('catalog.search')}
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPages(1);
+              }}
               className="max-w-xs"
             />
           ) : null}
@@ -1338,47 +1646,49 @@ export function CatalogSection({ s }: { s: SectionOf<'catalog'> }) {
               ))}
             </Select>
           ) : null}
-          {s.showCategories && categories.length > 0 ? (
-            <div className="flex flex-wrap gap-2" role="group">
-              {[
-                { id: null, label: t('catalog.all') },
-                ...categories.map((c) => ({ id: c.id, label: name(c), imageUrl: c.imageUrl })),
-              ].map((c: { id: string | null; label: string; imageUrl?: string | null }) => (
-                <button
-                  key={c.id ?? 'all'}
-                  type="button"
-                  aria-pressed={category === c.id}
-                  onClick={() => setCategory(c.id)}
-                  className="flex items-center gap-2 rounded-full border border-border bg-surface py-1 pe-3 ps-1 text-sm aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-fg"
-                >
-                  {'imageUrl' in c && c.imageUrl ? (
-                    <img src={c.imageUrl} alt="" className="size-6 rounded-full object-cover" />
-                  ) : (
-                    <span className="w-2" aria-hidden />
-                  )}
-                  {c.label}
-                </button>
-              ))}
-            </div>
-          ) : null}
+          {filters}
         </div>
       ) : null}
       {featured.length > 0 ? (
         <section aria-label={t('catalog.featured')} className="flex flex-col gap-2">
           <h2 className="text-lg font-semibold">{t('catalog.featured')}</h2>
-          <ProductGrid products={featured} testId="featured-grid" columns={s.columns} />
+          <ProductGrid
+            products={featured}
+            testId="featured-grid"
+            columns={s.columns}
+            look={s}
+            mobileColumns={s.mobileColumns}
+            quickAdd={s.showAdd}
+          />
         </section>
+      ) : null}
+      {s.showCount ? (
+        <p className="text-sm text-fg-muted" data-testid="catalog-count">
+          {t('design.productCount', { count: visible.length })}
+        </p>
       ) : null}
       {visible.length === 0 ? (
         <p className="text-sm text-fg-muted">{t('design.noMatch')}</p>
       ) : (
         <ProductGrid
-          products={visible}
+          products={page}
           testId="product-grid"
           columns={s.columns}
           variant={s.variant}
+          look={s}
+          mobileColumns={s.mobileColumns}
+          quickAdd={s.showAdd}
         />
       )}
+      {page.length < visible.length ? (
+        <button
+          type="button"
+          onClick={() => setPages((n) => n + 1)}
+          className="mx-auto rounded-full border border-border bg-surface px-6 py-2.5 text-sm font-semibold hover:border-primary"
+        >
+          {t('design.showMore', { count: visible.length - page.length })}
+        </button>
+      ) : null}
     </div>
   );
 }

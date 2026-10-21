@@ -161,6 +161,27 @@ export function useCta() {
     );
 }
 
+/**
+ * A section's own button style (ADR-0128 amendment 7): solid, outline, pill or frosted glass,
+ * on a picture (`light`) or on the page.
+ */
+export function useStyledCta() {
+  const cta = useCta();
+  return (style: 'solid' | 'outline' | 'pill' | 'glass', light: boolean, primary = true) =>
+    cn(
+      style === 'outline' || !primary
+        ? cta('outline')
+        : style === 'glass'
+          ? cn(
+              cta('outline'),
+              'border-white/40 bg-white/15 text-white backdrop-blur-md hover:bg-white/25',
+            )
+          : cta(light ? 'light' : 'primary'),
+      style === 'pill' && 'rounded-full',
+      style === 'glass' && !light && 'border-border bg-surface/60 text-fg',
+    );
+}
+
 const RADII = {
   sharp: ['0.125rem', '0.25rem', '0.375rem', '0.5rem'],
   soft: ['0.375rem', '0.625rem', '0.875rem', '1.25rem'],

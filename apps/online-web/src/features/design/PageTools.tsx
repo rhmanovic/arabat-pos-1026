@@ -81,6 +81,31 @@ export function SectionThumb({ type }: { type: SectionType }) {
     collage: [r(6, 4, 54, 24, brand, 3), r(63, 4, 51, 11, soft, 3), r(63, 17, 51, 11, soft, 3)],
     cta: [r(6, 5, 108, 22, brand, 3), line(40, 11, 40), r(46, 17, 28, 5, 'fill-white')],
     spacer: [r(6, 15, 108, 1.5, ink, 0.75)],
+    divider: [r(6, 15, 44, 1.5, ink, 0.75), r(70, 15, 44, 1.5, ink, 0.75), line(54, 14.25, 12)],
+    columns: [
+      r(6, 4, 33, 24),
+      r(43, 4, 34, 24),
+      r(81, 4, 33, 24),
+      line(10, 9, 20),
+      line(47, 9, 20),
+    ],
+    split: [r(6, 4, 50, 24, brand, 3), line(64, 9, 40), line(64, 15, 32), r(64, 21, 18, 4, brand)],
+    cards: [r(6, 4, 33, 24), r(43, 4, 34, 24), r(81, 4, 33, 24), r(6, 4, 33, 12, brand, 2)],
+    tabs: [r(6, 4, 20, 5, brand, 2.5), r(29, 4, 20, 5), r(52, 4, 20, 5), r(6, 12, 108, 16)],
+    marquee: [
+      r(0, 10, 120, 12, brand, 0),
+      line(8, 14.75, 24),
+      line(40, 14.75, 24),
+      line(72, 14.75, 24),
+    ],
+    stats: [18, 52, 86].map((x) => r(x, 8, 16, 8, ink, 2)),
+    steps: [
+      <circle key="a" cx="20" cy="14" r="6" className={brand} />,
+      <circle key="b" cx="60" cy="14" r="6" className={brand} />,
+      <circle key="c" cx="100" cy="14" r="6" className={brand} />,
+      r(28, 13, 24, 1.5, ink, 0.75),
+      r(68, 13, 24, 1.5, ink, 0.75),
+    ],
   };
   return (
     <svg
@@ -94,11 +119,11 @@ export function SectionThumb({ type }: { type: SectionType }) {
 }
 
 const GROUPS: { key: string; types: SectionType[] }[] = [
-  { key: 'hero', types: ['slider', 'banner', 'collage', 'countdown', 'cta'] },
+  { key: 'hero', types: ['slider', 'banner', 'collage', 'countdown', 'cta', 'marquee'] },
   { key: 'shop', types: ['products', 'categories', 'catalog', 'menu'] },
-  { key: 'content', types: ['text', 'image', 'video', 'gallery'] },
-  { key: 'trust', types: ['features', 'testimonials', 'faq', 'logos', 'info'] },
-  { key: 'layout', types: ['spacer'] },
+  { key: 'content', types: ['text', 'split', 'cards', 'tabs', 'image', 'video', 'gallery'] },
+  { key: 'trust', types: ['features', 'stats', 'steps', 'testimonials', 'faq', 'logos', 'info'] },
+  { key: 'layout', types: ['columns', 'divider', 'spacer'] },
 ];
 const READY_TYPE: Record<ReadySection, SectionType> = {
   heroSlider: 'slider',
@@ -113,6 +138,11 @@ const READY_TYPE: Record<ReadySection, SectionType> = {
   contactCta: 'cta',
   brands: 'logos',
   story: 'text',
+  ticker: 'marquee',
+  howItWorks: 'steps',
+  aboutSplit: 'split',
+  highlights: 'cards',
+  numbers: 'stats',
 };
 
 // ------------------------------------------------------------------------ picker
@@ -247,8 +277,39 @@ export function SectionPicker({
 
 /** A new section of a type with its defaults and its own id. */
 export function sectionFor(type: SectionType): DesignSection {
-  return newSection(type, newId(type));
+  const section = newSection(type, newId(type));
+  // New columns start with words to replace, so the preview shows the layout at once.
+  if (section.type === 'columns')
+    return {
+      ...section,
+      columns: section.columns.map((c, i) => ({
+        ...c,
+        blocks: [
+          {
+            ...STARTER_BLOCK,
+            id: newId(`h${i}`),
+            type: 'heading',
+            text: { en: 'Your title', ar: 'عنوانك' },
+          },
+          {
+            ...STARTER_BLOCK,
+            id: newId(`p${i}`),
+            type: 'text',
+            text: { en: 'A few words here.', ar: 'بضع كلمات هنا.' },
+          },
+        ],
+      })),
+    };
+  return section;
 }
+const STARTER_BLOCK = {
+  size: 'regular',
+  align: 'start',
+  imageId: null,
+  link: null,
+  style: 'solid',
+  icon: '',
+} as const;
 
 // -------------------------------------------------------------------- page layouts
 const LAYOUT_ICON: Record<HomeLayout | `categories:${CategoryLayout}`, string> = {
@@ -389,6 +450,19 @@ export function isEmptySection(s: DesignSection): boolean {
       return !s.imageId;
     case 'video':
       return !s.url;
+    case 'columns':
+      return s.columns.every((c) => c.blocks.length === 0);
+    case 'split':
+      return !s.imageId && !has(s.title) && !has(s.body);
+    case 'cards':
+    case 'steps':
+      return !s.items.some((i) => has(i.title));
+    case 'tabs':
+      return !s.tabs.some((x) => has(x.label));
+    case 'marquee':
+      return !s.items.some((i) => has(i.text));
+    case 'stats':
+      return !s.items.some((i) => i.value > 0);
     default:
       return false;
   }

@@ -532,7 +532,8 @@ function EditDialog({
     mutationFn: async () => {
       if (loaded && names && base && JSON.stringify(names) !== JSON.stringify(base))
         await api.catalog.updateProduct(loaded.id, catalogUpdate(loaded, names));
-      for (const imageId of gallery.removed) await api.catalog.deleteImage(listing.productId, imageId);
+      for (const imageId of gallery.removed)
+        await api.catalog.deleteImage(listing.productId, imageId);
       for (const file of gallery.added) await api.catalog.uploadImage(listing.productId, file);
       return api.online.saveListing(listing.productId, {
         ...v,

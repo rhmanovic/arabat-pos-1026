@@ -502,3 +502,85 @@ export function SocialFields({
     </div>
   );
 }
+
+/** Repeated items (reviews, questions, pictures…): each in a group with order and remove. */
+export function Items<T extends { id: string }>({
+  items,
+  max,
+  title,
+  addLabel,
+  make,
+  onChange,
+  render,
+}: {
+  items: T[];
+  max: number;
+  title: (n: number) => string;
+  addLabel: string;
+  make: () => T;
+  onChange: (next: T[]) => void;
+  render: (item: T, set: (p: Partial<T>) => void) => ReactNode;
+}) {
+  const { t } = useTranslation();
+  const move = (i: number, by: -1 | 1) => {
+    const next = [...items];
+    const [item] = next.splice(i, 1);
+    next.splice(i + by, 0, item!);
+    onChange(next);
+  };
+  return (
+    <div className="flex flex-col gap-3">
+      {items.map((item, i) => (
+        <Group key={item.id} title={title(i + 1)}>
+          {render(item, (p) => onChange(items.map((x, j) => (j === i ? { ...x, ...p } : x))))}
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" disabled={i === 0} onClick={() => move(i, -1)}>
+              {t('design.moveUp')}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={i === items.length - 1}
+              onClick={() => move(i, 1)}
+            >
+              {t('design.moveDown')}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onChange(items.filter((_, j) => j !== i))}
+            >
+              {t('design.removeItem')}
+            </Button>
+          </div>
+        </Group>
+      ))}
+      {/* Without a label the caller offers its own add buttons. */}
+      {items.length < max && addLabel ? (
+        <Button
+          variant="secondary"
+          className="self-start"
+          onClick={() => onChange([...items, make()])}
+        >
+          {addLabel}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+/** Chips for a section's variants, labelled `design.variant_<value>`. */
+export function useVariants<T extends string>(values: readonly T[]) {
+  const { t } = useTranslation();
+  return values.map((v) => ({ value: v, label: t(`design.variant_${v}`) }));
+}
+
+/** Options as chips labelled `design.<prefix>_<value>`. */
+export function useOpts() {
+  const { t } = useTranslation();
+  return <T extends string>(prefix: string, values: readonly T[]) =>
+    values.map((v) => ({ value: v, label: t(`design.${prefix}_${v}`) }));
+}
+
+/** An empty text in both languages. */
+export const empty = () => ({ en: null, ar: null });

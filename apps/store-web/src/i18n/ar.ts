@@ -25,6 +25,8 @@ export const storeAr: typeof storeEn = {
     searchPlaceholder: 'عن ماذا تبحث؟',
   },
   design: {
+    showMore: 'عرض المزيد ({{count}})',
+    openSection: 'افتح',
     previewBadge: 'معاينة: هذا ما سيراه المتسوقون بعد النشر',
     slider: 'أبرز العروض',
     goToSlide: 'الشريحة {{n}}',
@@ -146,6 +148,7 @@ export const storeAr: typeof storeEn = {
   },
   closed: 'هذا المتجر لا يستقبل الطلبات حاليًا. يمكنك التصفح فقط.',
   catalog: {
+    category: 'التصنيف',
     all: 'الكل',
     empty: 'لا توجد منتجات متاحة على المتجر بعد.',
     unavailable: 'نفدت الكمية',

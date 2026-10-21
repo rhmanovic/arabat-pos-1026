@@ -33,6 +33,15 @@ export const SECTION_TYPES = [
   'collage',
   'cta',
   'spacer',
+  // ADR-0128 amendment 7: layout and motion sections.
+  'divider',
+  'columns',
+  'split',
+  'cards',
+  'tabs',
+  'marquee',
+  'stats',
+  'steps',
 ] as const;
 export type SectionType = (typeof SECTION_TYPES)[number];
 
@@ -138,18 +147,79 @@ const moment = z
   .nullish()
   .transform((v) => v ?? null);
 
+/** A colour as `#rrggbb`, or null. */
+const hexColor = z
+  .string()
+  .trim()
+  .regex(/^#[0-9a-fA-F]{6}$/, 'Use a colour like #1a2b3c.')
+  .nullish()
+  .transform((v) => v ?? null);
+
+/** Ready gradients for a section background (ADR-0128 amendment 7); `brand` follows the store colour. */
+export const SECTION_GRADIENTS = [
+  'brand',
+  'sunset',
+  'ocean',
+  'candy',
+  'mint',
+  'night',
+  'peach',
+  'aurora',
+] as const;
+/** Shapes drawn on the top or bottom edge of a coloured section. */
+export const SHAPE_DIVIDERS = ['none', 'wave', 'curve', 'slant', 'zigzag', 'peaks'] as const;
+/** How a section appears when it scrolls into view (none with reduced motion). */
+export const SECTION_ANIMATIONS = ['none', 'fade', 'up', 'zoom', 'slide'] as const;
+
 /**
- * How any section sits on the page (ADR-0128 amendment 3): its background, spacing, width,
- * heading (subtitle and alignment), the screens it shows on, and when it shows.
+ * How any section sits on the page (ADR-0128 amendments 3 and 7): its background (colours,
+ * gradients, a custom colour or a picture), spacing, width (narrow, contained, edge to edge),
+ * height (up to the full screen), a boxed card, rounded corners, edge shapes, heading (kicker,
+ * size, subtitle, alignment), motion on scroll, a direct-link anchor, sticky / overlapping /
+ * collapsible behaviour, the screens it shows on, and when it shows.
  */
 export const sectionLookSchema = z
   .object({
-    background: z.enum(['none', 'soft', 'tinted', 'brand', 'dark']).default('none'),
-    spacing: z.enum(['compact', 'regular', 'roomy']).default('regular'),
-    /** `full` = edge to edge; a coloured background always spans the screen. */
-    width: z.enum(['contained', 'full']).default('contained'),
+    background: z
+      .enum(['none', 'soft', 'tinted', 'brand', 'dark', 'gradient', 'image', 'custom'])
+      .default('none'),
+    gradient: z.enum(SECTION_GRADIENTS).default('brand'),
+    /** The `custom` background. */
+    bgColor: hexColor,
+    /** The `image` background, with a shade so the words stay readable. */
+    bgImageId: image,
+    bgOverlay: z.enum(['none', 'light', 'dark']).default('dark'),
+    spacing: z.enum(['none', 'compact', 'regular', 'roomy', 'huge']).default('regular'),
+    /** `narrow` = reading width, `full` = edge to edge; a coloured background always spans the screen. */
+    width: z.enum(['narrow', 'contained', 'full']).default('contained'),
+    /** `screen` = at least the height of the screen, content in the middle. */
+    height: z.enum(['auto', 'half', 'screen']).default('auto'),
+    /** The content sits on a card inside the section (a boxed section). */
+    boxed: z.boolean().default(false),
+    /** Rounded background when the section does not span the screen. */
+    corners: z.enum(['none', 'soft', 'round']).default('none'),
+    dividerTop: z.enum(SHAPE_DIVIDERS).default('none'),
+    dividerBottom: z.enum(SHAPE_DIVIDERS).default('none'),
     titleAlign: z.enum(['start', 'center']).default('start'),
+    titleSize: z.enum(['small', 'regular', 'large', 'huge']).default('regular'),
+    /** A small line above the heading. */
+    eyebrow: localized(60),
     subtitle: localized(200),
+    animation: z.enum(SECTION_ANIMATIONS).default('none'),
+    /** A direct link to the section: `/#anchor` in a button or menu item. */
+    anchor: z
+      .string()
+      .trim()
+      .max(40)
+      .regex(/^[a-z0-9-]*$/, 'Lowercase letters, digits and dashes only.')
+      .default(''),
+    /** Stays at the top while the page scrolls past it. */
+    sticky: z.boolean().default(false),
+    /** Pulled up over the section before it. */
+    overlap: z.boolean().default(false),
+    /** Folded behind its label until the shopper opens it. */
+    collapsible: z.boolean().default(false),
+    collapseLabel: localized(80),
     devices: z.enum(['all', 'desktop', 'phone']).default('all'),
     showFrom: moment,
     showUntil: moment,
@@ -186,7 +256,8 @@ export const sliderSectionSchema = z.object({
 export const bannerSectionSchema = z.object({
   ...base,
   type: z.literal('banner'),
-  variant: z.enum(['overlay', 'split', 'color']).default('overlay'),
+  /** `card` / `glass` = the words on a card over the picture. */
+  variant: z.enum(['overlay', 'split', 'color', 'card', 'glass']).default('overlay'),
   /** `store` = the store's banner picture (settings), `upload` = `imageId`. */
   imageSource: z.enum(['store', 'upload', 'none']).default('upload'),
   imageId: image,
@@ -197,10 +268,30 @@ export const bannerSectionSchema = z.object({
   /** A second, quieter button. */
   button2: localized(30),
   link2: link,
-  align: z.enum(['start', 'center']).default('start'),
-  height: z.enum(['small', 'medium', 'large']).default('medium'),
-  overlay: z.enum(['none', 'light', 'dark']).default('dark'),
+  align: z.enum(['start', 'center', 'end']).default('start'),
+  height: z.enum(['small', 'medium', 'large', 'screen']).default('medium'),
+  overlay: z.enum(['none', 'light', 'medium', 'dark', 'gradient']).default('dark'),
+  // ADR-0128 amendment 7.
+  /** Where the words sit over the picture. */
+  position: z.enum(['top', 'center', 'bottom']).default('bottom'),
+  /** A small line above the title. */
+  eyebrow: localized(60),
+  titleSize: z.enum(['regular', 'large', 'huge']).default('regular'),
+  buttonStyle: z.enum(['solid', 'outline', 'pill', 'glass']).default('solid'),
+  /** Another picture for phones (tall pictures read better there). */
+  mobileImageId: image,
+  /** A slow zoom on the picture. */
+  zoom: z.boolean().default(false),
+  rounded: z.enum(['none', 'soft', 'round']).default('soft'),
 });
+/** How product cards look in a list (ADR-0128 amendment 7). */
+const cardOptions = {
+  cardStyle: z.enum(['default', 'minimal', 'bordered', 'soft', 'overlay']).default('default'),
+  aspect: z.enum(['square', 'portrait', 'landscape']).default('square'),
+  mobileColumns: z.union([z.literal(1), z.literal(2)]).default(2),
+  /** The second picture shows when the pointer is on the card. */
+  hoverImage: z.boolean().default(false),
+};
 export const productsSectionSchema = z.object({
   ...base,
   type: z.literal('products'),
@@ -215,11 +306,14 @@ export const productsSectionSchema = z.object({
   /** One-tap "add" on products with a single option. */
   showAdd: z.boolean().default(false),
   showViewAll: z.boolean().default(true),
+  ...cardOptions,
 });
 export const categoriesSectionSchema = z.object({
   ...base,
   type: z.literal('categories'),
-  variant: z.enum(['tiles', 'circles', 'chips', 'list', 'cards', 'banners']).default('tiles'),
+  variant: z
+    .enum(['tiles', 'circles', 'chips', 'list', 'cards', 'banners', 'carousel'])
+    .default('tiles'),
   title: localized(80),
   /** Empty = every category of the store, in its order. */
   categoryIds: z.array(uuidLike).max(40).default([]),
@@ -235,6 +329,10 @@ export const categoriesSectionSchema = z.object({
   /** Each category's subcategories as small links under it (tiles, cards, list). */
   showSub: z.boolean().default(false),
   showViewAll: z.boolean().default(false),
+  // ADR-0128 amendment 7.
+  /** The name under the picture or over it (tiles, carousel). */
+  labelPosition: z.enum(['overlay', 'below']).default('overlay'),
+  hover: z.enum(['none', 'zoom', 'lift']).default('zoom'),
 });
 export const imageSectionSchema = z.object({
   ...base,
@@ -271,7 +369,7 @@ export const textSectionSchema = z.object({
 export const featuresSectionSchema = z.object({
   ...base,
   type: z.literal('features'),
-  variant: z.enum(['row', 'grid', 'cards']).default('row'),
+  variant: z.enum(['row', 'grid', 'cards', 'list']).default('row'),
   title: localized(80),
   items: z
     .array(
@@ -280,10 +378,18 @@ export const featuresSectionSchema = z.object({
         icon: z.string().trim().max(8).default(''),
         title: localized(60),
         text: localized(160),
+        link,
       }),
     )
     .max(6)
     .default([]),
+  // ADR-0128 amendment 7.
+  iconStyle: z.enum(['circle', 'plain', 'square', 'outline']).default('circle'),
+  iconSize: z.enum(['small', 'regular', 'large']).default('regular'),
+  /** `auto` = centred in the grid, beside the icon otherwise. */
+  align: z.enum(['auto', 'start', 'center']).default('auto'),
+  /** Columns of the grid and cards (0 = as many as fit). */
+  columns: z.union([z.literal(0), z.literal(2), z.literal(3), z.literal(4)]).default(0),
 });
 /** The restaurant menu: products grouped by category with jump tabs. */
 export const menuSectionSchema = z.object({
@@ -316,6 +422,19 @@ export const catalogSectionSchema = z.object({
   showCategories: z.boolean().default(true),
   showFeatured: z.boolean().default(true),
   columns: z.number().int().min(2).max(4).default(4),
+  // ADR-0128 amendment 7.
+  ...cardOptions,
+  showAdd: z.boolean().default(false),
+  /** Category buttons as chips, tabs or a drop-down list. */
+  filterStyle: z.enum(['chips', 'tabs', 'dropdown']).default('chips'),
+  /** The search and filters stay at the top while scrolling. */
+  stickyFilters: z.boolean().default(false),
+  /** Products per page with a "show more" button; 0 = all at once. */
+  pageSize: z.union([z.literal(0), z.literal(12), z.literal(24), z.literal(48)]).default(0),
+  defaultSort: z.enum(['default', 'name', 'priceAsc', 'priceDesc']).default('default'),
+  /** "24 products" above the list. */
+  showCount: z.boolean().default(false),
+  searchPlaceholder: localized(60),
 });
 
 /** An offer that ends at a moment, with a live countdown; it hides itself once ended. */
@@ -361,7 +480,7 @@ export const faqSectionSchema = z.object({
 export const gallerySectionSchema = z.object({
   ...base,
   type: z.literal('gallery'),
-  variant: z.enum(['grid', 'carousel', 'mosaic']).default('grid'),
+  variant: z.enum(['grid', 'carousel', 'mosaic', 'masonry']).default('grid'),
   title: localized(80),
   columns: z.number().int().min(2).max(4).default(3),
   items: z
@@ -412,13 +531,220 @@ export const ctaSectionSchema = z.object({
   button2: localized(30),
   link2: link,
   align: z.enum(['start', 'center']).default('center'),
+  // ADR-0128 amendment 7.
+  size: z.enum(['compact', 'regular', 'large']).default('regular'),
+  /** `inline` = the words on one side, the buttons on the other. */
+  layout: z.enum(['stacked', 'inline']).default('stacked'),
+  eyebrow: localized(60),
+  buttonStyle: z.enum(['solid', 'outline', 'pill', 'glass']).default('solid'),
+  /** The main button gently pulses. */
+  pulse: z.boolean().default(false),
+  rounded: z.enum(['none', 'soft', 'round']).default('soft'),
 });
 /** Breathing room between sections, with an optional line. */
 export const spacerSectionSchema = z.object({
   ...base,
   type: z.literal('spacer'),
-  size: z.enum(['small', 'medium', 'large']).default('medium'),
+  size: z.enum(['small', 'medium', 'large', 'huge']).default('medium'),
   line: z.boolean().default(false),
+});
+
+// -------------------------------------------------- layout and motion (ADR-0128 amendment 7)
+/** A visual separator: a line in several styles, optionally with words or an emoji in it. */
+export const dividerSectionSchema = z.object({
+  ...base,
+  type: z.literal('divider'),
+  variant: z
+    .enum(['line', 'dashed', 'dotted', 'double', 'gradient', 'dots', 'wave', 'zigzag'])
+    .default('line'),
+  thickness: z.enum(['thin', 'regular', 'thick']).default('thin'),
+  length: z.enum(['short', 'half', 'full']).default('full'),
+  align: z.enum(['start', 'center', 'end']).default('center'),
+  color: z.enum(['border', 'brand', 'fg']).default('border'),
+  label: localized(60),
+  icon: z.string().trim().max(8).default(''),
+});
+
+export const COLUMN_LAYOUTS = ['1', '1-1', '2-1', '1-2', '1-1-1', '1-2-1', '1-1-1-1'] as const;
+export type ColumnLayout = (typeof COLUMN_LAYOUTS)[number];
+/** How many columns a layout has. */
+export const columnCount = (layout: ColumnLayout) => layout.split('-').length;
+export const COLUMN_BLOCKS = [
+  'heading',
+  'text',
+  'image',
+  'button',
+  'list',
+  'icon',
+  'divider',
+  'spacer',
+] as const;
+export type ColumnBlockType = (typeof COLUMN_BLOCKS)[number];
+/** One piece of a column; each kind uses the fields it needs. */
+const columnBlockSchema = z.object({
+  id,
+  type: z.enum(COLUMN_BLOCKS),
+  /** Heading, paragraph, button label, or list lines (one per line). */
+  text: localized(1000),
+  size: z.enum(['small', 'regular', 'large']).default('regular'),
+  align: z.enum(['start', 'center', 'end']).default('start'),
+  imageId: image,
+  link,
+  /** Button: solid, outline, soft or a plain link; image: rounded or round. */
+  style: z.enum(['solid', 'outline', 'soft', 'link']).default('solid'),
+  icon: z.string().trim().max(8).default(''),
+});
+export type ColumnBlock = z.infer<typeof columnBlockSchema>;
+/**
+ * Columns and rows of free content (headings, words, pictures, buttons, lists, icons, lines):
+ * grid and flexible layouts, split sections, vertical dividers, and on phones stacked rows,
+ * reversed rows or a sideways scroll.
+ */
+export const columnsSectionSchema = z.object({
+  ...base,
+  type: z.literal('columns'),
+  title: localized(80),
+  layout: z.enum(COLUMN_LAYOUTS).default('1-1'),
+  gap: z.enum(['none', 'small', 'regular', 'large']).default('regular'),
+  verticalAlign: z.enum(['top', 'center', 'bottom', 'stretch']).default('top'),
+  columnStyle: z.enum(['plain', 'card', 'soft', 'outline', 'glass']).default('plain'),
+  /** A line between the columns. */
+  dividers: z.boolean().default(false),
+  phone: z.enum(['stack', 'reverse', 'scroll']).default('stack'),
+  columns: z
+    .array(z.object({ id, blocks: z.array(columnBlockSchema).max(10).default([]) }))
+    .min(1)
+    .max(4)
+    .default([
+      { id: 'col-1', blocks: [] },
+      { id: 'col-2', blocks: [] },
+    ]),
+});
+
+/** A picture beside words: the classic split (two-column) section. */
+export const splitSectionSchema = z.object({
+  ...base,
+  type: z.literal('split'),
+  imageId: image,
+  imagePosition: z.enum(['start', 'end']).default('start'),
+  /** `image` = a wider picture, `text` = wider words. */
+  ratio: z.enum(['even', 'image', 'text']).default('even'),
+  imageShape: z.enum(['rect', 'rounded', 'circle', 'arch', 'blob']).default('rounded'),
+  verticalAlign: z.enum(['top', 'center']).default('center'),
+  eyebrow: localized(60),
+  title: localized(120),
+  body: localized(1500),
+  button: localized(30),
+  link,
+  button2: localized(30),
+  link2: link,
+});
+
+/** A grid of cards, each with a picture or an emoji, words and a link. */
+export const cardsSectionSchema = z.object({
+  ...base,
+  type: z.literal('cards'),
+  variant: z.enum(['bordered', 'shadow', 'plain', 'overlay', 'glass']).default('bordered'),
+  title: localized(80),
+  columns: z.number().int().min(2).max(4).default(3),
+  mobileColumns: z.union([z.literal(1), z.literal(2)]).default(1),
+  aspect: z.enum(['landscape', 'square', 'portrait']).default('landscape'),
+  align: z.enum(['start', 'center']).default('start'),
+  hover: z.enum(['none', 'lift', 'zoom', 'glow']).default('lift'),
+  items: z
+    .array(
+      z.object({
+        id,
+        imageId: image,
+        icon: z.string().trim().max(8).default(''),
+        title: localized(80),
+        text: localized(300),
+        button: localized(30),
+        link,
+      }),
+    )
+    .max(12)
+    .default([]),
+});
+
+/** Content behind tabs: each tab with a title, words, a picture and a button. */
+export const tabsSectionSchema = z.object({
+  ...base,
+  type: z.literal('tabs'),
+  variant: z.enum(['pills', 'underline', 'boxed', 'vertical']).default('pills'),
+  title: localized(80),
+  align: z.enum(['start', 'center']).default('start'),
+  imagePosition: z.enum(['start', 'end', 'top']).default('start'),
+  tabs: z
+    .array(
+      z.object({
+        id,
+        label: localized(30),
+        title: localized(80),
+        text: localized(1000),
+        imageId: image,
+        button: localized(30),
+        link,
+      }),
+    )
+    .max(8)
+    .default([]),
+});
+
+/** Words that keep sliding across the screen (offers, values, news). */
+export const marqueeSectionSchema = z.object({
+  ...base,
+  type: z.literal('marquee'),
+  variant: z.enum(['plain', 'brand', 'dark', 'outline', 'tilted']).default('brand'),
+  speed: z.enum(['slow', 'normal', 'fast']).default('normal'),
+  direction: z.enum(['start', 'end']).default('start'),
+  size: z.enum(['small', 'regular', 'large']).default('regular'),
+  separator: z.string().trim().max(8).default('✦'),
+  pauseOnHover: z.boolean().default(true),
+  items: z
+    .array(z.object({ id, text: localized(80) }))
+    .max(10)
+    .default([]),
+});
+
+/** Numbers that count up when they come into view. */
+export const statsSectionSchema = z.object({
+  ...base,
+  type: z.literal('stats'),
+  variant: z.enum(['row', 'cards', 'boxed']).default('row'),
+  title: localized(80),
+  countUp: z.boolean().default(true),
+  items: z
+    .array(
+      z.object({
+        id,
+        value: z.number().int().min(0).max(999_999_999).default(0),
+        prefix: text(6),
+        suffix: text(6),
+        label: localized(60),
+      }),
+    )
+    .max(6)
+    .default([]),
+});
+
+/** How it works: numbered steps, a timeline or cards. */
+export const stepsSectionSchema = z.object({
+  ...base,
+  type: z.literal('steps'),
+  variant: z.enum(['numbers', 'timeline', 'cards']).default('numbers'),
+  title: localized(80),
+  items: z
+    .array(
+      z.object({
+        id,
+        icon: z.string().trim().max(8).default(''),
+        title: localized(60),
+        text: localized(240),
+      }),
+    )
+    .max(8)
+    .default([]),
 });
 
 export const sectionSchema = z.discriminatedUnion('type', [
@@ -441,6 +767,14 @@ export const sectionSchema = z.discriminatedUnion('type', [
   collageSectionSchema,
   ctaSectionSchema,
   spacerSectionSchema,
+  dividerSectionSchema,
+  columnsSectionSchema,
+  splitSectionSchema,
+  cardsSectionSchema,
+  tabsSectionSchema,
+  marqueeSectionSchema,
+  statsSectionSchema,
+  stepsSectionSchema,
 ]);
 export type DesignSection = z.infer<typeof sectionSchema>;
 export type SectionOf<T extends SectionType> = Extract<DesignSection, { type: T }>;
@@ -946,6 +1280,13 @@ export function designImageIds(design: StoreDesign): string[] {
       if (s.type === 'banner' || s.type === 'image' || s.type === 'cta') ids.push(s.imageId);
       if (s.type === 'gallery' || s.type === 'logos') ids.push(...s.items.map((x) => x.imageId));
       if (s.type === 'collage') ids.push(...s.tiles.map((x) => x.imageId));
+      if (s.type === 'banner') ids.push(s.mobileImageId);
+      if (s.type === 'split') ids.push(s.imageId);
+      if (s.type === 'cards') ids.push(...s.items.map((x) => x.imageId));
+      if (s.type === 'tabs') ids.push(...s.tabs.map((x) => x.imageId));
+      if (s.type === 'columns')
+        for (const c of s.columns) ids.push(...c.blocks.map((b) => b.imageId));
+      ids.push(s.look.bgImageId);
     }
   return [...new Set(ids.filter((x): x is string => Boolean(x)))];
 }
@@ -1457,6 +1798,12 @@ export const READY_SECTIONS = [
   'contactCta',
   'brands',
   'story',
+  // ADR-0128 amendment 7.
+  'ticker',
+  'howItWorks',
+  'aboutSplit',
+  'highlights',
+  'numbers',
 ] as const;
 export type ReadySection = (typeof READY_SECTIONS)[number];
 type SectionInput = z.input<typeof sectionSchema>;
@@ -1583,6 +1930,59 @@ function readyInput(name: ReadySection): SectionDraft {
       return { type: 'logos', title: l('Brands we carry', 'الماركات المتوفرة') };
     case 'story':
       return { type: 'text', variant: 'card', align: 'center', title: l('Our story', 'قصتنا') };
+    case 'ticker':
+      return {
+        type: 'marquee',
+        variant: 'brand',
+        items: [
+          { id: 'm1', text: l('New arrivals', 'وصل حديثًا') },
+          { id: 'm2', text: l('Order online', 'اطلب أونلاين') },
+          { id: 'm3', text: l('Our picks for you', 'مختاراتنا لك') },
+        ],
+      };
+    case 'howItWorks':
+      return {
+        type: 'steps',
+        variant: 'numbers',
+        title: l('How it works', 'كيف تطلب'),
+        look: { titleAlign: 'center' },
+        items: [
+          { id: 's1', icon: '🛍️', title: l('Choose your products', 'اختر منتجاتك') },
+          { id: 's2', icon: '💳', title: l('Pay your way', 'ادفع بطريقتك') },
+          { id: 's3', icon: '📦', title: l('Receive your order', 'استلم طلبك') },
+        ],
+      };
+    case 'aboutSplit':
+      return {
+        type: 'split',
+        eyebrow: l('About us', 'من نحن'),
+        title: l('Our story', 'قصتنا'),
+        button: l('Shop now', 'تسوّق الآن'),
+        link: products,
+      };
+    case 'highlights':
+      return {
+        type: 'cards',
+        variant: 'overlay',
+        aspect: 'portrait',
+        hover: 'zoom',
+        items: [
+          { id: 'c1', title: l('New in', 'وصل حديثًا'), link: products },
+          { id: 'c2', title: l('Our picks', 'اختياراتنا'), link: products },
+          { id: 'c3', title: l('Categories', 'التصنيفات'), link: categoriesPage },
+        ],
+      };
+    case 'numbers':
+      return {
+        type: 'stats',
+        variant: 'row',
+        look: { titleAlign: 'center' },
+        items: [
+          { id: 'n1', suffix: '+', label: l('Happy customers', 'عميل سعيد') },
+          { id: 'n2', suffix: '+', label: l('Products', 'منتج') },
+          { id: 'n3', label: l('Years with you', 'سنوات معكم') },
+        ],
+      };
   }
 }
 
@@ -1758,9 +2158,24 @@ export const SECTION_STYLES = {
     classic: { variant: 'overlay', height: 'medium', overlay: 'dark', align: 'start' },
     split: { variant: 'split', height: 'medium', align: 'start' },
     color: { variant: 'color', height: 'small', align: 'center' },
+    glass: {
+      variant: 'glass',
+      height: 'large',
+      overlay: 'medium',
+      align: 'center',
+      position: 'center',
+    },
+    fullscreen: {
+      variant: 'overlay',
+      height: 'screen',
+      overlay: 'gradient',
+      align: 'center',
+      position: 'center',
+      titleSize: 'huge',
+    },
   },
   products: {
-    grid: { variant: 'grid', columns: 4, showAdd: false },
+    grid: { variant: 'grid', columns: 4, showAdd: false, cardStyle: 'default' },
     swipe: { variant: 'carousel', showAdd: true },
     list: { variant: 'list', showAdd: true },
     spotlight: {
@@ -1769,6 +2184,7 @@ export const SECTION_STYLES = {
       showAdd: true,
       look: { background: 'tinted', titleAlign: 'center' },
     },
+    minimal: { variant: 'grid', columns: 4, showAdd: false, cardStyle: 'minimal' },
   },
   categories: {
     circles: { variant: 'circles', showCount: false },
@@ -1777,6 +2193,7 @@ export const SECTION_STYLES = {
     banners: { variant: 'banners', showCount: true },
     chips: { variant: 'chips', showCount: false },
     list: { variant: 'list', showCount: true },
+    carousel: { variant: 'carousel', showCount: false },
   },
   image: {
     wide: { variant: 'contained', aspect: 'wide' },
@@ -1798,6 +2215,8 @@ export const SECTION_STYLES = {
     row: { variant: 'row' },
     grid: { variant: 'grid' },
     cards: { variant: 'cards', look: { background: 'soft', titleAlign: 'center' } },
+    list: { variant: 'list' },
+    bubbles: { variant: 'grid', iconStyle: 'square', look: { titleAlign: 'center' } },
   },
   menu: {
     list: { variant: 'list', showImages: true, showDescriptions: true },
@@ -1806,9 +2225,16 @@ export const SECTION_STYLES = {
   },
   info: { strip: { variant: 'strip' }, cards: { variant: 'cards' } },
   catalog: {
-    grid: { variant: 'grid', columns: 4 },
+    grid: { variant: 'grid', columns: 4, cardStyle: 'default', filterStyle: 'chips' },
     roomy: { variant: 'grid', columns: 3 },
     list: { variant: 'list' },
+    modern: {
+      variant: 'grid',
+      columns: 4,
+      cardStyle: 'soft',
+      filterStyle: 'tabs',
+      stickyFilters: true,
+    },
   },
   countdown: {
     banner: { variant: 'banner' },
@@ -1829,6 +2255,7 @@ export const SECTION_STYLES = {
     grid: { variant: 'grid', columns: 3 },
     mosaic: { variant: 'mosaic' },
     swipe: { variant: 'carousel' },
+    masonry: { variant: 'masonry', columns: 3 },
   },
   logos: { row: { variant: 'row', grayscale: true }, grid: { variant: 'grid', grayscale: false } },
   collage: { mosaic: { variant: 'mosaic' }, even: { variant: 'even' } },
@@ -1836,12 +2263,66 @@ export const SECTION_STYLES = {
     brand: { variant: 'brand', align: 'center' },
     soft: { variant: 'soft', align: 'center' },
     outline: { variant: 'outline', align: 'start' },
-    picture: { variant: 'image', align: 'center' },
+    picture: { variant: 'image', align: 'center', buttonStyle: 'solid', size: 'regular' },
+    inline: { variant: 'brand', align: 'start', layout: 'inline' },
+    glass: { variant: 'image', align: 'center', buttonStyle: 'glass', size: 'large' },
   },
   spacer: {
     small: { size: 'small', line: false },
     line: { size: 'medium', line: true },
     large: { size: 'large', line: false },
+  },
+  divider: {
+    line: { variant: 'line', length: 'full', color: 'border' },
+    dots: { variant: 'dots', length: 'short', color: 'brand' },
+    gradient: { variant: 'gradient', length: 'half', color: 'brand' },
+    wave: { variant: 'wave', length: 'short', color: 'brand' },
+  },
+  columns: {
+    two: { layout: '1-1', columnStyle: 'plain', dividers: false },
+    cards: { layout: '1-1-1', columnStyle: 'card', dividers: false },
+    split: { layout: '2-1', columnStyle: 'plain', dividers: true },
+    glass: {
+      layout: '1-1',
+      columnStyle: 'glass',
+      dividers: false,
+      look: { background: 'gradient' },
+    },
+  },
+  split: {
+    classic: { imagePosition: 'start', ratio: 'even', imageShape: 'rounded' },
+    reverse: { imagePosition: 'end', ratio: 'even', imageShape: 'rounded' },
+    arch: { imagePosition: 'start', ratio: 'even', imageShape: 'arch' },
+    circle: { imagePosition: 'end', ratio: 'text', imageShape: 'circle' },
+    wide: { imagePosition: 'start', ratio: 'image', imageShape: 'rect' },
+  },
+  cards: {
+    bordered: { variant: 'bordered', hover: 'lift' },
+    shadow: { variant: 'shadow', hover: 'lift' },
+    overlay: { variant: 'overlay', hover: 'zoom', aspect: 'portrait' },
+    glass: { variant: 'glass', hover: 'glow', look: { background: 'gradient' } },
+  },
+  tabs: {
+    pills: { variant: 'pills' },
+    underline: { variant: 'underline' },
+    boxed: { variant: 'boxed', look: { background: 'soft' } },
+    vertical: { variant: 'vertical' },
+  },
+  marquee: {
+    brand: { variant: 'brand', size: 'regular' },
+    dark: { variant: 'dark', size: 'regular' },
+    outline: { variant: 'outline', size: 'large' },
+    tilted: { variant: 'tilted', size: 'regular' },
+  },
+  stats: {
+    row: { variant: 'row' },
+    cards: { variant: 'cards' },
+    boxed: { variant: 'boxed', look: { background: 'brand', titleAlign: 'center' } },
+  },
+  steps: {
+    numbers: { variant: 'numbers' },
+    timeline: { variant: 'timeline' },
+    cards: { variant: 'cards', look: { background: 'soft', titleAlign: 'center' } },
   },
 } as const satisfies Record<SectionType, Record<string, StylePatch>>;
 
@@ -1928,7 +2409,16 @@ export function categoryLayout(layout: CategoryLayout): DesignSection[] {
 }
 
 // ------------------------------------------------------------------------------- API
-export const storeDesignStateSchema = z.object({
+// Explicit types: the design schema is too large for TypeScript to write out inline.
+type DesignSchema = typeof storeDesignSchema;
+export const storeDesignStateSchema: z.ZodObject<{
+  draft: DesignSchema;
+  published: z.ZodNullable<DesignSchema>;
+  publishedAt: z.ZodNullable<z.ZodString>;
+  dirty: z.ZodBoolean;
+  suggestedTemplate: z.ZodEnum<{ retail: 'retail'; restaurant: 'restaurant' }>;
+  version: z.ZodNumber;
+}> = z.object({
   draft: storeDesignSchema,
   published: storeDesignSchema.nullable(),
   publishedAt: z.string().nullable(),
@@ -1939,7 +2429,10 @@ export const storeDesignStateSchema = z.object({
   version: z.number().int(),
 });
 export type StoreDesignState = z.infer<typeof storeDesignStateSchema>;
-export const saveStoreDesignSchema = z.object({
+export const saveStoreDesignSchema: z.ZodObject<{
+  design: DesignSchema;
+  version: z.ZodNumber;
+}> = z.object({
   design: storeDesignSchema,
   version: z.number().int().nonnegative(),
 });
@@ -1956,4 +2449,6 @@ export type StoreAsset = z.infer<typeof storeAssetSchema>;
 export const storeAssetListSchema = z.object({ assets: z.array(storeAssetSchema) });
 
 /** What the storefront reads: the published design (or the legacy layout). */
-export const publicStoreDesignSchema = z.object({ design: storeDesignSchema });
+export const publicStoreDesignSchema: z.ZodObject<{ design: DesignSchema }> = z.object({
+  design: storeDesignSchema,
+});

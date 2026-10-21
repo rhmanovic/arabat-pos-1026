@@ -3,7 +3,7 @@ import { cn } from '@arabat/ui';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSlug } from '../shared.js';
-import { assetUrl, isPreview, useCard, useCta, useText } from './context.js';
+import { assetUrl, isPreview, useCard, useCta, useStyledCta, useText } from './context.js';
 import { SectionTitle } from './frame.js';
 import { DesignAnchor } from './parts.js';
 
@@ -284,6 +284,21 @@ export function GallerySection({ s }: { s: SectionOf<'gallery'> }) {
             </li>
           ))}
         </ul>
+      ) : s.variant === 'masonry' ? (
+        // Pictures keep their own shape, in columns of different heights.
+        <ul
+          className={cn(
+            'columns-2 gap-3 [&>li]:mb-3',
+            { 2: 'sm:columns-2', 3: 'sm:columns-3', 4: 'sm:columns-4' }[s.columns],
+          )}
+          data-variant="masonry"
+        >
+          {items.map((i) => (
+            <li key={i.id} className="break-inside-avoid">
+              {picture(i, '[&>img]:h-auto')}
+            </li>
+          ))}
+        </ul>
       ) : s.variant === 'mosaic' ? (
         <ul className="grid auto-rows-[9rem] grid-cols-2 gap-3 sm:auto-rows-[12rem] sm:grid-cols-4">
           {items.map((i, n) => (
@@ -432,6 +447,8 @@ export function CtaSection({ s }: { s: SectionOf<'cta'> }) {
   const slug = useSlug();
   const text = useText();
   const cta = useCta();
+  const styled = useStyledCta();
+  const eyebrow = text(s.eyebrow);
   const title = text(s.title);
   const body = text(s.text);
   const button = text(s.button);
@@ -439,10 +456,37 @@ export function CtaSection({ s }: { s: SectionOf<'cta'> }) {
   const img = s.variant === 'image' ? assetUrl(slug, s.imageId) : null;
   if (!title && !body && !button) return null;
   const dark = s.variant === 'brand' || s.variant === 'image';
+  const inline = s.layout === 'inline';
+  const buttons =
+    button || button2 ? (
+      <div
+        className={cn(
+          'flex shrink-0 flex-wrap gap-2',
+          !inline && 'mt-2',
+          !inline && s.align === 'center' && 'justify-center',
+        )}
+      >
+        {button ? (
+          <DesignAnchor
+            link={s.link}
+            className={cn(styled(s.buttonStyle, dark), s.pulse && 'store-pulse')}
+          >
+            {button}
+          </DesignAnchor>
+        ) : null}
+        {button2 ? (
+          <DesignAnchor link={s.link2} className={cta('outline')}>
+            {button2}
+          </DesignAnchor>
+        ) : null}
+      </div>
+    ) : null;
   return (
     <section
       className={cn(
-        'relative overflow-hidden rounded-2xl p-8 sm:p-12',
+        'relative overflow-hidden',
+        { compact: 'p-6 sm:p-8', regular: 'p-8 sm:p-12', large: 'p-10 sm:p-20' }[s.size],
+        { none: '', soft: 'rounded-2xl', round: 'rounded-[2rem]' }[s.rounded],
         s.variant === 'brand' && 'bg-primary text-primary-fg',
         s.variant === 'soft' && 'bg-primary-soft',
         s.variant === 'outline' && 'border-2 border-primary',
@@ -463,28 +507,33 @@ export function CtaSection({ s }: { s: SectionOf<'cta'> }) {
       ) : null}
       <div
         className={cn(
-          'relative flex flex-col gap-3',
-          s.align === 'center' ? 'items-center text-center' : 'items-start',
+          'relative flex gap-3',
+          inline
+            ? 'flex-col sm:flex-row sm:items-center sm:justify-between'
+            : cn('flex-col', s.align === 'center' ? 'items-center text-center' : 'items-start'),
         )}
       >
-        {title ? <h2 className="text-2xl font-extrabold sm:text-3xl">{title}</h2> : null}
-        {body ? (
-          <p className={cn('max-w-2xl', dark ? 'opacity-90' : 'text-fg-muted')}>{body}</p>
-        ) : null}
-        {button || button2 ? (
-          <div className="mt-2 flex flex-wrap justify-center gap-2">
-            {button ? (
-              <DesignAnchor link={s.link} className={cta(dark ? 'light' : 'primary')}>
-                {button}
-              </DesignAnchor>
-            ) : null}
-            {button2 ? (
-              <DesignAnchor link={s.link2} className={cta('outline')}>
-                {button2}
-              </DesignAnchor>
-            ) : null}
-          </div>
-        ) : null}
+        <div
+          className={cn('flex flex-col gap-3', !inline && s.align === 'center' && 'items-center')}
+        >
+          {eyebrow ? (
+            <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-80">{eyebrow}</p>
+          ) : null}
+          {title ? (
+            <h2
+              className={cn(
+                'font-extrabold',
+                s.size === 'large' ? 'text-3xl sm:text-5xl' : 'text-2xl sm:text-3xl',
+              )}
+            >
+              {title}
+            </h2>
+          ) : null}
+          {body ? (
+            <p className={cn('max-w-2xl', dark ? 'opacity-90' : 'text-fg-muted')}>{body}</p>
+          ) : null}
+        </div>
+        {buttons}
       </div>
     </section>
   );
@@ -492,7 +541,7 @@ export function CtaSection({ s }: { s: SectionOf<'cta'> }) {
 
 // ----------------------------------------------------------------------------- spacer
 export function SpacerSection({ s }: { s: SectionOf<'spacer'> }) {
-  const size = { small: 'h-4', medium: 'h-10', large: 'h-20' }[s.size];
+  const size = { small: 'h-4', medium: 'h-10', large: 'h-20', huge: 'h-36' }[s.size];
   return (
     <div aria-hidden className={cn('flex items-center', size)}>
       {s.line ? <hr className="w-full border-border" /> : null}

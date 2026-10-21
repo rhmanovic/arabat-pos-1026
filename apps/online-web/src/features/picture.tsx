@@ -264,9 +264,7 @@ export function GalleryField({
           e.target.value = '';
         }}
       />
-      <p className="text-xs text-fg-muted">
-        {t('picture.galleryHint', { count, max })}
-      </p>
+      <p className="text-xs text-fg-muted">{t('picture.galleryHint', { count, max })}</p>
     </div>
   );
 }

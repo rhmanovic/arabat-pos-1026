@@ -20,23 +20,104 @@ import {
   sectionSchema,
   storeDesignSchema,
   templateDesign,
+  columnCount,
 } from './store-design.js';
 
 const PIC = (n: number) => `0198f0a2-5c3e-7d41-9a3b-2f6c8e1d4b7${n}`;
+const MOBILE = '0198f0a2-5c3e-7d41-9a3b-2f6c8e1d4b80';
 
 describe('home page sections (ADR-0128 amendment 3)', () => {
   it('gives sections saved before the amendment the default look', () => {
     const old = sectionSchema.parse({ id: 'banner', type: 'banner', variant: 'overlay' });
     expect(old.look).toEqual({
       background: 'none',
+      gradient: 'brand',
+      bgColor: null,
+      bgImageId: null,
+      bgOverlay: 'dark',
       spacing: 'regular',
       width: 'contained',
+      height: 'auto',
+      boxed: false,
+      corners: 'none',
+      dividerTop: 'none',
+      dividerBottom: 'none',
       titleAlign: 'start',
+      titleSize: 'regular',
+      eyebrow: { en: null, ar: null },
       subtitle: { en: null, ar: null },
+      animation: 'none',
+      anchor: '',
+      sticky: false,
+      overlap: false,
+      collapsible: false,
+      collapseLabel: { en: null, ar: null },
       devices: 'all',
       showFrom: null,
       showUntil: null,
     });
+    // Older banners and catalogs keep how they looked (ADR-0128 amendment 7 adds options only).
+    expect(old).toMatchObject({ position: 'bottom', buttonStyle: 'solid', zoom: false });
+  });
+
+  it('adds layout and motion sections with checked frames (ADR-0128 amendment 7)', () => {
+    const columns = sectionSchema.parse({
+      id: 'cols',
+      type: 'columns',
+      layout: '1-2-1',
+      columns: [
+        { id: 'a', blocks: [{ id: 'h', type: 'heading', text: { en: 'Hi' } }] },
+        { id: 'b', blocks: [{ id: 'p', type: 'image', imageId: PIC(5) }] },
+        { id: 'c' },
+      ],
+    });
+    expect(columns.type === 'columns' && columns.columns[2]!.blocks).toEqual([]);
+    expect(columnCount('1-2-1')).toBe(3);
+    // At most four columns and ten blocks a column.
+    expect(
+      sectionSchema.safeParse({
+        id: 'x',
+        type: 'columns',
+        columns: Array.from({ length: 5 }, (_, i) => ({ id: `c${i}` })),
+      }).success,
+    ).toBe(false);
+    for (const type of ['divider', 'split', 'cards', 'tabs', 'marquee', 'stats', 'steps'] as const)
+      expect(sectionSchema.parse({ id: type, type }).type).toBe(type);
+    // A frame with a picture background, a custom colour, an anchor and motion.
+    const look = (l: Record<string, unknown>) =>
+      sectionSchema.safeParse({ id: 's', type: 'spacer', look: l }).success;
+    expect(
+      look({ background: 'image', bgImageId: PIC(6), animation: 'up', anchor: 'offers' }),
+    ).toBe(true);
+    expect(look({ background: 'custom', bgColor: '#1a2B3c' })).toBe(true);
+    expect(look({ background: 'custom', bgColor: 'red' })).toBe(false);
+    expect(look({ anchor: 'Our Offers' })).toBe(false);
+    expect(
+      sectionSchema.safeParse({ id: 'n', type: 'stats', items: [{ id: 'i', value: -1 }] }).success,
+    ).toBe(false);
+    // Every new picture field counts as in use.
+    const base = legacyDesign();
+    const design = storeDesignSchema.parse({
+      ...base,
+      pages: {
+        ...base.pages,
+        home: [
+          columns,
+          {
+            id: 'sp',
+            type: 'split',
+            imageId: PIC(7),
+            look: { background: 'image', bgImageId: PIC(6) },
+          },
+          { id: 'cd', type: 'cards', items: [{ id: 'i', imageId: PIC(8) }] },
+          { id: 'tb', type: 'tabs', tabs: [{ id: 't', imageId: PIC(9) }] },
+          { id: 'bn', type: 'banner', mobileImageId: MOBILE },
+        ],
+      },
+    });
+    expect(designImageIds(design).sort()).toEqual(
+      [PIC(5), PIC(6), PIC(7), PIC(8), PIC(9), MOBILE].sort(),
+    );
   });
 
   it('refuses a schedule that ends before it starts, and a date that is not one', () => {

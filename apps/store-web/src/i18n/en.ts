@@ -23,6 +23,8 @@ export const storeEn = {
     searchPlaceholder: 'What are you looking for?',
   },
   design: {
+    showMore: 'Show more ({{count}})',
+    openSection: 'Open',
     previewBadge: 'Preview: what shoppers will see once you publish',
     slider: 'Highlights',
     goToSlide: 'Slide {{n}}',
@@ -144,6 +146,7 @@ export const storeEn = {
   },
   closed: 'This store is not taking orders right now. You can still browse.',
   catalog: {
+    category: 'Category',
     all: 'All',
     empty: 'No products are available online yet.',
     unavailable: 'Sold out',

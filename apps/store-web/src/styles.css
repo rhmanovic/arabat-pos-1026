@@ -4,3 +4,99 @@
 /* Scan shared packages for class names used by their components. */
 @source '../../../packages/ui/src';
 @source '../../../packages/web-core/src';
+
+/*
+ * Store design motion (ADR-0128 amendment 7): sections that appear on scroll, the sliding
+ * ticker, a slow zoom on banners and a pulsing button. All of it stops for shoppers who ask
+ * their device for reduced motion.
+ */
+[data-reveal] {
+  transition:
+    opacity 700ms ease,
+    transform 700ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+[data-reveal='fade'][data-shown='false'] {
+  opacity: 0;
+}
+[data-reveal='up'][data-shown='false'] {
+  opacity: 0;
+  transform: translateY(2.5rem);
+}
+[data-reveal='zoom'][data-shown='false'] {
+  opacity: 0;
+  transform: scale(0.94);
+}
+[data-reveal='slide'][data-shown='false'] {
+  opacity: 0;
+  transform: translateX(-3rem);
+}
+[dir='rtl'] [data-reveal='slide'][data-shown='false'] {
+  transform: translateX(3rem);
+}
+
+@keyframes store-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+@keyframes store-marquee-rtl {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(50%);
+  }
+}
+.store-marquee {
+  animation: store-marquee var(--marquee-duration, 30s) linear infinite;
+}
+[dir='rtl'] .store-marquee {
+  animation-name: store-marquee-rtl;
+}
+.store-marquee[data-direction='end'] {
+  animation-direction: reverse;
+}
+.store-marquee-host[data-pause='true']:hover .store-marquee {
+  animation-play-state: paused;
+}
+
+@keyframes store-zoom {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.12);
+  }
+}
+.store-zoom {
+  animation: store-zoom 18s ease-in-out infinite alternate;
+}
+
+@keyframes store-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, currentColor 45%, transparent);
+  }
+  60% {
+    box-shadow: 0 0 0 14px transparent;
+  }
+}
+.store-pulse {
+  animation: store-pulse 2.2s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] {
+    transition: none;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .store-marquee,
+  .store-zoom,
+  .store-pulse {
+    animation: none;
+  }
+}
