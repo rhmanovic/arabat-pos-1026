@@ -178,9 +178,9 @@ test('a shopper orders without any gateway and pays at pickup; staff confirm, re
   await page.getByRole('link', { name: 'Store categories', exact: true }).click();
   await page.getByRole('button', { name: 'Add category' }).click();
   await page.getByLabel('Name (English)').fill('Sweets');
+  // One save stores the category and closes the dialog.
   await page.getByRole('button', { name: 'Save' }).click();
-  await expect(page.getByRole('dialog', { name: 'Edit category' })).toBeVisible();
-  await page.getByRole('button', { name: 'Close' }).click();
+  await expect(page.getByRole('dialog')).toBeHidden();
   await page.getByRole('link', { name: 'Products online' }).click();
   await page.getByRole('button', { name: 'Edit' }).click();
   const edit = page.getByRole('dialog');
@@ -528,4 +528,57 @@ test('the owner designs the store as a restaurant, previews it live and publishe
   await shopper.getByRole('link', { name: 'Menu' }).first().click();
   await expect(shopper).toHaveURL(new RegExp(`/store/${slug}/products$`));
   await shopperContext.close();
+});
+
+test('a store category is saved with a pasted picture in one step, converted to WebP', async ({
+  page,
+}) => {
+  const email = uniqueEmail('cat-owner');
+  expect(
+    (
+      await page.request.post('/api/v1/auth/register', {
+        data: {
+          company: { nameEn: 'Picture Co' },
+          owner: { fullName: 'Picture Owner', email, password: 'Owner-Pass-2026' },
+        },
+      })
+    ).status(),
+  ).toBe(201);
+  await page.goto('/online/categories');
+  await expect(page.getByText('separate from the categories of the point of sale')).toBeVisible();
+  await page.getByRole('button', { name: 'Add category' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Name (English)').fill('Dairy & Eggs');
+  await dialog.getByLabel('Name (Arabic)').fill('الألبان والبيض');
+  // Paste a screenshot (a real PNG) into the dialog, as Ctrl+V does.
+  await page.evaluate(async () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 120;
+    canvas.height = 80;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#0f766e';
+    ctx.fillRect(0, 0, 120, 80);
+    const png = await new Promise<Blob>((done) => canvas.toBlob((b) => done(b!), 'image/png'));
+    const data = new DataTransfer();
+    data.items.add(new File([png], 'screenshot.png', { type: 'image/png' }));
+    window.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data }));
+  });
+  await expect(dialog.getByRole('img', { name: 'Category picture' })).toBeVisible();
+  // The browser sends WebP; one save creates the category, uploads the picture and closes.
+  let sent = '';
+  await page.route('**/manager/online/categories/*/image', async (route) => {
+    sent = route.request().postDataBuffer()?.toString('latin1') ?? '';
+    await route.continue();
+  });
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(dialog).toBeHidden();
+  expect(sent).toContain('filename="image.webp"');
+  expect(sent).toContain('Content-Type: image/webp');
+  const [category] = (await (await page.request.get('/api/v1/manager/online/categories')).json())
+    .categories as { nameEn: string; imageUrl: string }[];
+  expect(category!.nameEn).toBe('Dairy & Eggs');
+  const picture = await page.request.get(category!.imageUrl);
+  expect(picture.headers()['content-type']).toBe('image/webp');
+  expect((await picture.body()).toString('ascii', 8, 12)).toBe('WEBP');
+  await expect(page.getByText('Dairy & Eggs')).toBeVisible();
 });

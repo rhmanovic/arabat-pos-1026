@@ -1,5 +1,6 @@
 import type { OnlineCategory, SaveOnlineCategory } from '@arabat/contracts';
 import {
+  Alert,
   Badge,
   Button,
   Dialog,
@@ -9,10 +10,11 @@ import {
   PageHeader,
   Section,
   Select,
+  cn,
 } from '@arabat/ui';
 import { AccessDenied, ErrorState, localizedName, useApi, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSession } from '../../app/context.js';
 import { key } from '../shared.js';
@@ -29,6 +31,9 @@ export function CategoriesPage() {
   return (
     <div>
       <PageHeader title={t('nav.categories')} description={t('categories.hint')} />
+      <Alert tone="info" className="mb-4" data-testid="categories-separate">
+        {t('categories.separateNote')}
+      </Alert>
       <CategoryList />
     </div>
   );
@@ -159,6 +164,23 @@ function CategoryList() {
   );
 }
 
+/** The first picture in a paste or a drop, if any. */
+function pictureFrom(data: DataTransfer | null): File | null {
+  if (!data) return null;
+  for (const file of Array.from(data.files)) if (file.type.startsWith('image/')) return file;
+  for (const item of Array.from(data.items ?? [])) {
+    if (item.kind === 'file' && item.type.startsWith('image/')) {
+      const file = item.getAsFile();
+      if (file) return file;
+    }
+  }
+  return null;
+}
+
+/**
+ * Add or edit a store category. The picture can be chosen, pasted (Ctrl+V anywhere in the
+ * dialog) or dropped before saving; "Save" stores the category, then its picture, then closes.
+ */
 function CategoryDialog({
   category,
   onClose,
@@ -172,53 +194,70 @@ function CategoryDialog({
   const api = useApi();
   const notify = useNotify();
   const fileInput = useRef<HTMLInputElement>(null);
+  // Set once the category exists, so a retry after a failed picture upload updates it.
   const [current, setCurrent] = useState<OnlineCategory | null>(category);
   const [v, setV] = useState<SaveOnlineCategory>({
     nameEn: category?.nameEn ?? null,
     nameAr: category?.nameAr ?? null,
     status: category?.status ?? 'active',
   });
+  const [picture, setPicture] = useState<File | null>(null);
+  const [removePicture, setRemovePicture] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const preview = useMemo(
+    () =>
+      picture && typeof URL.createObjectURL === 'function' ? URL.createObjectURL(picture) : null,
+    [picture],
+  );
+  useEffect(() => () => (preview ? URL.revokeObjectURL(preview) : undefined), [preview]);
+  const choose = (file: File | null) => {
+    if (!file) return;
+    setPicture(file);
+    setRemovePicture(false);
+  };
+  // A picture pasted anywhere while the dialog is open becomes its picture.
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      const file = pictureFrom(event.clipboardData);
+      if (!file) return;
+      event.preventDefault();
+      choose(file);
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, []);
   const set = (patch: Partial<SaveOnlineCategory>) => setV((x) => ({ ...x, ...patch }));
   const save = useMutation({
-    mutationFn: () =>
-      current
-        ? api.online.updateCategory(current.id, { ...v, version: current.version })
-        : api.online.createCategory(v),
-    onSuccess: async (saved) => {
+    mutationFn: async () => {
+      let saved = current
+        ? await api.online.updateCategory(current.id, { ...v, version: current.version })
+        : await api.online.createCategory(v);
       setCurrent(saved);
+      if (picture) saved = await api.online.uploadCategoryImage(saved.id, picture);
+      else if (removePicture && saved.imageUrl)
+        saved = await api.online.removeCategoryImage(saved.id);
+      return saved;
+    },
+    onSuccess: async () => {
       notify.ok(t('common.saved'));
       await onSaved();
-      if (!category) return; // a new category stays open so a picture can be added
       onClose();
     },
-    onError: notify.fail,
-  });
-  const upload = useMutation({
-    mutationFn: (file: File) => api.online.uploadCategoryImage(current!.id, file),
-    onSuccess: async (saved) => {
-      setCurrent(saved);
-      notify.ok(t('categories.imageSaved'));
+    onError: async (error) => {
+      notify.fail(error);
       await onSaved();
     },
-    onError: notify.fail,
   });
-  const removeImage = useMutation({
-    mutationFn: () => api.online.removeCategoryImage(current!.id),
-    onSuccess: async (saved) => {
-      setCurrent(saved);
-      await onSaved();
-    },
-    onError: notify.fail,
-  });
+  const shown = preview ?? (removePicture ? null : (current?.imageUrl ?? null));
   return (
     <Dialog
       open
       onOpenChange={(open) => (!open ? onClose() : undefined)}
-      title={current ? t('categories.editTitle') : t('categories.add')}
+      title={category ? t('categories.editTitle') : t('categories.add')}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
-            {current ? t('categories.close') : t('common.cancel')}
+            {t('common.cancel')}
           </Button>
           <Button loading={save.isPending} onClick={() => save.mutate()}>
             {t('common.save')}
@@ -258,47 +297,61 @@ function CategoryDialog({
             </Select>
           )}
         </Field>
-        {current ? (
-          <div className="flex items-center gap-3 sm:col-span-2">
-            <span className="size-16 shrink-0 overflow-hidden rounded-md border border-border bg-surface-muted">
-              {current.imageUrl ? (
-                <img src={current.imageUrl} alt="" className="size-full object-cover" />
-              ) : null}
-            </span>
-            <input
-              ref={fileInput}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="sr-only"
-              aria-label={t('categories.uploadImage')}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) upload.mutate(file);
-                e.target.value = '';
-              }}
-            />
-            <Button
-              variant="secondary"
-              size="sm"
-              loading={upload.isPending}
-              onClick={() => fileInput.current?.click()}
-            >
-              {t('categories.uploadImage')}
-            </Button>
-            {current.imageUrl ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                loading={removeImage.isPending}
-                onClick={() => removeImage.mutate()}
-              >
-                {t('categories.removeImage')}
-              </Button>
+        <div
+          className={cn(
+            'flex items-center gap-3 rounded-xl border-2 border-dashed p-3 sm:col-span-2',
+            dragging ? 'border-primary bg-primary-soft' : 'border-border',
+          )}
+          data-testid="category-picture"
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragging(false);
+            choose(pictureFrom(e.dataTransfer));
+          }}
+        >
+          <span className="size-16 shrink-0 overflow-hidden rounded-md border border-border bg-surface-muted">
+            {shown ? (
+              <img src={shown} alt={t('categories.picture')} className="size-full object-cover" />
             ) : null}
+          </span>
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <p className="text-xs text-fg-muted">{t('categories.pasteHint')}</p>
+            <div className="flex flex-wrap gap-2">
+              <input
+                ref={fileInput}
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                aria-label={t('categories.uploadImage')}
+                onChange={(e) => {
+                  choose(e.target.files?.[0] ?? null);
+                  e.target.value = '';
+                }}
+              />
+              <Button variant="secondary" size="sm" onClick={() => fileInput.current?.click()}>
+                {t('categories.uploadImage')}
+              </Button>
+              {shown ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setPicture(null);
+                    setRemovePicture(true);
+                  }}
+                >
+                  {t('categories.removeImage')}
+                </Button>
+              ) : null}
+            </div>
           </div>
-        ) : (
-          <p className="text-xs text-fg-muted sm:col-span-2">{t('categories.imageAfterSave')}</p>
-        )}
+        </div>
+        <p className="text-xs text-fg-muted sm:col-span-2">{t('categories.separateNote')}</p>
       </div>
     </Dialog>
   );

@@ -193,7 +193,7 @@ Before reporting work as done, run `pnpm verify`, `pnpm test:integration` and
 - Merchant status and subscription updates need `app.operator_id` (database trigger), also in
   owner-role fixtures: `select set_config('app.operator_id', gen_random_uuid()::text, true)`.
 - Uploaded files go through `FileStorage` (`apps/api/src/kernel/storage`); never write
-  to disk directly. Local storage lives in `var/` (git-ignored).
+  to disk directly. Pictures go through `toStorableImage` first (stored as WebP, ADR-0129). Local storage lives in `var/` (git-ignored).
 - In this cloud sandbox: Node 24 is at `~/.local/node24/bin` (if missing, unpack the official
   linux-x64 tarball there), Docker must be started with `dockerd &`, Docker Hub may answer 429
   (pull `mirror.gcr.io/library/postgres:18` and tag it `postgres:18`), and Playwright needs

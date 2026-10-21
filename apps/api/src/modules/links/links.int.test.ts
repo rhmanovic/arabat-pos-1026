@@ -413,10 +413,11 @@ describe('link page (ADR-0116)', () => {
     const s = await setup();
     const slug = uniqueSlug('pic');
     await s.ok('PUT', '/manager/link-page', page(slug));
-    const png = Buffer.concat([
-      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-      Buffer.alloc(32, 1),
-    ]);
+    // A real 1×1 PNG: uploads are decoded and stored as WebP.
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+      'base64',
+    );
     const upload = (data: Buffer) => {
       const boundary = '----arabat' + Math.random().toString(16).slice(2);
       return app.inject({
@@ -440,8 +441,8 @@ describe('link page (ADR-0116)', () => {
     expect(pub.avatarUrl).toMatch(new RegExp(`^/api/v1/public/links/${slug}/avatar`));
     const served = await app.inject({ method: 'GET', url: pub.avatarUrl });
     expect(served.statusCode).toBe(200);
-    expect(served.headers['content-type']).toBe('image/png');
-    expect(Buffer.compare(served.rawPayload, png)).toBe(0);
+    expect(served.headers['content-type']).toBe('image/webp');
+    expect(served.rawPayload.toString('ascii', 8, 12)).toBe('WEBP');
 
     const removed = await s.ok('DELETE', '/manager/link-page/avatar');
     expect(removed.avatarUrl).toBeNull();

@@ -41,7 +41,8 @@ import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { rules } from '../../kernel/errors/pos-rule.js';
 import { newId } from '../../kernel/ids.js';
-import { FileStorage, sniffImageType } from '../../kernel/storage/file-storage.js';
+import { FileStorage } from '../../kernel/storage/file-storage.js';
+import { toStorableImage } from '../../kernel/storage/image.js';
 import { AuditService } from '../audit/audit.service.js';
 import { isUniqueViolation } from '../auth/registration.service.js';
 import { versionConflict } from '../branches/branches.service.js';
@@ -721,7 +722,7 @@ export class EcommerceService {
   async setCategoryImage(actor: MerchantActor, id: string, data: Buffer | null, ip: string) {
     this.assertManage(actor);
     const upload = data
-      ? this.checkImage(data, `${actor.merchantId}/online/categories/${id}`)
+      ? await this.checkImage(data, `${actor.merchantId}/online/categories/${id}`)
       : null;
     const previous = await this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const row = await this.lockCategory(tx, id);
@@ -735,7 +736,7 @@ export class EcommerceService {
         })
         .where(eq(onlineCategories.id, id));
       // Written last inside the transaction: a storage failure rolls the row back.
-      if (upload && data) await this.storage.put(upload.key, data);
+      if (upload) await this.storage.put(upload.key, upload.data);
       await this.record(
         tx,
         actor.merchantId,
@@ -762,7 +763,7 @@ export class EcommerceService {
   // ------------------------------------------------------------ manager: store images (ADR-0121)
   async setStoreImage(actor: MerchantActor, kind: StoreImageKind, data: Buffer | null, ip: string) {
     this.assertManage(actor);
-    const upload = data ? this.checkImage(data, `${actor.merchantId}/online/${kind}`) : null;
+    const upload = data ? await this.checkImage(data, `${actor.merchantId}/online/${kind}`) : null;
     const previous = await this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const [row] = await tx.select().from(onlineStores).for('update');
       if (!row) throw AppError.notFound('Save the store settings first.');
@@ -773,7 +774,7 @@ export class EcommerceService {
         version: sql`${onlineStores.version} + 1`,
         updatedAt: sql`now()`,
       });
-      if (upload && data) await this.storage.put(upload.key, data);
+      if (upload) await this.storage.put(upload.key, upload.data);
       await this.record(
         tx,
         actor.merchantId,
@@ -799,14 +800,21 @@ export class EcommerceService {
     });
   }
 
-  /** Size and type checks shared by every store image; returns where it will be stored. */
-  private checkImage(data: Buffer, prefix: string) {
+  /**
+   * Size and type checks shared by every store image; the picture is converted to WebP and the
+   * result says where it will be stored.
+   */
+  private async checkImage(data: Buffer, prefix: string) {
     if (data.length === 0 || data.length > MAX_STORE_IMAGE_BYTES)
       throw new AppError(413, 'PAYLOAD_TOO_LARGE', 'Images must be at most 2 MB.');
-    const contentType = sniffImageType(data);
-    if (!contentType)
+    const image = await toStorableImage(data);
+    if (!image)
       throw new AppError(415, 'UNSUPPORTED_MEDIA', 'Only JPEG, PNG and WebP images are accepted.');
-    return { contentType, key: `${prefix}/${newId()}.${contentType.split('/')[1]}` };
+    return {
+      contentType: image.contentType,
+      data: image.data,
+      key: `${prefix}/${newId()}.${image.extension}`,
+    };
   }
 
   private async readImage(key: string | null, contentType: string | null) {

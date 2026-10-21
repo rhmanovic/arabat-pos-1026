@@ -15,7 +15,8 @@ import { DatabaseService, type Transaction } from '../../database/database.servi
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
-import { FileStorage, sniffImageType } from '../../kernel/storage/file-storage.js';
+import { FileStorage } from '../../kernel/storage/file-storage.js';
+import { toStorableImage } from '../../kernel/storage/image.js';
 import { AuditService } from '../audit/audit.service.js';
 import { versionConflict } from '../branches/branches.service.js';
 import { restaurantSettings } from '../restaurant/restaurant.schema.js';
@@ -243,11 +244,12 @@ export class StoreDesignService {
     this.assertManage(actor);
     if (data.length === 0 || data.length > MAX_STORE_IMAGE_BYTES)
       throw new AppError(413, 'PAYLOAD_TOO_LARGE', 'Images must be at most 2 MB.');
-    const contentType = sniffImageType(data);
-    if (!contentType)
+    const image = await toStorableImage(data);
+    if (!image)
       throw new AppError(415, 'UNSUPPORTED_MEDIA', 'Only JPEG, PNG and WebP images are accepted.');
+    const { contentType } = image;
     const id = newId();
-    const key = `${actor.merchantId}/online/design/${id}.${contentType.split('/')[1]}`;
+    const key = `${actor.merchantId}/online/design/${id}.${image.extension}`;
     return this.database.withMerchantTx(actor.merchantId, async (tx) => {
       const [count] = (await tx.execute(sql`select count(*)::int as n from online_store_assets`))
         .rows as { n: number }[];
@@ -264,12 +266,12 @@ export class StoreDesignService {
           merchantId: actor.merchantId,
           storageKey: key,
           contentType,
-          bytes: data.length,
+          bytes: image.data.length,
           createdByUserId: actor.userId,
         })
         .returning();
       // Written last inside the transaction: a storage failure rolls the row back.
-      await this.storage.put(key, data);
+      await this.storage.put(key, image.data);
       await this.audit.recordIn(tx, {
         merchantId: actor.merchantId,
         actorType: 'user',

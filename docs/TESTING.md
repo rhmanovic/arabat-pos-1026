@@ -66,6 +66,19 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-21 (pictures as WebP and the category dialog, ADR-0129, cloud sandbox run)
+- `apps/api/src/kernel/storage/image.test.ts` (new, 4): PNG and JPEG become WebP at their size; a
+  4800 × 1200 picture becomes 2400 × 600; EXIF orientation 6 is applied (60 × 20 → 20 × 60) and
+  no EXIF is kept; text and a fake PNG (right magic bytes) are refused.
+- Integration (catalog, ecommerce, links, pricing): uploads use a real 1 × 1 PNG; the stored and
+  served picture is `image/webp` (RIFF…WEBP) and its recorded size is the WebP size.
+- `apps/online-web/src/app.test.tsx` (29): the categories page shows the "separate from the point
+  of sale" note; a picture pasted in the new-category dialog is previewed, one save creates the
+  category, uploads the picture and closes the dialog.
+- `e2e/store.spec.ts` (+1, 44 in the suite): in Chromium a PNG pasted into the dialog is sent as
+  `image.webp` / `image/webp`, the dialog closes after one save, the stored picture is WebP.
+- Totals: `pnpm verify` 375 unit/web, `pnpm test:integration` 308 (44 files), `pnpm test:e2e` 44.
+
 ### Results 2026-10-20 (page sections v2, ADR-0128 amendment 3, cloud sandbox run)
 - `packages/contracts/src/store-design.test.ts` (new, 5): old sections get the default look; a
   schedule that ends before it starts and a non-date are refused; gallery, logos, collage and

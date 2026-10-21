@@ -19,7 +19,8 @@ import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { diffFields } from '../../kernel/audit-diff.js';
 import { newId } from '../../kernel/ids.js';
-import { FileStorage, sniffImageType } from '../../kernel/storage/file-storage.js';
+import { FileStorage } from '../../kernel/storage/file-storage.js';
+import { toStorableImage } from '../../kernel/storage/image.js';
 import { AuditService } from '../audit/audit.service.js';
 import { isUniqueViolation } from '../auth/registration.service.js';
 import { versionConflict } from '../branches/branches.service.js';
@@ -406,11 +407,12 @@ export class CatalogService {
         `Images must be at most ${MAX_IMAGE_BYTES / 1024 / 1024} MB.`,
       );
     }
-    const contentType = sniffImageType(data);
-    if (!contentType)
+    const image = await toStorableImage(data);
+    if (!image)
       throw new AppError(415, 'UNSUPPORTED_MEDIA', 'Only JPEG, PNG and WebP images are accepted.');
+    const { contentType } = image;
     const imageId = newId();
-    const key = `${actor.merchantId}/products/${productId}/${imageId}.${contentType.split('/')[1]}`;
+    const key = `${actor.merchantId}/products/${productId}/${imageId}.${image.extension}`;
     await this.database.withMerchantTx(actor.merchantId, async (tx) => {
       await this.loadProduct(tx, actor, productId);
       const [n] = await tx
@@ -425,11 +427,11 @@ export class CatalogService {
         productId,
         storageKey: key,
         contentType,
-        sizeBytes: data.length,
+        sizeBytes: image.data.length,
         position: Number(n?.n ?? 0),
       });
       // Written last inside the transaction: a storage failure rolls the row back.
-      await this.storage.put(key, data);
+      await this.storage.put(key, image.data);
       await tx
         .update(products)
         .set({ updatedAt: sql`now()` })

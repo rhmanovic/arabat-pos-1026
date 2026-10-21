@@ -1,3 +1,4 @@
+import { imageForm } from './image.js';
 import {
   type SaveLinkItem,
   type SaveLinkPage,
@@ -390,8 +391,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
     file: Blob,
     schema: T,
   ): Promise<z.output<T>> {
-    const form = new FormData();
-    form.append('file', file);
+    const form = await imageForm(file);
     const response = await doFetch(`${baseUrl}${path}`, {
       method: 'POST',
       body: form,
@@ -557,8 +557,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
           schema: offerItemSchema,
         }),
       async uploadOfferImage(id: string, file: Blob) {
-        const form = new FormData();
-        form.append('file', file);
+        const form = await imageForm(file);
         const response = await doFetch(`${baseUrl}/platform/offer-items/${id}/image`, {
           method: 'POST',
           body: form,
@@ -710,8 +709,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('DELETE', `/manager/products/${id}/images/${imageId}`, { schema: productSchema }),
       /** Multipart upload; returns the updated product. */
       async uploadImage(id: string, file: Blob) {
-        const form = new FormData();
-        form.append('file', file);
+        const form = await imageForm(file);
         const response = await doFetch(`${baseUrl}/manager/products/${id}/images`, {
           method: 'POST',
           body: form,
@@ -1329,8 +1327,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
       reorder: (ids: string[]) =>
         request('PUT', '/manager/link-page/items/order', { body: { ids }, schema: linkPageSchema }),
       async uploadAvatar(file: Blob) {
-        const form = new FormData();
-        form.append('file', file);
+        const form = await imageForm(file);
         const response = await doFetch(`${baseUrl}/manager/link-page/avatar`, {
           method: 'POST',
           body: form,

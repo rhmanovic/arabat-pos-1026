@@ -184,10 +184,11 @@ describe('pricing offer', () => {
 
   it('stores, serves and replaces an item picture checked by its bytes', async () => {
     const created = await ok('POST', '/platform/offer-items', ops.billing, device('Img', '10'));
-    const png = Buffer.concat([
-      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-      Buffer.alloc(32, 1),
-    ]);
+    // A real 1×1 PNG: uploads are decoded and stored as WebP.
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+      'base64',
+    );
     const upload = (data: Buffer, cookies: Cookies) => {
       const boundary = '----arabat' + Math.random().toString(16).slice(2);
       return app.inject({
@@ -212,8 +213,8 @@ describe('pricing offer', () => {
     expect(withImage.imageUrl).toMatch(/^\/api\/v1\/public\/pricing\/images\//);
     const served = await app.inject({ method: 'GET', url: withImage.imageUrl });
     expect(served.statusCode).toBe(200);
-    expect(served.headers['content-type']).toBe('image/png');
-    expect(served.rawPayload.equals(png)).toBe(true);
+    expect(served.headers['content-type']).toBe('image/webp');
+    expect(served.rawPayload.toString('ascii', 8, 12)).toBe('WEBP');
     const removed = await ok('DELETE', `/platform/offer-items/${created.id}/image`, ops.billing);
     expect(removed.imageUrl).toBeNull();
     expect((await app.inject({ method: 'GET', url: withImage.imageUrl })).statusCode).toBe(404);

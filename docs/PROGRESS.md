@@ -1265,6 +1265,25 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-21 — Pictures stored as WebP; store category dialog (ADR-0129)
+Owner's requests: the "Add category" dialog must close after saving; say that the store's
+categories are separate from the POS ones; allow pasting a picture into the category dialog;
+convert every uploaded picture to WebP before saving.
+- API: `toStorableImage` (`kernel/storage/image.ts`, `sharp`) in all six upload paths (product
+  pictures, store logo / banner, online categories, design pictures, link-page avatar, pricing
+  items): upright, metadata dropped, at most 2400 px, WebP quality 82, `.webp` keys,
+  `image/webp`. Undecodable "pictures" are refused (415). `allowBuilds: sharp: false`.
+- API client: every upload is re-encoded as WebP in the browser first (`api-client/src/image.ts`).
+- Console: categories page note (separate from the POS categories); the dialog takes a picture
+  by paste (Ctrl+V anywhere in it), drop or file before the first save, previews it, and one
+  "Save" stores the category, then its picture, then closes.
+- Tests: `kernel/storage/image.test.ts` (4); integration fixtures are now real PNGs and expect
+  WebP (catalog, ecommerce, links, pricing); online-web category test rewritten (paste, one save,
+  closes); e2e +1 (paste in Chromium → `image.webp` sent, `image/webp` stored, dialog closed) and
+  the store e2e follows the new save-and-close.
+- Verified (cloud sandbox): `pnpm verify` 375 unit/web, `pnpm test:integration` 308 (44 files),
+  `pnpm test:e2e` 44.
+
 ### 2026-10-20 — Page sections v2 for the home page (ADR-0128 amendment 3)
 Owner's request: the same depth for the home page as for the header and footer. Frontend +
 contract only (no migration).

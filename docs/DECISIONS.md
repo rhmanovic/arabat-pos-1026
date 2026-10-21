@@ -2142,6 +2142,29 @@ ADR; supersede it.
   does; labels used by tests and the e2e suite were kept ("Online store" stays the page heading).
   Other console pages inherit the palette, radii and dark mode through the tokens.
 
+## ADR-0129 — Every uploaded picture is stored as WebP
+- **Status:** Accepted (2026-10-21). Owner's rule: "all uploaded pictures must be converted to
+  WebP before they are saved". BR-235.
+- **Decision:**
+  - **Server (authoritative):** `toStorableImage` (`apps/api/src/kernel/storage/image.ts`, the
+    `sharp` library with its prebuilt libvips) is the single step every upload goes through —
+    product pictures, store logo / banner, online category pictures, design pictures, the link
+    page's avatar and the pricing page's item pictures. The real type is still checked from the
+    bytes (JPEG, PNG or WebP accepted, 2 MB as before); the picture is decoded, turned upright
+    from its EXIF orientation, stripped of metadata (location, camera), scaled to at most 2400 px
+    on its longest side and encoded as WebP (quality 82). The stored key ends in `.webp`, the
+    content type is `image/webp` and the recorded size is the WebP size. A file that only
+    pretends to be a picture (right first bytes, undecodable) is now refused (415).
+  - **Browser:** the API client re-encodes every picture as WebP (canvas, quality 0.85, same
+    2400 px limit) before uploading (`packages/api-client/src/image.ts`), so a pasted screenshot
+    fits the 2 MB limit; a browser that cannot encode WebP sends the original and the server
+    converts it.
+  - `sharp`'s install script is not run (`allowBuilds: sharp: false`): the prebuilt binaries for
+    linux-x64 (glibc, the Debian production image) are optional dependencies.
+  - Pictures stored before stay as they are (no rewrite of existing files).
+- **Consequences:** smaller pictures for shoppers, no personal metadata kept, one place to change
+  the format or the size rule.
+
 ## ADR-0128 — Storefront design: header, navigation, side menu, footer and page sections, with a live preview
 - **Status:** Accepted (2026-10-20). Owner's request: the store looked primitive; the owner wants
   to choose the navigation bar, header, footer (styles and blocks), side menu, and to build the

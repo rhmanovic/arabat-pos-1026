@@ -417,10 +417,11 @@ describe('permissions', () => {
 });
 
 describe('images', () => {
-  const png = Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    Buffer.alloc(64, 1),
-  ]);
+  // A real 1×1 PNG: uploads are decoded and stored as WebP.
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+    'base64',
+  );
 
   function multipart(data: Buffer, filename = 'photo.png', type = 'image/png') {
     const boundary = '----arabat' + Math.random().toString(16).slice(2);
@@ -450,12 +451,13 @@ describe('images', () => {
     });
     expect(upload.statusCode).toBe(201);
     const image = upload.json().images[0];
-    expect(image).toMatchObject({ contentType: 'image/png', sizeBytes: png.length });
+    expect(image).toMatchObject({ contentType: 'image/webp' });
 
     const served = await app.inject({ method: 'GET', url: image.url, cookies: c.cookies });
     expect(served.statusCode).toBe(200);
-    expect(served.headers['content-type']).toBe('image/png');
-    expect(served.rawPayload.equals(png)).toBe(true);
+    expect(served.headers['content-type']).toBe('image/webp');
+    expect(served.rawPayload.toString('ascii', 8, 12)).toBe('WEBP');
+    expect(image.sizeBytes).toBe(served.rawPayload.length);
     expect(
       (await app.inject({ method: 'GET', url: image.url, cookies: b.cookies })).statusCode,
     ).toBe(404);

@@ -22,7 +22,8 @@ import { AppError } from '../../kernel/errors/app-error.js';
 import { newId } from '../../kernel/ids.js';
 import { Mailer } from '../../kernel/mail/mailer.js';
 import { renderEmail } from '../../kernel/mail/template.js';
-import { FileStorage, sniffImageType } from '../../kernel/storage/file-storage.js';
+import { FileStorage } from '../../kernel/storage/file-storage.js';
+import { toStorableImage } from '../../kernel/storage/image.js';
 import { AuditService } from '../audit/audit.service.js';
 import { parseAmount } from '../payments/payments.service.js';
 import { offerItems, salesRequestLines, salesRequests } from './pricing.schema.js';
@@ -349,17 +350,20 @@ export class PricingService {
   ): Promise<OfferItem> {
     let contentType: string | null = null;
     let key: string | null = null;
+    let stored: Buffer | null = null;
     if (data) {
       if (data.length === 0 || data.length > MAX_OFFER_IMAGE_BYTES)
         throw new AppError(413, 'PAYLOAD_TOO_LARGE', 'Images must be at most 2 MB.');
-      contentType = sniffImageType(data);
-      if (!contentType)
+      const image = await toStorableImage(data);
+      if (!image)
         throw new AppError(
           415,
           'UNSUPPORTED_MEDIA',
           'Only JPEG, PNG and WebP images are accepted.',
         );
-      key = `platform/offer/${id}/${newId()}.${contentType.split('/')[1]}`;
+      contentType = image.contentType;
+      stored = image.data;
+      key = `platform/offer/${id}/${newId()}.${image.extension}`;
     }
     const previous = await this.database.withPlatformContext(actor.operatorId, null, async (tx) => {
       const current = await this.lockItem(tx, id);
@@ -373,7 +377,7 @@ export class PricingService {
         })
         .where(eq(offerItems.id, id));
       // Written last inside the transaction: a storage failure rolls the row back.
-      if (key && data) await this.storage.put(key, data);
+      if (key && stored) await this.storage.put(key, stored);
       await this.record(
         tx,
         actor,

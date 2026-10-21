@@ -540,32 +540,56 @@ describe('online store console', () => {
     );
   });
 
-  it('creates a store category and uploads its picture', async () => {
+  it('creates a store category with a pasted picture in one save, then closes', async () => {
     const user = userEvent.setup();
+    // jsdom has no object URLs; the preview needs one.
+    URL.createObjectURL = () => 'blob:preview';
+    URL.revokeObjectURL = () => undefined;
+    const withPicture = { ...CATEGORY, imageUrl: '/api/v1/manager/online/categories/c9/image?v=1' };
     const fetch = fakeApiFetch({
       session: makeSession('manager', ['manager.access', 'online.manage']),
       routes: {
         'GET /manager/online/categories': () => ({ status: 200, body: { categories: [] } }),
         'POST /manager/online/categories': () => ({ status: 200, body: CATEGORY }),
+        [`POST /manager/online/categories/${CATEGORY.id}/image`]: () => ({
+          status: 200,
+          body: withPicture,
+        }),
       },
     });
     renderApp({ routes, appInterface: 'manager', i18n, path: '/categories', fetch });
+    // The store's categories are separate from the point of sale ones.
+    expect(await screen.findByTestId('categories-separate')).toHaveTextContent(
+      'separate from the categories of the point of sale',
+    );
     await user.click(await screen.findByRole('button', { name: 'Add category' }));
     const dialog = await screen.findByRole('dialog');
     await user.type(within(dialog).getByLabelText('Name (Arabic)'), 'مشروبات');
     await user.type(within(dialog).getByLabelText('Name (English)'), 'Drinks');
-    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
-    await waitFor(() =>
-      expect(fetch.calls.find((c) => c.method === 'POST')?.body).toEqual({
-        nameEn: 'Drinks',
-        nameAr: 'مشروبات',
-        status: 'active',
-      }),
+    // A picture pasted anywhere in the dialog becomes the category's picture (shown at once).
+    const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'shot.png', {
+      type: 'image/png',
+    });
+    await user.paste({ files: [file], items: [], types: ['Files'] } as unknown as DataTransfer);
+    expect(within(dialog).getByRole('img', { name: 'Category picture' })).toHaveAttribute(
+      'src',
+      'blob:preview',
     );
-    // Saved: the dialog stays open so a picture can be added.
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    // One save: the category is created, its picture uploaded, and the dialog closes.
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(
-      await within(dialog).findByRole('button', { name: 'Upload picture' }),
-    ).toBeInTheDocument();
+      fetch.calls.find((c) => c.path === '/manager/online/categories' && c.method === 'POST')?.body,
+    ).toEqual({
+      nameEn: 'Drinks',
+      nameAr: 'مشروبات',
+      status: 'active',
+    });
+    expect(
+      fetch.calls.some(
+        (c) => c.method === 'POST' && c.path === `/manager/online/categories/${CATEGORY.id}/image`,
+      ),
+    ).toBe(true);
   });
 
   it('adds a delivery area from the Kuwait list with its fee and free-delivery threshold', async () => {

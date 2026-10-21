@@ -117,6 +117,11 @@ engineering defaults pending owner confirmation.
   (the main register's first), and cannot sell while none is open. A device shift is never refused because
   the person left a shift open elsewhere; that shift is listed for the managers to close. Records
   that reach the server after the branch shift closed are booked to it and flagged "late".
+- **BR-235** Pictures (ADR-0129): every uploaded picture is stored as WebP, upright, without
+  metadata, at most 2400 px on its longest side; JPEG, PNG and WebP up to 2 MB are accepted. The
+  store's categories (ADR-0121) are separate from the point-of-sale categories, and the console
+  says so; a category's picture can be pasted, dropped or chosen before the first save, and one
+  save stores the category with its picture and closes the dialog.
 - **BR-234** Page sections (ADR-0128 amendment 3): any section can have a background, spacing,
   width, a centred heading with a line under it, be limited to phones or large screens, and be
   scheduled (shown from / until); outside its schedule shoppers never see it. An offer countdown

@@ -24,3 +24,5 @@ minimumReleaseAgeExclude:
 allowBuilds:
   '@swc/core': true
   esbuild: true
+  # sharp ships prebuilt libvips binaries (@img/sharp-*); its install script only checks them.
+  sharp: false

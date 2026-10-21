@@ -1073,10 +1073,11 @@ describe('store address (ADR-0118)', () => {
 });
 
 // ---------------------------------------------------------------- merchandising (ADR-0121)
-const png = Buffer.concat([
-  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-  Buffer.alloc(64, 1),
-]);
+// A real 1×1 PNG: uploads are decoded and stored as WebP.
+const png = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+);
 function multipart(data: Buffer, filename = 'photo.png', type = 'image/png') {
   const boundary = '----arabat' + Math.random().toString(16).slice(2);
   const body = Buffer.concat([
@@ -1243,7 +1244,7 @@ describe('merchandising (ADR-0121)', () => {
       (await s.req('GET', branded.logoUrl.replace('/api/v1', ''), undefined, undefined)).headers[
         'content-type'
       ],
-    ).toBe('image/png');
+    ).toBe('image/webp');
     expect(
       (await s.req('GET', branded.bannerUrl.replace('/api/v1', ''), undefined, undefined))
         .statusCode,
@@ -2150,7 +2151,7 @@ describe('store design (ADR-0128)', () => {
 
     // A picture for the slider.
     const asset = (await upload(s, '/manager/online/design/assets')).json();
-    expect(asset).toMatchObject({ contentType: 'image/png', bytes: png.length });
+    expect(asset).toMatchObject({ contentType: 'image/webp' });
     expect(
       (await upload(s, '/manager/online/design/assets', Buffer.from('not an image'))).statusCode,
     ).toBe(415);
@@ -2249,7 +2250,9 @@ describe('store design (ADR-0128)', () => {
     expect(live.social.instagram).toBe('saffron.house');
     const picture = await pub(s, 'GET', `/assets/${asset.id}`);
     expect(picture.statusCode).toBe(200);
-    expect(picture.headers['content-type']).toBe('image/png');
+    expect(picture.headers['content-type']).toBe('image/webp');
+    expect(picture.rawPayload.toString('ascii', 8, 12)).toBe('WEBP');
+    expect(picture.rawPayload.length).toBe(asset.bytes);
     expect(picture.headers['cache-control']).toContain('immutable');
 
     // A picture in use cannot be deleted; an unused one can.

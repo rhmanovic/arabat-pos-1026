@@ -141,7 +141,6 @@ export const onlineEn = {
     noneHint: 'The store groups products by the catalog categories until you add your own.',
     listTitle: 'Categories in display order',
     editTitle: 'Edit category',
-    close: 'Close',
     nameAr: 'Name (Arabic)',
     nameEn: 'Name (English)',
     status: 'Status',
@@ -150,13 +149,16 @@ export const onlineEn = {
     productCount: '{{count}} products',
     uploadImage: 'Upload picture',
     removeImage: 'Remove picture',
-    imageSaved: 'Picture saved',
-    imageAfterSave: 'Save the category first, then add a picture.',
     delete: 'Delete',
     deleteTitle: 'Delete this category?',
     deleteHint:
       '“{{name}}” is removed from the store; its {{count}} products stay in the store without a category.',
     deleted: 'Category deleted',
+    picture: 'Category picture',
+    pasteHint:
+      'Paste a picture here (Ctrl+V), drop one, or upload it. It is saved with the category, as WebP.',
+    separateNote:
+      'These are the online store’s categories. They are separate from the categories of the point of sale (in Business management): changing one never changes the other.',
   },
   appearance: {
     title: 'Appearance',
