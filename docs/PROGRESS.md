@@ -1288,6 +1288,11 @@ Owner's request: options, ready pages and settings to design the product page. N
   editor, the published page orders with the − / + quantity); e2e quantity steps use − / +.
 - Verified (cloud sandbox): `pnpm verify` 392 unit/web, `pnpm test:integration` 311 (44 files),
   `pnpm test:e2e` 45; editor and product page checked at 1440 and 390 px.
+- Released (ADR-0122): production `9fd4a245fff7` (revision `arabat-web-00054-4d7`, previous
+  `arabat-web-00053-j2c`; migration job `arabat-migrate-9r5wl`, no new migration). Cloud Build
+  check `33c87500`: `/api/v1/health/ready` 200 with that version and database ok (3 ms); `live`,
+  `/store/`, `/manager/` and `/online/` 200. Signed out afterwards, `config.env` removed; no key,
+  account or secret deleted. Staging still waits for Railway to resume deploys.
 
 ### 2026-10-21 — Business management in the young look, phone-first (ADR-0131)
 Owner's request: make Business management suit Gen Z and fit phones. Frontend only.
