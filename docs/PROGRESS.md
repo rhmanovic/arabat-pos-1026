@@ -1265,6 +1265,30 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-21 — Store design: section options, layout and motion (ADR-0128 amendment 7, BR-240)
+Owner's batch: a floating Save in store settings; editing a store product like adding one
+(name, price, pictures, no trip to the catalog); and far more options and section kinds in the
+store designer for Gen Z merchants. Frontend and contract only; no migration.
+- Settings (`/online/settings`): Save floats over the window (shared `FloatingBar`), wakes with
+  the first change and shows "Unsaved changes".
+- Products (`/online/products`): the edit dialog edits the catalog name, the simple product's
+  price (needs `catalog.prices.manage`) and the pictures (`GalleryField`: paste, drop or add
+  several, remove with ✕, first = main, up to 8) together with the store fields, in one Save;
+  the rest of the catalog product (options, barcodes, SKU, cost, branches) is sent back as is.
+- Store design: richer section frame on every section (gradients, custom colour, picture
+  background, narrow width, half / full-screen height, boxed card, corners, edge shapes, kicker
+  and title size, entrance animation, anchor, sticky, overlap, collapsible), richer banner /
+  product cards / catalog / categories / highlights / gallery / call to action / spacer, and
+  eight new section types (divider, columns, split, cards, tabs, marquee, stats, steps) with
+  ready styles, editors, picker thumbnails and five ready sections. Home recommendations count
+  numbers and steps as trust, and a ticker above the hero.
+- Tests: contracts +1 (and the default-look test widened), store-web +2 (new sections and frames;
+  catalog paging, count, card style, search hint), online-web +2 (edit dialog with name, price
+  and pictures; columns section with gradient, edge, motion and anchor), settings test checks
+  the floating bar. Checked in a browser at 1280 and 390 px (Arabic).
+- Verified (cloud sandbox): `pnpm verify` 413 unit/web, `pnpm test:integration` 311 (44 files),
+  `pnpm test:e2e` 45.
+
 ### 2026-10-21 — Storefront header: one search on phones
 Owner's report: with search as a button and «شريط بحث تحت الهيدر على الجوال» on, phones showed
 both the search button in the header row and the search bar under it.

@@ -500,7 +500,10 @@ export function PageTips({
   const tips: { key: string; done: boolean; fix?: () => void; fixLabel?: string }[] = [
     {
       key: 'hero',
-      done: ['slider', 'banner', 'collage', 'countdown'].includes(shown[0]?.type ?? ''),
+      // A ticker or a divider may sit above the hero.
+      done: ['slider', 'banner', 'collage', 'countdown'].includes(
+        shown.find((s) => s.type !== 'marquee' && s.type !== 'divider')?.type ?? '',
+      ),
       fix: add('heroSlider', true),
     },
     {
@@ -513,7 +516,11 @@ export function PageTips({
       done: restaurant || has('categories', 'menu'),
       fix: add('shopByCategory'),
     },
-    { key: 'trust', done: has('features', 'testimonials', 'logos', 'faq'), fix: add('trustStrip') },
+    {
+      key: 'trust',
+      done: has('features', 'testimonials', 'logos', 'faq', 'stats', 'steps'),
+      fix: add('trustStrip'),
+    },
     { key: 'action', done: has('cta', 'countdown'), fix: add('contactCta') },
     {
       key: 'empty',

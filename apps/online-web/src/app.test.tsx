@@ -1651,6 +1651,57 @@ describe('online store console', () => {
         expect(new Date(offer.look.showUntil!).getFullYear()).toBe(2030);
       });
 
+      it('builds a columns section and gives it a gradient, an edge, motion and an anchor (amendment 7)', async () => {
+        const user = userEvent.setup();
+        const fetch = fakeApiFetch({ session: session(), routes: designRoutes() });
+        renderApp({ routes, appInterface: 'manager', i18n, path: '/design', fetch });
+        await user.click(await screen.findByRole('button', { name: 'Add section' }));
+        const picker = await screen.findByRole('dialog', { name: 'Add section' });
+        await user.click(within(picker).getByRole('button', { name: /^Columns & layout/ }));
+        // Three columns, then a button added to the third one.
+        await user.click(await screen.findByRole('radio', { name: 'Three equal' }));
+        const third = screen.getByRole('group', { name: 'Column 3' });
+        await user.click(within(third).getByRole('button', { name: '+ Button' }));
+        await user.type(within(third).getByLabelText('Button text (English)'), 'Shop now');
+        const radio = (group: string, name: string) =>
+          user.click(
+            within(screen.getByRole('radiogroup', { name: group })).getByRole('radio', { name }),
+          );
+        await radio('Background', 'Gradient');
+        await user.click(screen.getByRole('radio', { name: 'Ocean' }));
+        await radio('Bottom edge shape', 'Wave');
+        await radio('Entrance animation', 'Rise');
+        await radio('Section height', 'Full screen');
+        await user.type(screen.getByLabelText('Direct link name'), 'Our Offers');
+        expect(
+          screen.getByText('Link to it from any button or menu item with /#our-offers'),
+        ).toBeInTheDocument();
+        const design = await savedHome(fetch, user);
+        const columns = design.pages.home.at(-1)! as unknown as {
+          type: string;
+          layout: string;
+          columns: { blocks: { type: string; text: { en: string | null } }[] }[];
+          look: Record<string, unknown>;
+        };
+        expect(columns.type).toBe('columns');
+        expect(columns.layout).toBe('1-1-1');
+        expect(columns.columns).toHaveLength(3);
+        expect(columns.columns[2]!.blocks.map((b) => b.type)).toEqual(['button']);
+        expect(columns.columns[2]!.blocks[0]!.text.en).toBe('Shop now');
+        // New columns start with a title and words to replace.
+        expect(columns.columns[0]!.blocks.map((b) => b.type)).toEqual(['heading', 'text']);
+        expect(columns.look).toEqual(
+          expect.objectContaining({
+            background: 'gradient',
+            gradient: 'ocean',
+            dividerBottom: 'wave',
+            animation: 'up',
+            height: 'screen',
+            anchor: 'our-offers',
+          }),
+        );
+      });
+
       it('adds a ready-made section, follows the recommendations and applies a ready home page', async () => {
         const user = userEvent.setup();
         const fetch = fakeApiFetch({ session: session(), routes: designRoutes() });

@@ -453,8 +453,8 @@ export function CardsSection({ s }: { s: SectionOf<'cards'> }) {
                 {label ? (
                   <span
                     className={cn(
-                      'mt-auto inline-flex pt-2 text-sm font-semibold',
-                      overlay ? '' : 'text-primary',
+                      'inline-flex pt-2 text-sm font-semibold',
+                      overlay ? '' : 'mt-auto text-primary',
                     )}
                   >
                     {label}{' '}

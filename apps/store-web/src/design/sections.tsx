@@ -358,7 +358,9 @@ function BannerSection({ s }: { s: SectionOf<'banner'> }) {
           {eyebrow}
         </p>
       ) : null}
-      {title ? <p className={cn('font-bold', BANNER_TITLE[s.titleSize])}>{title}</p> : null}
+      {title ? (
+        <p className={cn('font-bold leading-tight', BANNER_TITLE[s.titleSize])}>{title}</p>
+      ) : null}
       {subtitle ? (
         <p
           className={cn(

@@ -225,6 +225,9 @@ function renderStore(path: string, routesMap: Record<string, FakeRoute> = {}) {
   return { fetch, router };
 }
 
+/** Design sections from their input (defaults filled in). */
+const sectionsOf = (list: unknown[]) => list.map(sectionSchemaParse);
+
 const assign = vi.fn();
 beforeEach(async () => {
   await i18n.changeLanguage('en');
@@ -896,6 +899,174 @@ describe('storefront', () => {
     expect(
       within(screen.getByTestId('product-grid')).getByText('Coffee beans'),
     ).toBeInTheDocument();
+  });
+
+  it('draws the layout and motion sections and the richer frames (ADR-0128 amendment 7)', async () => {
+    const user = userEvent.setup();
+    const PIC = '0190a000-0000-7000-8000-0000000000a9';
+    const L = (en: string) => ({ en, ar: null });
+    const design = templateDesign('retail');
+    design.pages.home = sectionsOf([
+      {
+        id: 'cols',
+        type: 'columns',
+        layout: '2-1',
+        title: L('Why us'),
+        columns: [
+          {
+            id: 'a',
+            blocks: [
+              { id: 'h', type: 'heading', text: L('Quality first') },
+              { id: 'l', type: 'list', text: L('Gift wrap\nEasy returns') },
+              {
+                id: 'b',
+                type: 'button',
+                text: L('Shop now'),
+                link: { kind: 'page', page: 'products' },
+              },
+            ],
+          },
+          { id: 'b', blocks: [{ id: 'i', type: 'icon', icon: '🚚' }] },
+        ],
+        look: {
+          background: 'gradient',
+          gradient: 'ocean',
+          dividerTop: 'wave',
+          anchor: 'why',
+          animation: 'up',
+          eyebrow: L('Promise'),
+          titleSize: 'huge',
+        },
+      },
+      {
+        id: 'split',
+        type: 'split',
+        imageId: PIC,
+        imageShape: 'arch',
+        title: L('Our story'),
+        body: L('Made with care.'),
+        look: { boxed: true, background: 'custom', bgColor: '#fef3c7' },
+      },
+      {
+        id: 'tabs',
+        type: 'tabs',
+        tabs: [
+          { id: 't1', label: L('Coffee'), title: L('Coffee sets') },
+          { id: 't2', label: L('Decor'), title: L('Home decor') },
+        ],
+      },
+      {
+        id: 'ticker',
+        type: 'marquee',
+        items: [
+          { id: 'm1', text: L('New in') },
+          { id: 'm2', text: L('Gifts') },
+        ],
+      },
+      {
+        id: 'stats',
+        type: 'stats',
+        items: [{ id: 's1', value: 1200, suffix: '+', label: L('Customers') }],
+      },
+      {
+        id: 'steps',
+        type: 'steps',
+        variant: 'timeline',
+        items: [
+          { id: 'x1', title: L('Choose') },
+          { id: 'x2', title: L('Receive') },
+        ],
+      },
+      {
+        id: 'cards',
+        type: 'cards',
+        items: [
+          { id: 'c1', icon: '🎁', title: L('Gifts'), link: { kind: 'page', page: 'categories' } },
+        ],
+      },
+      { id: 'div', type: 'divider', variant: 'dashed', label: L('More') },
+      {
+        id: 'folded',
+        type: 'text',
+        title: L('Returns'),
+        body: L('Within 14 days.'),
+        look: { collapsible: true, collapseLabel: L('Our return policy') },
+      },
+    ]);
+    renderStore('/demo', {
+      'GET /store/demo/design': () => ({ status: 200, body: { design } }),
+    });
+    // Columns: the layout, the blocks, the frame's gradient, edge shape, anchor and heading.
+    const columns = await screen.findByRole('region', { name: 'Why us' });
+    expect(within(columns).getByRole('heading', { name: 'Quality first' })).toBeInTheDocument();
+    expect(within(columns).getByText('Easy returns')).toBeInTheDocument();
+    expect(within(columns).getByRole('link', { name: 'Shop now' })).toHaveAttribute(
+      'href',
+      '/demo/products',
+    );
+    expect(within(columns).getByText('Promise')).toBeInTheDocument();
+    const frame = document.getElementById('section-cols')!;
+    expect(frame).toHaveAttribute('data-background', 'gradient');
+    expect(frame.querySelector('[data-edge="top-wave"]')).not.toBeNull();
+    expect(document.getElementById('why')).not.toBeNull();
+    expect(columns.querySelector('[data-layout="2-1"]')).not.toBeNull();
+    // The picture beside words, on a boxed card over a custom colour.
+    const split = screen.getByTestId('split-section');
+    expect(within(split).getByRole('heading', { name: 'Our story' })).toBeInTheDocument();
+    expect(split.querySelector('[data-shape="arch"]')).not.toBeNull();
+    expect(document.getElementById('section-split')!.querySelector('[data-boxed]')).not.toBeNull();
+    // Tabs switch their panel.
+    expect(screen.getByRole('tabpanel')).toHaveTextContent('Coffee sets');
+    await user.click(screen.getByRole('tab', { name: 'Decor' }));
+    expect(screen.getByRole('tabpanel')).toHaveTextContent('Home decor');
+    expect(screen.getByRole('tab', { name: 'Decor' })).toHaveAttribute('aria-selected', 'true');
+    // The ticker reads once for screen readers; numbers, steps, cards and the divider.
+    expect(within(screen.getByTestId('marquee')).getByText('New in · Gifts')).toBeInTheDocument();
+    expect(screen.getByText('Customers')).toBeInTheDocument();
+    expect(screen.getByText('1,200')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Receive' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Gifts/ })).toHaveAttribute('href', '/demo/categories');
+    expect(screen.getByRole('separator', { name: 'More' })).toBeInTheDocument();
+    // A collapsible section stays folded behind its label until opened.
+    const folded = document.getElementById('section-folded')!.querySelector('details')!;
+    expect(folded.open).toBe(false);
+    expect(within(folded).getByText('Our return policy')).toBeInTheDocument();
+  });
+
+  it('pages the product list with its count, card style and search hint', async () => {
+    const user = userEvent.setup();
+    const design = templateDesign('retail');
+    design.pages.products = sectionsOf([
+      {
+        id: 'catalog',
+        type: 'catalog',
+        showCount: true,
+        showFeatured: false,
+        pageSize: 12,
+        cardStyle: 'overlay',
+        searchPlaceholder: { en: 'Find a gift', ar: null },
+      },
+    ]);
+    const many = {
+      products: Array.from({ length: 14 }, (_, i) => ({
+        ...PRODUCTS.products[0]!,
+        productId: `0190a000-0000-7000-8000-${String(100 + i).padStart(12, '0')}`,
+        nameEn: `Item ${i + 1}`,
+        position: i,
+      })),
+    };
+    renderStore('/demo/products', {
+      'GET /store/demo/design': () => ({ status: 200, body: { design } }),
+      'GET /store/demo/products': () => ({ status: 200, body: many }),
+    });
+    const grid = await screen.findByTestId('product-grid');
+    expect(within(grid).getAllByRole('link')).toHaveLength(12);
+    expect(grid.querySelector('[data-card="overlay"]')).not.toBeNull();
+    expect(screen.getByTestId('catalog-count')).toHaveTextContent('14');
+    expect(screen.getByPlaceholderText('Find a gift')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Show more (2)' }));
+    expect(within(grid).getAllByRole('link')).toHaveLength(14);
+    expect(screen.queryByRole('button', { name: /Show more/ })).toBeNull();
   });
 
   it('keeps a hovered menu open while the pointer crosses to it, then closes it', async () => {

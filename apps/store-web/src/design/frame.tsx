@@ -74,10 +74,10 @@ export const GRADIENTS: Record<
   },
   sunset: { css: 'linear-gradient(135deg, #f97316, #db2777)', brand: '#c2410c', on: '#ffffff' },
   ocean: { css: 'linear-gradient(135deg, #0284c7, #4338ca)', brand: '#0369a1', on: '#ffffff' },
-  candy: { css: 'linear-gradient(135deg, #fbcfe8, #ddd6fe)', brand: '#831843', on: '#2a0f2f' },
-  mint: { css: 'linear-gradient(135deg, #a7f3d0, #a5f3fc)', brand: '#065f46', on: '#062a22' },
+  candy: { css: 'linear-gradient(135deg, #fbcfe8, #ddd6fe)', brand: '#ffffff', on: '#2a0f2f' },
+  mint: { css: 'linear-gradient(135deg, #a7f3d0, #a5f3fc)', brand: '#ffffff', on: '#062a22' },
   night: { css: 'linear-gradient(135deg, #0f172a, #4c1d95)', brand: '#1e1b4b', on: '#ffffff' },
-  peach: { css: 'linear-gradient(135deg, #fde68a, #fca5a5)', brand: '#9a3412', on: '#3b1d0a' },
+  peach: { css: 'linear-gradient(135deg, #fde68a, #fca5a5)', brand: '#ffffff', on: '#3b1d0a' },
   aurora: {
     css: 'linear-gradient(120deg, #0e7490, #7e22ce 55%, #be185d)',
     brand: '#581c87',
@@ -205,7 +205,7 @@ export function SectionFrame({
             ? {
                 outer: {
                   ...(look.bgOverlay === 'light'
-                    ? onColour('#111111', '#111111')
+                    ? onColour('#ffffff', '#111111')
                     : onColour('#111111', '#ffffff')),
                   backgroundImage: `url("${picture}")`,
                 },
@@ -346,7 +346,9 @@ export function SectionTitle({ children, aside }: { children: string; aside?: Re
           </p>
         ) : null}
         {children ? (
-          <h2 className={cn('font-bold', TITLE_SIZE[look?.titleSize ?? 'regular'])}>{children}</h2>
+          <h2 className={cn('font-bold leading-tight', TITLE_SIZE[look?.titleSize ?? 'regular'])}>
+            {children}
+          </h2>
         ) : null}
         {subtitle ? <p className="mt-1 max-w-2xl text-sm text-fg-muted">{subtitle}</p> : null}
       </div>

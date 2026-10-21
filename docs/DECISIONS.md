@@ -2484,3 +2484,40 @@ ADR; supersede it.
     section), replaced after a confirmation, and recommendations (every category has a
     picture, product counts, subcategories in order, products under the categories, no section
     waiting for content) with one-tap fixes.
+- **Amendment 7 (2026-10-21) — richer sections, layout and motion.** Owner's request: many more
+  options per section (banner, product list with search and filter, categories, highlights,
+  call to action) and many more section kinds (text, dividers, columns, rows, split sections,
+  card grids, tabs, sticky / full-screen / overlapping / collapsible / anchored sections,
+  moving things). Users are Gen Z. BR-240. No migration (jsonb); every new field has a default
+  that keeps today's look, so saved designs parse unchanged.
+  - **Section frame (every section):** backgrounds add eight ready gradients, a custom colour
+    (text colour picked for contrast) and a picture with a light / dark shade; spacing adds none
+    and huge; width adds narrow; height auto / half screen / full screen; a boxed card; rounded
+    corners and top / bottom edge shapes (wave, curve, slant, zigzag, peaks) on coloured
+    sections; a kicker line and title size; an entrance animation (fade, rise, zoom, slide; off
+    with reduced motion); a direct-link anchor (`/#name` from any link); sticky (under the
+    sticky header, `--store-header-h`), overlapping the section above, and collapsible behind a
+    label.
+  - **Existing sections:** banner (card and glass shapes, full-screen height, five shades, words
+    top / middle / bottom and start / centre / end, kicker, title size, button style, a phone
+    picture, slow zoom, corners); product lists and the catalog share card options (style,
+    picture shape, columns on phones, second picture on hover); the catalog adds one-tap add,
+    filter as chips / tabs / drop-down, sticky filters, first sort, product count, pages with
+    "show more", and its own search hint; categories add a swipe carousel, the name over or
+    under the picture and a hover effect; highlights add a list shape, icon style and size,
+    alignment, columns and a link per item; the gallery adds masonry; the call to action adds
+    size, side-by-side arrangement, kicker, button style, a pulsing button and corners; the
+    spacer adds huge.
+  - **New section types:** `divider` (eight line styles, thickness, length, colour, words or an
+    emoji in the middle), `columns` (seven column layouts, gap, vertical alignment, column
+    style, vertical lines, phones as stacked / reversed rows or a sideways swipe; each column
+    holds up to ten blocks: title, words, picture, button, list, emoji, line, space), `split`
+    (picture beside words, five picture shapes, widths), `cards` (card grid with pictures or
+    emojis, five looks, hover effects), `tabs` (four looks), `marquee` (a sliding ticker, five
+    looks, speed, direction), `stats` (numbers counting up) and `steps` (numbers, timeline,
+    cards). Each has ready styles; five new ready sections (ticker, how to order, about us,
+    highlight cards, our numbers) never invent facts (numbers start at 0 and stay hidden until
+    the merchant sets them).
+  - Pictures used by the new fields count as in use (`designImageIds`); the design API schemas
+    carry explicit types because the design schema is now too large for TypeScript to write
+    out inline.

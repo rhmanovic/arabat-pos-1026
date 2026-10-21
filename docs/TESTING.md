@@ -66,6 +66,23 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-21 (section options, layout and motion, ADR-0128 amendment 7, cloud sandbox run)
+- `packages/contracts/src/store-design.test.ts` (+1): columns with blocks (at most four columns),
+  every new section type parses, frames with a picture background, a custom colour, an anchor
+  and motion (wrong colour or anchor refused), stats refuse negative numbers, every new picture
+  field counts as in use; the default-look test lists the new frame fields and banner defaults.
+- `apps/store-web/src/app.test.tsx` (+2): columns in a gradient frame with a wave edge, an
+  anchor, a kicker and its blocks (title, list, button link); a picture beside words on a boxed
+  card; tabs switch their panel; the ticker read once; numbers, timeline steps, a card link, a
+  labelled divider; a collapsible section stays folded. The catalog shows 12 of 14 products in
+  overlay cards, the count and its own search hint, and "Show more (2)" shows the rest.
+- `apps/online-web/src/app.test.tsx` (+2): editing a store product sends the catalog name,
+  price and pictures (one removed, one pasted) with everything else unchanged; a new columns
+  section switched to three columns, a button added to the third, ocean gradient, wave edge,
+  rise animation, full-screen height and the anchor `our-offers` are saved; the settings test
+  checks the floating Save bar (disabled until a change, "Unsaved changes").
+- Totals: `pnpm verify` 413 unit/web, `pnpm test:integration` 311 (44 files), `pnpm test:e2e` 45.
+
 ### Results 2026-10-21 (ready section styles and the categories page, ADR-0128 amendment 6)
 - Contracts +3 (every style of every section type valid and recognised once applied; content
   kept and the frame reset between styles; old categories sections unchanged and every ready
