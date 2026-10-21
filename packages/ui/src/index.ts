@@ -4,6 +4,7 @@ export * from './cn.js';
 export * from './controls.js';
 export * from './dialog.js';
 export * from './feedback.js';
+export * from './icons.js';
 export * from './input.js';
 export * from './kbd.js';
 export * from './menu.js';

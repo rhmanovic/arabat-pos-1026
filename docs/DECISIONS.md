@@ -2116,6 +2116,7 @@ ADR; supersede it.
   sidebar, a dropdown filter, an overview of grey cards). The merchants who run an online store
   are often young and work from a phone; they expect a bold look, dark mode, thumb-reachable
   navigation, visual progress and one-tap sharing.
+  Shared with Business management since ADR-0131 (the look now lives in `@arabat/ui/vibe.css`).
 - **Decision:**
   - **Own palette, scoped to this app.** `apps/online-web/src/styles.css` redefines the shared
     tokens (the one exception to the rule in `packages/ui/src/theme.css`): violet primary, pink
@@ -2165,6 +2166,37 @@ ADR; supersede it.
   - Pictures stored before stay as they are (no rewrite of existing files).
 - **Consequences:** smaller pictures for shoppers, no personal metadata kept, one place to change
   the format or the size rule.
+
+## ADR-0131 — Business management in the consoles' young look, phone-first
+- **Status:** Accepted (2026-10-21). Owner's request: "عدل واجهة إدارة نقطة المبيعات عشان تناسب جيل
+  زي وتأكد أنها متناسقة مع الهاتف" (make Business management suit Gen Z and fit phones).
+  Frontend only (`apps/manager-web`, shared packages); no API or database change.
+- **Decision:**
+  - **One look for both consoles.** The palette, dark mode and effects of ADR-0127 move from
+    the online console to `packages/ui/src/vibe.css` (exported as `@arabat/ui/vibe.css`) and
+    are imported by the online store console and Business management; the POS, storefront,
+    platform, link page and landing keep the Arabat palette. The console icon set moves to
+    `@arabat/ui` (`Icon`, with icons for every management page), the light / dark / device
+    choice to `@arabat/web-core` (`applyTheme`, `useThemeMode`, `ThemeSwitch`; one key
+    `arabat.theme` for both consoles, the online console's old key is read once).
+  - **Shell:** icons on every menu item, a gradient active item, the theme switch and the
+    server status at the foot of the menu, a greeting top bar (morning / afternoon / evening
+    with the first name, the company under it). On phones and tablets (`< 1024 px`, rendered
+    only there) a floating bottom tab bar with the first four pages the user may open of
+    Home, Sales, Products, Inventory, Reports, Customers and "More" (the full menu); the branch
+    filter moves into the menu on phones; the assistant becomes a round icon above the tab bar.
+  - **Dashboard:** a gradient welcome card (date, greeting, company, shortcuts to new product,
+    sales, reports and team by permission); today's figures as emoji tiles that swipe on
+    phones; cash, branches, employees and roles as tiles that open their pages; the controls
+    list with a count; the setup checklist with a progress ring and ticks. Same figures as
+    before (BR-187), nothing invented.
+  - **Phones:** every management page was measured at 390 px. A grid without columns of its own
+    now gets one shrinkable column (`.grid { grid-template-columns: minmax(0, 1fr) }` in the
+    components layer of `vibe.css`; any `grid-cols-*` utility still wins), which stopped the
+    Reports cards from running off the screen; the consoles clip sideways overflow.
+- **Consequences:** the merchant sees one product in two consoles, in light or dark. Labels and
+  test hooks of the management app were kept; the tab bar exists only on small screens, so it
+  never doubles the sidebar's links.
 
 ## ADR-0130 — One catalog for the point of sale and the online store (shared categories, two switches, collections)
 - **Status:** Accepted (2026-10-21). Owner's decision after a merchant's bad experience: a product

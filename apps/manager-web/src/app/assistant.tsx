@@ -27,6 +27,9 @@ export function ManagerAssistant() {
       }}
       labels={assistantLabels(t)}
       suggestions={SUGGESTIONS.map((s) => t(`assistant.suggestions.${s}`))}
+      // Above the phone tab bar, a round icon there (ADR-0131).
+      buttonClassName="vibe-glow max-lg:bottom-24 max-lg:size-12 max-lg:justify-center max-lg:px-0"
+      compactOnPhone
     />
   );
 }

@@ -255,6 +255,8 @@ module (`/platform/offer`); the pricing page's form opens a trial account throug
 Free-trial funnel `/start` and `/platform/trials` (`trials` module, ADR-0115): the account opens at once (no e-mail
 code in this phase, amendment 1), through `RegistrationService.createAccount`; every trial number is an operator setting.
 The landing navbar's "Our apps" dropdown reads `site_apps` (`site` module, `/platform/site-apps`, ADR-0117).
+Business management and the online console share the young look (ADR-0131): `@arabat/ui/vibe.css`, `Icon`,
+`ThemeSwitch` / `applyTheme` in web-core (key `arabat.theme`); other apps keep the Arabat palette.
 Online store (`docs/ONLINE_STORE_PLAN.md`): pay on receipt and store address (ADR-0118), the `/online` console
 (ADR-0119), merchandising (ADR-0121; one catalog with shared categories, a website switch on the listing, a POS switch
 `products.pos_visible`, collections and a trigger that lists every new product: ADR-0130), fulfilment (ADR-0123: delivery areas, serving branches, hours / slots, order

@@ -3,6 +3,7 @@ import {
   ApiStatus,
   BranchList,
   LanguageSwitcher,
+  ThemeSwitch,
   localizedName,
   useApi,
   useAuth,
@@ -17,7 +18,6 @@ import { useOrderOverview } from '../features/shared.js';
 import { managerUrl } from './context.js';
 import { Icon } from './icons.js';
 import { NAV, type NavItem } from './navigation.js';
-import { type ThemeMode, useThemeMode } from './theme.js';
 
 const SECTIONS = ['store', 'shared'] as const;
 
@@ -211,41 +211,6 @@ function TabBar({
         <span>{t('nav.more')}</span>
       </button>
     </nav>
-  );
-}
-
-/** Light, dark or the device's choice, as three small buttons. */
-function ThemeSwitch() {
-  const { t } = useTranslation();
-  const [mode, setMode] = useThemeMode();
-  const options: { mode: ThemeMode; icon: 'sun' | 'moon' | 'system' }[] = [
-    { mode: 'light', icon: 'sun' },
-    { mode: 'dark', icon: 'moon' },
-    { mode: 'system', icon: 'system' },
-  ];
-  return (
-    <div
-      role="group"
-      aria-label={t('theme.label')}
-      className="flex rounded-lg bg-surface-muted p-1"
-    >
-      {options.map((o) => (
-        <button
-          key={o.mode}
-          type="button"
-          aria-pressed={mode === o.mode}
-          title={t(`theme.${o.mode}`)}
-          onClick={() => setMode(o.mode)}
-          className={cn(
-            'flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-medium transition-colors',
-            mode === o.mode ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted hover:text-fg',
-          )}
-        >
-          <Icon name={o.icon} className="size-4" />
-          <span>{t(`theme.${o.mode}`)}</span>
-        </button>
-      ))}
-    </div>
   );
 }
 

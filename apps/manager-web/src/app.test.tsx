@@ -112,6 +112,54 @@ describe('manager app', () => {
     expect(within(nav).queryByRole('link', { name: 'Branches' })).not.toBeInTheDocument();
   });
 
+  it('switches between light, dark and the device theme and remembers it (ADR-0131)', async () => {
+    const user = userEvent.setup();
+    renderApp({
+      routes,
+      appInterface: 'manager',
+      i18n,
+      fetch: fakeApiFetch({ session: makeSession('manager', ['manager.access']) }),
+    });
+    const group = await screen.findByRole('group', { name: 'Appearance' });
+    await user.click(within(group).getByRole('button', { name: 'Dark' }));
+    expect(document.documentElement.dataset['theme']).toBe('dark');
+    expect(localStorage.getItem('arabat.theme')).toBe('dark');
+    await user.click(within(group).getByRole('button', { name: 'Auto' }));
+    expect(document.documentElement.dataset['theme']).toBeUndefined();
+    expect(localStorage.getItem('arabat.theme')).toBeNull();
+  });
+
+  it('shows a bottom tab bar on phones with the pages the user may open (ADR-0131)', async () => {
+    const user = userEvent.setup();
+    const original = window.matchMedia;
+    window.matchMedia = ((q: string) => ({
+      matches: q.includes('max-width'),
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    })) as never;
+    try {
+      renderApp({
+        routes,
+        appInterface: 'manager',
+        i18n,
+        fetch: fakeApiFetch({
+          session: makeSession('manager', ['manager.access', 'sales.read', 'catalog.read']),
+        }),
+      });
+      const tabs = await screen.findByRole('navigation', { name: 'Quick navigation' });
+      expect(
+        within(tabs)
+          .getAllByRole('link')
+          .map((l) => l.textContent),
+      ).toEqual(['Home', 'Sales', 'Products']);
+      // "More" opens the full menu.
+      await user.click(within(tabs).getByRole('button', { name: 'More' }));
+      expect(screen.getAllByRole('button', { name: 'Close menu' }).length).toBeGreaterThan(0);
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+
   it('shows administration links for permitted users', async () => {
     const permissions = [
       'manager.access',

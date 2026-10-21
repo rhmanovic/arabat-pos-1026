@@ -82,6 +82,12 @@ export const commonAr: CommonResources = {
     done: 'حسابك جاهز. يمكنك تسجيل الدخول الآن.',
     invalid: 'رابط الدعوة غير مكتمل.',
   },
+  theme: {
+    label: 'المظهر',
+    light: 'فاتح',
+    dark: 'داكن',
+    system: 'تلقائي',
+  },
   nav: {
     comingSoon: 'قريباً في {{milestone}}',
   },

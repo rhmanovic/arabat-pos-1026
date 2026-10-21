@@ -3,6 +3,9 @@ export const managerEn = {
   navLabel: 'Manager navigation',
   comingSoon: 'Not available yet',
   nav: {
+    tabsLabel: 'Quick navigation',
+    tab_dashboard: 'Home',
+    more: 'More',
     links: 'Link page',
     transfers: 'Transfers',
     refunds: 'Returns',
@@ -37,6 +40,9 @@ export const managerEn = {
     sectionOrganization: 'Organization',
   },
   top: {
+    morning: 'Good morning, {{name}}',
+    afternoon: 'Good afternoon, {{name}}',
+    evening: 'Good evening, {{name}}',
     branchContext: 'Branch',
     allBranches: 'All branches',
     switchCompany: 'Switch company',
@@ -82,6 +88,10 @@ export const managerEn = {
     never: 'Never',
   },
   dashboard: {
+    shortcut_newProduct: 'New product',
+    shortcut_sales: 'Sales',
+    shortcut_reports: 'Reports',
+    shortcut_team: 'Team',
     totalCash: 'Total cash on hand',
     inTreasuries: 'Treasuries:',
     inRegisters: 'Registers:',

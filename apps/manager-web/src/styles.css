@@ -1,5 +1,7 @@
 @import 'tailwindcss';
 @import '@arabat/ui/theme.css';
+/* The consoles' young look: palette, dark mode, effects (ADR-0127, ADR-0131). */
+@import '@arabat/ui/vibe.css';
 
 /* Scan shared packages for class names used by their components. */
 @source '../../../packages/ui/src';

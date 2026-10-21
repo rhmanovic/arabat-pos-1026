@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./theme.css": "./src/theme.css",
+    "./vibe.css": "./src/vibe.css",
     "./fonts": "./src/fonts.ts"
   },
   "scripts": {

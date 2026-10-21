@@ -1,5 +1,9 @@
+import type { IconName } from '@arabat/ui';
+
 export interface NavItem {
   key: string;
+  /** Line icon beside the label (ADR-0131). */
+  icon: IconName;
   to: string;
   /** Shown only when the user holds one of these permissions (UX only; the API enforces). */
   anyOf: string[];
@@ -11,10 +15,25 @@ export interface NavItem {
 }
 
 export const NAV: readonly NavItem[] = [
-  { key: 'dashboard', to: '/', anyOf: ['manager.access'], available: true, section: 'main' },
-  { key: 'account', to: '/account', anyOf: ['manager.access'], available: true, section: 'main' },
+  {
+    key: 'dashboard',
+    icon: 'home',
+    to: '/',
+    anyOf: ['manager.access'],
+    available: true,
+    section: 'main',
+  },
+  {
+    key: 'account',
+    icon: 'account',
+    to: '/account',
+    anyOf: ['manager.access'],
+    available: true,
+    section: 'main',
+  },
   {
     key: 'products',
+    icon: 'products',
     to: '/products',
     anyOf: ['catalog.read', 'catalog.manage'],
     available: true,
@@ -22,6 +41,7 @@ export const NAV: readonly NavItem[] = [
   },
   {
     key: 'categories',
+    icon: 'categories',
     to: '/categories',
     anyOf: ['catalog.read', 'catalog.manage'],
     available: true,
@@ -29,22 +49,39 @@ export const NAV: readonly NavItem[] = [
   },
   {
     key: 'inventory',
+    icon: 'inventory',
     to: '/inventory',
     anyOf: ['inventory.read'],
     available: true,
     section: 'operations',
   },
-  { key: 'sales', to: '/sales', anyOf: ['sales.read'], available: true, section: 'operations' },
+  {
+    key: 'sales',
+    icon: 'sales',
+    to: '/sales',
+    anyOf: ['sales.read'],
+    available: true,
+    section: 'operations',
+  },
   {
     key: 'transfers',
+    icon: 'transfers',
     to: '/transfers',
     anyOf: ['inventory.transfer', 'inventory.transfer.approve'],
     available: true,
     section: 'operations',
   },
-  { key: 'refunds', to: '/refunds', anyOf: ['sales.read'], available: true, section: 'operations' },
+  {
+    key: 'refunds',
+    icon: 'refunds',
+    to: '/refunds',
+    anyOf: ['sales.read'],
+    available: true,
+    section: 'operations',
+  },
   {
     key: 'shifts',
+    icon: 'shifts',
     to: '/shifts',
     anyOf: ['shifts.view_all'],
     available: true,
@@ -52,6 +89,7 @@ export const NAV: readonly NavItem[] = [
   },
   {
     key: 'registers',
+    icon: 'registers',
     to: '/registers',
     anyOf: ['registers.manage'],
     available: true,
@@ -59,6 +97,7 @@ export const NAV: readonly NavItem[] = [
   },
   {
     key: 'devices',
+    icon: 'devices',
     to: '/devices',
     anyOf: ['registers.manage'],
     available: true,
@@ -66,6 +105,7 @@ export const NAV: readonly NavItem[] = [
   },
   {
     key: 'printers',
+    icon: 'printers',
     to: '/printers',
     anyOf: ['registers.manage'],
     available: true,
@@ -73,6 +113,7 @@ export const NAV: readonly NavItem[] = [
   },
   {
     key: 'cash',
+    icon: 'cash',
     to: '/cash',
     anyOf: ['cash.custody'],
     available: true,
@@ -80,6 +121,7 @@ export const NAV: readonly NavItem[] = [
   },
   {
     key: 'payments',
+    icon: 'payments',
     to: '/payments',
     anyOf: ['payments.settings'],
     available: true,
@@ -87,6 +129,7 @@ export const NAV: readonly NavItem[] = [
   },
   {
     key: 'accounts',
+    icon: 'accounts',
     to: '/accounts',
     anyOf: ['payments.settings'],
     available: true,
@@ -94,6 +137,7 @@ export const NAV: readonly NavItem[] = [
   },
   {
     key: 'purchasing',
+    icon: 'purchasing',
     to: '/purchasing',
     anyOf: ['purchasing.read'],
     available: true,
@@ -101,6 +145,7 @@ export const NAV: readonly NavItem[] = [
   },
   {
     key: 'suppliers',
+    icon: 'suppliers',
     to: '/suppliers',
     anyOf: ['purchasing.read'],
     available: true,
@@ -108,6 +153,7 @@ export const NAV: readonly NavItem[] = [
   },
   {
     key: 'reports',
+    icon: 'reports',
     to: '/reports',
     anyOf: ['reports.sales', 'reports.financial', 'reports.inventory'],
     available: true,
@@ -115,6 +161,7 @@ export const NAV: readonly NavItem[] = [
   },
   {
     key: 'restaurant',
+    icon: 'restaurant',
     to: '/restaurant',
     anyOf: ['restaurant.manage'],
     available: true,
@@ -123,6 +170,7 @@ export const NAV: readonly NavItem[] = [
   {
     // The online store has its own console at /online (ADR-0119): same account and session.
     key: 'online',
+    icon: 'orders',
     to: import.meta.env.DEV ? 'http://localhost:5178/online/' : '/online/',
     anyOf: ['online.manage', 'online.orders'],
     available: true,
@@ -132,6 +180,7 @@ export const NAV: readonly NavItem[] = [
   {
     // The link page has its own interface at /links (ADR-0116 amendment 1).
     key: 'links',
+    icon: 'links',
     to: import.meta.env.DEV ? 'http://localhost:5177/links/' : '/links/',
     anyOf: ['online.manage'],
     available: true,
@@ -140,6 +189,7 @@ export const NAV: readonly NavItem[] = [
   },
   {
     key: 'customers',
+    icon: 'contact',
     to: '/customers',
     anyOf: ['customers.read'],
     available: true,
@@ -147,14 +197,23 @@ export const NAV: readonly NavItem[] = [
   },
   {
     key: 'employees',
+    icon: 'customers',
     to: '/employees',
     anyOf: ['employees.read'],
     available: true,
     section: 'people',
   },
-  { key: 'roles', to: '/roles', anyOf: ['employees.read'], available: true, section: 'people' },
+  {
+    key: 'roles',
+    icon: 'roles',
+    to: '/roles',
+    anyOf: ['employees.read'],
+    available: true,
+    section: 'people',
+  },
   {
     key: 'branches',
+    icon: 'branches',
     to: '/branches',
     anyOf: ['branches.read'],
     available: true,
@@ -162,6 +221,7 @@ export const NAV: readonly NavItem[] = [
   },
   {
     key: 'subscription',
+    icon: 'star',
     to: '/subscription',
     anyOf: ['merchant.settings.read'],
     available: true,
@@ -169,6 +229,7 @@ export const NAV: readonly NavItem[] = [
   },
   {
     key: 'settings',
+    icon: 'settings',
     to: '/settings',
     anyOf: ['merchant.settings.read'],
     available: true,
@@ -176,10 +237,24 @@ export const NAV: readonly NavItem[] = [
   },
   {
     key: 'periods',
+    icon: 'calendar',
     to: '/periods',
     anyOf: ['reports.financial'],
     available: true,
     section: 'organization',
   },
-  { key: 'audit', to: '/audit', anyOf: ['audit.read'], available: true, section: 'organization' },
+  {
+    key: 'audit',
+    icon: 'audit',
+    to: '/audit',
+    anyOf: ['audit.read'],
+    available: true,
+    section: 'organization',
+  },
 ];
+
+/**
+ * Phones (ADR-0131): the first four of these the user may open sit in the bottom tab bar, with
+ * "More" opening the full menu.
+ */
+export const TAB_KEYS = ['dashboard', 'sales', 'products', 'inventory', 'reports', 'customers'];

@@ -1177,14 +1177,14 @@ describe('online store console', () => {
     const theme = await screen.findByRole('group', { name: 'Appearance' });
     await user.click(within(theme).getByRole('button', { name: 'Dark' }));
     expect(document.documentElement.dataset['theme']).toBe('dark');
-    expect(localStorage.getItem('arabat.online.theme')).toBe('dark');
+    expect(localStorage.getItem('arabat.theme')).toBe('dark');
     expect(within(theme).getByRole('button', { name: 'Dark' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
     await user.click(within(theme).getByRole('button', { name: 'Auto' }));
     expect(document.documentElement.dataset['theme']).toBeUndefined();
-    expect(localStorage.getItem('arabat.online.theme')).toBeNull();
+    expect(localStorage.getItem('arabat.theme')).toBeNull();
   });
 
   it('filters the orders with status chips that carry their counts', async () => {

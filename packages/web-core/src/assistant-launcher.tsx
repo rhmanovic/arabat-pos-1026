@@ -32,6 +32,8 @@ export function AssistantLauncher({
   labels,
   suggestions,
   hotkey,
+  buttonClassName,
+  compactOnPhone = false,
 }: {
   /** DOM id of the panel (one launcher per app). */
   id: string;
@@ -40,6 +42,10 @@ export function AssistantLauncher({
   suggestions: string[];
   /** Keyboard shortcut that opens the panel (e.g. "F9" on the register). */
   hotkey?: string;
+  /** Extra classes for the floating button, e.g. to sit above a phone tab bar. */
+  buttonClassName?: string;
+  /** On phones and tablets the button shows only its icon (the label stays for screen readers). */
+  compactOnPhone?: boolean;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -102,13 +108,14 @@ export function AssistantLauncher({
           open
             ? 'bg-surface text-fg ring-1 ring-border hover:bg-surface-muted max-sm:hidden'
             : 'bg-primary text-primary-fg hover:opacity-90',
+          buttonClassName,
         )}
         onClick={() => setOpen(!open)}
       >
         <span aria-hidden="true" className="text-lg leading-none">
           ✦
         </span>
-        {labels.open}
+        <span className={compactOnPhone ? 'max-lg:sr-only' : undefined}>{labels.open}</span>
       </button>
     </>
   );

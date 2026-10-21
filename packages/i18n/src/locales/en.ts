@@ -81,6 +81,12 @@ export const commonEn = {
     done: 'Your account is ready. You can sign in now.',
     invalid: 'This invitation link is incomplete.',
   },
+  theme: {
+    label: 'Appearance',
+    light: 'Light',
+    dark: 'Dark',
+    system: 'Auto',
+  },
   nav: {
     comingSoon: 'Coming in {{milestone}}',
   },

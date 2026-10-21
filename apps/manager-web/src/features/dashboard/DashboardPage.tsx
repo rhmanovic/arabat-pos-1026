@@ -1,4 +1,4 @@
-import { Badge, PageHeader, StatCard } from '@arabat/ui';
+import { Badge, Icon, type IconName, cn } from '@arabat/ui';
 import { localizedName, useApi } from '@arabat/web-core';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -289,12 +289,50 @@ export function DashboardPage() {
   const doneCount = required.filter((s) => s.done).length;
 
   const company = session.merchant ? localizedName(session.merchant, i18n.language) : '';
+  const shortcuts: { key: string; to: string; icon: IconName; visible: boolean }[] = [
+    { key: 'newProduct', to: '/products/new', icon: 'plus', visible: can('catalog.manage') },
+    { key: 'sales', to: '/sales', icon: 'sales', visible: can('sales.read') },
+    { key: 'reports', to: '/reports', icon: 'reports', visible: can('reports.sales') },
+    { key: 'team', to: '/employees', icon: 'customers', visible: can('employees.read') },
+  ];
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        title={t('dashboard.welcome', { name: session.actor.fullName })}
-        description={t('dashboard.subtitle', { company })}
-      />
+      {/* A bold welcome with the day and one-tap shortcuts (ADR-0131). */}
+      <section className="vibe-gradient vibe-glow relative overflow-hidden rounded-xl p-5 sm:p-7">
+        <span
+          aria-hidden
+          className="pointer-events-none absolute -end-16 -top-16 size-56 rounded-full bg-white/10"
+        />
+        <span
+          aria-hidden
+          className="pointer-events-none absolute -bottom-20 end-24 size-44 rounded-full bg-white/10"
+        />
+        <p className="relative text-sm opacity-90">
+          {new Intl.DateTimeFormat(i18n.language.startsWith('ar') ? 'ar-KW-u-nu-latn' : 'en-GB', {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long',
+          }).format(new Date())}
+        </p>
+        <h1 className="relative mt-1 text-2xl font-bold sm:text-3xl">
+          {t('dashboard.welcome', { name: session.actor.fullName })} <span aria-hidden>✨</span>
+        </h1>
+        <p className="relative mt-1 text-sm opacity-90">{t('dashboard.subtitle', { company })}</p>
+        <div className="relative mt-5 flex flex-wrap gap-2">
+          {shortcuts
+            .filter((x) => x.visible)
+            .map((x) => (
+              <Link
+                key={x.key}
+                to={x.to}
+                className="flex min-h-10 items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm font-semibold backdrop-blur-sm transition-colors hover:bg-white/25"
+              >
+                <Icon name={x.icon} className="size-4" />
+                {t(`dashboard.shortcut_${x.key}`)}
+              </Link>
+            ))}
+        </div>
+      </section>
 
       {can('merchant.settings.read') ? <YourApps /> : null}
 
@@ -304,10 +342,18 @@ export function DashboardPage() {
         <Link
           to="/cash"
           data-testid="dashboard-cash"
-          className="rounded-lg border border-border bg-surface p-5 hover:bg-surface-muted"
+          className="vibe-lift rounded-xl border border-border bg-surface p-5"
         >
-          <span className="block text-sm text-fg-muted">{t('dashboard.totalCash')}</span>
-          <span dir="ltr" className="block text-3xl font-semibold tabular-nums">
+          <span className="flex items-center gap-2 text-sm text-fg-muted">
+            <span
+              aria-hidden
+              className="grid size-9 place-items-center rounded-lg bg-success-soft text-lg"
+            >
+              💵
+            </span>
+            {t('dashboard.totalCash')}
+          </span>
+          <span dir="ltr" className="mt-2 block text-3xl font-bold tabular-nums">
             {formatAmount(cash.data.total, i18n.language)}
           </span>
           <span className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-fg-muted">
@@ -331,21 +377,27 @@ export function DashboardPage() {
 
       <div className="grid grid-cols-3 gap-2 sm:gap-4">
         {can('branches.read') ? (
-          <StatCard
+          <Tile
+            emoji="🏬"
+            to="/branches"
             label={t('dashboard.branches')}
             value={activeBranches}
             hint={t('dashboard.branchesHint', { inactive: branches.length - activeBranches })}
           />
         ) : null}
         {can('employees.read') ? (
-          <StatCard
+          <Tile
+            emoji="👥"
+            to="/employees"
             label={t('dashboard.employees')}
             value={activeEmployees ?? '—'}
             hint={t('dashboard.employeesHint', { invited: pendingInvites ?? 0 })}
           />
         ) : null}
         {can('employees.read') ? (
-          <StatCard
+          <Tile
+            emoji="🛡️"
+            to="/roles"
             label={t('dashboard.roles')}
             value={roles.data?.roles.length ?? '—'}
             hint={t('dashboard.rolesHint', { custom: customRoles })}
@@ -354,9 +406,15 @@ export function DashboardPage() {
       </div>
 
       {controls.data ? (
-        <section className="rounded-lg border border-border bg-surface" data-testid="controls">
-          <h2 className="border-b border-border p-5 font-semibold">
-            {t('dashboard.controlsTitle')}
+        <section className="rounded-xl border border-border bg-surface" data-testid="controls">
+          <h2 className="flex items-center gap-2 border-b border-border p-5 font-semibold">
+            <span aria-hidden>{warnings.length === 0 ? '✅' : '⚡'}</span>
+            <span className="flex-1">{t('dashboard.controlsTitle')}</span>
+            {warnings.length > 0 ? (
+              <span className="grid min-w-6 place-items-center rounded-full bg-accent px-1.5 text-xs font-bold text-accent-fg">
+                {warnings.length}
+              </span>
+            ) : null}
           </h2>
           {warnings.length === 0 ? (
             <p className="p-5 text-sm text-fg-muted">{t('dashboard.controlsAllGood')}</p>
@@ -379,12 +437,15 @@ export function DashboardPage() {
       ) : null}
 
       {steps.length > 0 ? (
-        <section className="rounded-lg border border-border bg-surface">
-          <div className="flex items-center justify-between gap-3 border-b border-border p-5">
-            <h2 className="font-semibold">{t('dashboard.onboardingTitle')}</h2>
-            <span className="text-sm text-fg-muted" data-testid="onboarding-progress">
-              {t('dashboard.onboardingProgress', { done: doneCount, total: required.length })}
-            </span>
+        <section className="rounded-xl border border-border bg-surface">
+          <div className="flex items-center gap-4 border-b border-border p-5">
+            <ProgressRing done={doneCount} total={required.length} />
+            <div className="min-w-0 flex-1">
+              <h2 className="font-semibold">{t('dashboard.onboardingTitle')}</h2>
+              <span className="text-sm text-fg-muted" data-testid="onboarding-progress">
+                {t('dashboard.onboardingProgress', { done: doneCount, total: required.length })}
+              </span>
+            </div>
           </div>
           <ul className="divide-y divide-border">
             {steps.map((step) => (
@@ -394,7 +455,20 @@ export function DashboardPage() {
                   to={step.to}
                   className="flex min-h-14 items-center justify-between gap-3 px-5 py-4 hover:bg-surface-muted"
                 >
-                  <span className="text-sm">{t(`dashboard.${step.key}`)}</span>
+                  <span className="flex items-center gap-3 text-sm">
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'grid size-6 shrink-0 place-items-center rounded-full border',
+                        step.done
+                          ? 'border-transparent bg-success text-white'
+                          : 'border-border-strong text-transparent',
+                      )}
+                    >
+                      <Icon name="check" className="size-3.5" />
+                    </span>
+                    {t(`dashboard.${step.key}`)}
+                  </span>
                   <span className="flex items-center gap-3">
                     <Badge tone={step.done ? 'success' : step.optional ? 'neutral' : 'warning'}>
                       {step.done
@@ -412,5 +486,70 @@ export function DashboardPage() {
         </section>
       ) : null}
     </div>
+  );
+}
+
+/** A small figure card that opens its page. */
+function Tile({
+  emoji,
+  to,
+  label,
+  value,
+  hint,
+}: {
+  emoji: string;
+  to: string;
+  label: string;
+  value: number | string;
+  hint: string;
+}) {
+  return (
+    <Link
+      to={to}
+      className="vibe-lift flex flex-col rounded-xl border border-border bg-surface p-3 sm:p-4"
+    >
+      <span
+        aria-hidden
+        className="grid size-9 place-items-center rounded-lg bg-primary-soft text-lg"
+      >
+        {emoji}
+      </span>
+      <span className="mt-2 text-xs text-fg-muted sm:text-sm">{label}</span>
+      <span className="text-2xl font-bold tabular-nums">{value}</span>
+      <span className="mt-0.5 text-xs text-fg-subtle">{hint}</span>
+    </Link>
+  );
+}
+
+/** Progress of the setup checklist as a ring. */
+function ProgressRing({ done, total }: { done: number; total: number }) {
+  const r = 22;
+  const c = 2 * Math.PI * r;
+  const share = total === 0 ? 1 : done / total;
+  return (
+    <svg viewBox="0 0 56 56" className="size-14 shrink-0 -rotate-90" aria-hidden>
+      <circle cx="28" cy="28" r={r} fill="none" strokeWidth="6" className="stroke-surface-muted" />
+      <circle
+        cx="28"
+        cy="28"
+        r={r}
+        fill="none"
+        strokeWidth="6"
+        strokeLinecap="round"
+        strokeDasharray={c}
+        strokeDashoffset={c * (1 - share)}
+        className="stroke-primary transition-[stroke-dashoffset]"
+      />
+      <text
+        x="28"
+        y="28"
+        textAnchor="middle"
+        dominantBaseline="central"
+        className="rotate-90 fill-fg text-[0.8rem] font-bold"
+        style={{ transformOrigin: '28px 28px' }}
+      >
+        {Math.round(share * 100)}%
+      </text>
+    </svg>
   );
 }

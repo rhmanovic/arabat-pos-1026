@@ -5,6 +5,9 @@ export const managerAr: ManagerResources = {
   navLabel: 'قائمة الإدارة',
   comingSoon: 'غير متاح بعد',
   nav: {
+    tabsLabel: 'تنقل سريع',
+    tab_dashboard: 'الرئيسية',
+    more: 'المزيد',
     links: 'صفحة الروابط',
     transfers: 'التحويلات',
     refunds: 'المرتجعات',
@@ -39,6 +42,9 @@ export const managerAr: ManagerResources = {
     sectionOrganization: 'المنشأة',
   },
   top: {
+    morning: 'صباح الخير، {{name}}',
+    afternoon: 'هلا {{name}}',
+    evening: 'مساء الخير، {{name}}',
     branchContext: 'الفرع',
     allBranches: 'كل الفروع',
     switchCompany: 'تغيير الشركة',
@@ -84,6 +90,10 @@ export const managerAr: ManagerResources = {
     never: 'أبداً',
   },
   dashboard: {
+    shortcut_newProduct: 'منتج جديد',
+    shortcut_sales: 'المبيعات',
+    shortcut_reports: 'التقارير',
+    shortcut_team: 'الفريق',
     totalCash: 'إجمالي النقد',
     inTreasuries: 'الخزائن:',
     inRegisters: 'الصناديق:',

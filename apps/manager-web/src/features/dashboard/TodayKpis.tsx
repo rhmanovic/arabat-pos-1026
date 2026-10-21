@@ -1,4 +1,5 @@
-import { Alert, StatCard } from '@arabat/ui';
+import { Alert } from '@arabat/ui';
+import type { ReactNode } from 'react';
 import { useApi } from '@arabat/web-core';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -30,28 +31,67 @@ export function TodayKpis() {
           {t('dashboard.openReports')}
         </Link>
       </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
-        <StatCard
+      {/* Swipe on phones, a row of four on larger screens (ADR-0131). */}
+      <div className="vibe-scroll -mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-4 sm:gap-4 sm:overflow-visible sm:px-0">
+        <Kpi
+          emoji="💰"
+          tone="bg-primary-soft"
           label={t('dashboard.todaySales', { count: d.today.saleCount })}
-          value={<span dir="ltr">{amount(d.today.netSales)}</span>}
+          value={amount(d.today.netSales)}
           hint={t('dashboard.yesterdayWas', { amount: amount(d.yesterday.netSales) })}
         />
-        <StatCard
+        <Kpi
+          emoji="↩️"
+          tone="bg-warning-soft"
           label={t('dashboard.todayRefunds', { count: d.today.refundCount })}
-          value={<span dir="ltr">{amount(d.today.refunds)}</span>}
+          value={amount(d.today.refunds)}
           hint={t('dashboard.yesterdayWas', { amount: amount(d.yesterday.refunds) })}
         />
-        <StatCard
+        <Kpi
+          emoji="✨"
+          tone="bg-success-soft"
           label={t('dashboard.todayNet')}
-          value={<span dir="ltr">{amount(d.today.netAfterRefunds)}</span>}
+          value={amount(d.today.netAfterRefunds)}
           hint={t('dashboard.yesterdayWas', { amount: amount(d.yesterday.netAfterRefunds) })}
         />
-        <StatCard
+        <Kpi
+          emoji="🕐"
+          tone="bg-surface-muted"
           label={t('dashboard.openShifts')}
-          value={d.openShifts}
+          value={String(d.openShifts)}
           hint={t('dashboard.cutOffHint', { timezone: d.timezone })}
+          money={false}
         />
       </div>
     </section>
+  );
+}
+
+function Kpi({
+  emoji,
+  tone,
+  label,
+  value,
+  hint,
+  money = true,
+}: {
+  emoji: string;
+  tone: string;
+  label: ReactNode;
+  value: string;
+  hint: ReactNode;
+  money?: boolean;
+}) {
+  return (
+    <div className="vibe-lift flex min-w-[11rem] snap-start flex-col rounded-xl border border-border bg-surface p-4 sm:min-w-0">
+      <span aria-hidden className={`grid size-9 place-items-center rounded-lg text-lg ${tone}`}>
+        {emoji}
+      </span>
+      <span className="mt-2 text-sm text-fg-muted">{label}</span>
+      <span dir={money ? 'ltr' : undefined} className="text-2xl font-bold tabular-nums text-start">
+        {value}
+      </span>
+      <span className="mt-1 text-xs text-fg-subtle">{hint}</span>
+    </div>
   );
 }

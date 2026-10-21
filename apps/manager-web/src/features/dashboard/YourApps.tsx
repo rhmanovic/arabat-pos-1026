@@ -207,7 +207,7 @@ function Tile({ tile }: { tile: AppTile }) {
     </>
   );
   const className =
-    'flex h-full flex-col rounded-xl border border-border bg-surface p-3 text-start sm:p-4';
+    'vibe-lift flex h-full flex-col rounded-xl border border-border bg-surface p-3 text-start sm:p-4';
   if (tile.state === 'notIncluded')
     return (
       <Link to="/subscription" className={`${className} hover:bg-surface-muted`}>

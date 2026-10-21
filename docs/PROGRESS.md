@@ -1265,6 +1265,21 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-21 — Business management in the young look, phone-first (ADR-0131)
+Owner's request: make Business management suit Gen Z and fit phones. Frontend only.
+- Shared layer: `@arabat/ui/vibe.css` (palette, dark mode, effects, shrinkable grid column,
+  no sideways overflow), `Icon` in `@arabat/ui`, `applyTheme` / `useThemeMode` / `ThemeSwitch` /
+  `useMediaQuery` in `@arabat/web-core`; the online console now uses them too.
+- Shell: icon menu with a gradient active item, theme switch, greeting top bar, branch filter in
+  the menu on phones, bottom tab bar on phones and tablets, round assistant button there.
+- Dashboard: gradient welcome card with shortcuts, today's figures as swipeable emoji tiles,
+  tiles for cash / branches / employees / roles, controls with a count, setup checklist with a
+  progress ring.
+- Checked at 390 px on all 33 management pages in light and dark: no page wider than the screen
+  (Reports' cards fixed by the grid rule); desktop checked in light and dark.
+- Tests: manager-web +2 (theme switch remembered under `arabat.theme`; phone tab bar shows only
+  permitted pages and "More" opens the menu); online-web theme test follows the shared key.
+
 ### 2026-10-21 — Store console on the phone: rows, dialogs and sideways overflow
 Owner's report with phone screenshots: in the store console's products, categories and lists
 pages the rows overflowed the screen (names squeezed to nothing, buttons and arrows pushed out),
