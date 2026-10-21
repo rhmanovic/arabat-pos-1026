@@ -934,6 +934,31 @@ describe('storefront', () => {
     await waitFor(() => expect(within(header).queryByTestId('mega-menu')).toBeNull());
   });
 
+  it('shows one search on phones: the bar under the header replaces the search button', async () => {
+    const design = templateDesign('retail');
+    design.header = {
+      ...design.header,
+      layout: 'classic',
+      searchStyle: 'icon',
+      mobileSearch: true,
+      actions: [
+        { type: 'search', visible: true },
+        { type: 'cart', visible: true },
+      ],
+    };
+    renderStore('/demo', {
+      'GET /store/demo': () => ({ status: 200, body: STORE }),
+      'GET /store/demo/design': () => ({ status: 200, body: { design } }),
+    });
+    const header = await screen.findByTestId('store-header');
+    // The bar is for phones only; the button stays for larger screens only.
+    expect(
+      await within(header).findByRole('searchbox', { name: 'Search the store' }),
+    ).toBeInTheDocument();
+    const button = within(header).getByRole('link', { name: 'Search products' });
+    expect(button).toHaveClass('max-lg:hidden');
+  });
+
   it('builds the header from the design: top bar, layout, menus, mega-menu, ordered items and search', async () => {
     const user = userEvent.setup();
     const DRINKS = '0190a000-0000-7000-8000-0000000000c1';

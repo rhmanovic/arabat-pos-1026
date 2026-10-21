@@ -1265,6 +1265,18 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-21 — Storefront header: one search on phones
+Owner's report: with search as a button and «شريط بحث تحت الهيدر على الجوال» on, phones showed
+both the search button in the header row and the search bar under it.
+- `Header` (`apps/store-web/src/design/Header.tsx`): when the bar shows under the row on phones
+  (`mobileSearch`, or search as a bar), the row's search button is hidden below `lg`; larger
+  screens keep the button. This also covers a bar beside a centred logo, which falls back to a
+  button on large screens.
+- Tests: store-web +1 (`app.test.tsx`: bar present, button hidden on phones); it fails on the
+  previous code.
+- Verified (cloud sandbox): `pnpm verify` 408 unit/web, `pnpm test:integration` 311 (44 files),
+  `pnpm test:e2e` 45.
+
 ### 2026-10-21 — Storefront header: menus wait for the pointer
 Owner's report: the categories menu under the header closed as soon as the pointer left the
 item on its way down to the menu. The mega-menu hangs from the bottom of the header row, so

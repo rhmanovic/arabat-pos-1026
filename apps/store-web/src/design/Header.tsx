@@ -203,6 +203,8 @@ export function Header({ tagline, onMenu }: { tagline: string | null; onMenu: ()
   );
   const searchShown = header.actions.some((a) => a.type === 'search' && a.visible);
   const searchBar = searchShown && (layout === 'stacked' || header.searchStyle === 'bar');
+  // On phones the bar sits under the header row; the row then leaves out the search button.
+  const phoneSearchBar = searchBar || (searchShown && header.mobileSearch);
   const navRowBelow = layout === 'centered' || layout === 'stacked' || layout === 'bold';
   const nav = (part?: 'first' | 'second') => (
     <Nav
@@ -260,7 +262,11 @@ export function Header({ tagline, onMenu }: { tagline: string | null; onMenu: ()
         <div className="flex-1 max-lg:hidden" />
       )}
       {/* Beside a centred logo the search stays a button; its bar would cover the logo. */}
-      <Actions searchBar={searchBar && !centeredBrand} searchInRow={layout === 'stacked'} />
+      <Actions
+        searchBar={searchBar && !centeredBrand}
+        searchInRow={layout === 'stacked'}
+        phoneSearchBar={phoneSearchBar}
+      />
     </div>
   );
 
@@ -268,7 +274,7 @@ export function Header({ tagline, onMenu }: { tagline: string | null; onMenu: ()
     <>
       <div className={width}>{row}</div>
       {/* The search bar sits under the main row on phones (and on the search-first layout). */}
-      {searchBar || (searchShown && header.mobileSearch) ? (
+      {phoneSearchBar ? (
         <div className={cn(width, 'pb-3 lg:hidden')}>
           <SearchBar />
         </div>
@@ -314,7 +320,7 @@ export function Header({ tagline, onMenu }: { tagline: string | null; onMenu: ()
           data-layout={layout}
         >
           <div className="px-3 sm:px-4">{row}</div>
-          {searchBar || (searchShown && header.mobileSearch) ? (
+          {phoneSearchBar ? (
             <div className="px-3 pb-3 lg:hidden">
               <SearchBar />
             </div>
@@ -652,7 +658,15 @@ function SearchBar({ className }: { className?: string }) {
   );
 }
 
-function Actions({ searchBar, searchInRow }: { searchBar: boolean; searchInRow: boolean }) {
+function Actions({
+  searchBar,
+  searchInRow,
+  phoneSearchBar,
+}: {
+  searchBar: boolean;
+  searchInRow: boolean;
+  phoneSearchBar: boolean;
+}) {
   const slug = useSlug();
   const { data: store } = useStorefront();
   const { header, social } = useDesign();
@@ -671,7 +685,11 @@ function Actions({ searchBar, searchInRow }: { searchBar: boolean; searchInRow: 
             <SearchBar />
           </div>
         ) : (
-          <Link to={`/${slug}/products?search=1`} className={icon} aria-label={t('catalog.search')}>
+          <Link
+            to={`/${slug}/products?search=1`}
+            className={cn(icon, phoneSearchBar && 'max-lg:hidden')}
+            aria-label={t('catalog.search')}
+          >
             <StoreIcon name="search" />
           </Link>
         );
