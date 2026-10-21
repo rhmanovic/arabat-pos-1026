@@ -1276,6 +1276,11 @@ both the search button in the header row and the search bar under it.
   previous code.
 - Verified (cloud sandbox): `pnpm verify` 408 unit/web, `pnpm test:integration` 311 (44 files),
   `pnpm test:e2e` 45.
+- Released (ADR-0122): production `60a668a18e24` (revision `arabat-web-00059-gf4`, previous
+  `arabat-web-00058-9b4`; migration job `arabat-migrate-25c8w`, no new migration). Cloud Build
+  check `8d052ac3`: `/api/v1/health/ready` 200 with that version and database ok (3 ms); `live`,
+  `/store/`, `/manager/` and `/online/` 200. Signed out afterwards, `config.env` removed; no key,
+  account or secret deleted.
 
 ### 2026-10-21 — Storefront header: menus wait for the pointer
 Owner's report: the categories menu under the header closed as soon as the pointer left the
