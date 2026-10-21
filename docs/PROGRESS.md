@@ -1283,6 +1283,12 @@ convert every uploaded picture to WebP before saving.
   the store e2e follows the new save-and-close.
 - Verified (cloud sandbox): `pnpm verify` 375 unit/web, `pnpm test:integration` 308 (44 files),
   `pnpm test:e2e` 44.
+- Released (ADR-0122): production `fc5d4219743f` (revision `arabat-web-00049-q4d`, previous
+  `arabat-web-00048-ks4`; migration job `arabat-migrate-29gdd`, no new migration). The revision
+  started with `sharp` loaded; Cloud Build check `f9100650`: `/api/v1/health/ready` 200 with that
+  version and database ok (3 ms), `live` 200. Signed out afterwards, `config.env` removed; no key,
+  account or secret deleted. **Staging not updated yet:** Railway answered "Deploys have been
+  paused temporarily"; a retry is scheduled.
 
 ### 2026-10-20 — Page sections v2 for the home page (ADR-0128 amendment 3)
 Owner's request: the same depth for the home page as for the header and footer. Frontend +
