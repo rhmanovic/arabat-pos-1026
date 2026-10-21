@@ -475,17 +475,21 @@ function PagesEditor({
       ) : page === 'checkout' ? (
         <CheckoutPageEditor design={design} set={set} />
       ) : null}
-      {page === 'home' ? (
+      {page === 'home' || page === 'categories' ? (
         <>
           <Panel
             icon="🪄"
-            title={t('design.homeLayouts')}
-            hint={t('design.homeLayoutsHint')}
+            title={t(page === 'home' ? 'design.homeLayouts' : 'design.categoryLayouts')}
+            hint={t(page === 'home' ? 'design.homeLayoutsHint' : 'design.categoryLayoutsHint')}
             defaultOpen={false}
           >
-            <PageLayouts onApply={setSections} />
+            <PageLayouts page={page} onApply={setSections} />
           </Panel>
-          <Panel icon="💡" title={t('design.pageTips')} hint={t('design.pageTipsHint')}>
+          <Panel
+            icon="💡"
+            title={t('design.pageTips')}
+            hint={t(page === 'home' ? 'design.pageTipsHint' : 'design.categoryTipsHint')}
+          >
             <PageTips
               design={design}
               page={page}

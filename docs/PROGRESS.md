@@ -1265,6 +1265,22 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-21 — Ready section styles and the categories page (ADR-0128 amendment 6, BR-239)
+Owner's request: the same depth for the home page and all its sections, and for the categories
+page and all its sections. Contract and frontend only; no migration.
+- Contract: `SECTION_STYLES` (2–6 ready styles for each of the 19 section types),
+  `applySectionStyle` / `currentSectionStyle`; categories section gains cards and wide banners,
+  picture shape, phone columns, counts, main-only and subcategory links; `categoryLayout` with
+  five ready categories pages.
+- Storefront: the new categories shapes and options (counts include subcategories).
+- Console: "Ready styles" panel on top of every section editor; the categories page gets ready
+  pages (with their own confirmation words) and recommendations with fixes.
+- Tests: contracts +3 (every style valid and recognised; content kept, frame reset; old sections
+  unchanged, every categories layout valid), store-web +1, online-web +2, e2e design test
+  extended (the categories section restyled as cards shows counts in the preview).
+- Verified (cloud sandbox): `pnpm verify` 406 unit/web, `pnpm test:integration` 311 (44 files),
+  `pnpm test:e2e` 45; editor checked at 390 px (Arabic), nothing wider than the screen.
+
 ### 2026-10-21 — Cart and checkout designer (ADR-0128 amendment 5, BR-238)
 Owner's request: the same designer for the cart and the checkout. Frontend and contract only;
 no migration, no API rule changed (the save audit counts the cart's sections).

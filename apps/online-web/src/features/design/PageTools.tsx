@@ -1,4 +1,6 @@
 import {
+  CATEGORY_LAYOUTS,
+  type CategoryLayout,
   type DesignPage,
   type DesignSection,
   HOME_LAYOUTS,
@@ -7,6 +9,7 @@ import {
   type ReadySection,
   type SectionType,
   type StoreDesign,
+  categoryLayout,
   homeLayout,
   newSection,
   readySection,
@@ -15,6 +18,7 @@ import { Badge, Button, Dialog, Input, cn } from '@arabat/ui';
 import { type ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { SECTION_ICON, newId, sectionOrder } from './SectionEditor.js';
+import { useStoreCatalog } from './fields.js';
 
 /*
  * Page tools of the design console (ADR-0128 amendment 3): the section gallery with drawings and
@@ -247,26 +251,76 @@ export function sectionFor(type: SectionType): DesignSection {
 }
 
 // -------------------------------------------------------------------- page layouts
-export function PageLayouts({ onApply }: { onApply: (sections: DesignSection[]) => void }) {
+const LAYOUT_ICON: Record<HomeLayout | `categories:${CategoryLayout}`, string> = {
+  fashion: '👗',
+  electronics: '🎧',
+  grocery: '🥑',
+  beauty: '💄',
+  restaurant: '🍔',
+  cafe: '☕',
+  minimal: '◻️',
+  'categories:tiles': '🧱',
+  'categories:circles': '⭕',
+  'categories:cards': '🃏',
+  'categories:list': '📋',
+  'categories:showcase': '✨',
+};
+
+/** Whole pages in one tap: the home page's and the categories page's (ADR-0128 amendment 6). */
+export function PageLayouts({
+  page = 'home',
+  onApply,
+}: {
+  page?: 'home' | 'categories';
+  onApply: (sections: DesignSection[]) => void;
+}) {
+  return page === 'categories' ? (
+    <LayoutChoices
+      names={CATEGORY_LAYOUTS}
+      label={(l) => `design.categoryLayout_${l}`}
+      icon={(l) => LAYOUT_ICON[`categories:${l}`]}
+      build={categoryLayout}
+      prefix="category"
+      onApply={onApply}
+    />
+  ) : (
+    <LayoutChoices
+      names={HOME_LAYOUTS}
+      label={(l) => `design.homeLayout_${l}`}
+      icon={(l) => LAYOUT_ICON[l]}
+      build={homeLayout}
+      prefix=""
+      onApply={onApply}
+    />
+  );
+}
+
+function LayoutChoices<L extends string>({
+  names,
+  label,
+  icon,
+  build,
+  prefix,
+  onApply,
+}: {
+  /** "" for the home page's words, "category" for the categories page's. */
+  prefix: '' | 'category';
+  names: readonly L[];
+  label: (l: L) => string;
+  icon: (l: L) => string;
+  build: (l: L) => DesignSection[];
+  onApply: (sections: DesignSection[]) => void;
+}) {
   const { t } = useTranslation();
-  const [confirm, setConfirm] = useState<HomeLayout | null>(null);
-  const icon: Record<HomeLayout, string> = {
-    fashion: '👗',
-    electronics: '🎧',
-    grocery: '🥑',
-    beauty: '💄',
-    restaurant: '🍔',
-    cafe: '☕',
-    minimal: '◻️',
-  };
+  const [confirm, setConfirm] = useState<L | null>(null);
   return (
     <div className="flex flex-col gap-2">
       <ul className="grid grid-cols-2 gap-2">
-        {HOME_LAYOUTS.map((l) => (
+        {names.map((l) => (
           <li key={l}>
             <button
               type="button"
-              aria-label={t('design.useLayout', { name: t(`design.homeLayout_${l}`) })}
+              aria-label={t('design.useLayout', { name: t(label(l)) })}
               onClick={() => setConfirm(l)}
               className={cn(
                 'flex w-full flex-col items-start gap-1 rounded-xl border p-3 text-start transition-colors',
@@ -276,11 +330,11 @@ export function PageLayouts({ onApply }: { onApply: (sections: DesignSection[]) 
               )}
             >
               <span aria-hidden className="text-2xl">
-                {icon[l]}
+                {icon(l)}
               </span>
-              <span className="text-sm font-bold">{t(`design.homeLayout_${l}`)}</span>
+              <span className="text-sm font-bold">{t(label(l))}</span>
               <span className="text-xs text-fg-muted">
-                {t('design.sectionsCount', { count: homeLayout(l).length })}
+                {t('design.sectionsCount', { count: build(l).length })}
               </span>
             </button>
           </li>
@@ -288,16 +342,16 @@ export function PageLayouts({ onApply }: { onApply: (sections: DesignSection[]) 
       </ul>
       {confirm ? (
         <div className="flex flex-col gap-2 rounded-xl border border-warning bg-warning-soft p-3 text-sm">
-          <p>{t('design.layoutWarning')}</p>
+          <p>{t(prefix ? 'design.categoryLayoutWarning' : 'design.layoutWarning')}</p>
           <div className="flex gap-2">
             <Button
               size="sm"
               onClick={() => {
-                onApply(homeLayout(confirm));
+                onApply(build(confirm));
                 setConfirm(null);
               }}
             >
-              {t('design.layoutConfirm')}
+              {t(prefix ? 'design.categoryLayoutConfirm' : 'design.layoutConfirm')}
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setConfirm(null)}>
               {t('common.cancel')}
@@ -354,6 +408,8 @@ export function PageTips({
   onEdit: (id: string) => void;
 }) {
   const { t } = useTranslation();
+  if (page === 'categories')
+    return <CategoryTips sections={sections} onChange={onChange} onEdit={onEdit} />;
   if (page !== 'home') return null;
   const shown = sections.filter((s) => s.visible);
   const has = (...types: SectionType[]) => shown.some((s) => types.includes(s.type));
@@ -432,6 +488,97 @@ export function PageTips({
             {!tip.done && tip.fix ? (
               <Button size="sm" variant="secondary" onClick={tip.fix}>
                 {tip.fixLabel ?? t('design.pageTipFix')}
+              </Button>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** What a categories page that leads shoppers on usually has (ADR-0128 amendment 6). */
+function CategoryTips({
+  sections,
+  onChange,
+  onEdit,
+}: {
+  sections: DesignSection[];
+  onChange: (next: DesignSection[]) => void;
+  onEdit: (id: string) => void;
+}) {
+  const { t } = useTranslation();
+  const { store } = useStoreCatalog();
+  const categories = store?.categories ?? [];
+  const main = sections.find((s) => s.visible && s.type === 'categories');
+  const shown = sections.filter((s) => s.visible);
+  const setMain = (patch: Record<string, unknown>) =>
+    main
+      ? () =>
+          onChange(
+            sections.map((s) => (s.id === main.id ? ({ ...s, ...patch } as DesignSection) : s)),
+          )
+      : undefined;
+  const noPicture = categories.filter((c) => !c.imageUrl).length;
+  const nested = categories.some((c) => c.parentId);
+  const empty = shown.filter(isEmptySection);
+  const tips: { key: string; done: boolean; fix?: () => void; count?: number; label?: string }[] = [
+    { key: 'catPictures', done: categories.length > 0 && noPicture === 0, count: noPicture },
+    {
+      key: 'catCounts',
+      done: main?.type === 'categories' && main.showCount,
+      fix: setMain({ showCount: true }),
+    },
+    {
+      key: 'catNested',
+      done: !nested || (main?.type === 'categories' && (main.topOnly || main.showSub)),
+      fix: setMain({ topOnly: true, showSub: true }),
+    },
+    {
+      key: 'catProducts',
+      done: shown.some((s) => s.type === 'products'),
+      fix: () => onChange([...sections, readySection('featured', newId('products'))]),
+    },
+    {
+      key: 'empty',
+      done: empty.length === 0,
+      fix: empty[0] ? () => onEdit(empty[0]!.id) : undefined,
+      label: t('design.tipFix_emptyOpen'),
+    },
+  ];
+  const done = tips.filter((x) => x.done).length;
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-3">
+        <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-muted">
+          <div
+            className="h-full rounded-full bg-primary transition-all"
+            style={{ width: `${Math.round((done / tips.length) * 100)}%` }}
+          />
+        </div>
+        <span className="text-xs font-semibold text-fg-muted" data-testid="page-score">
+          {t('design.tipsDone', { done, total: tips.length })}
+        </span>
+      </div>
+      <ul className="flex flex-col gap-2">
+        {tips.map((tip) => (
+          <li
+            key={tip.key}
+            className={cn(
+              'flex items-start gap-3 rounded-lg p-3 text-sm',
+              tip.done ? 'bg-surface-muted' : 'border border-dashed border-border-strong',
+            )}
+          >
+            <span aria-hidden>{tip.done ? '✅' : '💡'}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold">{t(`design.pageTip_${tip.key}`)}</span>
+              <span className="block text-xs text-fg-muted">
+                {t(`design.pageTipHint_${tip.key}`, { count: tip.count ?? 0 })}
+              </span>
+            </span>
+            {!tip.done && tip.fix ? (
+              <Button size="sm" variant="secondary" onClick={tip.fix}>
+                {tip.label ?? t('design.pageTipFix')}
               </Button>
             ) : null}
           </li>

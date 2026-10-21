@@ -2465,3 +2465,22 @@ ADR; supersede it.
     preview (the order button is disabled and submitting does nothing).
   - **Console:** «السلة» and «إتمام الطلب» page chips; ready pages, recommendations with fixes,
     and panels for every setting; the cart's sections are edited below its settings.
+- **Amendment 6 (2026-10-21) — ready styles for every section, and the categories page.** Owner's
+  request: the same for the home page and all its sections, and for the categories page and all
+  its sections. BR-239. No migration (jsonb); sections saved before parse with the same look.
+  - **Ready styles:** `SECTION_STYLES` gives every section type 2–6 named styles (40 names in
+    all); `applySectionStyle` sets the variant, arrangement options and the frame's background /
+    heading alignment, and never touches content (words, pictures, items, links, chosen
+    products or categories); a style without its own background or alignment resets them so
+    styles do not pile up; `currentSectionStyle` marks the one a section matches. The console's
+    section editor opens with a "Ready styles" panel on every page (home, products, categories,
+    product, cart).
+  - **Categories section:** two new shapes (cards with the name under the picture, wide
+    banners), picture shape (wide / square / tall), columns on phones (1–3), product counts (a
+    category counts its subcategories' products too), main categories only, and subcategory
+    links under each category.
+  - **Categories page:** five ready categories pages (`categoryLayout`: picture tiles, circles +
+    new arrivals, cards with counts, simple list, wide showcase; each keeps a categories
+    section), replaced after a confirmation, and recommendations (every category has a
+    picture, product counts, subcategories in order, products under the categories, no section
+    waiting for content) with one-tap fixes.

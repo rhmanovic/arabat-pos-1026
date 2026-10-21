@@ -4,6 +4,7 @@ import {
   cartPreset,
   newSection,
   productPagePreset,
+  sectionSchema,
   templateDesign,
 } from '@arabat/contracts';
 import { flattenKeys } from '@arabat/i18n';
@@ -18,6 +19,7 @@ import { StoreRoot } from './root.js';
 import { routes } from './routes.js';
 
 const kwd = (amount: string) => ({ amount, currency: 'KWD' });
+const sectionSchemaParse = (input: unknown) => sectionSchema.parse(input);
 const STORE = {
   slug: 'demo',
   nameEn: 'Demo Shop',
@@ -1666,6 +1668,57 @@ describe('storefront', () => {
     } finally {
       window.name = '';
     }
+  });
+
+  it('draws the categories page from the design: cards with counts, main categories and their subcategories', async () => {
+    const HOT = '0190a000-0000-7000-8000-0000000000d1';
+    const TEA_CAT = '0190a000-0000-7000-8000-0000000000d2';
+    const design = templateDesign('retail');
+    design.pages.categories = [
+      sectionSchemaParse({
+        id: 'cats',
+        type: 'categories',
+        variant: 'cards',
+        showCount: true,
+        topOnly: true,
+        showSub: true,
+        aspect: 'square',
+        mobileColumns: 1,
+      }),
+    ];
+    renderStore('/demo/categories', {
+      'GET /store/demo': () => ({
+        status: 200,
+        body: {
+          ...STORE,
+          categories: [
+            { id: HOT, nameEn: 'Hot drinks', nameAr: null, parentId: null, imageUrl: null },
+            { id: TEA_CAT, nameEn: 'Tea', nameAr: null, parentId: HOT, imageUrl: null },
+          ],
+        },
+      }),
+      'GET /store/demo/products': () => ({
+        status: 200,
+        body: {
+          products: [
+            { ...PRODUCTS.products[0]!, categoryId: HOT },
+            { ...PRODUCTS.products[1]!, categoryId: TEA_CAT },
+          ],
+        },
+      }),
+      'GET /store/demo/design': () => ({ status: 200, body: { design } }),
+    });
+    const section = await screen.findByRole('region', { name: 'Categories' });
+    expect(section).toHaveAttribute('data-variant', 'cards');
+    // Only the main category is a card; it counts its subcategory's products too.
+    const card = within(section).getByRole('link', { name: /Hot drinks/ });
+    await waitFor(() => expect(card).toHaveTextContent('Products: 2'));
+    const subs = within(section).getByRole('list', { name: 'Subcategories' });
+    expect(within(subs).getByRole('link', { name: 'Tea' })).toHaveAttribute(
+      'href',
+      `/demo/products?category=${TEA_CAT}`,
+    );
+    expect(within(section).queryByRole('link', { name: /^Tea Products/ })).toBeNull();
   });
 
   it('defines the same translation keys in Arabic and English', () => {

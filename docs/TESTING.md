@@ -66,6 +66,16 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-21 (ready section styles and the categories page, ADR-0128 amendment 6)
+- Contracts +3 (every style of every section type valid and recognised once applied; content
+  kept and the frame reset between styles; old categories sections unchanged and every ready
+  categories page valid). store-web +1 (cards with counts that include subcategories, main
+  categories only, subcategory links). online-web +2 (a home banner restyled in one tap with its
+  content kept; a ready categories page applied after its own confirmation, recommendations,
+  new categories settings saved, no untranslated key). e2e design test extended (categories
+  restyled as cards show counts in the preview).
+- Totals: `pnpm verify` 406, `pnpm test:integration` 311, `pnpm test:e2e` 45.
+
 ### Results 2026-10-21 (cart and checkout designer, ADR-0128 amendment 5, cloud sandbox run)
 - Contracts +3 (old designs get default cart / checkout pages; presets set both; catalog refused
   under the cart, settings bounded, unsafe terms link refused). store-web +4 (designed cart with

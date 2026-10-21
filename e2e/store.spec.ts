@@ -531,6 +531,15 @@ test('the owner designs the store as a restaurant, previews it live and publishe
     preview.getByText('Preview: two sample products stand in for an empty cart.'),
   ).toBeVisible();
   await expect(preview.getByRole('button', { name: 'Continue', exact: true })).toBeVisible();
+  // Ready styles (ADR-0128 amendment 6): the categories section as cards with counts.
+  await page.getByRole('radio', { name: 'Categories' }).click();
+  await page.getByRole('button', { name: 'Edit Categories' }).click();
+  await page
+    .getByRole('radiogroup', { name: 'Ready styles' })
+    .getByRole('radio', { name: 'Cards' })
+    .click();
+  await expect(preview.getByText('Products: 1')).toBeVisible();
+  await page.getByRole('button', { name: /Back to sections/ }).click();
   // Shoppers still see the old layout until the design is published.
   const shopperContext = await browser.newContext();
   await shopperContext.addInitScript(() => localStorage.setItem('arabat.language', 'en'));

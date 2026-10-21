@@ -599,34 +599,90 @@ function CategoriesSection({ s }: { s: SectionOf<'categories'> }) {
   const page = useContext(PageContext);
   const slug = useSlug();
   const { data: store } = useStorefront();
+  const products = useStoreProducts();
   const name = useLocalName();
   const text = useText();
   const card = useCard();
   const { t } = useTranslation();
   if (!store) return null;
+  const parentOf = (id: string) => store.categories.find((c) => c.id === id)?.parentId ?? null;
   // Chosen ids may name categories or collections; without a choice, the categories.
   const list: StoreGroup[] =
     s.categoryIds.length > 0
       ? s.categoryIds.map((id) => findGroup(store, id)).filter((c): c is StoreGroup => Boolean(c))
-      : navGroups(store);
+      : navGroups(store).filter((c) => !s.topOnly || !parentOf(c.id));
   // On the categories page an empty store says so; elsewhere the section just stays out.
   if (list.length === 0)
     return page === 'categories' ? <EmptyState title={t('design.noCategories')} /> : null;
   const to = (id: string) => `/${slug}/products?category=${id}`;
+  const all = products.data?.products ?? [];
+  // A category counts its own products and those of its subcategories.
+  const familyOf = (id: string) => [
+    id,
+    ...store.categories.filter((c) => c.parentId === id).map((c) => c.id),
+  ];
+  const count = (id: string) => {
+    const ids = familyOf(id);
+    return all.filter((p) => ids.some((x) => inGroup(p, x))).length;
+  };
+  const children = (id: string) =>
+    s.showSub ? store.categories.filter((c) => c.parentId === id) : [];
+  const countLabel = (id: string) =>
+    s.showCount && products.data ? t('design.productCount', { count: count(id) }) : null;
+  const subLinks = (id: string, className?: string) => {
+    const subs = children(id);
+    if (subs.length === 0) return null;
+    return (
+      <ul
+        className={cn('flex flex-wrap gap-1.5', className)}
+        aria-label={t('design.subcategories')}
+      >
+        {subs.map((c) => (
+          <li key={c.id}>
+            <Link
+              to={to(c.id)}
+              className="inline-block rounded-full bg-surface-muted px-2.5 py-0.5 text-xs hover:text-primary"
+            >
+              {name(c)}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    );
+  };
   const initial = (label: string) => (
     <span aria-hidden className="text-2xl font-bold text-primary">
       {label.slice(0, 1)}
     </span>
   );
+  const phone = { 1: 'grid-cols-1', 2: 'grid-cols-2', 3: 'grid-cols-3' }[s.mobileColumns];
   const grid = {
-    2: 'grid-cols-2',
-    3: 'grid-cols-2 sm:grid-cols-3',
-    4: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4',
-    5: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5',
-    6: 'grid-cols-3 sm:grid-cols-4 lg:grid-cols-6',
+    2: 'sm:grid-cols-2',
+    3: 'sm:grid-cols-3',
+    4: 'sm:grid-cols-3 lg:grid-cols-4',
+    5: 'sm:grid-cols-3 lg:grid-cols-5',
+    6: 'sm:grid-cols-4 lg:grid-cols-6',
   }[s.columns];
+  const ratio = { landscape: 'aspect-[4/3]', square: 'aspect-square', portrait: 'aspect-[3/4]' }[
+    s.aspect
+  ];
+  const picture = (c: StoreGroup, className: string) =>
+    c.imageUrl ? (
+      <img
+        src={c.imageUrl}
+        alt=""
+        className={cn(
+          'size-full object-cover transition-transform duration-300 group-hover:scale-105',
+          className,
+        )}
+      />
+    ) : (
+      <span className={cn('grid size-full place-items-center bg-primary-soft', className)}>
+        {initial(name(c))}
+      </span>
+    );
   return (
-    <section aria-label={text(s.title) || t('nav.categories')}>
+    <section aria-label={text(s.title) || t('nav.categories')} data-variant={s.variant}>
       <SectionTitle
         aside={
           s.showViewAll && page !== 'categories' ? (
@@ -647,16 +703,15 @@ function CategoriesSection({ s }: { s: SectionOf<'categories'> }) {
             <li key={c.id} className="shrink-0">
               <Link
                 to={to(c.id)}
-                className="flex w-20 flex-col items-center gap-2 text-center text-xs font-medium sm:w-24"
+                className="group flex w-20 flex-col items-center gap-2 text-center text-xs font-medium sm:w-24"
               >
-                <span className="grid size-20 place-items-center overflow-hidden rounded-full bg-primary-soft ring-2 ring-transparent transition hover:ring-primary sm:size-24">
-                  {c.imageUrl ? (
-                    <img src={c.imageUrl} alt="" className="size-full object-cover" />
-                  ) : (
-                    initial(name(c))
-                  )}
+                <span className="grid size-20 place-items-center overflow-hidden rounded-full bg-primary-soft ring-2 ring-transparent transition group-hover:ring-primary sm:size-24">
+                  {picture(c, '')}
                 </span>
                 {name(c)}
+                {countLabel(c.id) ? (
+                  <span className="text-[11px] text-fg-muted">{countLabel(c.id)}</span>
+                ) : null}
               </Link>
             </li>
           ))}
@@ -675,6 +730,9 @@ function CategoriesSection({ s }: { s: SectionOf<'categories'> }) {
                   <span className="w-2" aria-hidden />
                 )}
                 {name(c)}
+                {s.showCount && products.data ? (
+                  <span className="text-xs text-fg-muted">({count(c.id)})</span>
+                ) : null}
               </Link>
             </li>
           ))}
@@ -682,46 +740,86 @@ function CategoriesSection({ s }: { s: SectionOf<'categories'> }) {
       ) : s.variant === 'list' ? (
         <ul className={cn('divide-y divide-border overflow-hidden rounded-lg', card)}>
           {list.map((c) => (
-            <li key={c.id}>
-              <Link to={to(c.id)} className="flex items-center gap-3 p-3 hover:bg-surface-muted">
+            <li key={c.id} className="flex flex-col gap-2 p-3">
+              <Link to={to(c.id)} className="group flex items-center gap-3 hover:text-primary">
                 <span className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-md bg-primary-soft">
-                  {c.imageUrl ? (
-                    <img src={c.imageUrl} alt="" className="size-full object-cover" />
-                  ) : (
-                    initial(name(c))
-                  )}
+                  {picture(c, '')}
                 </span>
-                <span className="flex-1 font-medium">{name(c)}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium">{name(c)}</span>
+                  {countLabel(c.id) ? (
+                    <span className="block text-xs text-fg-muted">{countLabel(c.id)}</span>
+                  ) : null}
+                </span>
                 <span aria-hidden className="text-fg-subtle rtl:-scale-x-100">
                   ›
+                </span>
+              </Link>
+              {subLinks(c.id, 'ps-15')}
+            </li>
+          ))}
+        </ul>
+      ) : s.variant === 'banners' ? (
+        <ul className="flex flex-col gap-3">
+          {list.map((c) => (
+            <li key={c.id}>
+              <Link
+                to={to(c.id)}
+                className="group relative flex aspect-[5/2] items-end overflow-hidden rounded-xl sm:aspect-[4/1]"
+              >
+                <span className="absolute inset-0">{picture(c, '')}</span>
+                <span className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                <span className="relative flex w-full items-end justify-between gap-3 p-4 text-white">
+                  <span>
+                    <span className="block text-lg font-bold sm:text-2xl">{name(c)}</span>
+                    {countLabel(c.id) ? (
+                      <span className="block text-sm opacity-90">{countLabel(c.id)}</span>
+                    ) : null}
+                  </span>
+                  <span className="shrink-0 rounded-full bg-white/90 px-4 py-1.5 text-sm font-semibold text-[#111]">
+                    {t('design.shopNow')}
+                  </span>
                 </span>
               </Link>
             </li>
           ))}
         </ul>
-      ) : (
-        <ul className={cn('grid gap-3', grid)}>
+      ) : s.variant === 'cards' ? (
+        <ul className={cn('grid gap-3', phone, grid)}>
           {list.map((c) => (
-            <li key={c.id}>
-              <Link
-                to={to(c.id)}
-                className={cn('group relative block aspect-[4/3] overflow-hidden rounded-lg', card)}
-              >
-                {c.imageUrl ? (
-                  <img
-                    src={c.imageUrl}
-                    alt=""
-                    className="absolute inset-0 size-full object-cover transition-transform duration-300 group-hover:scale-105"
-                  />
-                ) : (
-                  <span className="absolute inset-0 grid place-items-center bg-primary-soft">
-                    {initial(name(c))}
-                  </span>
-                )}
-                <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-3 text-sm font-semibold text-white">
-                  {name(c)}
+            <li key={c.id} className={cn('flex flex-col overflow-hidden rounded-lg', card)}>
+              <Link to={to(c.id)} className="group flex flex-col">
+                <span className={cn('block overflow-hidden bg-surface-muted', ratio)}>
+                  {picture(c, '')}
+                </span>
+                <span className="flex flex-col gap-0.5 p-3">
+                  <span className="font-semibold">{name(c)}</span>
+                  {countLabel(c.id) ? (
+                    <span className="text-xs text-fg-muted">{countLabel(c.id)}</span>
+                  ) : null}
                 </span>
               </Link>
+              {subLinks(c.id, 'px-3 pb-3')}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <ul className={cn('grid gap-3', phone, grid)}>
+          {list.map((c) => (
+            <li key={c.id} className="flex flex-col gap-2">
+              <Link
+                to={to(c.id)}
+                className={cn('group relative block overflow-hidden rounded-lg', ratio, card)}
+              >
+                <span className="absolute inset-0">{picture(c, '')}</span>
+                <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-3 text-sm font-semibold text-white">
+                  {name(c)}
+                  {countLabel(c.id) ? (
+                    <span className="block text-xs font-normal opacity-90">{countLabel(c.id)}</span>
+                  ) : null}
+                </span>
+              </Link>
+              {subLinks(c.id)}
             </li>
           ))}
         </ul>

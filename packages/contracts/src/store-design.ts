@@ -219,11 +219,21 @@ export const productsSectionSchema = z.object({
 export const categoriesSectionSchema = z.object({
   ...base,
   type: z.literal('categories'),
-  variant: z.enum(['tiles', 'circles', 'chips', 'list']).default('tiles'),
+  variant: z.enum(['tiles', 'circles', 'chips', 'list', 'cards', 'banners']).default('tiles'),
   title: localized(80),
   /** Empty = every category of the store, in its order. */
   categoryIds: z.array(uuidLike).max(40).default([]),
   columns: z.number().int().min(2).max(6).default(4),
+  /** Columns on phones (tiles and cards). */
+  mobileColumns: z.union([z.literal(1), z.literal(2), z.literal(3)]).default(2),
+  /** Picture shape of tiles and cards (ADR-0128 amendment 6). */
+  aspect: z.enum(['landscape', 'square', 'portrait']).default('landscape'),
+  /** How many products each category holds. */
+  showCount: z.boolean().default(false),
+  /** Only the main categories (when none is chosen by hand). */
+  topOnly: z.boolean().default(false),
+  /** Each category's subcategories as small links under it (tiles, cards, list). */
+  showSub: z.boolean().default(false),
   showViewAll: z.boolean().default(false),
 });
 export const imageSectionSchema = z.object({
@@ -1716,6 +1726,203 @@ export function homeLayout(layout: HomeLayout): DesignSection[] {
           title: l('Products', 'المنتجات'),
         }),
         r('story'),
+      ];
+  }
+}
+
+// -------------------------------------------------- section styles and categories page
+/**
+ * Ready styles per section type (ADR-0128 amendment 6): one tap sets how a section looks —
+ * its variant, arrangement options and part of its frame — and never touches its content
+ * (words, pictures, items, links, chosen products or categories). A style without its own
+ * background or heading alignment resets them, so styles do not pile up.
+ */
+type StylePatch = Record<string, unknown> & {
+  look?: { background?: string; titleAlign?: string };
+};
+export const SECTION_STYLES = {
+  slider: {
+    classic: { variant: 'contained', height: 'medium', overlay: 'dark', textAlign: 'start' },
+    bold: { variant: 'full', height: 'large', overlay: 'dark', textAlign: 'center' },
+    cards: { variant: 'cards', height: 'small', overlay: 'light', textAlign: 'start' },
+    soft: {
+      variant: 'contained',
+      height: 'small',
+      overlay: 'light',
+      textAlign: 'center',
+      look: { background: 'soft' },
+    },
+  },
+  banner: {
+    hero: { variant: 'overlay', height: 'large', overlay: 'dark', align: 'center' },
+    classic: { variant: 'overlay', height: 'medium', overlay: 'dark', align: 'start' },
+    split: { variant: 'split', height: 'medium', align: 'start' },
+    color: { variant: 'color', height: 'small', align: 'center' },
+  },
+  products: {
+    grid: { variant: 'grid', columns: 4, showAdd: false },
+    swipe: { variant: 'carousel', showAdd: true },
+    list: { variant: 'list', showAdd: true },
+    spotlight: {
+      variant: 'grid',
+      columns: 3,
+      showAdd: true,
+      look: { background: 'tinted', titleAlign: 'center' },
+    },
+  },
+  categories: {
+    circles: { variant: 'circles', showCount: false },
+    tiles: { variant: 'tiles', columns: 4, aspect: 'landscape', showCount: false },
+    cards: { variant: 'cards', columns: 4, aspect: 'square', showCount: true },
+    banners: { variant: 'banners', showCount: true },
+    chips: { variant: 'chips', showCount: false },
+    list: { variant: 'list', showCount: true },
+  },
+  image: {
+    wide: { variant: 'contained', aspect: 'wide' },
+    full: { variant: 'full', aspect: 'wide' },
+    square: { variant: 'contained', aspect: 'square' },
+  },
+  video: {
+    classic: { variant: 'contained', aspect: 'landscape' },
+    full: { variant: 'full', aspect: 'landscape' },
+    reel: { variant: 'contained', aspect: 'portrait' },
+  },
+  text: {
+    plain: { variant: 'plain', align: 'start' },
+    centered: { variant: 'plain', align: 'center', look: { titleAlign: 'center' } },
+    card: { variant: 'card', align: 'start' },
+    highlight: { variant: 'highlight', align: 'center' },
+  },
+  features: {
+    row: { variant: 'row' },
+    grid: { variant: 'grid' },
+    cards: { variant: 'cards', look: { background: 'soft', titleAlign: 'center' } },
+  },
+  menu: {
+    list: { variant: 'list', showImages: true, showDescriptions: true },
+    grid: { variant: 'grid', showImages: true, showDescriptions: false },
+    compact: { variant: 'compact', showImages: false, showDescriptions: false },
+  },
+  info: { strip: { variant: 'strip' }, cards: { variant: 'cards' } },
+  catalog: {
+    grid: { variant: 'grid', columns: 4 },
+    roomy: { variant: 'grid', columns: 3 },
+    list: { variant: 'list' },
+  },
+  countdown: {
+    banner: { variant: 'banner' },
+    card: { variant: 'card' },
+    minimal: { variant: 'minimal' },
+  },
+  testimonials: {
+    cards: { variant: 'cards' },
+    swipe: { variant: 'carousel' },
+    quote: { variant: 'quote', look: { background: 'soft', titleAlign: 'center' } },
+  },
+  faq: {
+    accordion: { variant: 'accordion' },
+    columns: { variant: 'columns' },
+    centered: { variant: 'accordion', look: { background: 'soft', titleAlign: 'center' } },
+  },
+  gallery: {
+    grid: { variant: 'grid', columns: 3 },
+    mosaic: { variant: 'mosaic' },
+    swipe: { variant: 'carousel' },
+  },
+  logos: { row: { variant: 'row', grayscale: true }, grid: { variant: 'grid', grayscale: false } },
+  collage: { mosaic: { variant: 'mosaic' }, even: { variant: 'even' } },
+  cta: {
+    brand: { variant: 'brand', align: 'center' },
+    soft: { variant: 'soft', align: 'center' },
+    outline: { variant: 'outline', align: 'start' },
+    picture: { variant: 'image', align: 'center' },
+  },
+  spacer: {
+    small: { size: 'small', line: false },
+    line: { size: 'medium', line: true },
+    large: { size: 'large', line: false },
+  },
+} as const satisfies Record<SectionType, Record<string, StylePatch>>;
+
+/** The ready styles of a section type, in the order the console offers them. */
+export function sectionStyles(type: SectionType): string[] {
+  return Object.keys(SECTION_STYLES[type]);
+}
+
+function stylePatch(type: SectionType, style: string): StylePatch | null {
+  return (SECTION_STYLES[type] as Record<string, StylePatch>)[style] ?? null;
+}
+
+/** The section with a ready style applied; its content is kept. Unknown styles change nothing. */
+export function applySectionStyle(section: DesignSection, style: string): DesignSection {
+  const patch = stylePatch(section.type, style);
+  if (!patch) return section;
+  const { look, ...rest } = patch;
+  return sectionSchema.parse({
+    ...section,
+    ...rest,
+    look: { ...section.look, background: 'none', titleAlign: 'start', ...look },
+  });
+}
+
+/** The ready style a section matches now, if any. */
+export function currentSectionStyle(section: DesignSection): string | null {
+  const record = section as unknown as Record<string, unknown>;
+  for (const style of sectionStyles(section.type)) {
+    const { look, ...rest } = stylePatch(section.type, style)!;
+    const wanted = { background: 'none', titleAlign: 'start', ...look };
+    if (
+      Object.entries(rest).every(([k, v]) => record[k] === v) &&
+      section.look.background === wanted.background &&
+      section.look.titleAlign === wanted.titleAlign
+    )
+      return style;
+  }
+  return null;
+}
+
+/** Whole categories pages offered in the console (ADR-0128 amendment 6). */
+export const CATEGORY_LAYOUTS = ['tiles', 'circles', 'cards', 'list', 'showcase'] as const;
+export type CategoryLayout = (typeof CATEGORY_LAYOUTS)[number];
+
+export function categoryLayout(layout: CategoryLayout): DesignSection[] {
+  const r = (name: ReadySection, extra: Record<string, unknown> = {}) =>
+    sectionSchema.parse({ ...readyInput(name), ...extra, id: `cat-${layout}-${name}` });
+  const one = (sectionId: string, input: SectionDraft) =>
+    sectionSchema.parse({ ...input, id: `cat-${layout}-${sectionId}` });
+  const categories = (extra: Record<string, unknown>) =>
+    one('categories', { type: 'categories', title: l('Categories', 'التصنيفات'), ...extra });
+  switch (layout) {
+    case 'tiles':
+      return [categories({ variant: 'tiles', columns: 3 }), r('featured', { columns: 4 })];
+    case 'circles':
+      return [
+        categories({ variant: 'circles', topOnly: true }),
+        r('newArrivals'),
+        r('featured', { variant: 'grid', columns: 4 }),
+      ];
+    case 'cards':
+      return [
+        categories({
+          variant: 'cards',
+          columns: 4,
+          aspect: 'square',
+          showCount: true,
+          showSub: true,
+        }),
+        r('trustStrip', { look: { background: 'soft' } }),
+      ];
+    case 'list':
+      return [
+        categories({ variant: 'list', showCount: true, showSub: true, topOnly: true }),
+        r('contactCta'),
+      ];
+    case 'showcase':
+      return [
+        r('collage'),
+        categories({ variant: 'banners', showCount: true, topOnly: true }),
+        r('featured'),
       ];
   }
 }

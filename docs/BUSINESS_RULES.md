@@ -117,6 +117,11 @@ engineering defaults pending owner confirmation.
   (the main register's first), and cannot sell while none is open. A device shift is never refused because
   the person left a shift open elsewhere; that shift is listed for the managers to close. Records
   that reach the server after the branch shift closed are booked to it and flagged "late".
+- **BR-239** Ready section styles and the categories page (ADR-0128 amendment 6, owner
+  2026-10-21): a ready style changes only how a section looks, never its words, pictures,
+  items, links or chosen products and categories. A ready categories page replaces the page's
+  sections only after the merchant confirms, and always keeps a categories section. A category's
+  product count includes its subcategories' products and only products shown on the website.
 - **BR-238** Cart and checkout design (ADR-0128 amendment 5, owner 2026-10-21): the cart and
   the checkout follow the store design (arrangement, pictures, notes, button words, highlights,
   suggestions, the empty cart, steps, choice style, terms). The design never changes a price, a

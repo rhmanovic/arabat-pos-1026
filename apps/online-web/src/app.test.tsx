@@ -1799,6 +1799,67 @@ describe('online store console', () => {
       });
     });
 
+    describe('ready styles and the categories page (ADR-0128 amendment 6)', () => {
+      it('restyles a home section in one tap and keeps its content', async () => {
+        const user = userEvent.setup();
+        const fetch = fakeApiFetch({ session: session(), routes: designRoutes() });
+        renderApp({ routes, appInterface: 'manager', i18n, path: '/design', fetch });
+        await user.click(await screen.findByRole('button', { name: 'Edit Banner' }));
+        const styles = screen.getByRole('radiogroup', { name: 'Ready styles' });
+        await user.click(within(styles).getByRole('radio', { name: 'Big hero' }));
+        expect(within(styles).getByRole('radio', { name: /Big hero/ })).toBeChecked();
+        await user.click(screen.getByRole('button', { name: 'Save draft' }));
+        await waitFor(() => expect(fetch.calls.some((c) => c.method === 'PUT')).toBe(true));
+        const home = (
+          fetch.calls.find((c) => c.method === 'PUT')!.body as {
+            design: { pages: { home: Record<string, unknown>[] } };
+          }
+        ).design.pages.home;
+        expect(home[0]).toMatchObject({
+          type: 'banner',
+          imageSource: 'store',
+          variant: 'overlay',
+          height: 'large',
+          align: 'center',
+        });
+      });
+
+      it('applies a ready categories page, follows its recommendations and sets the categories section', async () => {
+        const user = userEvent.setup();
+        const fetch = fakeApiFetch({ session: session(), routes: designRoutes() });
+        renderApp({ routes, appInterface: 'manager', i18n, path: '/design', fetch });
+        await user.click(await screen.findByRole('radio', { name: 'Categories' }));
+        await user.click(screen.getByText('Ready categories pages'));
+        await user.click(screen.getByRole('button', { name: 'Use the Cards with counts layout' }));
+        await user.click(screen.getByRole('button', { name: 'Yes, replace the categories page' }));
+        expect(screen.getByRole('button', { name: 'Edit Categories' })).toBeInTheDocument();
+        // Counts and nesting are done by the layout; products under the categories are not.
+        const tips = screen.getByTestId('page-score');
+        const before = tips.textContent;
+        await user.click(screen.getByRole('button', { name: 'Edit Categories' }));
+        await user.click(screen.getByRole('radio', { name: 'Tall' }));
+        await user.click(screen.getByRole('checkbox', { name: 'Main categories only' }));
+        await user.click(screen.getByRole('button', { name: /Back to sections/ }));
+        expect(screen.getByTestId('page-score').textContent).toBe(before);
+        expect(document.body.textContent).not.toMatch(/design\.(style|pageTip|categoryLayout)_/);
+        await user.click(screen.getByRole('button', { name: 'Save draft' }));
+        await waitFor(() => expect(fetch.calls.some((c) => c.method === 'PUT')).toBe(true));
+        const categories = (
+          fetch.calls.find((c) => c.method === 'PUT')!.body as {
+            design: { pages: { categories: Record<string, unknown>[] } };
+          }
+        ).design.pages.categories;
+        expect(categories.map((x) => x['type'])).toEqual(['categories', 'features']);
+        expect(categories[0]).toMatchObject({
+          variant: 'cards',
+          aspect: 'portrait',
+          showCount: true,
+          showSub: true,
+          topOnly: true,
+        });
+      });
+    });
+
     describe('cart and checkout pages (ADR-0128 amendment 5)', () => {
       it('designs the cart and the checkout: presets, recommendations, settings and cart sections', async () => {
         const user = userEvent.setup();

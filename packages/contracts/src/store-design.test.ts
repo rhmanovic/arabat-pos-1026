@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   CART_PRESETS,
+  CATEGORY_LAYOUTS,
+  SECTION_TYPES,
+  applySectionStyle,
+  categoryLayout,
+  currentSectionStyle,
+  newSection,
+  sectionStyles,
   HOME_LAYOUTS,
   PRODUCT_PAGE_PRESETS,
   READY_SECTIONS,
@@ -180,5 +187,52 @@ describe('cart and checkout pages (ADR-0128 amendment 5)', () => {
         },
       }),
     ).toBe(true);
+  });
+});
+
+describe('section styles and the categories page (ADR-0128 amendment 6)', () => {
+  it('offers ready styles for every section type, each valid and recognised once applied', () => {
+    for (const type of SECTION_TYPES) {
+      const styles = sectionStyles(type);
+      expect(styles.length).toBeGreaterThanOrEqual(2);
+      for (const style of styles) {
+        const styled = applySectionStyle(newSection(type, `s-${type}`), style);
+        expect(sectionSchema.parse(styled)).toEqual(styled);
+        expect(currentSectionStyle(styled)).toBe(style);
+      }
+    }
+  });
+
+  it('keeps the content and resets the frame a previous style set', () => {
+    const faq = {
+      ...newSection('faq', 'f'),
+      title: { en: 'Questions', ar: null },
+      items: [{ id: 'q', question: { en: 'Q?', ar: null }, answer: { en: 'A.', ar: null } }],
+    };
+    const centred = applySectionStyle(faq as never, 'centered');
+    expect(centred).toMatchObject({ title: { en: 'Questions' }, items: [{ id: 'q' }] });
+    expect(centred.look).toMatchObject({ background: 'soft', titleAlign: 'center' });
+    const plain = applySectionStyle(centred, 'columns');
+    expect(plain.look).toMatchObject({ background: 'none', titleAlign: 'start' });
+    expect(applySectionStyle(plain, 'no-such-style')).toBe(plain);
+  });
+
+  it('gives old categories sections the same look and offers whole categories pages', () => {
+    const old = sectionSchema.parse({ id: 'c', type: 'categories', variant: 'tiles' });
+    expect(old).toMatchObject({
+      aspect: 'landscape',
+      mobileColumns: 2,
+      showCount: false,
+      topOnly: false,
+      showSub: false,
+    });
+    const base = legacyDesign();
+    for (const layout of CATEGORY_LAYOUTS) {
+      const categories = categoryLayout(layout);
+      expect(categories.some((x) => x.type === 'categories')).toBe(true);
+      expect(
+        storeDesignSchema.safeParse({ ...base, pages: { ...base.pages, categories } }).success,
+      ).toBe(true);
+    }
   });
 });

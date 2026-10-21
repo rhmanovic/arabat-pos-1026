@@ -5,9 +5,12 @@ import {
   type SectionOf,
   type SectionType,
   SECTION_TYPES,
+  applySectionStyle,
+  currentSectionStyle,
+  sectionStyles,
   videoEmbed,
 } from '@arabat/contracts';
-import { Button, Field, Input, Select } from '@arabat/ui';
+import { Button, Field, Input, Select, cn } from '@arabat/ui';
 import { localizedName } from '@arabat/web-core';
 import { type ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -108,6 +111,9 @@ export function SectionEditor({
   const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-3">
+      <Panel icon="🪄" title={t('design.sectionStyles')} hint={t('design.sectionStylesHint')}>
+        <StylePicker section={section} onChange={onChange} />
+      </Panel>
       <Panel
         icon="✏️"
         title={t('design.sectionContent')}
@@ -125,6 +131,44 @@ export function SectionEditor({
       >
         <VisibilityEditor section={section} onChange={onChange} />
       </Panel>
+    </div>
+  );
+}
+
+/** Ready styles of the section's type (ADR-0128 amendment 6): its content stays as it is. */
+function StylePicker({
+  section,
+  onChange,
+}: {
+  section: DesignSection;
+  onChange: (next: DesignSection) => void;
+}) {
+  const { t } = useTranslation();
+  const current = currentSectionStyle(section);
+  return (
+    <div
+      role="radiogroup"
+      aria-label={t('design.sectionStyles')}
+      className="grid grid-cols-2 gap-2 sm:grid-cols-3"
+    >
+      {sectionStyles(section.type).map((style) => (
+        <button
+          key={style}
+          type="button"
+          role="radio"
+          aria-checked={current === style}
+          onClick={() => onChange(applySectionStyle(section, style))}
+          className={cn(
+            'flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-start text-sm font-semibold transition-colors',
+            current === style
+              ? 'border-primary bg-primary-soft text-primary ring-2 ring-primary/30'
+              : 'border-border bg-surface hover:border-border-strong',
+          )}
+        >
+          {t(`design.style_${style}`)}
+          {current === style ? <span aria-hidden>✓</span> : null}
+        </button>
+      ))}
     </div>
   );
 }
@@ -1186,7 +1230,7 @@ function CategoriesEditor({
       <Choice
         label={t('design.shape')}
         value={s.variant}
-        options={useVariants(['tiles', 'circles', 'chips', 'list'] as const)}
+        options={useVariants(['tiles', 'cards', 'circles', 'banners', 'chips', 'list'] as const)}
         onChange={(v) => set({ variant: v })}
       />
       <MultiPick
@@ -1195,12 +1239,48 @@ function CategoriesEditor({
         value={s.categoryIds}
         onChange={(v) => set({ categoryIds: v })}
       />
-      {s.variant === 'tiles' ? (
-        <Choice
-          label={t('design.columns')}
-          value={s.columns}
-          options={[2, 3, 4, 5, 6].map((n) => ({ value: n, label: String(n) }))}
-          onChange={(columns) => set({ columns })}
+      {s.variant === 'tiles' || s.variant === 'cards' ? (
+        <>
+          <Choice
+            label={t('design.columns')}
+            value={s.columns}
+            options={[2, 3, 4, 5, 6].map((n) => ({ value: n, label: String(n) }))}
+            onChange={(columns) => set({ columns })}
+          />
+          <Choice
+            label={t('design.mobileColumns')}
+            value={s.mobileColumns}
+            options={([1, 2, 3] as const).map((n) => ({ value: n, label: String(n) }))}
+            onChange={(mobileColumns) => set({ mobileColumns })}
+          />
+          <Choice
+            label={t('design.pictureShape')}
+            value={s.aspect}
+            options={(['landscape', 'square', 'portrait'] as const).map((v) => ({
+              value: v,
+              label: t(`design.pictureShape_${v}`),
+            }))}
+            onChange={(aspect) => set({ aspect })}
+          />
+        </>
+      ) : null}
+      <Toggle
+        label={t('design.showCount')}
+        checked={s.showCount}
+        onChange={(showCount) => set({ showCount })}
+      />
+      {s.categoryIds.length === 0 ? (
+        <Toggle
+          label={t('design.topOnly')}
+          checked={s.topOnly}
+          onChange={(topOnly) => set({ topOnly })}
+        />
+      ) : null}
+      {s.variant === 'tiles' || s.variant === 'cards' || s.variant === 'list' ? (
+        <Toggle
+          label={t('design.showSub')}
+          checked={s.showSub}
+          onChange={(showSub) => set({ showSub })}
         />
       ) : null}
       <Toggle
