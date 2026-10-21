@@ -1279,6 +1279,8 @@ Owner's request: make Business management suit Gen Z and fit phones. Frontend on
   (Reports' cards fixed by the grid rule); desktop checked in light and dark.
 - Tests: manager-web +2 (theme switch remembered under `arabat.theme`; phone tab bar shows only
   permitted pages and "More" opens the menu); online-web theme test follows the shared key.
+- Verified (cloud sandbox): `pnpm verify` 385 unit/web, `pnpm test:integration` 311 (44 files),
+  `pnpm test:e2e` 45.
 
 ### 2026-10-21 — Store console on the phone: rows, dialogs and sideways overflow
 Owner's report with phone screenshots: in the store console's products, categories and lists

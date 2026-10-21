@@ -66,6 +66,16 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-21 (Business management in the young look, ADR-0131)
+- `apps/manager-web/src/app.test.tsx` (+2): the theme switch sets `<html data-theme>` and
+  remembers the choice under `arabat.theme` ("Auto" clears it); on a phone (matchMedia) the
+  tab bar lists only the permitted pages (Home, Sales, Products for that user) and "More" opens
+  the menu.
+- `apps/online-web/src/app.test.tsx`: the theme test follows the shared key.
+- Phone check (script, not a suite): all 33 management pages at 390 px in light and dark, no
+  page wider than the screen.
+- Totals: `pnpm verify` 385 unit/web, `pnpm test:integration` 311 (44 files), `pnpm test:e2e` 45.
+
 ### Results 2026-10-21 (categories and special lists simplified, ADR-0130 amendment 1)
 - `apps/online-web/src/app.test.tsx` (+1, 35): categories and special lists are two tabs of one
   page with one navigation entry; the product dialog shows the category before "Also show it in:".
