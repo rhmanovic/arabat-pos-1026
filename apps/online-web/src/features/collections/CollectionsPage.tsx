@@ -85,6 +85,16 @@ export function CollectionList() {
                   next.splice(index + by, 0, c.id);
                   order.mutate(next);
                 }}
+                actions={
+                  <>
+                    <Button size="sm" variant="secondary" onClick={() => setEditing(c)}>
+                      {t('products.edit')}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setDeleting(c)}>
+                      {t('categories.delete')}
+                    </Button>
+                  </>
+                }
               >
                 <span className="size-12 shrink-0 overflow-hidden rounded-md bg-surface-muted">
                   {c.imageUrl ? (
@@ -93,19 +103,15 @@ export function CollectionList() {
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex flex-wrap items-center gap-2">
-                    <span className="truncate font-medium">{localizedName(c, i18n.language)}</span>
+                    <span className="line-clamp-2 font-medium break-words">
+                      {localizedName(c, i18n.language)}
+                    </span>
                     {c.status === 'hidden' ? <Badge>{t('collections.status_hidden')}</Badge> : null}
                   </span>
                   <span className="block text-xs text-fg-muted">
                     {t('categories.productCount', { count: c.productIds.length })}
                   </span>
                 </span>
-                <Button size="sm" variant="secondary" onClick={() => setEditing(c)}>
-                  {t('products.edit')}
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setDeleting(c)}>
-                  {t('categories.delete')}
-                </Button>
               </SortableRow>
             ))}
           </SortableList>

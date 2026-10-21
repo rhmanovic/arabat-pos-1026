@@ -273,6 +273,22 @@ function Listings() {
                     next.splice(index + by, 0, p.productId);
                     order.mutate(next);
                   }}
+                  actions={
+                    <>
+                      <Checkbox
+                        className="shrink-0"
+                        label={t('products.onWebsite')}
+                        checked={p.visible}
+                        disabled={
+                          visibility.isPending && visibility.variables?.productId === p.productId
+                        }
+                        onChange={() => visibility.mutate(p)}
+                      />
+                      <Button size="sm" variant="secondary" onClick={() => setEditing(p)}>
+                        {t('products.edit')}
+                      </Button>
+                    </>
+                  }
                 >
                   <input
                     type="checkbox"
@@ -288,7 +304,7 @@ function Listings() {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-center gap-2">
-                      <span className="truncate font-medium">{displayName(p)}</span>
+                      <span className="line-clamp-2 font-medium break-words">{displayName(p)}</span>
                       {p.featured ? <Badge tone="primary">{t('products.featured')}</Badge> : null}
                       {!p.visible ? <Badge>{t('products.hiddenOnWebsite')}</Badge> : null}
                       {!p.posVisible ? (
@@ -308,18 +324,6 @@ function Listings() {
                         .join(' · ')}
                     </span>
                   </span>
-                  <Checkbox
-                    className="shrink-0"
-                    label={t('products.onWebsite')}
-                    checked={p.visible}
-                    disabled={
-                      visibility.isPending && visibility.variables?.productId === p.productId
-                    }
-                    onChange={() => visibility.mutate(p)}
-                  />
-                  <Button size="sm" variant="secondary" onClick={() => setEditing(p)}>
-                    {t('products.edit')}
-                  </Button>
                 </SortableRow>
               );
             })}

@@ -207,6 +207,20 @@ function CategoryList() {
                   next.splice(index + by, 0, c.id);
                   order.mutate(next);
                 }}
+                actions={
+                  <>
+                    <Checkbox
+                      className="shrink-0"
+                      label={t('categories.shownInStore')}
+                      checked={c.visible}
+                      disabled={toggle.isPending}
+                      onChange={() => toggle.mutate(c)}
+                    />
+                    <Button size="sm" variant="secondary" onClick={() => setEditing(c)}>
+                      {t('products.edit')}
+                    </Button>
+                  </>
+                }
               >
                 <span className="size-12 shrink-0 overflow-hidden rounded-md bg-surface-muted">
                   {c.imageUrl ? (
@@ -215,7 +229,7 @@ function CategoryList() {
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex flex-wrap items-center gap-2">
-                    <span className="truncate font-medium">
+                    <span className="line-clamp-2 font-medium break-words">
                       {storeCategoryName(c, i18n.language)}
                     </span>
                     {!c.visible ? <Badge>{t('categories.hiddenInStore')}</Badge> : null}
@@ -231,16 +245,6 @@ function CategoryList() {
                       .join(' · ')}
                   </span>
                 </span>
-                <Checkbox
-                  className="shrink-0"
-                  label={t('categories.shownInStore')}
-                  checked={c.visible}
-                  disabled={toggle.isPending}
-                  onChange={() => toggle.mutate(c)}
-                />
-                <Button size="sm" variant="secondary" onClick={() => setEditing(c)}>
-                  {t('products.edit')}
-                </Button>
               </SortableRow>
             ))}
           </SortableList>

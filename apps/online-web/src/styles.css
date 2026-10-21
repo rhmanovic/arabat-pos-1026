@@ -154,3 +154,12 @@
     transform: none;
   }
 }
+
+/*
+ * The console is used from phones: nothing may widen the page sideways (the closed side menu
+ * waits just off screen), or the whole page and its dialogs shift and get cut off.
+ */
+html,
+body {
+  overflow-x: clip;
+}

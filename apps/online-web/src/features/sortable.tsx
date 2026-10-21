@@ -59,7 +59,10 @@ export function SortableList({
   );
 }
 
-/** One row of a `SortableList`: a drag handle, up / down buttons for screen readers, content. */
+/**
+ * One row of a `SortableList`: a drag handle, the content, its `actions` and up / down buttons.
+ * On a phone the actions move to a second line so the name keeps the width of the row.
+ */
 export function SortableRow({
   id,
   label,
@@ -67,6 +70,7 @@ export function SortableRow({
   last,
   onMove,
   children,
+  actions,
 }: {
   id: string;
   label: string;
@@ -74,6 +78,7 @@ export function SortableRow({
   last: boolean;
   onMove: (by: -1 | 1) => void;
   children: ReactNode;
+  actions?: ReactNode;
 }) {
   const { t } = useTranslation();
   const {
@@ -90,7 +95,7 @@ export function SortableRow({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       data-dragging={isDragging || undefined}
-      className={`flex items-center gap-3 rounded-lg border border-border bg-surface p-2 ${
+      className={`flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border bg-surface p-2 ${
         isDragging ? 'z-20 shadow-lg ring-2 ring-primary' : ''
       }`}
     >
@@ -111,8 +116,13 @@ export function SortableRow({
           ))}
         </svg>
       </button>
-      {children}
-      <span className="flex shrink-0 flex-col">
+      <div className="order-1 flex min-w-0 flex-1 basis-40 items-center gap-3">{children}</div>
+      {actions ? (
+        <div className="order-3 flex w-full flex-wrap items-center justify-end gap-2 border-t border-border pt-2 sm:w-auto sm:border-0 sm:pt-0">
+          {actions}
+        </div>
+      ) : null}
+      <span className="order-2 flex shrink-0 flex-col sm:order-4">
         <button
           type="button"
           className="text-xs text-fg-muted hover:text-fg disabled:opacity-30"

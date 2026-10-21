@@ -1265,6 +1265,22 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-21 — Store console on the phone: rows, dialogs and sideways overflow
+Owner's report with phone screenshots: in the store console's products, categories and lists
+pages the rows overflowed the screen (names squeezed to nothing, buttons and arrows pushed out),
+which widened the whole page so dialogs were cut off. Frontend only.
+- `SortableRow` takes its buttons in an `actions` slot: on a phone they go to a second line under
+  the name, the ▲ / ▼ stay beside the name; on wider screens the row is unchanged. Used by the
+  products, categories, special lists, delivery areas and branches pages; names wrap to two
+  lines instead of being cut.
+- The console clips sideways overflow (`html, body { overflow-x: clip }`): the closed side menu
+  waits just off screen and left a 1 px sideways scroll.
+- Checked at 390 px on every console page and dialog (dashboard, orders, products, categories,
+  lists, delivery areas, branches, promotions, analytics, design, settings; product edit / add,
+  category, list and promotion dialogs): no page is wider than the screen.
+- e2e: the one-catalog test now also checks, at 390 px, that the products, categories and lists
+  pages do not scroll sideways and the product dialog fits the screen.
+
 ### 2026-10-21 — Categories and special lists made simple (ADR-0130 amendment 1)
 Owner: shoppers do not understand "collections"; simplify and explain. Frontend only (no
 migration, no API change).

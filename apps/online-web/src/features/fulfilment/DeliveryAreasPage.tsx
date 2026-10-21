@@ -102,10 +102,22 @@ function AreaList() {
                   next.splice(index + by, 0, a.id);
                   order.mutate(next);
                 }}
+                actions={
+                  <>
+                    <Button size="sm" variant="secondary" onClick={() => setEditing(a)}>
+                      {t('products.edit')}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setDeleting(a)}>
+                      {t('categories.delete')}
+                    </Button>
+                  </>
+                }
               >
                 <span className="min-w-0 flex-1">
                   <span className="flex flex-wrap items-center gap-2">
-                    <span className="truncate font-medium">{localizedName(a, i18n.language)}</span>
+                    <span className="line-clamp-2 font-medium break-words">
+                      {localizedName(a, i18n.language)}
+                    </span>
                     {!a.active ? <Badge>{t('areas.inactive')}</Badge> : null}
                   </span>
                   <span className="block text-xs text-fg-muted">
@@ -126,12 +138,6 @@ function AreaList() {
                       .join(' · ')}
                   </span>
                 </span>
-                <Button size="sm" variant="secondary" onClick={() => setEditing(a)}>
-                  {t('products.edit')}
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setDeleting(a)}>
-                  {t('categories.delete')}
-                </Button>
               </SortableRow>
             ))}
           </SortableList>

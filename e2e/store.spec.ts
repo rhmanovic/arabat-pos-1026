@@ -697,4 +697,22 @@ test('a product added in the store console is at the point of sale too; each sid
       .filter({ hasText: 'Cheese croissant' })
       .getByText('Hidden at the point of sale'),
   ).toBeVisible();
+
+  // On a phone nothing widens the page: names keep their line and the row buttons wrap below.
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const path of ['/online/products', '/online/categories', '/online/categories?tab=lists']) {
+    await page.goto(path);
+    await page.waitForLoadState('networkidle');
+    const width = await page.evaluate(() => [
+      document.documentElement.scrollWidth,
+      document.documentElement.clientWidth,
+    ]);
+    expect(width[0], path).toBeLessThanOrEqual(width[1]);
+  }
+  await page.goto('/online/products');
+  await expect(page.getByText('Cheese croissant', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Edit' }).first().click();
+  const box = await page.getByRole('dialog').boundingBox();
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(390);
 });

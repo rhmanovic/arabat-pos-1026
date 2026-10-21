@@ -91,29 +91,35 @@ function BranchList() {
                   next.splice(index + by, 0, b.branchId);
                   order.mutate(next);
                 }}
+                actions={
+                  <>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setEditing({ branchId: b.branchId, current: b })}
+                    >
+                      {t('products.edit')}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      loading={remove.isPending && remove.variables === b.branchId}
+                      onClick={() => remove.mutate(b.branchId)}
+                    >
+                      {t('storeBranches.remove')}
+                    </Button>
+                  </>
+                }
               >
                 <span className="min-w-0 flex-1">
                   <span className="flex flex-wrap items-center gap-2">
-                    <span className="truncate font-medium">{localizedName(b, i18n.language)}</span>
+                    <span className="line-clamp-2 font-medium break-words">
+                      {localizedName(b, i18n.language)}
+                    </span>
                     {!b.active ? <Badge>{t('areas.inactive')}</Badge> : null}
                   </span>
                   <span className="block text-xs text-fg-muted">{summary(b)}</span>
                 </span>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => setEditing({ branchId: b.branchId, current: b })}
-                >
-                  {t('products.edit')}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  loading={remove.isPending && remove.variables === b.branchId}
-                  onClick={() => remove.mutate(b.branchId)}
-                >
-                  {t('storeBranches.remove')}
-                </Button>
               </SortableRow>
             ))}
           </SortableList>
