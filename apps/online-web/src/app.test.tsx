@@ -1736,9 +1736,11 @@ describe('online store console', () => {
           ),
         );
         await user.selectOptions(await screen.findByLabelText('Preview with'), MUG);
-        expect(posted).toHaveBeenLastCalledWith(
-          { type: 'arabat:navigate', page: 'product', productId: MUG },
-          window.location.origin,
+        await waitFor(() =>
+          expect(posted).toHaveBeenCalledWith(
+            { type: 'arabat:navigate', page: 'product', productId: MUG },
+            window.location.origin,
+          ),
         );
         // Recommendations: the mug lacks a picture and words; no WhatsApp number yet.
         expect(screen.getByTestId('product-page-score')).toHaveTextContent('3 of 7 done');
@@ -1889,9 +1891,12 @@ describe('online store console', () => {
         await user.click(await screen.findByRole('button', { name: /Back to sections/ }));
         // The checkout: settings only, no sections.
         await user.click(screen.getByRole('radio', { name: 'Checkout' }));
-        expect(posted).toHaveBeenLastCalledWith(
-          expect.objectContaining({ type: 'arabat:navigate', page: 'checkout' }),
-          window.location.origin,
+        // The draft follows the preview a moment later, so the order of the two may vary.
+        await waitFor(() =>
+          expect(posted).toHaveBeenCalledWith(
+            expect.objectContaining({ type: 'arabat:navigate', page: 'checkout' }),
+            window.location.origin,
+          ),
         );
         expect(screen.queryByRole('button', { name: 'Add section' })).toBeNull();
         expect(screen.getByTestId('checkout-page-score')).toHaveTextContent('3 of 4 done');

@@ -6,10 +6,11 @@ import {
   type StoreDesignState,
   storeDesignSchema,
 } from '@arabat/contracts';
-import { Alert, Badge, Button, PageHeader, Segmented, cn } from '@arabat/ui';
+import { Alert, Badge, Button, Icon, PageHeader, Segmented, cn } from '@arabat/ui';
 import { AccessDenied, ErrorState, useApi, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type Ref, useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { useSession } from '../../app/context.js';
@@ -244,66 +245,86 @@ function Editor({
       : { tone: 'success' as const, label: t('design.status_live') };
 
   return (
-    <div className="flex flex-col gap-4">
-      <PageHeader
-        title={t('nav.design')}
-        description={t('design.hint')}
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={status.tone} data-testid="design-status">
-              {status.label}
-            </Badge>
-            <a href={storeUrl} target="_blank" rel="noreferrer">
-              <Button variant="ghost" size="sm">
-                {t('design.viewStore')}
-              </Button>
-            </a>
-            {state.version > 0 && (state.dirty || changed) ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={busy}
-                loading={discard.isPending}
-                onClick={() => (changed && !state.dirty ? setDraft(state.draft) : discard.mutate())}
-              >
-                {t('design.discard')}
-              </Button>
-            ) : null}
+    <div className="flex flex-col gap-4 pb-24 lg:pb-16">
+      <PageHeader title={t('nav.design')} description={t('design.hint')} />
+      {/*
+        Floats over the whole window so saving and publishing never scroll away (under the
+        editor column on large screens, clear of the preview's device switch). Rendered in the
+        body: the page's entrance animation would otherwise pin it inside the page.
+      */}
+      {createPortal(
+        <div
+          role="toolbar"
+          aria-label={t('design.actions')}
+          data-testid="design-actions"
+          className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-30 mx-auto flex w-fit max-w-[calc(100%-1.5rem)] flex-wrap items-center justify-center gap-2 rounded-2xl border border-border bg-surface/90 p-2 shadow-xl backdrop-blur-md lg:inset-x-auto lg:start-[19rem] lg:bottom-6 lg:mx-0"
+        >
+          <Segmented
+            label={t('design.view')}
+            className="lg:hidden"
+            value={mobileView}
+            options={[
+              { value: 'edit', label: t('design.edit') },
+              { value: 'preview', label: t('design.preview') },
+            ]}
+            onChange={setMobileView}
+          />
+          <Badge tone={status.tone} data-testid="design-status" title={status.label}>
+            <span aria-hidden className="size-2 rounded-full bg-current sm:hidden" />
+            <span className="max-sm:sr-only">{status.label}</span>
+          </Badge>
+          <a
+            href={storeUrl}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={t('design.viewStore')}
+            title={t('design.viewStore')}
+            className="inline-flex h-9 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium hover:bg-surface-muted"
+          >
+            <Icon name="external" className="size-4" />
+            <span className="max-sm:hidden">{t('design.viewStore')}</span>
+          </a>
+          {state.version > 0 && (state.dirty || changed) ? (
             <Button
-              variant="secondary"
+              variant="ghost"
               size="sm"
-              disabled={!changed || busy || !valid.success}
-              loading={save.isPending}
-              onClick={() => save.mutate()}
+              aria-label={t('design.discard')}
+              title={t('design.discard')}
+              disabled={busy}
+              loading={discard.isPending}
+              onClick={() => (changed && !state.dirty ? setDraft(state.draft) : discard.mutate())}
             >
-              {t('design.save')}
+              <span aria-hidden className="sm:hidden">
+                ↺
+              </span>
+              <span className="max-sm:hidden">{t('design.discard')}</span>
             </Button>
-            <Button
-              size="sm"
-              disabled={(!changed && !state.dirty) || busy || !valid.success}
-              loading={publish.isPending}
-              onClick={() => publish.mutate()}
-            >
-              {t('design.publish')}
-            </Button>
-          </div>
-        }
-      />
+          ) : null}
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!changed || busy || !valid.success}
+            loading={save.isPending}
+            onClick={() => save.mutate()}
+          >
+            {t('design.save')}
+          </Button>
+          <Button
+            size="sm"
+            disabled={(!changed && !state.dirty) || busy || !valid.success}
+            loading={publish.isPending}
+            onClick={() => publish.mutate()}
+          >
+            {t('design.publish')}
+          </Button>
+        </div>,
+        document.body,
+      )}
       {!valid.success ? (
         <Alert tone="danger" title={t('design.invalid')}>
           {valid.error.issues.map((i) => i.message).join(' ')}
         </Alert>
       ) : null}
-      <Segmented
-        label={t('design.view')}
-        className="self-start lg:hidden"
-        value={mobileView}
-        options={[
-          { value: 'edit', label: t('design.edit') },
-          { value: 'preview', label: t('design.preview') },
-        ]}
-        onChange={setMobileView}
-      />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,26rem)_1fr]">
         <div
           className={cn('flex min-w-0 flex-col gap-4', mobileView === 'preview' && 'max-lg:hidden')}
@@ -352,20 +373,20 @@ function Editor({
         <div
           className={cn('flex min-w-0 flex-col gap-2', mobileView === 'edit' && 'max-lg:hidden')}
         >
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-semibold">{t('design.livePreview')}</p>
-            <Segmented
-              label={t('design.device')}
-              value={device}
-              options={[
-                { value: 'desktop', label: t('design.desktop') },
-                { value: 'phone', label: t('design.phone') },
-              ]}
-              onChange={setDevice}
-            />
-          </div>
+          <p className="text-sm font-semibold">{t('design.livePreview')}</p>
           {ready ? (
-            <div className="rounded-xl border border-border bg-surface-muted p-2 lg:sticky lg:top-20">
+            <div className="sticky top-20 rounded-xl border border-border bg-surface-muted p-2">
+              {/* The device switch floats inside the preview, so it stays at hand. */}
+              <Segmented
+                label={t('design.device')}
+                className="absolute inset-x-0 bottom-4 z-10 mx-auto w-fit shadow-lg"
+                value={device}
+                options={[
+                  { value: 'desktop', label: t('design.desktop') },
+                  { value: 'phone', label: t('design.phone') },
+                ]}
+                onChange={setDevice}
+              />
               <PreviewFrame
                 ref={frame}
                 device={device}

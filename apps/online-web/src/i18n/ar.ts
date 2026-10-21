@@ -485,6 +485,7 @@ export const onlineAr: typeof onlineEn = {
     pageTipHint_length: '{{count}} أقسام ظاهرة؛ 12 أو أقل تبقيها خفيفة.',
     needStore: 'جهّز المتجر (العنوان والاسم) أولًا من',
     needBranch: 'اختر فرع التجهيز في إعدادات المتجر لتظهر المعاينة:',
+    actions: 'الحفظ والنشر',
     viewStore: 'عرض المتجر',
     discard: 'تجاهل التغييرات',
     save: 'حفظ المسودة',

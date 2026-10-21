@@ -1265,6 +1265,18 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-21 — Store design: publish bar and device switch always at hand
+Owner's report: on scrolling, the status, view-store, save and publish buttons and the
+desktop / phone switch went out of view. Frontend only.
+- The status, view store, discard, save draft and publish now float over the whole window
+  (rendered in the body, above the phone tab bar; under the editor column on large screens);
+  on phones the edit / preview switch rides in the same bar and long labels become icons.
+- The desktop / phone switch floats inside the preview box, which stays in view while scrolling.
+- Tests: two console assertions on preview messages now wait for the message instead of
+  expecting it last (the draft follows the preview a moment later, which made them flaky).
+- Verified (cloud sandbox): `pnpm verify` 406, `pnpm test:integration` 311, `pnpm test:e2e` 45;
+  checked at 1440 and 390 px (Arabic) while scrolled, nothing wider than the screen.
+
 ### 2026-10-21 — Ready section styles and the categories page (ADR-0128 amendment 6, BR-239)
 Owner's request: the same depth for the home page and all its sections, and for the categories
 page and all its sections. Contract and frontend only; no migration.

@@ -494,6 +494,7 @@ export const onlineEn = {
     pageTipHint_length: '{{count}} sections shown; 12 or fewer keeps it light.',
     needStore: 'Set up the store (address and name) first in',
     needBranch: 'Pick the fulfilment branch in the store settings to see the preview:',
+    actions: 'Save and publish',
     viewStore: 'View store',
     discard: 'Discard changes',
     save: 'Save draft',
