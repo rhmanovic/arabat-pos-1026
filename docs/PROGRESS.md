@@ -1277,6 +1277,11 @@ follow-up, BR-241).
   refused) and a web test (a list column's problem is named after the list).
 - Verified (cloud sandbox): `pnpm verify` 421 unit/web, `pnpm test:integration` 316 (45 files),
   `pnpm test:e2e` 46.
+- Released (ADR-0122): production `d3487bd71d6b` (revision `arabat-web-00068-kmx`, previous
+  `arabat-web-00067-h2r`; migration job `arabat-migrate-wlvp7`, no new migration). Cloud Build
+  check `fe4be801`: ready 200 with that version and database ok (4 ms); `live`, `/store/`,
+  `/manager/` and `/online/` 200. Signed out afterwards, `config.env` removed; no key, account
+  or secret deleted.
 
 ### 2026-10-22 — Excel upload: the file picker no longer freezes Firefox
 Owner's report: Firefox on Windows stopped responding when "Upload in one go" opened the file
