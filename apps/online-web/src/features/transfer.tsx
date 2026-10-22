@@ -10,7 +10,13 @@ import { key } from './shared.js';
 /*
  * Products and categories in Excel (ADR-0132): the template, every record in the same shape,
  * and an upload that is checked first and then written all at once (or not at all).
+ *
+ * The file picker lives outside the dialog and carries no `accept` filter: Firefox on Windows
+ * froze opening a picker filtered by the spreadsheet MIME type from inside the modal, so the
+ * picker opens first (like any plain upload) and the extension is checked here instead.
  */
+
+const isXlsx = (f: File) => f.name.toLowerCase().endsWith('.xlsx');
 
 const link =
   'inline-flex h-9 items-center gap-2 rounded-md border border-border bg-surface px-3 text-sm font-medium hover:border-primary hover:text-primary';
@@ -19,7 +25,28 @@ export function TransferBar({ kind }: { kind: TransferKind }) {
   const { t } = useTranslation();
   const api = useApi();
   const { can } = useSession();
+  const notify = useNotify();
+  const input = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [result, setResult] = useState<TransferResult | null>(null);
+  const check = useMutation({
+    mutationFn: (f: File) => api.online.transferImport(kind, f, false),
+    onSuccess: setResult,
+    onError: notify.fail,
+  });
+  const pick = () => input.current?.click();
+  const choose = (f: File | null | undefined) => {
+    if (!f) return;
+    if (!isXlsx(f)) {
+      notify.info(t('transfer.notXlsx'));
+      return;
+    }
+    setFile(f);
+    setResult(null);
+    setOpen(true);
+    check.mutate(f);
+  };
   return (
     <div
       className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-border bg-surface-muted/60 p-2"
@@ -40,30 +67,69 @@ export function TransferBar({ kind }: { kind: TransferKind }) {
         {t('transfer.export')}
       </a>
       {can('catalog.manage') ? (
-        <Button size="sm" onClick={() => setOpen(true)}>
-          <Icon name="upload" className="size-4" />
-          {t('transfer.upload')}
-        </Button>
+        <>
+          <Button size="sm" onClick={pick}>
+            <Icon name="upload" className="size-4" />
+            {t('transfer.upload')}
+          </Button>
+          <input
+            ref={input}
+            type="file"
+            className="sr-only"
+            tabIndex={-1}
+            aria-label={t('transfer.chooseFile')}
+            data-testid={`transfer-${kind}-file`}
+            onChange={(e) => {
+              choose(e.target.files?.[0]);
+              e.target.value = '';
+            }}
+          />
+        </>
       ) : null}
-      {open ? <UploadDialog kind={kind} onClose={() => setOpen(false)} /> : null}
+      {open ? (
+        <UploadDialog
+          kind={kind}
+          file={file}
+          checking={check.isPending}
+          result={result}
+          setResult={setResult}
+          onPick={pick}
+          onDrop={choose}
+          onClose={() => {
+            setOpen(false);
+            setFile(null);
+            setResult(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
 
-function UploadDialog({ kind, onClose }: { kind: TransferKind; onClose: () => void }) {
+function UploadDialog({
+  kind,
+  file,
+  checking,
+  result,
+  setResult,
+  onPick,
+  onDrop,
+  onClose,
+}: {
+  kind: TransferKind;
+  file: File | null;
+  checking: boolean;
+  result: TransferResult | null;
+  setResult: (r: TransferResult) => void;
+  onPick: () => void;
+  onDrop: (f: File | undefined) => void;
+  onClose: () => void;
+}) {
   const { t, i18n } = useTranslation();
   const api = useApi();
   const notify = useNotify();
   const queryClient = useQueryClient();
-  const input = useRef<HTMLInputElement>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const [result, setResult] = useState<TransferResult | null>(null);
   const [dragging, setDragging] = useState(false);
-  const check = useMutation({
-    mutationFn: (f: File) => api.online.transferImport(kind, f, false),
-    onSuccess: setResult,
-    onError: notify.fail,
-  });
   const apply = useMutation({
     mutationFn: () => api.online.transferImport(kind, file!, true),
     onSuccess: async (r) => {
@@ -75,12 +141,6 @@ function UploadDialog({ kind, onClose }: { kind: TransferKind; onClose: () => vo
     },
     onError: notify.fail,
   });
-  const choose = (f: File | null | undefined) => {
-    if (!f) return;
-    setFile(f);
-    setResult(null);
-    check.mutate(f);
-  };
   const ar = i18n.language.startsWith('ar');
   const column = (k: string) => {
     const c = TRANSFER_COLUMNS[kind].find((x) => x.key === k);
@@ -101,7 +161,7 @@ function UploadDialog({ kind, onClose }: { kind: TransferKind; onClose: () => vo
             {t('common.cancel')}
           </Button>
           <Button
-            disabled={!ready || check.isPending}
+            disabled={!ready || checking}
             loading={apply.isPending}
             onClick={() => apply.mutate()}
           >
@@ -124,28 +184,12 @@ function UploadDialog({ kind, onClose }: { kind: TransferKind; onClose: () => vo
           onDrop={(e) => {
             e.preventDefault();
             setDragging(false);
-            choose(e.dataTransfer.files[0]);
+            onDrop(e.dataTransfer.files[0]);
           }}
         >
           <Icon name="sheet" className="size-8 text-primary" />
           <p className="text-sm">{file ? file.name : t('transfer.drop')}</p>
-          <input
-            ref={input}
-            type="file"
-            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            className="sr-only"
-            aria-label={t('transfer.chooseFile')}
-            onChange={(e) => {
-              choose(e.target.files?.[0]);
-              e.target.value = '';
-            }}
-          />
-          <Button
-            variant="secondary"
-            size="sm"
-            loading={check.isPending}
-            onClick={() => input.current?.click()}
-          >
+          <Button variant="secondary" size="sm" loading={checking} onClick={onPick}>
             {file ? t('transfer.otherFile') : t('transfer.chooseFile')}
           </Button>
         </div>

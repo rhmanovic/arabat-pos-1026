@@ -66,6 +66,12 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-22 (Excel upload picker)
+- `apps/online-web/src/app.test.tsx`: the Excel picker carries no `accept` filter and sits in the
+  bar; a `.txt` file is refused with a message and no request; the dialog opens with the file.
+- `e2e/store.spec.ts` (+1, 46): "Upload in one go" raises the browser's file chooser with no
+  dialog open; a `.txt` file is refused; the template is checked in the dialog (nothing to change).
+
 ### Results 2026-10-22 (Excel: locked ID column, offers and special lists)
 - `catalog-transfer.int.test.ts` (+1, 5): the template sheet is protected (id column locked,
   name column open, headers locked); a product joins two special lists from one cell

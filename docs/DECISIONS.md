@@ -2219,6 +2219,12 @@ ADR; supersede it.
     separated by commas (Excel only reminds, it does not refuse; a real multi-choice drop-down
     needs macros, which Excel blocks); the upload sets exactly those lists (empty = none)
     through `saveListingInTx`, and an unknown name is reported with its text.
+  - **Follow-up (2026-10-22, owner):** Firefox on Windows froze ("Not responding") as soon as
+    the upload's file picker opened. The picker was opened from inside the modal dialog with an
+    `accept` filter naming the spreadsheet MIME type, unlike every upload that works (ChatGPT's
+    included). The picker now has no `accept` filter and lives in the Excel bar, outside the
+    dialog: "Upload in one go" opens it straight away, the dialog opens once a file is chosen,
+    and the extension (`.xlsx`) is checked in the page (the server checks the content anyway).
 
 ## ADR-0131 — Business management in the consoles' young look, phone-first
 - **Status:** Accepted (2026-10-21). Owner's request: "عدل واجهة إدارة نقطة المبيعات عشان تناسب جيل

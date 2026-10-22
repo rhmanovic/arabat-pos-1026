@@ -1538,6 +1538,7 @@ export const onlineAr: typeof onlineEn = {
     drop: 'اسحب ملف الإكسل وأفلته هنا (.xlsx)',
     chooseFile: 'اختر ملفًا',
     otherFile: 'اختر ملفًا آخر',
+    notXlsx: 'اختر ملف إكسل (.xlsx) مثل القالب أو ملف «تنزيل الكل».',
     count_created: 'جديد',
     count_updated: 'تعديل',
     count_unchanged: 'بلا تغيير',

@@ -751,3 +751,56 @@ test('a product added in the store console is at the point of sale too; each sid
   expect(box!.x).toBeGreaterThanOrEqual(0);
   expect(box!.x + box!.width).toBeLessThanOrEqual(390);
 });
+
+test('the Excel upload opens the plain file picker first, then checks and applies the file (ADR-0132)', async ({
+  page,
+}) => {
+  expect(
+    (
+      await page.request.post('/api/v1/auth/register', {
+        data: {
+          company: { nameEn: 'Sheet Co' },
+          owner: {
+            fullName: 'Sheet Owner',
+            email: uniqueEmail('sheet'),
+            password: 'Owner-Pass-2026',
+          },
+        },
+      })
+    ).status(),
+  ).toBe(201);
+  const template = await (
+    await page.request.get('/api/v1/manager/online/transfer/products/template')
+  ).body();
+  await page.goto('/online/products');
+  const bar = page.getByTestId('transfer-products');
+
+  // The button opens the browser's picker straight away, with no type filter and no dialog behind it.
+  const chooser = page.waitForEvent('filechooser');
+  await bar.getByRole('button', { name: 'Upload in one go' }).click();
+  const picker = await chooser;
+  expect(await picker.element().getAttribute('accept')).toBeNull();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  // Anything but an .xlsx file is turned away before it is sent.
+  await picker.setFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('x') });
+  await expect(page.getByTestId('toast')).toContainText('Choose an Excel file (.xlsx)');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  // The empty template is checked in the dialog: nothing to change.
+  const again = page.waitForEvent('filechooser');
+  await bar.getByRole('button', { name: 'Upload in one go' }).click();
+  await (
+    await again
+  ).setFiles({
+    name: 'products-template.xlsx',
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    buffer: template,
+  });
+  const dialog = page.getByRole('dialog', { name: 'Upload products from Excel' });
+  await expect(dialog.getByText('products-template.xlsx')).toBeVisible();
+  await expect(dialog.getByTestId('transfer-counts')).toBeVisible();
+  await expect(dialog.getByText('nothing to change')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeHidden();
+});

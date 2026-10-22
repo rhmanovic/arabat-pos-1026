@@ -1555,6 +1555,7 @@ export const onlineEn = {
     drop: 'Drop the Excel file here (.xlsx)',
     chooseFile: 'Choose a file',
     otherFile: 'Choose another file',
+    notXlsx: 'Choose an Excel file (.xlsx), such as the template or the downloaded list.',
     count_created: 'New',
     count_updated: 'Updated',
     count_unchanged: 'Unchanged',

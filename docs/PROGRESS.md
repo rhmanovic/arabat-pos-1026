@@ -1265,6 +1265,18 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-22 — Excel upload: the file picker no longer freezes Firefox
+Owner's report: Firefox on Windows stopped responding when "Upload in one go" opened the file
+picker. Cause: the picker opened from inside the modal dialog with an `accept` filter naming the
+spreadsheet MIME type. Fix (ADR-0132 follow-up): a plain picker without a type filter, outside the
+dialog; the button opens it at once, the dialog opens with the chosen file and checks it; a file
+that is not `.xlsx` is turned away with a message.
+- Tests: web tests (picker has no `accept`, a `.txt` file is refused before any request, the
+  dialog opens with the chosen file) and a new E2E (the button raises the browser's file chooser
+  with no dialog behind it; a `.txt` file is refused; the template is checked in the dialog).
+- Verified (cloud sandbox): `pnpm verify` 421 unit/web, `pnpm test:integration` 316 (45 files),
+  `pnpm test:e2e` 46.
+
 ### 2026-10-22 — Excel: locked ID column, offers and special lists
 Owner's request: lock the ID column, and add an "Offers & special lists" column with several
 choices per product.

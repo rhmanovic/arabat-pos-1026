@@ -829,10 +829,16 @@ describe('online store console', () => {
       'href',
       '/api/v1/manager/online/transfer/products/export',
     );
-    await user.click(within(bar).getByRole('button', { name: /Upload in one go/ }));
-    const dialog = await screen.findByRole('dialog', { name: 'Upload products from Excel' });
+    // The picker sits outside the dialog with no type filter (Firefox on Windows froze on one);
+    // the dialog opens once a file is chosen, and a file that is not .xlsx is turned away.
+    const picker = within(bar).getByLabelText('Choose a file');
+    expect(picker).not.toHaveAttribute('accept');
+    await user.upload(picker, new File(['x'], 'notes.txt'));
+    expect(await screen.findByText(/Choose an Excel file/)).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).toBeNull();
     const file = new File([new Uint8Array([0x50, 0x4b])], 'products.xlsx');
-    await user.upload(within(dialog).getByLabelText('Choose a file'), file);
+    await user.upload(picker, file);
+    const dialog = await screen.findByRole('dialog', { name: 'Upload products from Excel' });
     // The check shows what changes; nothing is applied yet.
     expect(await within(dialog).findByTestId('transfer-counts')).toHaveTextContent('1New');
     expect(within(dialog).getByText('Coffee')).toBeInTheDocument();
@@ -869,12 +875,11 @@ describe('online store console', () => {
       },
     });
     renderApp({ routes, appInterface: 'manager', i18n, path: '/products', fetch });
-    await user.click(await screen.findByRole('button', { name: /Upload in one go/ }));
-    const dialog = await screen.findByRole('dialog');
     await user.upload(
-      within(dialog).getByLabelText('Choose a file'),
+      within(await screen.findByTestId('transfer-products')).getByLabelText('Choose a file'),
       new File([new Uint8Array([1])], 'bad.xlsx'),
     );
+    const dialog = await screen.findByRole('dialog');
     expect(
       await within(dialog).findByText('Fix 2 problems in the file, then upload it again:'),
     ).toBeInTheDocument();
