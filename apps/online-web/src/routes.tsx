@@ -13,6 +13,7 @@ import { CollectionsPage } from './features/collections/CollectionsPage.js';
 import { DashboardPage } from './features/dashboard/DashboardPage.js';
 import { BranchesPage } from './features/fulfilment/BranchesPage.js';
 import { DeliveryAreasPage } from './features/fulfilment/DeliveryAreasPage.js';
+import { DiscountsPage } from './features/discounts/DiscountsPage.js';
 import { OrdersPage } from './features/orders/OrdersPage.js';
 import { ProductsPage } from './features/products/ProductsPage.js';
 import { PromotionsPage } from './features/promotions/PromotionsPage.js';
@@ -52,6 +53,7 @@ export const routes: RouteObject[] = [
       { path: 'delivery-areas', element: <DeliveryAreasPage /> },
       { path: 'branches', element: <BranchesPage /> },
       { path: 'promotions', element: <PromotionsPage /> },
+      { path: 'discounts', element: <DiscountsPage /> },
       { path: 'analytics', element: <AnalyticsPage /> },
       { path: 'design', element: <DesignPage /> },
       { path: 'settings', element: <SettingsPage /> },

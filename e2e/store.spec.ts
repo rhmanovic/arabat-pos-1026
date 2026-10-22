@@ -804,3 +804,71 @@ test('the Excel upload opens the plain file picker first, then checks and applie
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toBeHidden();
 });
+
+test('a product discount made in the console shows in the store with its badge and old price (ADR-0133)', async ({
+  page,
+}) => {
+  expect(
+    (
+      await page.request.post('/api/v1/auth/register', {
+        data: {
+          company: { nameEn: 'Rose Co' },
+          owner: {
+            fullName: 'Rose Owner',
+            email: uniqueEmail('discount'),
+            password: 'Owner-Pass-2026',
+          },
+        },
+      })
+    ).status(),
+  ).toBe(201);
+  const main = (
+    (await (await page.request.get('/api/v1/manager/branches')).json()).branches as {
+      id: string;
+    }[]
+  )[0]!.id;
+  await page.request.post('/api/v1/manager/products', {
+    data: { nameEn: 'Rose water', trackInventory: false, variants: [{ price: '2.000' }] },
+  });
+  const slug = `rose-${Date.now().toString(36)}`;
+  expect(
+    (
+      await page.request.put('/api/v1/manager/online/store', {
+        data: {
+          slug,
+          status: 'published',
+          nameEn: 'Rose',
+          primaryColor: '#be123c',
+          fulfillmentBranchId: main,
+          pickupEnabled: true,
+          deliveryEnabled: false,
+          deliveryFee: '0.000',
+          minimumOrder: '0.000',
+          reservationMinutes: 30,
+          payOnReceiptEnabled: true,
+          version: 0,
+        },
+      })
+    ).status(),
+  ).toBe(200);
+
+  await page.goto('/online/discounts');
+  await page.getByRole('button', { name: 'New discount' }).click();
+  const dialog = page.getByRole('dialog', { name: 'New discount' });
+  await dialog.getByLabel('Name (English)').fill('Spring sale');
+  await dialog.getByRole('button', { name: '25%' }).click();
+  await expect(dialog.getByTestId('discount-preview')).toContainText(
+    'Lowers the price of 1 product.',
+  );
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(dialog).toBeHidden();
+  const card = page.getByTestId('discount').filter({ hasText: 'Spring sale' });
+  await expect(card).toContainText('Running');
+  await expect(card).toContainText('Lowers 1 product');
+
+  await page.goto(`/store/${slug}/products`);
+  const product = page.locator('[data-card]').filter({ hasText: 'Rose water' }).first();
+  await expect(product.locator('[data-sale-badge]')).toHaveText('-25%');
+  await expect(product.locator('[data-old-price]')).toContainText('2.000');
+  await expect(product.locator('[data-sale-price]')).toContainText('1.500');
+});

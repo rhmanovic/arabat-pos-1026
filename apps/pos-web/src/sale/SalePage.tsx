@@ -8,7 +8,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ShiftMoreMenu, ShiftStrip, type StripAction } from '../pages/ShiftPages.js';
 import { useRestaurantEnabled } from '../restaurant/RestaurantPages.js';
-import { type CartLine, formatQty, priceLines, requiredRights, useCart } from './cart.js';
+import {
+  type CartLine,
+  formatQty,
+  itemsInForce,
+  priceLines,
+  requiredRights,
+  useCart,
+  useNow,
+} from './cart.js';
 import { describeCart, useAssistantCart } from './assistant.js';
 import { CustomerBar } from './customer.js';
 import {
@@ -104,16 +112,15 @@ export function SalePage() {
   const [receiptId, setReceiptId] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const items = useMemo(
-    () => new Map((catalog.data?.items ?? []).map((i) => [i.variantId, i])),
-    [catalog.data],
-  );
+  const now = useNow();
+  const live = useMemo(() => itemsInForce(catalog.data?.items ?? [], now), [catalog.data, now]);
+  const items = useMemo(() => new Map(live.map((i) => [i.variantId, i])), [live]);
   const stock = useMemo(
     () => new Map((availability.data?.items ?? []).map((a) => [a.variantId, a])),
     [availability.data],
   );
   const term = search.trim().toLowerCase();
-  const visible = (catalog.data?.items ?? []).filter((i) => {
+  const visible = live.filter((i) => {
     if (category && i.categoryId !== category) return false;
     if (!term) return true;
     return (
@@ -147,7 +154,7 @@ export function SalePage() {
     const code = search.trim();
     if (!code) return;
     const lower = code.toLowerCase();
-    const exact = (catalog.data?.items ?? []).find(
+    const exact = live.find(
       (i) =>
         i.barcodes.some((b) => b.toLowerCase() === lower) || (i.sku ?? '').toLowerCase() === lower,
     );
@@ -346,8 +353,23 @@ export function SalePage() {
                       </span>
                     ) : null}
                     <span className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-                      <span className="font-semibold whitespace-nowrap tabular-nums" dir="ltr">
-                        {fmt(item.price)}
+                      <span className="flex flex-wrap items-baseline gap-x-1.5" dir="ltr">
+                        <span
+                          className={cn(
+                            'font-semibold whitespace-nowrap tabular-nums',
+                            item.regularPrice && 'text-danger',
+                          )}
+                        >
+                          {fmt(item.price)}
+                        </span>
+                        {item.regularPrice ? (
+                          <s
+                            className="text-xs whitespace-nowrap text-fg-muted tabular-nums"
+                            data-testid="tile-regular-price"
+                          >
+                            {fmt(item.regularPrice)}
+                          </s>
+                        ) : null}
                       </span>
                       {item.trackInventory &&
                       s &&

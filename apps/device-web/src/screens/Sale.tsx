@@ -5,6 +5,7 @@ import {
   type CatalogItem,
   EMPTY_CART,
   type PreparedSale,
+  catalogAt,
   type StaffMember,
   attemptPin,
   commitSale,
@@ -42,7 +43,7 @@ export function SaleScreen({ onRefunds, onClose }: { onRefunds: () => void; onCl
     bridge,
     cashier,
     ctx,
-    catalog,
+    catalog: loaded,
     methods,
     shift,
     staff,
@@ -86,6 +87,16 @@ export function SaleScreen({ onRefunds, onClose }: { onRefunds: () => void; onCl
     note: string | null;
   } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  // Prices in force now: a product discount that starts or ends shows within a minute (ADR-0133).
+  const [minute, setMinute] = useState(() => Math.floor(Date.now() / 60_000));
+  useEffect(() => {
+    const timer = setInterval(() => setMinute(Math.floor(Date.now() / 60_000)), 15_000);
+    return () => clearInterval(timer);
+  }, []);
+  const catalog = useMemo(
+    () => (loaded ? catalogAt(loaded, new Date(minute * 60_000)) : null),
+    [loaded, minute],
+  );
 
   const items = useMemo(
     () => (catalog ? searchCatalog(catalog, query, category) : []),
@@ -225,8 +236,21 @@ export function SaleScreen({ onRefunds, onClose }: { onRefunds: () => void; onCl
                     ? ` — ${name({ nameEn: item.variantNameEn, nameAr: item.variantNameAr }, i18n.language)}`
                     : ''}
                 </span>
-                <span className="text-sm text-fg-muted" dir="ltr">
-                  {kwd(item.priceMinor, i18n.language)}
+                <span className="flex flex-wrap items-baseline gap-1.5 text-sm" dir="ltr">
+                  <span
+                    className={
+                      item.regularPriceMinor !== null
+                        ? 'font-semibold text-danger'
+                        : 'text-fg-muted'
+                    }
+                  >
+                    {kwd(item.priceMinor, i18n.language)}
+                  </span>
+                  {item.regularPriceMinor !== null ? (
+                    <s className="text-xs text-fg-muted" data-testid="regular-price">
+                      {kwd(item.regularPriceMinor, i18n.language)}
+                    </s>
+                  ) : null}
                 </span>
               </button>
             ))}

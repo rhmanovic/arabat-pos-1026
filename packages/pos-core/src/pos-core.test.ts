@@ -5,6 +5,7 @@ import {
   type PosPaymentMethod,
   PosRuleError,
   type PricePolicy,
+  type ProductDiscountRule,
   type SaleLine,
   assertDifferentSupervisor,
   assertOverrideUsable,
@@ -15,6 +16,10 @@ import {
   checkPayments,
   closingNoteRequired,
   computeRefund,
+  discountedPrice,
+  offerAt,
+  priceOffers,
+  savedPercent,
   createRightCheck,
   evaluateSale,
   exchangeCreditUsed,
@@ -478,5 +483,64 @@ describe('refunds', () => {
     expect(
       refusal(() => assertVoidable({ saleShiftId: 's1', openShiftId: 's1', activeRefunds: 1 })),
     ).toEqual([409, 'NOT_VOIDABLE']);
+  });
+});
+
+describe('product discounts (ADR-0133)', () => {
+  const rule = (over: Partial<ProductDiscountRule>): ProductDiscountRule => ({
+    id: 'd',
+    type: 'percentage',
+    percent: '20',
+    amountMinor: null,
+    startsAt: null,
+    endsAt: null,
+    ...over,
+  });
+
+  it('takes a percentage half-up to the fils, or an amount, never down to zero', () => {
+    expect(discountedPrice(1250n, rule({ percent: '20' }))).toBe(1000n);
+    // 12.5% of 1.005 = 0.125625 → 0.126 off.
+    expect(discountedPrice(1005n, rule({ percent: '12.5' }))).toBe(879n);
+    expect(discountedPrice(1250n, rule({ type: 'amount', percent: null, amountMinor: 250n }))).toBe(
+      1000n,
+    );
+    // An amount as large as the price, a 100% discount or nothing off leave the price alone.
+    expect(discountedPrice(200n, rule({ type: 'amount', percent: null, amountMinor: 200n }))).toBe(
+      null,
+    );
+    expect(discountedPrice(1250n, rule({ percent: '100' }))).toBe(null);
+    expect(discountedPrice(1n, rule({ percent: '10' }))).toBe(null);
+    expect(discountedPrice(1250n, rule({ percent: '20.555' }))).toBe(null);
+  });
+
+  it('chooses the largest discount in force; dates are start inclusive, end exclusive', () => {
+    const offers = priceOffers(1000n, [
+      rule({ id: 'a', percent: '10' }),
+      rule({ id: 'b', type: 'amount', percent: null, amountMinor: 300n }),
+      rule({
+        id: 'c',
+        percent: '50',
+        startsAt: '2026-11-01T00:00:00Z',
+        endsAt: '2026-11-02T00:00:00Z',
+      }),
+    ]);
+    expect(offers.map((o) => [o.discountId, o.priceMinor])).toEqual([
+      ['a', 900n],
+      ['b', 700n],
+      ['c', 500n],
+    ]);
+    expect(offerAt(offers, new Date('2026-10-31T23:59:59Z'))?.discountId).toBe('b');
+    expect(offerAt(offers, new Date('2026-11-01T00:00:00Z'))?.discountId).toBe('c');
+    expect(offerAt(offers, new Date('2026-11-02T00:00:00Z'))?.discountId).toBe('b');
+    expect(offerAt([], new Date())).toBe(null);
+    // A tie keeps the first offer.
+    const tie = priceOffers(1000n, [rule({ id: 'x' }), rule({ id: 'y' })]);
+    expect(offerAt(tie, new Date())?.discountId).toBe('x');
+  });
+
+  it('shows the whole percentage saved', () => {
+    expect(savedPercent(1250n, 1000n)).toBe(20);
+    expect(savedPercent(1000n, 999n)).toBe(1);
+    expect(savedPercent(1000n, 1000n)).toBe(0);
   });
 });

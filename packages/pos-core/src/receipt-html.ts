@@ -24,6 +24,8 @@ export type ReceiptData = {
     modifiers: string[];
     quantity: string;
     unitPriceMinor: bigint;
+    /** The price before a product discount (ADR-0133): printed as "was …". */
+    regularUnitPriceMinor?: bigint | null;
     grossMinor: bigint;
     lineDiscountMinor: bigint;
   }[];
@@ -134,6 +136,11 @@ export function renderReceiptHtml(data: ReceiptData, printedAt: Date, copyNumber
           ? `<p class="mods" dir="auto">${escape(l.modifiers.join('، '))}</p>`
           : '') +
         `<div class="row"><span class="k" dir="ltr">${escape(l.quantity)} × ${Money.ofMinor(l.unitPriceMinor, 'KWD').toDecimalString()}</span><span class="v" dir="ltr">${Money.ofMinor(l.grossMinor, 'KWD').toDecimalString()}</span></div>` +
+        (l.regularUnitPriceMinor
+          ? row('قبل الخصم', Money.ofMinor(l.regularUnitPriceMinor, 'KWD').toDecimalString(), {
+              ltr: true,
+            })
+          : '') +
         (l.lineDiscountMinor > 0n
           ? row('خصم', `-${Money.ofMinor(l.lineDiscountMinor, 'KWD').toDecimalString()}`, {
               ltr: true,

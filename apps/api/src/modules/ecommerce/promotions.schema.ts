@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   bigint,
+  boolean,
   check,
   foreignKey,
   index,
@@ -54,6 +55,8 @@ export const onlinePromotions = pgTable(
     appliesTo: text().notNull().default('order'),
     /** Category or product ids when `applies_to` is not `order`. */
     targetIds: jsonb().notNull().default([]),
+    /** Also applies to items lowered by a product discount (ADR-0133); off by default. */
+    stacksWithDiscounts: boolean().notNull().default(false),
     position: integer().notNull().default(0),
     version: integer().notNull().default(1),
     createdAt: createdAt(),

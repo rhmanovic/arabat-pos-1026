@@ -165,6 +165,11 @@ export class PosHandoverService {
             productId: l['product_id'] as string,
             quantityMilli: parseQuantity(l['quantity'] as string),
             unitPriceMinor: BigInt(l['unit_price_minor'] as string),
+            regularUnitPriceMinor:
+              l['regular_unit_price_minor'] === null
+                ? null
+                : BigInt(l['regular_unit_price_minor'] as string),
+            productDiscountId: (l['product_discount_id'] as string | null) ?? null,
             nameEn: (l['name_en'] as string | null) ?? null,
             nameAr: (l['name_ar'] as string | null) ?? null,
             variantNameEn: (l['variant_name_en'] as string | null) ?? null,

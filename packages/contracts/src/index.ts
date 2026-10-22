@@ -28,3 +28,4 @@ export * from './trials.js';
 export * from './links.js';
 export * from './store-design.js';
 export * from './catalog-transfer.js';
+export * from './discounts.js';

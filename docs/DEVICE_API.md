@@ -159,6 +159,7 @@ snapshot). Call it at start-up, after every successful upload and every few minu
                         "feeFixedMinor": "0", "feePercent": "0", "sortOrder": 0 } ],
   "staff": [ { "membershipId": "…", "userId": "…", "fullName": "Sara", "isOwner": false,
                "pinHash": "$argon2id$v=19$m=65536,t=3,p=1$…", "permissions": ["pos.access", "sales.create", "…"] } ],
+  "priceOffers": [ { "variantId": "…", "discountId": "…", "priceMinor": "200", "startsAt": null, "endsAt": "2026-11-01T00:00:00.000Z" } ],
   "categories": [ { "id": "…", "parentId": null, "nameEn": "Drinks", "nameAr": "مشروبات", "sortOrder": 0, "status": "active" } ],
   "products": [ { "id": "…", "categoryId": "…", "nameEn": "Tea", "nameAr": "شاي", "type": "standard",
                   "trackInventory": false, "sellable": true, "updatedAt": "…",
@@ -194,6 +195,10 @@ snapshot). Call it at start-up, after every successful upload and every few minu
   register (else to that shift's register), or `null`.
 - Payment methods: offer those with `status: "active"`, `availableInPos: true` and no
   `gatewayProvider` (gateway payments are online only).
+- `priceOffers` (ADR-0133, always complete): every discounted price at the point of sale, with
+  its dates (running and scheduled). Replace the local set; sell at the offer in force at the
+  moment of the sale (`offerAt` in `@arabat/pos-core`; `catalogAt` in `@arabat/device-core`):
+  the lowest price wins, start inclusive, end exclusive.
 - Not in the snapshot: product images, customers, modifiers and recipes (restaurant only, online
   only; recipes are expanded by the server when it ingests a sale), held sales of other tills.
 
@@ -286,6 +291,10 @@ the device shift: it is accepted and the stale shift is listed for the managers
   difference (`TOTALS_MISMATCH`). It does **not** compare with its own catalog: the device's price
   is final.
 - `unitPriceMinor` ≠ `listUnitPriceMinor` is a price change; give `priceOverrideReason`.
+- While a product discount is in force, `listUnitPriceMinor` is the discounted price; send the
+  price before it as `regularUnitPriceMinor` and the discount as `productDiscountId` (both
+  optional, ADR-0133). The server keeps them when they are consistent and the discount is the
+  company's, and never refuses a sale because of them.
 - Payments: the amounts add up to `totalMinor` (`PAYMENT_TOTAL_MISMATCH` otherwise); cash:
   `tenderedMinor = amountMinor + changeMinor`, `feeMinor = 0`; other methods: `changeMinor = 0`,
   `tenderedMinor` null, `feeMinor` from `checkPayments`. A total of zero has no payments and needs

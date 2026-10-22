@@ -2055,6 +2055,57 @@ describe('storefront', () => {
     expect(within(section).queryByRole('link', { name: /^Tea Products/ })).toBeNull();
   });
 
+  it('shows discounted products with the designed badge, the old price and the saving (ADR-0133)', async () => {
+    const user = userEvent.setup();
+    const discounted = {
+      ...PRODUCTS.products[0]!,
+      variants: [
+        {
+          ...PRODUCTS.products[0]!.variants[0]!,
+          price: kwd('1.000'),
+          regularPrice: kwd('1.250'),
+          discountEndsAt: new Date(Date.now() + 2 * 24 * 3600_000 - 60_000).toISOString(),
+        },
+      ],
+    };
+    const design = templateDesign('retail');
+    design.sale.card = {
+      ...design.sale.card,
+      text: 'word',
+      colour: 'green',
+      shape: 'ribbon',
+      position: 'top-end',
+    };
+    renderStore('/demo/products', {
+      'GET /store/demo/products': () => ({
+        status: 200,
+        body: { products: [discounted, PRODUCTS.products[1]!] },
+      }),
+      'GET /store/demo/design': () => ({ status: 200, body: { design } }),
+    });
+    const card = (await screen.findAllByText('Coffee beans'))[0]!.closest(
+      '[data-card]',
+    ) as HTMLElement;
+    const badge = card.querySelector('[data-sale-badge]') as HTMLElement;
+    expect(badge).toHaveTextContent('Sale');
+    expect(badge).toHaveAttribute('data-sale-badge', 'ribbon');
+    expect(badge).toHaveStyle({ backgroundColor: '#16a34a' });
+    expect(card.querySelector('[data-old-price]')).toHaveTextContent('1.250');
+    // A product sold at its regular price has neither.
+    const mug = screen.getByText('Mug').closest('[data-card]') as HTMLElement;
+    expect(mug.querySelector('[data-sale-badge]')).toBeNull();
+    expect(mug.querySelector('[data-old-price]')).toBeNull();
+    // The product page: its own badge (the percentage), the saving and the end of the offer.
+    await user.click(within(card).getAllByRole('link')[0]!);
+    expect(await screen.findByRole('heading', { name: 'Coffee beans' })).toBeInTheDocument();
+    const page = screen.getByTestId('product-page');
+    expect(page.querySelector('[data-sale-badge]')).toHaveTextContent('-20%');
+    expect(within(page).getByTestId('product-price')).toHaveTextContent(/1\.000.*1\.250/);
+    expect(within(page).getByTestId('product-saving')).toHaveTextContent(
+      /You save .*0\.250.*\(20%\).*Offer ends in 2 days/,
+    );
+  });
+
   it('defines the same translation keys in Arabic and English', () => {
     expect(flattenKeys(resources.ar).sort()).toEqual(flattenKeys(resources.en).sort());
   });

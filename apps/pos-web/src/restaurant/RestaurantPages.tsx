@@ -13,6 +13,7 @@ import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router';
 import { shiftKey } from '../pages/ShiftPages.js';
+import { itemsInForce, useNow } from '../sale/cart.js';
 import { PaymentDialog, ReceiptDialog } from '../sale/dialogs.js';
 import { availabilityKey, catalogKey, itemLabel, useMoneyFormat } from '../sale/SalePage.js';
 
@@ -244,6 +245,7 @@ export function OrderPage() {
     queryFn: () => api.restaurant.posMenu(),
     staleTime: 60_000,
   });
+  const now = useNow();
   const [search, setSearch] = useState('');
   const [picking, setPicking] = useState<PosCatalogItem | null>(null);
   const [dialog, setDialog] = useState<'bill' | 'move' | 'merge' | null>(null);
@@ -290,7 +292,8 @@ export function OrderPage() {
       (id) => menu.data?.groups.filter((g) => g.id === id) ?? [],
     );
   const term = search.trim().toLowerCase();
-  const visible = (catalog.data?.items ?? []).filter(
+  // The menu shows the price in force (product discounts, ADR-0133), as the bill charges it.
+  const visible = itemsInForce(catalog.data?.items ?? [], now).filter(
     (i) =>
       !term ||
       itemLabel(i, i18n.language).toLowerCase().includes(term) ||

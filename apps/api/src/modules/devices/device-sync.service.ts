@@ -8,6 +8,7 @@ import { AppError } from '../../kernel/errors/app-error.js';
 import type { Device } from '../../kernel/access/device-resolver.js';
 import type { MerchantActor } from '../../kernel/access/session-resolver.js';
 import { AuditService } from '../audit/audit.service.js';
+import { offersFor } from '../catalog/discount-offers.js';
 import { AccessRepository } from '../iam/access.repository.js';
 import { DevicesService } from './devices.service.js';
 
@@ -151,6 +152,7 @@ export class DeviceSyncService {
         ...(await this.branchShift(tx, device)),
         paymentMethods: await this.paymentMethods(tx),
         staff: await this.staff(tx, device, Boolean(merchant!['owner_frozen_at'])),
+        priceOffers: await this.priceOffers(tx, device.branchId),
         categories: await this.categories(tx),
         products: await this.products(tx, device.branchId, delta ? sinceDate : null),
       };
@@ -219,6 +221,7 @@ export class DeviceSyncService {
           (select max(updated_at) from products where merchant_id = ${merchantId}),
           (select max(updated_at) from product_variants where merchant_id = ${merchantId}),
           (select max(updated_at) from categories where merchant_id = ${merchantId}),
+          (select max(updated_at) from product_discounts where merchant_id = ${merchantId}),
           (select created_at from merchants where id = ${merchantId})) as v`)
     ).rows as Row[];
     return iso(row!['v']);
@@ -360,6 +363,39 @@ export class DeviceSyncService {
       updatedAt: iso(r['updated_at']),
       variants: variants.get(String(r['id'])) ?? [],
     }));
+  }
+
+  /** Every discounted price at the point of sale for the branch's sellable variants (ADR-0133). */
+  private async priceOffers(
+    tx: Transaction,
+    branchId: string,
+  ): Promise<DeviceSnapshot['priceOffers']> {
+    const rows = (
+      await tx.execute(sql`
+        select v.id, v.product_id, v.price_minor::text as price
+        from product_variants v join products p on p.id = v.product_id
+        where v.status = 'active' and p.status = 'active' and p.pos_visible
+          and (p.available_in_all_branches or exists (select 1 from product_branch_availability a
+               where a.product_id = p.id and a.branch_id = ${branchId}))`)
+    ).rows as Row[];
+    const offers = await offersFor(
+      tx,
+      'pos',
+      rows.map((r) => ({
+        variantId: String(r['id']),
+        productId: String(r['product_id']),
+        priceMinor: BigInt(String(r['price'])),
+      })),
+    );
+    return [...offers].flatMap(([variantId, list]) =>
+      list.map((o) => ({
+        variantId,
+        discountId: o.discountId,
+        priceMinor: o.priceMinor.toString(),
+        startsAt: o.startsAt,
+        endsAt: o.endsAt,
+      })),
+    );
   }
 
   async getSettings(actor: MerchantActor): Promise<DeviceSettings> {

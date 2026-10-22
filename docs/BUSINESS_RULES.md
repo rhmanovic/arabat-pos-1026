@@ -117,6 +117,15 @@ engineering defaults pending owner confirmation.
   (the main register's first), and cannot sell while none is open. A device shift is never refused because
   the person left a shift open elsewhere; that shift is listed for the managers to close. Records
   that reach the server after the branch shift closed are booked to it and flagged "late".
+- **BR-242** Product discounts (ADR-0133, owner 2026-10-22): a discount lowers chosen products
+  by a percentage or an amount, online and / or at the point of sale, optionally between two
+  dates. Discounts never add up: the largest one in force wins. A discount never makes an item
+  free (a product cheaper than the amount keeps its price). An order promotion code does not
+  apply to discounted items unless the promotion says it stacks. The cashier's own discount
+  limit is measured from the discounted price. A discount below cost is allowed after the
+  merchant confirms a warning. Creating or changing discounts needs the right to manage prices.
+  A discount is never deleted (archived), and each sale line keeps the regular price and the
+  discount.
 - **BR-241** Products and categories in Excel (ADR-0132, owner 2026-10-22): an uploaded file
   is checked before anything is saved, and is then saved completely or not at all. A row with
   an id changes that product or category; a row without one adds a new one; a file never

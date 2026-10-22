@@ -37,6 +37,7 @@ export function receiptDataFor(
         modifiers: [],
         quantity: l.quantity.replace(/\.?0+$/, ''),
         unitPriceMinor: l.unitPriceMinor,
+        regularUnitPriceMinor: l.regularUnitPriceMinor,
         grossMinor: l.grossMinor,
         lineDiscountMinor: l.lineDiscountMinor,
       };

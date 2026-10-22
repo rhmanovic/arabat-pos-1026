@@ -35,6 +35,7 @@ import {
   products,
 } from './catalog.schema.js';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
+import { offersFor } from './discount-offers.js';
 
 type SaveProductInput = z.output<typeof saveProductSchema>;
 type SaveCategoryInput = z.output<typeof saveCategorySchema>;
@@ -566,6 +567,16 @@ export class CatalogService {
         .from(categories)
         .where(eq(categories.status, 'active'))
         .orderBy(asc(categories.sortOrder));
+      // Every running or scheduled discount of the till, chosen at the moment of the sale (ADR-0133).
+      const offers = await offersFor(
+        tx,
+        'pos',
+        rows.map((r) => ({
+          variantId: r.variantId,
+          productId: r.productId,
+          priceMinor: r.priceMinor,
+        })),
+      );
       const items = rows.map((r) => ({
         variantId: r.variantId,
         productId: r.productId,
@@ -578,6 +589,12 @@ export class CatalogService {
         sku: r.sku,
         barcodes: r.barcodes,
         price: money(r.priceMinor),
+        offers: (offers.get(r.variantId) ?? []).map((o) => ({
+          discountId: o.discountId,
+          price: money(o.priceMinor),
+          startsAt: o.startsAt,
+          endsAt: o.endsAt,
+        })),
         trackInventory: r.trackInventory,
         imageUrl: r.imageId ? `/api/v1/pos/catalog/images/${r.productId}/${r.imageId}` : null,
       }));

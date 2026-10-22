@@ -1,3 +1,4 @@
+import { type PriceOffer, offerAt } from '@arabat/pos-core';
 import type { BridgeDb } from './bridge.js';
 
 /** A sellable variant with what the till shows and what pricing needs. */
@@ -11,7 +12,13 @@ export interface CatalogItem {
   variantNameAr: string | null;
   sku: string | null;
   barcodes: string[];
+  /** The price in force: the discounted one while a product discount runs (see `catalogAt`). */
   priceMinor: bigint;
+  /** The catalog price while a discount lowers `priceMinor`; null otherwise (ADR-0133). */
+  regularPriceMinor: bigint | null;
+  discountId: string | null;
+  /** Every discounted price of the item with its dates. */
+  offers: PriceOffer[];
   costMinor: bigint | null;
   trackInventory: boolean;
 }
@@ -42,6 +49,20 @@ export async function loadCatalog(db: BridgeDb): Promise<Catalog> {
      ORDER BY p.name_en, p.name_ar, v.position`,
   );
   const codes = await db.query(`SELECT barcode, variant_id FROM barcodes`);
+  const offerRows = await db.query(
+    `SELECT variant_id, discount_id, price_minor, starts_at, ends_at FROM price_offers`,
+  );
+  const offers = new Map<string, PriceOffer[]>();
+  for (const o of offerRows) {
+    const list = offers.get(String(o['variant_id'])) ?? [];
+    list.push({
+      discountId: String(o['discount_id']),
+      priceMinor: BigInt(String(o['price_minor'])),
+      startsAt: str(o['starts_at']),
+      endsAt: str(o['ends_at']),
+    });
+    offers.set(String(o['variant_id']), list);
+  }
   const byVariant = new Map<string, string[]>();
   for (const c of codes) {
     const list = byVariant.get(String(c['variant_id'])) ?? [];
@@ -64,6 +85,9 @@ export async function loadCatalog(db: BridgeDb): Promise<Catalog> {
       sku: str(r['sku']),
       barcodes,
       priceMinor: BigInt(String(r['price_minor'])),
+      regularPriceMinor: null,
+      discountId: null,
+      offers: offers.get(id) ?? [],
       costMinor: r['cost_minor'] === null ? null : BigInt(String(r['cost_minor'])),
       trackInventory: r['track_inventory'] === 1,
     });
@@ -83,6 +107,30 @@ export async function loadCatalog(db: BridgeDb): Promise<Catalog> {
       sortOrder: Number(c['sort_order']),
     })),
   };
+}
+
+/**
+ * The catalog at a moment: each item's price is the one in force then (the largest running
+ * product discount, ADR-0133), with the regular price kept. The till prices and sells with it.
+ */
+export function catalogAt(catalog: Catalog, now: Date = new Date()): Catalog {
+  const items = new Map<string, CatalogItem>();
+  for (const [id, item] of catalog.items) {
+    const regular = item.regularPriceMinor ?? item.priceMinor;
+    const offer = offerAt(item.offers, now);
+    items.set(
+      id,
+      offer
+        ? {
+            ...item,
+            priceMinor: offer.priceMinor,
+            regularPriceMinor: regular,
+            discountId: offer.discountId,
+          }
+        : { ...item, priceMinor: regular, regularPriceMinor: null, discountId: null },
+    );
+  }
+  return { ...catalog, items };
 }
 
 /** Name, variant, SKU or barcode containing the text (case-insensitive); exact barcode first. */

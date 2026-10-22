@@ -300,6 +300,10 @@ import {
   accountOrderListSchema,
   onlinePromotionSchema,
   onlinePromotionListSchema,
+  productDiscountListSchema,
+  productDiscountPreviewSchema,
+  productDiscountSchema,
+  type SaveProductDiscount,
   type SaveOnlinePromotion,
   type StoreDesignInput,
   storeDesignStateSchema,
@@ -1318,6 +1322,22 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('PUT', '/manager/online/promotions/order', {
           body: { ids },
           schema: onlinePromotionListSchema,
+        }),
+      // Product discounts (ADR-0133): the store and the point of sale.
+      discounts: () => request('GET', '/manager/discounts', { schema: productDiscountListSchema }),
+      previewDiscount: (body: SaveProductDiscount) =>
+        request('POST', '/manager/discounts/preview', {
+          body,
+          schema: productDiscountPreviewSchema,
+        }),
+      createDiscount: (body: SaveProductDiscount) =>
+        request('POST', '/manager/discounts', { body, schema: productDiscountSchema }),
+      updateDiscount: (id: string, body: SaveProductDiscount) =>
+        request('PUT', `/manager/discounts/${id}`, { body, schema: productDiscountSchema }),
+      setDiscountStatus: (id: string, status: 'active' | 'paused' | 'archived') =>
+        request('POST', `/manager/discounts/${id}/status`, {
+          body: { status },
+          schema: productDiscountSchema,
         }),
       /** Store design (ADR-0128): draft, publish, discard and the design pictures. */
       design: () => request('GET', '/manager/online/design', { schema: storeDesignStateSchema }),

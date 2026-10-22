@@ -1226,6 +1226,60 @@ export const checkoutPageSchema = z.object({
 });
 export type CheckoutPageDesign = z.output<typeof checkoutPageSchema>;
 
+// ------------------------------------------------------------- discounts (ADR-0133)
+/** What the badge on a discounted product says: "-20%", "Save 0.250", "Sale" or own words. */
+export const SALE_BADGE_TEXTS = ['percent', 'amount', 'word', 'custom'] as const;
+export const SALE_BADGE_COLOURS = [
+  'red',
+  'brand',
+  'dark',
+  'green',
+  'orange',
+  'pink',
+  'gold',
+  'custom',
+] as const;
+export const SALE_BADGE_SIZES = ['sm', 'md', 'lg', 'xl'] as const;
+export const SALE_BADGE_SHAPES = ['pill', 'rounded', 'square', 'circle', 'ribbon', 'tag'] as const;
+export const SALE_BADGE_POSITIONS = ['top-start', 'top-end', 'bottom-start', 'bottom-end'] as const;
+export const SALE_BADGE_STYLES = ['solid', 'soft', 'outline'] as const;
+
+/** The discount badge on a product's picture (cards in lists, or the product page). */
+const saleBadgeSchema = z.object({
+  show: z.boolean().default(true),
+  text: z.enum(SALE_BADGE_TEXTS).default('percent'),
+  /** Own words for `custom` (e.g. "Eid offer"). */
+  customText: localized(20),
+  colour: z.enum(SALE_BADGE_COLOURS).default('red'),
+  customColour: hexColor,
+  style: z.enum(SALE_BADGE_STYLES).default('solid'),
+  size: z.enum(SALE_BADGE_SIZES).default('md'),
+  shape: z.enum(SALE_BADGE_SHAPES).default('pill'),
+  position: z.enum(SALE_BADGE_POSITIONS).default('top-start'),
+  /** A gentle pulse that draws the eye (still under reduced motion). */
+  pulse: z.boolean().default(false),
+});
+export type SaleBadgeDesign = z.infer<typeof saleBadgeSchema>;
+
+/**
+ * How discounted products show (ADR-0133): the badge on cards and on the product page, the old
+ * price struck through, the colour of the new price, the saving and the end of the offer.
+ * Prices themselves always come from the server; this only decides how they look.
+ */
+export const saleDesignSchema = z.object({
+  card: saleBadgeSchema.prefault({}),
+  page: saleBadgeSchema.prefault({ size: 'lg' }),
+  /** The price before the discount, struck through beside the new one. */
+  oldPrice: z.boolean().default(true),
+  /** The new price in the badge's colour, the store colour, or like any price. */
+  priceColour: z.enum(['badge', 'brand', 'default']).default('badge'),
+  /** "You save 0.250 KWD" on the product page. */
+  savings: z.boolean().default(true),
+  /** "Ends in 2 days" on the product page when the discount has an end. */
+  endsIn: z.boolean().default(true),
+});
+export type SaleDesign = z.infer<typeof saleDesignSchema>;
+
 const handle = z
   .string()
   .trim()
@@ -1278,6 +1332,8 @@ export const storeDesignSchema = z
       .prefault({}),
     footer: footerSchema.prefault({}),
     productPage: productPageSchema.prefault({}),
+    /** Discounted products: badge, old price and saving (ADR-0133). */
+    sale: saleDesignSchema.prefault({}),
     cartPage: cartPageSchema.prefault({}),
     checkoutPage: checkoutPageSchema.prefault({}),
     social: z

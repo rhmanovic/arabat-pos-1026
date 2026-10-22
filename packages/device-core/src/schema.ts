@@ -68,6 +68,15 @@ export const MIGRATIONS: readonly string[][] = [
     `ALTER TABLE shifts ADD COLUMN origin TEXT NOT NULL DEFAULT 'local'`,
     `ALTER TABLE shifts ADD COLUMN closed_by TEXT`,
   ],
+  // ADR-0133: product discounts. Every discounted price with its dates (replaced on each sync);
+  // a sale line keeps the price before the discount and the discount.
+  [
+    `CREATE TABLE IF NOT EXISTS price_offers (variant_id TEXT NOT NULL, discount_id TEXT NOT NULL,
+       price_minor TEXT NOT NULL, starts_at TEXT, ends_at TEXT)`,
+    `CREATE INDEX IF NOT EXISTS price_offers_variant_idx ON price_offers(variant_id)`,
+    `ALTER TABLE sale_lines ADD COLUMN regular_unit_price_minor TEXT`,
+    `ALTER TABLE sale_lines ADD COLUMN product_discount_id TEXT`,
+  ],
 ];
 
 export const META = {

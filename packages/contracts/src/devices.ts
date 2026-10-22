@@ -237,6 +237,21 @@ export const deviceSnapshotSchema = z.object({
       permissions: z.array(z.string()),
     }),
   ),
+  /**
+   * Always complete: every discounted price at the point of sale (ADR-0133), running or
+   * scheduled. The device replaces its set and sells at the offer in force (`offerAt`).
+   */
+  priceOffers: z
+    .array(
+      z.object({
+        variantId: z.uuid(),
+        discountId: z.uuid(),
+        priceMinor: minor,
+        startsAt: z.string().nullable(),
+        endsAt: z.string().nullable(),
+      }),
+    )
+    .default([]),
   /** Always complete. */
   categories: z.array(
     z.object({
@@ -337,8 +352,14 @@ export const deviceSaleSchema = z.object({
       z.object({
         variantId: z.uuid(),
         quantity: z.string().regex(/^\d{1,9}(\.\d{1,3})?$/),
-        /** The catalog price on the device. */
+        /** The catalog price on the device (the discounted one while a discount is in force). */
         listUnitPriceMinor: amountMinor,
+        /** The price before a product discount, and the discount (ADR-0133); absent without. */
+        regularUnitPriceMinor: amountMinor.nullish().transform((v) => v ?? null),
+        productDiscountId: z
+          .uuid()
+          .nullish()
+          .transform((v) => v ?? null),
         /** The price charged (differs from the list price only for a price change). */
         unitPriceMinor: amountMinor,
         priceOverrideReason: note,

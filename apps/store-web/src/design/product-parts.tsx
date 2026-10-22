@@ -77,6 +77,7 @@ export function ProductGallery({
   index,
   setIndex,
   scroll,
+  overlay,
 }: {
   images: string[];
   settings: Gallery;
@@ -84,6 +85,8 @@ export function ProductGallery({
   setIndex: (i: number) => void;
   /** The "all pictures" arrangement: every picture one under another on large screens. */
   scroll: boolean;
+  /** Shown over the main picture (the discount badge, ADR-0133). */
+  overlay?: ReactNode;
 }) {
   const { t } = useTranslation();
   const [zoomed, setZoomed] = useState(false);
@@ -127,6 +130,7 @@ export function ProductGallery({
           <StoreIcon name="bag" className="size-12 opacity-40" />
         </span>
       )}
+      {overlay}
       {count > 1 ? (
         <>
           <Arrow by={-1} onClick={() => step(-1)} />

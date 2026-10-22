@@ -37,6 +37,7 @@ import { stockConsumption } from '../inventory/consumption.js';
 import { StockLedgerService } from '../inventory/stock-ledger.service.js';
 import { parseAmount } from '../payments/payments.service.js';
 import { ShiftsService } from '../registers/shifts.service.js';
+import { inForce, offersFor } from '../catalog/discount-offers.js';
 import { type ParsedLine, SalesService } from '../sales/sales.service.js';
 import { RestaurantConfigService } from './restaurant-config.service.js';
 import {
@@ -83,7 +84,7 @@ export class RestaurantOrdersService {
 
   // ------------------------------------------------------------ reading
   private async itemRows(tx: Transaction, where: ReturnType<typeof sql>) {
-    return (
+    const rows = (
       await tx.execute(sql`
         select i.*, i.quantity::text as qty, v.product_id, v.price_minor::text as price,
                p.name_en, p.name_ar, v.name_en as vn_en, v.name_ar as vn_ar,
@@ -92,6 +93,24 @@ export class RestaurantOrdersService {
         join products p on p.id = v.product_id
         where ${where} order by i.position`)
     ).rows as Row[];
+    // Unpaid items show the price the bill will charge: a product discount in force lowers it
+    // (ADR-0133), as `SalesService.loadItems` does when the bill is paid.
+    const offers = await offersFor(
+      tx,
+      'pos',
+      rows.map((r) => ({
+        variantId: r['variant_id'] as string,
+        productId: r['product_id'] as string,
+        priceMinor: BigInt(r['price'] as string),
+      })),
+    );
+    for (const r of rows)
+      r['price'] = inForce(
+        offers,
+        r['variant_id'] as string,
+        BigInt(r['price'] as string),
+      ).priceMinor.toString();
+    return rows;
   }
 
   private lineTotal(r: Row): bigint {

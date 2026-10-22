@@ -692,7 +692,12 @@ export const storeProductSchema = z.object({
       variantId: z.string(),
       ...named,
       sku: z.string().nullable(),
+      /** The price now: the discounted one while a product discount is in force (ADR-0133). */
       price: moneySchema,
+      /** The price before the discount, only while one is in force (shown struck through). */
+      regularPrice: moneySchema.nullable().default(null),
+      /** When the discount in force ends, if it has an end. */
+      discountEndsAt: z.string().nullable().default(null),
       /** Whether it can be ordered now (stock minus reservations, or untracked). */
       available: z.boolean(),
       /** Upper bound offered in the cart (never the exact stock). */
@@ -890,6 +895,8 @@ export const onlinePromotionSchema = z.object({
   status: z.enum(['active', 'paused']),
   appliesTo: z.enum(PROMOTION_TARGETS),
   targetIds: z.array(z.string()),
+  /** Also discounts items already lowered by a product discount (ADR-0133); off by default. */
+  stacksWithDiscounts: z.boolean(),
   position: z.number().int(),
   version: z.number().int(),
 });
@@ -938,6 +945,7 @@ export const saveOnlinePromotionSchema = z
     status: z.enum(['active', 'paused']).default('active'),
     appliesTo: z.enum(PROMOTION_TARGETS).default('order'),
     targetIds: z.array(z.uuid()).max(200).default([]),
+    stacksWithDiscounts: z.boolean().default(false),
     version: z.number().int().positive().optional(),
   })
   .refine((p) => Boolean(p.nameAr || p.nameEn), { error: 'A name is required.', path: ['nameAr'] })

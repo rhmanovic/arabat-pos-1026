@@ -16,6 +16,7 @@ import {
   useRecentlyViewed,
 } from '../design/product-parts.js';
 import { DesignedPage } from '../design/sections.js';
+import { SaleBadge, SalePrice, useEndsIn, variantSale } from '../design/sale.js';
 import {
   setPageMeta,
   useLocalName,
@@ -111,6 +112,8 @@ function ProductView({ product, all }: { product: StoreProduct; all: StoreProduc
     product.variants.find((v) => v.available) ??
     product.variants[0]!;
   const sticky = page.buy.stickyBar && variant.available;
+  const sale = variantSale(variant);
+  const endsIn = useEndsIn();
   // The phone's bottom bar appears once the main add button has scrolled above the screen.
   const buyAway = useOutOfView(buyRef, sticky, true);
 
@@ -288,6 +291,7 @@ function ProductView({ product, all }: { product: StoreProduct; all: StoreProduc
         index={Math.min(imageIndex, Math.max(0, images.length - 1))}
         setIndex={setImageIndex}
         scroll={page.layout === 'scroll'}
+        overlay={<SaleBadge sale={sale} where="page" />}
       />
     </div>
   );
@@ -365,7 +369,13 @@ function ProductView({ product, all }: { product: StoreProduct; all: StoreProduc
           )}
           data-testid="product-price"
         >
-          {money(variant.price)}
+          <SalePrice
+            sale={sale}
+            className={sale ? 'font-bold' : undefined}
+            oldClassName="text-base sm:text-lg"
+          >
+            {money(variant.price)}
+          </SalePrice>
         </p>
         {page.info.stock && variant.available && fewLeft === null ? (
           <Badge tone="success">{t('product.inStock')}</Badge>
@@ -374,6 +384,24 @@ function ProductView({ product, all }: { product: StoreProduct; all: StoreProduc
           <Badge tone="warning">{t('product.fewLeft', { count: fewLeft })}</Badge>
         ) : null}
       </div>
+      {sale && (design.sale.savings || design.sale.endsIn) ? (
+        <p
+          className={cn(
+            'flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-medium',
+            center && 'justify-center',
+          )}
+          data-testid="product-saving"
+        >
+          {design.sale.savings ? (
+            <span className="rounded-md bg-danger-soft px-2 py-0.5 text-danger">
+              {t('design.saleYouSave', { amount: money(sale.saving), percent: sale.percent })}
+            </span>
+          ) : null}
+          {design.sale.endsIn && endsIn(sale.endsAt) ? (
+            <span className="text-fg-muted">{endsIn(sale.endsAt)}</span>
+          ) : null}
+        </p>
+      ) : null}
       {page.info.sku && variant.sku ? (
         <p className="text-xs text-fg-muted">{t('product.sku', { sku: variant.sku })}</p>
       ) : null}
@@ -471,7 +499,9 @@ function ProductView({ product, all }: { product: StoreProduct; all: StoreProduc
         >
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-semibold">{title}</span>
-            <span className="block text-sm tabular-nums text-fg-muted">{money(variant.price)}</span>
+            <span className="block text-sm tabular-nums text-fg-muted">
+              <SalePrice sale={sale}>{money(variant.price)}</SalePrice>
+            </span>
           </span>
           <Button disabled={!canAdd} onClick={add}>
             {addLabel}

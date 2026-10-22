@@ -1,6 +1,6 @@
 import type { PosCatalogItem } from '@arabat/contracts';
 import { describe, expect, it } from 'vitest';
-import { type CartLine, requiredRights } from './cart.js';
+import { type CartLine, itemsInForce, requiredRights } from './cart.js';
 
 const item = {
   variantId: 'tea',
@@ -47,5 +47,36 @@ describe('requiredRights (shared with the server, pos-core)', () => {
     expect(
       requiredRights(cart([line({ discount: { type: 'percent', value: '100' } })]), items, null),
     ).toEqual(['sales.discount', 'sales.zero_total']);
+  });
+});
+
+describe('itemsInForce (product discounts, ADR-0133)', () => {
+  const offered = {
+    ...item,
+    offers: [
+      {
+        discountId: 'week',
+        price: { amount: '1.000', currency: 'KWD' },
+        startsAt: null,
+        endsAt: '2026-11-01T00:00:00.000Z',
+      },
+      {
+        discountId: 'friday',
+        price: { amount: '0.800', currency: 'KWD' },
+        startsAt: '2026-10-30T00:00:00.000Z',
+        endsAt: '2026-10-31T00:00:00.000Z',
+      },
+    ],
+  } as unknown as PosCatalogItem;
+
+  it('sells at the largest discount in force and keeps the regular price', () => {
+    const [now] = itemsInForce([offered], new Date('2026-10-22T12:00:00Z'));
+    expect(now).toMatchObject({ price: { amount: '1.000' }, regularPrice: { amount: '1.250' } });
+    const [friday] = itemsInForce([offered], new Date('2026-10-30T12:00:00Z'));
+    expect(friday!.price).toMatchObject({ amount: '0.800' });
+    const [after] = itemsInForce([offered], new Date('2026-11-01T00:00:00Z'));
+    expect(after).toMatchObject({ price: { amount: '1.250' }, regularPrice: null });
+    // An item without offers is unchanged.
+    expect(itemsInForce([item], new Date())[0]).toMatchObject({ regularPrice: null });
   });
 });

@@ -141,6 +141,7 @@ export const commonEn = {
       'This register is bound to another device, or the device is still bound. Unbind first.',
     PIN_LINK_INVALID: 'This sign-in link is no longer valid. Ask your manager for the new one.',
     PIN_NOT_SET: 'You have no PIN yet. Set it from the till app, then try again.',
+    DISCOUNT_ARCHIVED: 'This discount is archived and can no longer be changed.',
     REGISTER_INACTIVE: 'This register is inactive.',
     REGISTER_ACCESS_DENIED: 'You are not allowed to use this register.',
     SHIFT_CLOSED: 'This shift is already closed.',

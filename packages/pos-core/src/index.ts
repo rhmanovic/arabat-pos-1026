@@ -10,3 +10,4 @@ export * from './order-slip-html.js';
 export * from './overrides.js';
 export * from './shifts.js';
 export * from './refunds.js';
+export * from './discounts.js';

@@ -36,6 +36,7 @@ import {
   useText,
 } from './context.js';
 import { SectionFrame, SectionTitle, full, shownSections } from './frame.js';
+import { SaleBadge, SalePrice, productSale } from './sale.js';
 import {
   CollageSection,
   CountdownSection,
@@ -632,6 +633,7 @@ export function ProductCard({
   const lowest = lowestPrice(p);
   const varies = prices.some((m) => !m.equals(lowest));
   const price = varies ? t('catalog.from', { price: money(lowest) }) : money(lowest);
+  const sale = productSale(p);
   const description = i18n.language.startsWith('ar')
     ? p.descriptionAr || p.descriptionEn
     : p.descriptionEn || p.descriptionAr;
@@ -659,7 +661,9 @@ export function ProductCard({
         <div className="flex min-w-0 flex-1 flex-col gap-1 py-1">
           <p className="font-medium">{name(p)}</p>
           {description ? <p className="line-clamp-2 text-xs text-fg-muted">{description}</p> : null}
-          <p className="mt-auto text-sm font-semibold tabular-nums">{price}</p>
+          <p className="mt-auto text-sm font-semibold tabular-nums">
+            <SalePrice sale={sale}>{price}</SalePrice>
+          </p>
           {!available ? <Badge tone="warning">{t('catalog.unavailable')}</Badge> : null}
         </div>
       </Link>
@@ -705,6 +709,7 @@ export function ProductCard({
           loading="lazy"
         />
       ) : null}
+      <SaleBadge sale={sale} where="card" />
       {corner}
     </div>
   );
@@ -718,7 +723,11 @@ export function ProductCard({
         {pictureBox}
         <div className="absolute inset-x-0 bottom-0 flex flex-col gap-0.5 bg-gradient-to-t from-black/75 to-transparent p-3 pt-10 text-white">
           <p className="font-semibold">{name(p)}</p>
-          <p className="text-sm tabular-nums opacity-90">{price}</p>
+          <p className="text-sm tabular-nums opacity-90">
+            <SalePrice sale={sale} oldClassName="text-white/75">
+              {price}
+            </SalePrice>
+          </p>
           {!available && look.soldOut === 'text' ? (
             <Badge tone="warning">{t('catalog.unavailable')}</Badge>
           ) : null}
@@ -737,7 +746,9 @@ export function ProductCard({
         look.priceSize === 'large' ? 'text-lg font-bold' : 'text-sm text-fg-muted',
       )}
     >
-      {price}
+      <SalePrice sale={sale} className={sale ? 'font-semibold' : undefined}>
+        {price}
+      </SalePrice>
     </p>
   );
   // The card's link holds the picture and the words; the buy button sits beside it, never in it.

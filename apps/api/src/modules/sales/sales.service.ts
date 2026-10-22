@@ -64,6 +64,7 @@ import {
   salesSettings,
 } from './sales.schema.js';
 import { consumptionCosts, stockConsumption } from '../inventory/consumption.js';
+import { inForce, offersFor } from '../catalog/discount-offers.js';
 
 type CheckoutInput = z.output<typeof checkoutSchema>;
 type CartEventInput = z.output<typeof cartEventSchema>;
@@ -664,6 +665,9 @@ export class SalesService {
         sku: item.sku,
         quantity: formatQuantity(l.quantityMilli),
         listUnitPriceMinor: item.priceMinor + extra,
+        regularUnitPriceMinor:
+          item.regularPriceMinor === null ? null : item.regularPriceMinor + extra,
+        productDiscountId: item.discountId,
         unitPriceMinor: (l.priceOverrideMinor ?? item.priceMinor) + extra,
         priceOverridden: changed(l),
         priceOverrideReason: changed(l) ? l.input.priceOverrideReason : null,
@@ -865,6 +869,9 @@ export class SalesService {
         productId: string;
         quantityMilli: bigint;
         unitPriceMinor: bigint;
+        /** The price before a product discount and the discount (ADR-0133). */
+        regularUnitPriceMinor?: bigint | null;
+        productDiscountId?: string | null;
         nameEn: string | null;
         nameAr: string | null;
         variantNameEn: string | null;
@@ -1007,6 +1014,8 @@ export class SalesService {
         sku: l.sku,
         quantity: formatQuantity(l.quantityMilli),
         listUnitPriceMinor: l.unitPriceMinor,
+        regularUnitPriceMinor: l.productDiscountId ? (l.regularUnitPriceMinor ?? null) : null,
+        productDiscountId: l.regularUnitPriceMinor ? (l.productDiscountId ?? null) : null,
         unitPriceMinor: l.unitPriceMinor,
         priceOverridden: false,
         grossMinor: p.grossMinor,
@@ -1194,13 +1203,15 @@ export class SalesService {
   /**
    * Sellable variants at a branch with their current price and cost. At the point of sale a
    * product hidden from it (`pos_visible`, ADR-0130) is not sellable; the online store has its
-   * own switch on the listing.
+   * own switch on the listing. The price is the one in force now: a product discount of the
+   * channel lowers it and the regular price is kept beside it (ADR-0133).
    */
   async loadItems(
     tx: Transaction,
     branchId: string,
     variantIds: string[],
     channel: 'pos' | 'online' = 'pos',
+    now = new Date(),
   ) {
     const rows = (
       await tx.execute(sql`
@@ -1216,12 +1227,22 @@ export class SalesService {
           and (p.available_in_all_branches or exists (
             select 1 from product_branch_availability a where a.product_id = p.id and a.branch_id = ${branchId}))`)
     ).rows as Record<string, string | null>[];
+    const offers = await offersFor(
+      tx,
+      channel,
+      rows.map((r) => ({
+        variantId: r['id']!,
+        productId: r['product_id']!,
+        priceMinor: BigInt(r['price']!),
+      })),
+      now,
+    );
     return new Map(
       rows.map((r) => [
         r['id']!,
         {
           productId: r['product_id']!,
-          priceMinor: BigInt(r['price']!),
+          ...pickPrice(inForce(offers, r['id']!, BigInt(r['price']!), now)),
           costMinor: r['cost'] === null ? null : BigInt(r['cost']!),
           nameEn: r['name_en'] ?? null,
           nameAr: r['name_ar'] ?? null,
@@ -1722,6 +1743,8 @@ export class SalesService {
           sku: l.sku,
           quantity: l.quantity,
           listUnitPrice: money(l.listUnitPriceMinor),
+          regularUnitPrice:
+            l.regularUnitPriceMinor === null ? null : money(l.regularUnitPriceMinor),
           unitPrice: money(l.unitPriceMinor),
           priceOverridden: l.priceOverridden,
           priceOverrideReason: l.priceOverrideReason,
@@ -1922,4 +1945,13 @@ export class SalesService {
       flags: r['flags'] as SaleFlag[],
     }));
   }
+}
+
+/** The price fields a sold item carries (ADR-0133). */
+function pickPrice(p: ReturnType<typeof inForce>) {
+  return {
+    priceMinor: p.priceMinor,
+    regularPriceMinor: p.regularPriceMinor,
+    discountId: p.discountId,
+  };
 }

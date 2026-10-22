@@ -77,6 +77,7 @@ import { merchantTimezone } from '../../kernel/time/period.js';
 import { type PromotionLine, PromotionsService } from './promotions.service.js';
 import { type StoreCustomer, StoreAccountsService } from './store-accounts.service.js';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
+import { inForce, offersFor } from '../catalog/discount-offers.js';
 
 type Row = Record<string, unknown>;
 const CURRENCY = 'KWD' as const;
@@ -1506,6 +1507,16 @@ export class EcommerceService {
           and ${where}
         order by ol.position, coalesce(lower(p.name_en), p.name_ar), v.position`)
     ).rows as Row[];
+    // The price in force now: a product discount of the store lowers it (ADR-0133).
+    const offers = await offersFor(
+      tx,
+      'online',
+      rows.map((r) => ({
+        variantId: r['variant_id'] as string,
+        productId: r['product_id'] as string,
+        priceMinor: BigInt(r['price'] as string),
+      })),
+    );
     const out = new Map<string, StoreProduct>();
     for (const r of rows) {
       const id = r['product_id'] as string;
@@ -1536,7 +1547,7 @@ export class EcommerceService {
         nameEn: (r['vn_en'] as string | null) ?? null,
         nameAr: (r['vn_ar'] as string | null) ?? null,
         sku: (r['sku'] as string | null) ?? null,
-        price: money(r['price'] as string),
+        ...storePrice(inForce(offers, r['variant_id'] as string, BigInt(r['price'] as string))),
         available: !tracked || units > 0,
         maxQuantity: tracked ? Math.min(cap, units) : cap,
         fewLeft: tracked && units > 0 && units <= lowStockAt ? units : null,
@@ -1620,7 +1631,7 @@ export class EcommerceService {
    */
   private async promotionLines(
     tx: Transaction,
-    lines: { productId: string; netMinor: bigint }[],
+    lines: { productId: string; netMinor: bigint; discounted: boolean }[],
   ): Promise<PromotionLine[]> {
     if (lines.length === 0) return [];
     const rows = (
@@ -1639,6 +1650,7 @@ export class EcommerceService {
       categoryId: (byProduct.get(l.productId)?.['category_id'] as string | null) ?? null,
       collectionIds: (byProduct.get(l.productId)?.['collections'] as string[] | undefined) ?? [],
       netMinor: l.netMinor,
+      discounted: l.discounted,
     }));
   }
 
@@ -1680,6 +1692,7 @@ export class EcommerceService {
           {
             productId: found.p.productId,
             unitPriceMinor: parseAmount(found.v.price.amount, 'price'),
+            discounted: found.v.regularPrice !== null,
             quantityMilli: quantityMilli > 0n ? quantityMilli : 1000n,
           },
         ];
@@ -1712,7 +1725,11 @@ export class EcommerceService {
       const { promotion, codeIssue } = await this.promotions.apply(tx, {
         lines: await this.promotionLines(
           tx,
-          lines.map((l, i) => ({ productId: l.productId, netMinor: priced.lines[i]!.netMinor })),
+          lines.map((l, i) => ({
+            productId: l.productId,
+            netMinor: priced.lines[i]!.netMinor,
+            discounted: l.discounted,
+          })),
         ),
         subtotalMinor: priced.totalMinor,
         deliveryFeeMinor: fee,
@@ -1951,6 +1968,7 @@ export class EcommerceService {
             lines.map((l, i) => ({
               productId: l.item.productId,
               netMinor: priced.lines[i]!.netMinor,
+              discounted: l.item.discountId !== null,
             })),
           ),
           subtotalMinor: priced.totalMinor,
@@ -2055,6 +2073,8 @@ export class EcommerceService {
             sku: l.item.sku,
             quantity: formatQuantity(l.quantityMilli),
             unitPriceMinor: l.item.priceMinor,
+            regularUnitPriceMinor: l.item.regularPriceMinor,
+            productDiscountId: l.item.discountId,
             lineTotalMinor: priced.lines[position]!.netMinor,
           })),
         );
@@ -2545,6 +2565,8 @@ export class EcommerceService {
           productId: l.productId,
           quantityMilli: parseQuantity(l.quantity),
           unitPriceMinor: l.unitPriceMinor,
+          regularUnitPriceMinor: l.regularUnitPriceMinor,
+          productDiscountId: l.productDiscountId,
           nameEn: l.nameEn,
           nameAr: l.nameAr,
           variantNameEn: l.variantNameEn,
@@ -2666,3 +2688,12 @@ const slugTaken = () =>
   new AppError(409, 'DUPLICATE_CODE', 'Another store or link page already uses this address.', [
     { path: 'slug', code: 'duplicate', message: 'This address is taken.' },
   ]);
+
+/** A store variant's price fields: the price now, and the regular one while discounted. */
+function storePrice(p: ReturnType<typeof inForce>) {
+  return {
+    price: money(p.priceMinor.toString()),
+    regularPrice: p.regularPriceMinor === null ? null : money(p.regularPriceMinor.toString()),
+    discountEndsAt: p.regularPriceMinor === null ? null : p.endsAt,
+  };
+}

@@ -35,7 +35,7 @@ export async function loadReceiptData(
   const lines = (
     await tx.execute(sql`
       select l.position, l.name_en, l.name_ar, l.variant_name_en, l.variant_name_ar, l.quantity::text,
-             l.unit_price_minor::text, l.gross_minor::text, l.line_discount_minor::text,
+             l.unit_price_minor::text, l.regular_unit_price_minor::text, l.gross_minor::text, l.line_discount_minor::text,
              coalesce((select array_agg(coalesce(nullif(md.name_ar, ''), md.name_en) order by md.name_en)
                        from sale_line_modifiers md where md.sale_id = l.sale_id and md.position = l.position),
                       '{}') as modifiers
@@ -73,6 +73,10 @@ export async function loadReceiptData(
         modifiers: (l['modifiers'] as string[]).filter(Boolean),
         quantity: (l['quantity'] as string).replace(/\.?0+$/, ''),
         unitPriceMinor: BigInt(l['unit_price_minor'] as string),
+        regularUnitPriceMinor:
+          l['regular_unit_price_minor'] === null
+            ? null
+            : BigInt(l['regular_unit_price_minor'] as string),
         grossMinor: BigInt(l['gross_minor'] as string),
         lineDiscountMinor: BigInt(l['line_discount_minor'] as string),
       };

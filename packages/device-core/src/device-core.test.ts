@@ -1,7 +1,7 @@
 import type { DeviceRecordResult, DeviceSnapshot } from '@arabat/contracts';
 import { argon2id } from 'hash-wasm';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { loadCatalog, searchCatalog } from './catalog.js';
+import { catalogAt, loadCatalog, searchCatalog } from './catalog.js';
 import { afterFailure, attemptPin, freshLock, isLocked, verifyPinHash } from './pin.js';
 import { OFFLINE_RED_HOURS, offlineState } from './offline.js';
 import { applyResults, listOutbox, nextBatch, outboxCounts } from './outbox.js';
@@ -57,6 +57,7 @@ function snapshot(partial: Partial<DeviceSnapshot> = {}): DeviceSnapshot {
     catalogVersion: '2026-10-18T09:00:00.000Z',
     serverTime: '2026-10-18T10:00:00.000Z',
     offlineLimitHours: 72,
+    priceOffers: [],
     device: {
       id: U(1),
       name: 'Till',
@@ -417,7 +418,7 @@ describe('schema and snapshot', () => {
   it('migrates once, stores a full snapshot and applies deltas per product', async () => {
     const d = await device();
     await migrate(d.db); // idempotent
-    expect(await getMeta(d.db, META.schemaVersion)).toBe('2');
+    expect(await getMeta(d.db, META.schemaVersion)).toBe('3');
     await applySnapshot(d.db, snapshot());
     const ctx = (await loadContext(d.db))!;
     expect(ctx.branch.code).toBe('MAIN');
@@ -638,6 +639,72 @@ describe('selling', () => {
       cashSalesMinor: 700n,
       expectedCashMinor: 5700n,
     });
+  });
+
+  it('sells at the product discount in force and keeps the regular price (ADR-0133)', async () => {
+    const d = await device();
+    await applySnapshot(
+      d.db,
+      snapshot({
+        priceOffers: [
+          { variantId: U(61), discountId: U(90), priceMinor: '200', startsAt: null, endsAt: null },
+          {
+            variantId: U(61),
+            discountId: U(91),
+            priceMinor: '150',
+            startsAt: '2026-10-30T00:00:00.000Z',
+            endsAt: '2026-10-31T00:00:00.000Z',
+          },
+        ],
+      }),
+    );
+    const ctx = (await loadContext(d.db))!;
+    const staff = await loadStaff(d.db);
+    const catalog = await loadCatalog(d.db);
+    const methods = await loadPaymentMethods(d.db);
+    const sara = staff.find((m) => m.fullName === 'Sara')!;
+    const now = new Date('2026-10-22T12:00:00Z');
+    const tea = catalogAt(catalog, now).items.get(U(61))!;
+    expect([tea.priceMinor, tea.regularPriceMinor, tea.discountId]).toEqual([200n, 250n, U(90)]);
+    expect(catalogAt(catalog, new Date('2026-10-30T12:00:00Z')).items.get(U(61))!.priceMinor).toBe(
+      150n,
+    );
+    expect(priceCartLines(teaCart('2'), catalog, now)).toMatchObject({
+      ok: true,
+      cart: { totalMinor: 400n },
+    });
+    const shift = await openShift(d.db, {
+      cashier: sara,
+      countedCashMinor: 0n,
+      note: null,
+      role: 'primary',
+    });
+    const prepared = prepareSale(
+      {
+        cart: teaCart('2'),
+        payments: cash('0.400'),
+        cashier: sara,
+        shift,
+        supervisor: null,
+        zeroTotalReason: null,
+      },
+      ctx,
+      catalog,
+      methods,
+      now,
+    );
+    expect(prepared.record.lines[0]).toMatchObject({
+      listUnitPriceMinor: '200',
+      unitPriceMinor: '200',
+      regularUnitPriceMinor: '250',
+      productDiscountId: U(90),
+      netMinor: '400',
+    });
+    const sale = await commitSale(d.db, prepared, ctx);
+    const local = (await getSale(d.db, sale.saleId))!;
+    expect(local.lines[0]).toMatchObject({ listUnitPriceMinor: 200n, regularUnitPriceMinor: 250n });
+    // The receipt shows the price before the discount.
+    expect(receiptHtmlFor(local, ctx, sara)).toContain('قبل الخصم');
   });
 
   it('keeps the receipt series gap-free when a sale fails to write or two sales race', async () => {

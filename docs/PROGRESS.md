@@ -1265,6 +1265,32 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-22 — Product discounts for the store and the point of sale (ADR-0133, BR-242)
+Owner's request: a professional way in the store console to discount products by a price or a
+percentage, shown in the store and charged at the point of sale at the same time, with the
+badge's colour and size chosen in the store design. Owner's decisions: no stacking (largest wins),
+order codes skip discounted items unless set to stack, the cashier's limit counts from the
+discounted price, below cost allowed after a warning.
+- Database (migration 0073): `product_discounts` (RLS, never deleted), regular price and discount
+  on `sale_lines` and `online_order_lines`, `online_promotions.stacks_with_discounts`.
+- Rules in `@arabat/pos-core` (`discountedPrice`, `priceOffers`, `offerAt`, `savedPercent`);
+  coverage in `catalog/discount-offers.ts` used by every price path (`SalesService.loadItems`, POS
+  catalog, store products, restaurant bills, device sync).
+- API: `/manager/discounts` (list, preview, create, update, status) with audit.
+- Point of sale: browser till, restaurant menu and exchanges price at the offer in force every 15
+  seconds, tiles show the old price struck; devices get `priceOffers`, keep them locally (device
+  schema 3), sell with `catalogAt` and upload the regular price; receipts print "قبل الخصم".
+- Online store: price now + regular price + end; cards, product page, cart; quote and checkout
+  leave discounted lines out of non-stacking codes.
+- Console: `/online/discounts` (states, editor, quick values, targets with search, channels,
+  dates, live preview with below-cost confirmation; read-only without the price right), stacking
+  option on promotions, a "Discounts" tab in the store design (badge on cards and on the product
+  page: words, colour, fill, size, shape, corner, pulse; old price, price colour, saving, end).
+- Tests: pos-core (+3), device-core (+1), pos-web (+1), online-web (+2), store-web (+1),
+  integration discounts (+3) and device ingest (+1), E2E (+1).
+- Verified (cloud sandbox): `pnpm verify` 429 unit/web, `pnpm test:integration` 320 (46 files),
+  `pnpm test:e2e` 47.
+
 ### 2026-10-22 — Excel: special lists as a checklist (one ✓ column per list)
 Owner's request: merchants cannot be expected to type list names with commas; they need to tick
 several lists at once. Excel has no multi-choice drop-down without macros, so each list of the

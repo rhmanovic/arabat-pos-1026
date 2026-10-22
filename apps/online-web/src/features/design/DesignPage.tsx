@@ -29,6 +29,7 @@ import { HeaderEditor } from './HeaderEditor.js';
 import { FooterEditor } from './FooterEditor.js';
 import { ThemeEditor } from './ShellEditors.js';
 import { ProductPageEditor } from './ProductPageEditor.js';
+import { SaleEditor } from './SaleEditor.js';
 import { CartPageEditor, CheckoutPageEditor } from './CartEditors.js';
 
 /** The preview frame's name: the storefront shows the draft when it runs inside it. */
@@ -92,7 +93,7 @@ function PreviewFrame({
     </div>
   );
 }
-type Tab = 'pages' | 'theme' | 'header' | 'footer';
+type Tab = 'pages' | 'theme' | 'header' | 'footer' | 'sale';
 /** The pages the editor shows: the designed ones, and the checkout (settings only, no sections). */
 type EditorPage = PageKey | 'checkout';
 const EDITOR_PAGES: readonly EditorPage[] = [...DESIGN_PAGES, 'checkout'];
@@ -332,9 +333,9 @@ function Editor({
           <div
             role="tablist"
             aria-label={t('design.parts')}
-            className="grid grid-cols-4 gap-1 rounded-xl bg-surface-muted p-1"
+            className="grid grid-cols-5 gap-1 rounded-xl bg-surface-muted p-1"
           >
-            {(['pages', 'theme', 'header', 'footer'] as const).map((x) => (
+            {(['pages', 'theme', 'header', 'footer', 'sale'] as const).map((x) => (
               <button
                 key={x}
                 type="button"
@@ -365,6 +366,8 @@ function Editor({
               <ThemeEditor design={draft} set={setDraft} />
             ) : tab === 'header' ? (
               <HeaderEditor design={draft} set={setDraft} />
+            ) : tab === 'sale' ? (
+              <SaleEditor design={draft} set={setDraft} />
             ) : (
               <FooterEditor design={draft} set={setDraft} />
             )}

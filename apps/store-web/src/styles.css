@@ -88,6 +88,14 @@
   animation: store-pulse 2.2s ease-out infinite;
 }
 
+/* A price tag: the badge's outer end is cut to a point (ADR-0133). */
+.sale-tag {
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%);
+}
+[dir='rtl'] .sale-tag {
+  clip-path: polygon(8px 0, 100% 0, 100% 100%, 8px 100%, 0 50%);
+}
+
 /*
  * Lively page motion: the items of a list (products, cards, categories, steps…) follow one
  * another as their section comes into view, and cards lift under the pointer.

@@ -33,6 +33,7 @@ function snapshot(partial: Partial<DeviceSnapshot> = {}): DeviceSnapshot {
     catalogVersion: 'c1',
     serverTime: new Date().toISOString(),
     offlineLimitHours: 72,
+    priceOffers: [],
     device: {
       id: U(1),
       name: 'Till',

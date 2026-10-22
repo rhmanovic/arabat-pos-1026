@@ -53,7 +53,13 @@ export function snapshotStatements(
     { sql: `DELETE FROM payment_methods` },
     { sql: `DELETE FROM staff` },
     { sql: `DELETE FROM categories` },
+    { sql: `DELETE FROM price_offers` },
   );
+  for (const o of snap.priceOffers ?? [])
+    s.push({
+      sql: `INSERT INTO price_offers (variant_id, discount_id, price_minor, starts_at, ends_at) VALUES (?, ?, ?, ?, ?)`,
+      params: [o.variantId, o.discountId, o.priceMinor, o.startsAt, o.endsAt],
+    });
   for (const m of snap.paymentMethods)
     s.push({
       sql: `INSERT INTO payment_methods (id, sort_order, json) VALUES (?, ?, ?)`,

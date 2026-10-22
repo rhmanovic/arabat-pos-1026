@@ -29,6 +29,8 @@ export type PromotionLine = {
   /** Collections of the product (ADR-0130; former store categories keep their ids). */
   collectionIds: string[];
   netMinor: bigint;
+  /** Lowered by a product discount (ADR-0133): left out unless the promotion stacks. */
+  discounted: boolean;
 };
 export type CodeIssue = NonNullable<StoreQuoteResult['codeIssue']>;
 export type AppliedPromotion = {
@@ -75,6 +77,7 @@ export class PromotionsService {
       status: r['status'] as 'active',
       appliesTo: r['applies_to'] as 'order',
       targetIds: (r['target_ids'] as string[]) ?? [],
+      stacksWithDiscounts: Boolean(r['stacks_with_discounts']),
       position: r['position'] as number,
       version: r['version'] as number,
     };
@@ -111,6 +114,7 @@ export class PromotionsService {
       status: input.status,
       appliesTo: input.appliesTo,
       targetIds: JSON.stringify(input.appliesTo === 'order' ? [] : input.targetIds),
+      stacksWithDiscounts: input.stacksWithDiscounts,
     };
   }
 
@@ -126,11 +130,12 @@ export class PromotionsService {
       await this.assertCodeFree(tx, v.code, null);
       await tx.execute(sql`
         insert into online_promotions (id, merchant_id, name_en, name_ar, kind, code, discount_type, percent, amount_minor,
-          minimum_order_minor, max_uses, max_uses_per_customer, starts_at, ends_at, status, applies_to, target_ids, position)
+          minimum_order_minor, max_uses, max_uses_per_customer, starts_at, ends_at, status, applies_to, target_ids,
+          stacks_with_discounts, position)
         values (${id}, ${actor.merchantId}, ${v.nameEn}, ${v.nameAr}, ${v.kind}, ${v.code}, ${v.discountType}, ${v.percent},
           ${v.amountMinor}, ${v.minimumOrderMinor}, ${v.maxUses}, ${v.maxUsesPerCustomer},
           ${v.startsAt}::timestamptz, ${v.endsAt}::timestamptz, ${v.status}, ${v.appliesTo}, ${v.targetIds}::jsonb,
-          coalesce((select max(position) + 1 from online_promotions), 0))`);
+          ${v.stacksWithDiscounts}, coalesce((select max(position) + 1 from online_promotions), 0))`);
       await this.record(tx, actor, 'online.promotion_created', id, ip, {
         name: v.nameAr ?? v.nameEn,
         code: v.code,
@@ -160,7 +165,8 @@ export class PromotionsService {
           discount_type = ${v.discountType}, percent = ${v.percent}, amount_minor = ${v.amountMinor},
           minimum_order_minor = ${v.minimumOrderMinor}, max_uses = ${v.maxUses}, max_uses_per_customer = ${v.maxUsesPerCustomer},
           starts_at = ${v.startsAt}::timestamptz, ends_at = ${v.endsAt}::timestamptz, status = ${v.status},
-          applies_to = ${v.appliesTo}, target_ids = ${v.targetIds}::jsonb, version = version + 1, updated_at = now()
+          applies_to = ${v.appliesTo}, target_ids = ${v.targetIds}::jsonb,
+          stacks_with_discounts = ${v.stacksWithDiscounts}, version = version + 1, updated_at = now()
         where id = ${id}`);
       await this.record(tx, actor, 'online.promotion_updated', id, ip, {
         name: v.nameAr ?? v.nameEn,
@@ -287,10 +293,16 @@ export class PromotionsService {
       )
         return { issue: 'customer_limit', applied: null };
       const targets = new Set((r['target_ids'] as string[]) ?? []);
+      // Items already lowered by a product discount get no second discount unless the
+      // promotion says so (ADR-0133).
+      const stacks = Boolean(r['stacks_with_discounts']);
+      const eligible = cart.lines.filter((l) => stacks || !l.discounted);
       const base =
         r['applies_to'] === 'order'
-          ? cart.subtotalMinor
-          : cart.lines
+          ? stacks || eligible.length === cart.lines.length
+            ? cart.subtotalMinor
+            : eligible.reduce((sum, l) => sum + l.netMinor, 0n)
+          : eligible
               .filter((l) =>
                 r['applies_to'] === 'product'
                   ? targets.has(l.productId)

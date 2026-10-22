@@ -512,6 +512,13 @@
       "when": 1792578251948,
       "tag": "0072_drop_online_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1792685531092,
+      "tag": "0073_product_discounts",
+      "breakpoints": true
     }
   ]
 }

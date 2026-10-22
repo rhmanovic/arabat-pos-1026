@@ -14,8 +14,41 @@ import {
   parseQuantity,
   priceCart,
 } from '@arabat/money';
-import { type SaleLine, requiredSaleRights } from '@arabat/pos-core';
-import { type ReactNode, createContext, useContext, useMemo, useState } from 'react';
+import { type SaleLine, offerAt, requiredSaleRights } from '@arabat/pos-core';
+import { type ReactNode, createContext, useContext, useEffect, useMemo, useState } from 'react';
+
+/** A till item at the price in force now; `regularPrice` while a product discount lowers it. */
+export type TillItem = PosCatalogItem & { regularPrice: PosCatalogItem['price'] | null };
+
+/**
+ * The catalog's items at the price in force at `now` (product discounts, ADR-0133): the server
+ * sends every offer with its dates and sells at the same one, so the till needs no reload when
+ * a discount starts or ends.
+ */
+export function itemsInForce(items: readonly PosCatalogItem[], now: Date): TillItem[] {
+  return items.map((i) => {
+    const offer = offerAt(
+      (i.offers ?? []).map((o) => ({
+        ...o,
+        priceMinor: Money.fromJSON(o.price as { amount: string; currency: 'KWD' }).minor,
+      })),
+      now,
+    );
+    return offer
+      ? { ...i, price: offer.price, regularPrice: i.price }
+      : { ...i, regularPrice: null };
+  });
+}
+
+/** The current time, refreshed every 15 seconds (prices of discounts that start or end). */
+export function useNow(): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 15_000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
 
 export interface CartLine {
   key: string;

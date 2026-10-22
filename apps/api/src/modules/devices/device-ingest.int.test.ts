@@ -832,3 +832,113 @@ describe('device exceptions for managers', () => {
     ).toBe(401);
   });
 });
+
+describe('product discounts on devices (ADR-0133)', () => {
+  it('sends every offer in the snapshot and keeps the regular price on a device sale', async () => {
+    const s = await setup();
+    const make = async (body: Rec) => {
+      const res = await s.c.client.request('POST', '/manager/discounts', {
+        cookies: s.c.cookies,
+        body,
+      });
+      expect(res.statusCode).toBe(201);
+      return res.json() as { id: string };
+    };
+    const teaProduct = (
+      await owner.query(`select product_id from product_variants where id = $1`, [s.tea])
+    ).rows[0].product_id as string;
+    // 20% on the tea now, 50% next month, and one for the online store only (not sent).
+    const now = await make({
+      nameEn: 'Tea week',
+      type: 'percentage',
+      percent: '20',
+      appliesTo: 'products',
+      targetIds: [teaProduct],
+    });
+    const later = await make({
+      nameEn: 'Next month',
+      type: 'percentage',
+      percent: '50',
+      appliesTo: 'products',
+      targetIds: [teaProduct],
+      startsAt: at(60 * 24 * 30),
+    });
+    await make({
+      nameEn: 'Web only',
+      type: 'amount',
+      amount: '0.100',
+      appliesTo: 'all',
+      pos: false,
+    });
+    const snap = (await sync(s.token, 'GET')).json();
+    const offers = (snap.priceOffers as Rec[]).filter((o) => o['variantId'] === s.tea);
+    expect(offers).toEqual([
+      expect.objectContaining({ discountId: now.id, priceMinor: '200', startsAt: null }),
+      expect.objectContaining({ discountId: later.id, priceMinor: '125' }),
+    ]);
+    expect((snap.priceOffers as Rec[]).every((o) => o['variantId'] === s.tea)).toBe(true);
+
+    // The device sold two teas at 0.200 (regular 0.250), and a cup with a discount it made up.
+    const shiftId = newId();
+    const theSale = sale(s, shiftId, 1, {
+      lines: [
+        {
+          variantId: s.tea,
+          quantity: '2',
+          listUnitPriceMinor: '200',
+          regularUnitPriceMinor: '250',
+          productDiscountId: now.id,
+          unitPriceMinor: '200',
+          priceOverrideReason: null,
+          discount: null,
+          grossMinor: '400',
+          lineDiscountMinor: '0',
+          orderDiscountMinor: '0',
+          netMinor: '400',
+        },
+        {
+          variantId: s.cup,
+          quantity: '1',
+          listUnitPriceMinor: '1000',
+          regularUnitPriceMinor: '1500',
+          productDiscountId: newId(),
+          unitPriceMinor: '1000',
+          priceOverrideReason: null,
+          discount: null,
+          grossMinor: '1000',
+          lineDiscountMinor: '0',
+          orderDiscountMinor: '0',
+          netMinor: '1000',
+        },
+      ],
+      subtotalMinor: '1400',
+      lineDiscountsMinor: '0',
+      totalMinor: '1400',
+      payments: [
+        {
+          id: newId(),
+          methodId: s.cash,
+          amountMinor: '1400',
+          tenderedMinor: '1400',
+          changeMinor: '0',
+          feeMinor: '0',
+          reference: null,
+        },
+      ],
+    });
+    const res = await sync(s.token, 'POST', [openShift(s, shiftId), theSale]);
+    expect(res.json().results.map((r: Rec) => r['status'])).toEqual(['accepted', 'accepted']);
+    const lines = (
+      await owner.query(
+        `select position, list_unit_price_minor::text as list, regular_unit_price_minor::text as regular,
+                product_discount_id from sale_lines where sale_id = $1 order by position`,
+        [theSale['id']],
+      )
+    ).rows;
+    // The unknown discount is left out, never refused (the sale happened).
+    expect(lines).toEqual([
+      { position: 0, list: '200', regular: '250', product_discount_id: now.id },
+      { position: 1, list: '1000', regular: null, product_discount_id: null },
+    ]);
+  });
+});

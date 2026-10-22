@@ -143,6 +143,8 @@ export const saleLineSchema = z.object({
   sku: z.string().nullable(),
   quantity: z.string(),
   listUnitPrice: moneySchema,
+  /** The price before a product discount (ADR-0133); the list price is then the discounted one. */
+  regularUnitPrice: moneySchema.nullable().default(null),
   unitPrice: moneySchema,
   priceOverridden: z.boolean(),
   priceOverrideReason: z.string().nullable().default(null),

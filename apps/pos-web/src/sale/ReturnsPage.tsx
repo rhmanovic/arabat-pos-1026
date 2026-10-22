@@ -13,7 +13,7 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { shiftKey } from '../pages/ShiftPages.js';
-import { type CartLine, priceLines } from './cart.js';
+import { type CartLine, itemsInForce, priceLines, useNow } from './cart.js';
 import { ReceiptDialog } from './dialogs.js';
 import { availabilityKey, catalogKey, itemLabel, useMoneyFormat } from './SalePage.js';
 
@@ -473,10 +473,9 @@ function ExchangePanel({
     queryKey: ['pos', 'payment-methods'],
     queryFn: () => api.payments.posMethods(),
   });
-  const items = useMemo(
-    () => new Map((catalog.data?.items ?? []).map((i) => [i.variantId, i])),
-    [catalog.data],
-  );
+  const now = useNow();
+  const live = useMemo(() => itemsInForce(catalog.data?.items ?? [], now), [catalog.data, now]);
+  const items = useMemo(() => new Map(live.map((i) => [i.variantId, i])), [live]);
   const [lines, setLines] = useState<CartLine[]>([]);
   const [search, setSearch] = useState('');
   const [methodId, setMethodId] = useState<string>('');
@@ -488,7 +487,7 @@ function ExchangePanel({
   const due = newTotal - creditMinor;
   const term = search.trim().toLowerCase();
   const matches = term
-    ? (catalog.data?.items ?? [])
+    ? live
         .filter(
           (i) =>
             itemLabel(i, i18n.language).toLowerCase().includes(term) ||

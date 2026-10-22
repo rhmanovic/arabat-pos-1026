@@ -66,6 +66,27 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-22 (product discounts, ADR-0133)
+- `packages/pos-core` (+3): percentage half-up to the fils, amount, never down to zero or 100%;
+  the largest offer in force wins, start inclusive / end exclusive, first on a tie; saved %.
+- `packages/device-core` (+1): offers from the snapshot, `catalogAt` now and on a later date,
+  cart priced at the offer, the sale record and the local line keep the regular price and the
+  discount, the receipt prints "قبل الخصم"; schema version 3.
+- `apps/pos-web/src/sale/cart.test.ts` (+1): `itemsInForce` before, during and after offers.
+- `apps/online-web/src/app.test.tsx` (+2): new discount with quick 25%, categories, live preview,
+  below-cost tick before saving, the body sent; read-only without `catalog.prices.manage`.
+- `apps/store-web/src/app.test.tsx` (+1): card badge as designed (words, colour, ribbon), old
+  price; none on a regular product; product page badge, struck price, saving and "ends in 2 days".
+- `catalog/discounts.int.test.ts` (3): preview (sub-categories, below cost, amount larger than a
+  price), states (running / scheduled / paused / archived), validation, rights, audit; the till
+  sells at the largest offer with the regular price and discount on the line, the cashier's 10%
+  on top, a paused discount gives `TOTAL_CHANGED`; the store shows regular price and end, codes
+  skip discounted items unless stacking, order lines record both.
+- `device-ingest.int.test.ts` (+1): `priceOffers` in the snapshot (POS only, scheduled included);
+  a device sale keeps the regular price, an unknown discount is left out.
+- `e2e/store.spec.ts` (+1, 47): a 25% discount made in the console runs and shows on the store's
+  card with "-25%", the old price and the new one.
+
 ### Results 2026-10-22 (Excel: special lists as a checklist)
 - `catalog-transfer.int.test.ts` (5): one "قائمة: <name>" column per list after the category
   with a ✓ drop-down (`lists!$D$2:$D$2`, stop); two ticks put the product in both lists; the

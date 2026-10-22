@@ -20,6 +20,7 @@ import {
 import { createdAt, id, merchantId, updatedAt } from '../../database/schema/columns.js';
 import { branches } from '../branches/branches.schema.js';
 import { productVariants, products } from '../catalog/catalog.schema.js';
+import { productDiscounts } from '../catalog/discounts.schema.js';
 import { merchants } from '../merchants/merchants.schema.js';
 import { onlinePromotions } from './promotions.schema.js';
 
@@ -424,6 +425,9 @@ export const onlineOrderLines = pgTable(
     quantity: quantity().notNull(),
     /** Price shown at checkout; the sale uses it even if the catalog price changes later. */
     unitPriceMinor: minor().notNull(),
+    /** The price before a product discount (ADR-0133); null without one. */
+    regularUnitPriceMinor: minor(),
+    productDiscountId: uuid().references(() => productDiscounts.id),
     lineTotalMinor: minor().notNull(),
   },
   (t) => [

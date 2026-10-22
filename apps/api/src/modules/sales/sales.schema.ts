@@ -17,6 +17,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { createdAt, id, merchantId, updatedAt } from '../../database/schema/columns.js';
 import { branches } from '../branches/branches.schema.js';
+import { productDiscounts } from '../catalog/discounts.schema.js';
 import { customers } from '../customers/customers.schema.js';
 import { users } from '../iam/iam.schema.js';
 import { merchants } from '../merchants/merchants.schema.js';
@@ -424,6 +425,13 @@ export const saleLines = pgTable(
     sku: text(),
     quantity: quantity().notNull(),
     listUnitPriceMinor: minor().notNull(),
+    /**
+     * The catalog price before a product discount (ADR-0133); null without one. The list price
+     * is then the discounted price, from which the cashier's own discounts are measured.
+     */
+    regularUnitPriceMinor: minor(),
+    /** The product discount that set the list price (never deleted, archived). */
+    productDiscountId: uuid().references(() => productDiscounts.id),
     unitPriceMinor: minor().notNull(),
     priceOverridden: boolean().notNull().default(false),
     /** Why the price was changed (BR-178); set whenever `price_overridden`. */
@@ -443,6 +451,10 @@ export const saleLines = pgTable(
     check(
       'sale_lines_amounts_consistent',
       sql`${t.netMinor} = ${t.grossMinor} - ${t.lineDiscountMinor} - ${t.orderDiscountMinor} and ${t.netMinor} >= 0`,
+    ),
+    check(
+      'sale_lines_regular_price_valid',
+      sql`${t.regularUnitPriceMinor} is null or (${t.regularUnitPriceMinor} > ${t.listUnitPriceMinor} and ${t.productDiscountId} is not null)`,
     ),
     index('sale_lines_variant_idx').on(t.merchantId, t.variantId),
   ],

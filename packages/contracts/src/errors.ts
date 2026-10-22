@@ -142,6 +142,8 @@ export const ERROR_CODES = [
   'REGISTER_BOUND',
   'PIN_LINK_INVALID',
   'PIN_NOT_SET',
+  // Product discounts (ADR-0133)
+  'DISCOUNT_ARCHIVED',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

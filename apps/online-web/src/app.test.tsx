@@ -1251,6 +1251,7 @@ describe('online store console', () => {
       status: 'active',
       appliesTo: 'order',
       targetIds: [],
+      stacksWithDiscounts: false,
       position: 0,
       version: 1,
     };
@@ -2218,6 +2219,96 @@ describe('online store console', () => {
         expect(design.pages.cart.map((x) => x.type)).toEqual(['faq']);
       });
     });
+  });
+
+  it('creates a product discount with a preview and a below-cost confirmation (ADR-0133)', async () => {
+    const user = userEvent.setup();
+    const previews: unknown[] = [];
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'online.manage', 'catalog.prices.manage']),
+      routes: {
+        'GET /manager/discounts': () => ({ status: 200, body: { discounts: [] } }),
+        'GET /manager/online/categories': () => ({
+          status: 200,
+          body: { categories: [CATEGORY], uncategorized: 0 },
+        }),
+        'POST /manager/discounts/preview': (body) => {
+          previews.push(body);
+          return {
+            status: 200,
+            body: {
+              products: 3,
+              unchanged: 0,
+              belowCost: 1,
+              samples: [
+                {
+                  productId: '0190a000-0000-7000-8000-0000000000a7',
+                  nameEn: 'Espresso',
+                  nameAr: null,
+                  price: money('1.000'),
+                  discountedPrice: money('0.750'),
+                  cost: money('0.800'),
+                  belowCost: true,
+                },
+              ],
+            },
+          };
+        },
+        'POST /manager/discounts': (body) => ({
+          status: 201,
+          body: {
+            id: '0190a000-0000-7000-8000-0000000000a8',
+            ...(body as object),
+            amount: null,
+            state: 'running',
+            status: 'active',
+            productCount: 3,
+            version: 1,
+            createdAt: '2026-10-22T10:00:00.000Z',
+          },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/discounts', fetch });
+    expect(await screen.findByText('No discounts yet')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'New discount' }));
+    const dialog = await screen.findByRole('dialog', { name: 'New discount' });
+    await user.type(within(dialog).getByLabelText('Name (Arabic)'), 'خصم المشروبات');
+    await user.click(within(dialog).getByRole('button', { name: '25%' }));
+    await user.click(within(dialog).getByRole('radio', { name: 'Categories' }));
+    await user.click(await within(dialog).findByRole('checkbox', { name: 'Drinks' }));
+    // The preview tells what the discount does and warns about selling below cost.
+    const preview = within(dialog).getByTestId('discount-preview');
+    expect(await within(preview).findByText('Lowers the price of 3 products.')).toBeInTheDocument();
+    expect(within(preview).getByText('1 product would sell below its cost.')).toBeInTheDocument();
+    const save = within(dialog).getByRole('button', { name: 'Save' });
+    expect(save).toBeDisabled();
+    await user.click(within(preview).getByRole('checkbox', { name: 'I know, save it anyway' }));
+    await user.click(save);
+    await waitFor(() =>
+      expect(
+        fetch.calls.find((c) => c.method === 'POST' && c.path === '/manager/discounts')?.body,
+      ).toMatchObject({
+        nameAr: 'خصم المشروبات',
+        type: 'percentage',
+        percent: '25',
+        appliesTo: 'categories',
+        targetIds: [CATEGORY.id],
+        online: true,
+        pos: true,
+      }),
+    );
+    expect(previews.length).toBeGreaterThan(0);
+  });
+
+  it('shows discounts read-only without the right to manage prices', async () => {
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'online.manage']),
+      routes: { 'GET /manager/discounts': () => ({ status: 200, body: { discounts: [] } }) },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/discounts', fetch });
+    expect(await screen.findByText(/Changing them needs/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New discount' })).toBeNull();
   });
 
   it('defines the same translation keys in Arabic and English', () => {

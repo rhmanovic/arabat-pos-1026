@@ -26,7 +26,7 @@ import {
   toDiscount,
 } from '@arabat/pos-core';
 import type { BridgeDb, SqlStatement } from './bridge.js';
-import type { Catalog, CatalogItem } from './catalog.js';
+import { type Catalog, type CatalogItem, catalogAt } from './catalog.js';
 import { newId, nowIso } from './ids.js';
 import { enqueueStatement } from './outbox.js';
 import { META, getMeta } from './schema.js';
@@ -81,7 +81,8 @@ export type CartPricing =
   { ok: true; cart: PricedCart } | { ok: false; line: number | null; code: string };
 
 /** Prices the cart for display with the shared function; refusals come later at checkout. */
-export function priceCartLines(cart: Cart, catalog: Catalog): CartPricing {
+export function priceCartLines(cart: Cart, loaded: Catalog, now: Date = new Date()): CartPricing {
+  const catalog = catalogAt(loaded, now);
   try {
     const lines = toSaleLines(cart);
     return {
@@ -107,10 +108,12 @@ export function priceCartLines(cart: Cart, catalog: Catalog): CartPricing {
 /** The overridable rights the cart needs and the cashier lacks (ask a supervisor for these). */
 export function missingRights(
   cart: Cart,
-  catalog: Catalog,
+  loaded: Catalog,
   ctx: LocalContext,
   cashier: StaffMember,
+  now: Date = new Date(),
 ): OverridablePermission[] {
+  const catalog = catalogAt(loaded, now);
   try {
     const needed =
       requiredSaleRights(
@@ -165,10 +168,12 @@ export interface PreparedSale {
 export function prepareSale(
   input: SaleInput,
   ctx: LocalContext,
-  catalog: Catalog,
+  loaded: Catalog,
   methods: readonly DevicePaymentMethod[],
   now: Date = new Date(),
 ): PreparedSale {
+  // Prices in force at the moment of the sale (product discounts, ADR-0133).
+  const catalog = catalogAt(loaded, now);
   const { cart, cashier } = input;
   if (!holds(cashier, 'pos.access') || !holds(cashier, 'sales.create'))
     throw new PosRuleError(403, 'FORBIDDEN', 'You are not allowed to sell.');
@@ -229,10 +234,13 @@ export function prepareSale(
     lines: lines.map((l, i) => {
       const p = priced.lines[i]!;
       const listUnit = items[i]!.priceMinor;
+      const regular = items[i]!.regularPriceMinor;
       return {
         variantId: l.variantId,
         quantity: formatQuantity(l.quantityMilli),
         listUnitPriceMinor: listUnit.toString(),
+        regularUnitPriceMinor: regular === null ? null : regular.toString(),
+        productDiscountId: items[i]!.discountId,
         unitPriceMinor: (l.priceOverrideMinor ?? listUnit).toString(),
         priceOverrideReason:
           l.priceOverrideMinor !== null && l.priceOverrideMinor !== listUnit
@@ -352,8 +360,9 @@ export function commitSale(
         const item = prepared.items[i]!;
         return {
           sql: `INSERT INTO sale_lines (sale_id, position, variant_id, name_en, name_ar, variant_name_en, variant_name_ar, sku, quantity,
-                  list_unit_price_minor, unit_price_minor, gross_minor, line_discount_minor, order_discount_minor, net_minor, track_inventory)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                  list_unit_price_minor, unit_price_minor, gross_minor, line_discount_minor, order_discount_minor, net_minor, track_inventory,
+                  regular_unit_price_minor, product_discount_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           params: [
             r.id,
             i,
@@ -371,6 +380,8 @@ export function commitSale(
             l.orderDiscountMinor,
             l.netMinor,
             item.trackInventory ? 1 : 0,
+            l.regularUnitPriceMinor ?? null,
+            l.productDiscountId ?? null,
           ],
         };
       }),
@@ -426,6 +437,8 @@ export interface LocalSale {
     sku: string | null;
     quantity: string;
     listUnitPriceMinor: bigint;
+    /** The price before a product discount (ADR-0133), for "was" on the receipt. */
+    regularUnitPriceMinor: bigint | null;
     unitPriceMinor: bigint;
     grossMinor: bigint;
     lineDiscountMinor: bigint;
@@ -477,6 +490,10 @@ export async function getSale(db: BridgeDb, saleId: string): Promise<LocalSale |
       sku: str(l['sku']),
       quantity: String(l['quantity']),
       listUnitPriceMinor: BigInt(String(l['list_unit_price_minor'])),
+      regularUnitPriceMinor:
+        l['regular_unit_price_minor'] === null || l['regular_unit_price_minor'] === undefined
+          ? null
+          : BigInt(String(l['regular_unit_price_minor'])),
       unitPriceMinor: BigInt(String(l['unit_price_minor'])),
       grossMinor: BigInt(String(l['gross_minor'])),
       lineDiscountMinor: BigInt(String(l['line_discount_minor'])),

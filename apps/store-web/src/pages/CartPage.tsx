@@ -8,6 +8,7 @@ import { isPreview, useDesign, useText } from '../design/context.js';
 import { StoreIcon } from '../design/parts.js';
 import { Highlights, ProductRow, useOutOfView } from '../design/product-parts.js';
 import { DesignedPage } from '../design/sections.js';
+import { SalePrice, variantSale } from '../design/sale.js';
 import { useLocalName, useMoney, useSlug, useStoreProducts, useStorefront } from '../shared.js';
 
 /** Products offered with the cart: never one in it or sold out; the featured first. */
@@ -196,7 +197,9 @@ export function CartPage() {
                   ) : null}
                   <div className="min-w-0 flex-1">
                     <p className="font-medium">{label}</p>
-                    <p className="text-sm tabular-nums text-fg-muted">{money(l.unitPrice)}</p>
+                    <p className="text-sm tabular-nums text-fg-muted">
+                      <SalePrice sale={variantSale(l.variant)}>{money(l.unitPrice)}</SalePrice>
+                    </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <Button

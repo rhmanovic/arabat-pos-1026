@@ -203,6 +203,19 @@ export type SaveProduct = z.input<typeof saveProductSchema>;
 export const productStatusSchema = z.object({ status: z.enum(['active', 'archived']) });
 
 // ---------------------------------------------------------------- POS catalog
+/**
+ * A discounted price of one variant and when it is valid (product discounts, ADR-0133). Tills receive every offer of an item
+ * and choose the one in force at the moment of the sale (`offerAt` in pos-core), so a discount
+ * that starts or ends needs no new catalog.
+ */
+export const priceOfferSchema = z.object({
+  discountId: z.string(),
+  price: moneySchema,
+  startsAt: z.string().nullable(),
+  endsAt: z.string().nullable(),
+});
+export type PriceOfferJson = z.infer<typeof priceOfferSchema>;
+
 export const posCatalogItemSchema = z.object({
   variantId: z.string(),
   productId: z.string(),
@@ -214,6 +227,8 @@ export const posCatalogItemSchema = z.object({
   sku: z.string().nullable(),
   barcodes: z.array(z.string()),
   price: moneySchema,
+  /** Discounted prices with their dates; the till sells at the one in force (ADR-0133). */
+  offers: z.array(priceOfferSchema).default([]),
   trackInventory: z.boolean(),
   imageUrl: z.string().nullable(),
 });

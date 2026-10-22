@@ -950,6 +950,33 @@ export class DeviceIngestService {
       return cost === null ? null : BigInt(String(cost));
     });
 
+    // The regular price and the product discount are descriptive (ADR-0133): kept when they
+    // are consistent and the discount is this company's, otherwise left out (never refused).
+    const discountIds = [
+      ...new Set(lines.map((l) => l.input.productDiscountId).filter((x): x is string => !!x)),
+    ];
+    const knownDiscounts = new Set(
+      discountIds.length
+        ? (
+            (
+              await tx.execute(
+                sql`select id from product_discounts where id in (${sql.join(
+                  discountIds.map((id) => sql`${id}`),
+                  sql`, `,
+                )})`,
+              )
+            ).rows as Row[]
+          ).map((d) => String(d['id']))
+        : [],
+    );
+    const discountOf = (l: (typeof lines)[number]) => {
+      const regular = l.input.regularUnitPriceMinor ? BigInt(l.input.regularUnitPriceMinor) : null;
+      const id = l.input.productDiscountId;
+      return regular !== null && id && knownDiscounts.has(id) && regular > l.listUnitPriceMinor
+        ? { regularUnitPriceMinor: regular, productDiscountId: id }
+        : { regularUnitPriceMinor: null, productDiscountId: null };
+    };
+
     let costMinor: bigint | null = 0n;
     const lineRows = lines.map((l, i) => {
       const item = items.get(l.input.variantId)!;
@@ -976,6 +1003,7 @@ export class DeviceIngestService {
         sku: (item['sku'] as string | null) ?? null,
         quantity: formatQuantity(l.quantityMilli),
         listUnitPriceMinor: l.listUnitPriceMinor,
+        ...discountOf(l),
         unitPriceMinor: l.unitPriceMinor,
         priceOverridden: overridden,
         priceOverrideReason: overridden ? l.input.priceOverrideReason : null,

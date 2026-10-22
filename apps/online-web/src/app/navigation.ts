@@ -72,6 +72,13 @@ export const NAV: NavItem[] = [
     section: 'store',
   },
   {
+    key: 'discounts',
+    icon: 'discount',
+    to: '/discounts',
+    anyOf: ['online.manage'],
+    section: 'store',
+  },
+  {
     key: 'analytics',
     icon: 'analytics',
     to: '/analytics',

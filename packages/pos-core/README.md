@@ -125,6 +125,19 @@ The device keeps its counter gap-free in the same local transaction as the sale.
 | `refundApprovalReasons({ totalMinor, saleCreatedAt, saleUserId, requesterUserId, now, settings })` | `over_limit`, `outside_window`, `own_sale` (only the owner skips approval). |
 | `assertVoidable({ saleShiftId, openShiftId, activeRefunds })` | Cancel only in the own open shift and without refunds (409 `NOT_VOIDABLE`). |
 
+### Product discounts (`discounts.ts`, ADR-0133)
+
+| Export | Purpose |
+|---|---|
+| `discountedPrice(priceMinor, rule)` | Price after a percentage (half-up to the fils) or an amount off; null when it would not leave a price above zero (such a product keeps its price). |
+| `priceOffers(priceMinor, rules)` | Every discounted price of a variant, one per covering discount, with its dates. |
+| `offerAt(offers, now)` | The offer in force: never added up, the lowest price wins (first on a tie). |
+| `offerActive(offer, now)`, `savedPercent(regular, price)` | Dates check (start inclusive, end exclusive); the whole % saved for a badge. |
+
+The API resolves which products a discount covers and sends each variant's offers with the
+catalog (browser till, device, store); the price in force is chosen with `offerAt` at the moment
+of the sale, so a discount that starts or ends needs no new catalog.
+
 ## What is not here (yet)
 
 Stock (consumption of recipes and modifiers, negative-stock policy), the cash ledger, receipt

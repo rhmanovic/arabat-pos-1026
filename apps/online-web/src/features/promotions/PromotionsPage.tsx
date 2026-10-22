@@ -191,6 +191,7 @@ function PromotionDialog({
     status: promotion?.status ?? 'active',
     appliesTo: promotion?.appliesTo ?? 'order',
     targetIds: promotion?.targetIds ?? [],
+    stacksWithDiscounts: promotion?.stacksWithDiscounts ?? false,
   });
   const set = (patch: Partial<SaveOnlinePromotion>) => setV((x) => ({ ...x, ...patch }));
   const save = useMutation({
@@ -424,6 +425,16 @@ function PromotionDialog({
             </Select>
           )}
         </Field>
+        {v.discountType !== 'free_delivery' ? (
+          <div className="sm:col-span-2">
+            <Checkbox
+              label={t('promotions.stacks')}
+              description={t('promotions.stacksHint')}
+              checked={v.stacksWithDiscounts ?? false}
+              onChange={(e) => set({ stacksWithDiscounts: e.target.checked })}
+            />
+          </div>
+        ) : null}
         {targets.length > 0 ? (
           <div className="sm:col-span-2">
             <p className="mb-1 text-sm font-medium">{t('promotions.targets')}</p>

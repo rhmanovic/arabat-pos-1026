@@ -2167,6 +2167,65 @@ ADR; supersede it.
 - **Consequences:** smaller pictures for shoppers, no personal metadata kept, one place to change
   the format or the size rule.
 
+## ADR-0133 — Product discounts for the store and the point of sale
+- **Status:** Accepted (2026-10-22). Owner's request: a professional way, in the store console,
+  to lower product prices by a percentage or an amount, shown in the online store and charged at
+  the point of sale at the same time, with the badge's colour and size chosen in the store design.
+  Migration 0073; BR-242.
+- **Owner's decisions (asked 2026-10-22):** discounts never add up: the **largest one in force
+  wins**; an order promotion code (ADR-0125) does **not** apply to items already discounted
+  unless the promotion is set to stack (`stacks_with_discounts`, off by default); the cashier may
+  give an extra discount on a discounted item **within their limit, measured from the discounted
+  price**; a discount that takes a product **below its cost is allowed after a warning** in the
+  console (the merchant confirms).
+- **Decision:**
+  - **`product_discounts`** (name ar/en, `discount_type` percentage (0–100 exclusive, 2
+    decimals) | amount (fils off each piece), `applies_to` all | categories (with their
+    sub-categories) | collections (the store's lists) | products + `target_ids`, `pos_enabled`,
+    `online_enabled` (at least one), `starts_at` / `ends_at`, `status` active | paused |
+    archived, version; RLS). Never deleted (`DELETE` revoked from `app_runtime`): sales name it;
+    archived instead (no more changes, `DISCOUNT_ARCHIVED`).
+  - **No catalog price changes.** The price in force is worked out when an item is shown or
+    sold: `@arabat/pos-core` `discountedPrice` (percentage rounded half-up to the fils, like
+    `priceCart`; an amount as large as the price, or a 100% discount, leaves the product at its
+    price: a discount never makes an item free), `priceOffers` (one offer per covering discount
+    with its dates) and `offerAt` (in force = start ≤ now < end; the lowest price wins, first on a
+    tie). Coverage is resolved once in the API (`catalog/discount-offers.ts`: `offersFor`,
+    `inForce`), used by `SalesService.loadItems` (every till, restaurant, exchange and online
+    checkout path), the POS catalog, the store's products, the restaurant bill view and the
+    device sync.
+  - **Tills choose at the moment of the sale:** the POS catalog carries every item's `offers`
+    (running and scheduled) and the browser till / restaurant menu / exchange screen price items
+    with `offerAt` every 15 seconds (`itemsInForce`); the server prices again at completion, so a
+    discount that starts, ends or is paused between showing and paying gives `TOTAL_CHANGED`.
+    Devices receive `priceOffers` (always complete) in the sync snapshot, keep them in a local
+    `price_offers` table (device schema migration 3) and sell with `catalogAt(catalog, now)`.
+    The catalog version includes the discounts' last change.
+  - **Records:** a sale line's `list_unit_price_minor` is the discounted price (the cashier's
+    own discounts and price-change bounds are measured from it, as decided); the new
+    `regular_unit_price_minor` and `product_discount_id` keep the price before the discount and
+    the discount (CHECK: regular > list and a discount named). Online order lines carry the same
+    two columns and pass them to the sale. Device sales send them (optional fields); the server
+    keeps them only when consistent and the discount is the company's, never refusing a sale for
+    them. Receipts print "قبل الخصم" under a discounted line.
+  - **Online store:** a variant's `price` is the price now; `regularPrice` and
+    `discountEndsAt` are sent while a discount runs. The quote / checkout mark discounted lines,
+    which `PromotionsService.apply` leaves out unless the promotion stacks.
+  - **Console** `/online/discounts` (`online.manage` to see; `catalog.prices.manage` to create,
+    edit, pause, resume or archive, else read-only): list with states (running, scheduled, ended,
+    paused) and counts, an editor with quick percentages, targets with search, channels,
+    dates with quick ends, and a live preview (`POST /manager/discounts/preview`: products
+    lowered, left alone, below cost with examples); below cost needs a confirmation tick.
+    Audit: `catalog.discount_created / _updated / _status_changed`.
+  - **Design** (`design.sale`, a "Discounts" tab in the store design with a live sample): the
+    badge on cards and on the product page separately (show, words: -20% / save amount / "Sale"
+    / own words, colour: 7 ready + any, fill solid / soft / outline, size, shape pill / rounded /
+    square / circle / ribbon / price tag, corner, gentle pulse), the old price struck through,
+    the colour of the new price, "You save …" and "Offer ends in …" on the product page.
+- **Consequences:** one discount reaches every channel at once without touching catalog prices,
+  and reports can tell regular price from discounted price per line. Devices on an older bundle
+  ignore the offers and sell at the regular price until they update.
+
 ## ADR-0132 — Products and categories in Excel from the store console
 - **Status:** Accepted (2026-10-22). Owner's request: upload and download products and
   categories in one go with Excel (.xlsx) in the store console's products and categories

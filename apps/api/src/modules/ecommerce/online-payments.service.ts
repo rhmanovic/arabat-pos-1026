@@ -285,6 +285,8 @@ export class OnlinePaymentsService implements OnModuleInit, OnModuleDestroy {
               productId: l.productId,
               quantityMilli: parseQuantity(l.quantity),
               unitPriceMinor: l.unitPriceMinor,
+              regularUnitPriceMinor: l.regularUnitPriceMinor,
+              productDiscountId: l.productDiscountId,
               nameEn: l.nameEn,
               nameAr: l.nameAr,
               variantNameEn: l.variantNameEn,
