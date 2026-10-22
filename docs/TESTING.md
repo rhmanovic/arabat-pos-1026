@@ -66,6 +66,13 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-22 (Excel: special lists as a checklist)
+- `catalog-transfer.int.test.ts` (5): one "قائمة: <name>" column per list after the category
+  with a ✓ drop-down (`lists!$D$2:$D$2`, stop); two ticks put the product in both lists; the
+  export shows the ticks; clearing one removes only that list; a header naming an unknown list
+  (row 1, `list:<name>`) and a mark other than ✓ are refused.
+- `apps/online-web/src/app.test.tsx`: a problem on a list column is shown as "List: <name>".
+
 ### Results 2026-10-22 (Excel upload picker)
 - `apps/online-web/src/app.test.tsx`: the Excel picker carries no `accept` filter and sits in the
   bar; a `.txt` file is refused with a message and no request; the dialog opens with the file.

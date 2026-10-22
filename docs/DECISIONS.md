@@ -2225,6 +2225,16 @@ ADR; supersede it.
     included). The picker now has no `accept` filter and lives in the Excel bar, outside the
     dialog: "Upload in one go" opens it straight away, the dialog opens once a file is chosen,
     and the extension (`.xlsx`) is checked in the page (the server checks the content anyway).
+  - **Follow-up (2026-10-22, owner):** typing several list names with commas was too hard for
+    merchants; they need to tick lists. Excel has no multi-choice drop-down without macros, so
+    the single "Offers & special lists" column became a checklist: one column per active list
+    of the store after the category, headed "قائمة: <name>" (light purple), with a ✓ drop-down
+    (refusing anything else) that turns the cell green. A tick puts the product in that list,
+    an empty cell takes it out, and a list without a column in the file is left as it is (an
+    older file changes no list). A header naming a list the store does not have (renamed since
+    the download) is reported on row 1 and nothing is written. The columns are built per store
+    at download, so they are not in the shared column definition; `listColumnName` and
+    `readListMark` in the contract read them.
 
 ## ADR-0131 — Business management in the consoles' young look, phone-first
 - **Status:** Accepted (2026-10-21). Owner's request: "عدل واجهة إدارة نقطة المبيعات عشان تناسب جيل

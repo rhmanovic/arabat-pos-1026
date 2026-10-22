@@ -35,8 +35,8 @@ export type TransferColumnKind =
   | 'choice'
   /** A category of the store, from the drop-down list. */
   | 'category'
-  /** Special lists (collections): one from the drop-down, or several separated by commas. */
-  | 'collections'
+  /** One special list of the store (built per store at download): ✓ = in the list. */
+  | 'list'
   | 'int'
   /** Shown in the download for information; ignored when read. */
   | 'info';
@@ -94,17 +94,6 @@ const PRODUCT_SPECS: ColumnSpec[] = [
     group: 'name',
   },
   { key: 'category', ar: 'التصنيف', en: 'Category', kind: 'category', width: 26 },
-  {
-    key: 'collections',
-    ar: 'العروض والقوائم الخاصة',
-    en: 'Offers & special lists',
-    kind: 'collections',
-    width: 30,
-    hint: {
-      ar: 'اختر من القائمة، أو اكتب أكثر من قائمة مفصولة بفاصلة «،». فارغ = ليس في أي قائمة.',
-      en: 'Pick one from the list, or write several separated by commas. Empty = in no list.',
-    },
-  },
   {
     key: 'price',
     ar: 'السعر (د.ك)',
@@ -300,10 +289,34 @@ export function readCodes(value: string): string[] {
     .filter(Boolean);
 }
 
+/*
+ * Offers & special lists (collections): one column per list of the store, built at download
+ * after the category, headed "قائمة: <name>". A tick puts the product in that list, an empty
+ * cell takes it out; lists without a column in the file are left as they are.
+ */
+export const LIST_COLUMN = { prefix: 'list:', ar: 'قائمة: ', en: 'List: ', mark: '✓' } as const;
+
+/** The column key of a list column, or `null` when the header is not one. */
+export function listColumnName(header: string): string | null {
+  const h = header.trim();
+  for (const p of [LIST_COLUMN.ar, LIST_COLUMN.en, LIST_COLUMN.prefix]) {
+    const pre = p.trim().toLowerCase();
+    if (h.toLowerCase().startsWith(pre)) return h.slice(pre.length).trim() || null;
+  }
+  return null;
+}
+
+/** A list cell: ticked, empty, or `undefined` when it is neither. */
+export function readListMark(value: string): boolean | undefined {
+  const v = value.trim().toLowerCase();
+  if (v === '') return false;
+  if (['✓', '✔', '☑', 'x', 'نعم', 'yes', 'y', 'true', '1', 'صح'].includes(v)) return true;
+  if (['لا', 'no', 'n', 'false', '0'].includes(v)) return false;
+  return undefined;
+}
+
 /** The product a row describes, in the shape the catalog saves (before checks against data). */
 export type ProductRowValues = {
-  /** Names of special lists as written (matched to the store's lists by the API). */
-  collections: string[];
   nameAr: string | null;
   nameEn: string | null;
   price: string | null;
@@ -349,7 +362,6 @@ export function readProductRow(row: TransferRow): Read<ProductRowValues> {
     issues.push({ column: 'barcodes', code: 'invalidCode' });
   return {
     values: {
-      collections: readCodes(row['collections'] ?? ''),
       nameAr: textOrNull(row['nameAr']),
       nameEn: textOrNull(row['nameEn']),
       price: amount('price'),
@@ -533,12 +545,7 @@ function rowIsValid(kind: TransferKind, row: TransferRow): boolean {
 
 function withRequired(kind: TransferKind, specs: ColumnSpec[]): TransferColumn[] {
   return specs.map((spec) => {
-    if (
-      spec.kind === 'id' ||
-      spec.kind === 'info' ||
-      spec.kind === 'category' ||
-      spec.kind === 'collections'
-    )
+    if (spec.kind === 'id' || spec.kind === 'info' || spec.kind === 'category')
       return { ...spec, required: 'no' };
     if (!rowIsValid(kind, { ...SAMPLE[kind], [spec.key]: '' })) return { ...spec, required: 'yes' };
     if (spec.group) {

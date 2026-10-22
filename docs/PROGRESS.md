@@ -1265,6 +1265,19 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-22 — Excel: special lists as a checklist (one ✓ column per list)
+Owner's request: merchants cannot be expected to type list names with commas; they need to tick
+several lists at once. Excel has no multi-choice drop-down without macros, so each list of the
+store now has its own column after the category ("قائمة: <name>"), with a ✓ drop-down that turns
+green; a tick adds the product to the list, an empty cell takes it out, lists without a column
+are untouched, and a list name the store no longer has is reported on the header (ADR-0132
+follow-up, BR-241).
+- Tests: integration (columns after the category, ✓ drop-down, two ticks → two lists, the ticks
+  shown back, clearing one removes only that list, a renamed list on the header and a wrong mark
+  refused) and a web test (a list column's problem is named after the list).
+- Verified (cloud sandbox): `pnpm verify` 421 unit/web, `pnpm test:integration` 316 (45 files),
+  `pnpm test:e2e` 46.
+
 ### 2026-10-22 — Excel upload: the file picker no longer freezes Firefox
 Owner's report: Firefox on Windows stopped responding when "Upload in one go" opened the file
 picker. Cause: the picker opened from inside the modal dialog with an `accept` filter naming the

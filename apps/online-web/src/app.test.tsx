@@ -869,6 +869,7 @@ describe('online store console', () => {
             issues: [
               { row: 4, column: 'price', code: 'invalidAmount' },
               { row: 5, column: 'category', code: 'unknownCategory' },
+              { row: 1, column: 'list:Sale', code: 'unknownCollection', message: 'Sale' },
             ],
           },
         }),
@@ -881,11 +882,15 @@ describe('online store console', () => {
     );
     const dialog = await screen.findByRole('dialog');
     expect(
-      await within(dialog).findByText('Fix 2 problems in the file, then upload it again:'),
+      await within(dialog).findByText('Fix 3 problems in the file, then upload it again:'),
     ).toBeInTheDocument();
     const row = within(dialog).getByText('Price (KWD)').closest('tr')!;
     expect(row).toHaveTextContent('4');
     expect(row).toHaveTextContent('Write an amount with up to 3 decimals, like 1.250.');
+    // A special list's column (one per list) is named after the list.
+    expect(within(dialog).getByText('List: Sale').closest('tr')).toHaveTextContent(
+      'Your store has no special list named “Sale”.',
+    );
     expect(within(dialog).getByRole('button', { name: /Apply/ })).toBeDisabled();
   });
 

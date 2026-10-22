@@ -1581,7 +1581,7 @@ export const onlineEn = {
     issue_tooLong: 'Too long.',
     issue_unknownCategory: 'No category with this name. Choose one from the list.',
     issue_unknownCollection:
-      'No special list named “{{detail}}”. Choose from the list, separated by commas.',
+      'Your store has no special list named “{{detail}}”. Download the file again to get the current lists.',
     issue_ambiguousCategory:
       'Two categories have this name. Choose it from the list (with its parent).',
     issue_unknownId: 'This ID is not in the store. Leave it empty to add a new one.',

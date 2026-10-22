@@ -19,6 +19,9 @@ import {
   readCategoryRow,
   readProductRow,
   saveProductSchema,
+  LIST_COLUMN,
+  listColumnName,
+  readListMark,
 } from '@arabat/contracts';
 import { Money } from '@arabat/money';
 import { can } from '@arabat/permissions';
@@ -252,6 +255,32 @@ export class CatalogTransferService {
   }
 
   /** "Parent › Child" labels of the drop-down list, by category id. */
+  /**
+   * The sheet's columns: the shared definition, with one column per special list of this
+   * store after the category (a checklist: ✓ = the product is in that list).
+   */
+  private sheetColumns(kind: TransferKind, collections: CollectionSnap[]): TransferColumn[] {
+    const base = TRANSFER_COLUMNS[kind];
+    if (kind !== 'products' || collections.length === 0) return base;
+    const lists: TransferColumn[] = collections.map((c) => {
+      const name = this.collectionName(c);
+      return {
+        key: `${LIST_COLUMN.prefix}${c.id}`,
+        ar: `${LIST_COLUMN.ar}${name}`,
+        en: `${LIST_COLUMN.en}${name}`,
+        kind: 'list',
+        width: Math.min(24, Math.max(12, name.length + 9)),
+        required: 'no',
+        hint: {
+          ar: 'من «العروض والقوائم الخاصة»: ✓ = المنتج في هذه القائمة، فارغ = ليس فيها.',
+          en: 'Offers & special lists: ✓ = the product is in this list, empty = it is not.',
+        },
+      };
+    });
+    const at = base.findIndex((c) => c.key === 'category') + 1;
+    return [...base.slice(0, at), ...lists, ...base.slice(at)];
+  }
+
   private categoryLabels(categories: CategorySnap[]): Map<string, string> {
     const byId = new Map(categories.map((c) => [c.id, c]));
     const name = (c: CategorySnap) => c.nameAr || c.nameEn || '';
@@ -287,7 +316,9 @@ export class CatalogTransferService {
   async workbook(actor: MerchantActor, kind: TransferKind, withRows: boolean): Promise<Buffer> {
     const snap = await this.database.withMerchantTx(actor.merchantId, (tx) => this.snapshot(tx));
     const showCost = can(actor.access, 'catalog.prices.manage', null);
-    const columns = TRANSFER_COLUMNS[kind].filter((c) => showCost || c.key !== 'cost');
+    const columns = this.sheetColumns(kind, snap.collections).filter(
+      (c) => showCost || c.key !== 'cost',
+    );
     const labels = this.categoryLabels(snap.categories);
     const wb = new ExcelJS.Workbook();
     wb.creator = 'Arabat';
@@ -302,7 +333,11 @@ export class CatalogTransferService {
       // Codes, amounts and ids stay text: Excel keeps leading zeros and long numbers.
       style: {
         numFmt: '@',
-        alignment: { vertical: 'top', wrapText: c.kind === 'longText' },
+        alignment: {
+          vertical: 'top',
+          wrapText: c.kind === 'longText',
+          ...(c.kind === 'list' ? { horizontal: 'center' as const } : {}),
+        },
         // The id (and the information column) are locked in grey; every other column is open.
         protection: { locked: locked(c) },
         ...(locked(c)
@@ -322,7 +357,15 @@ export class CatalogTransferService {
       cell.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: required ? 'FFDC2626' : c.kind === 'info' ? 'FFF3F4F6' : 'FFD1D5DB' },
+        fgColor: {
+          argb: required
+            ? 'FFDC2626'
+            : c.kind === 'info'
+              ? 'FFF3F4F6'
+              : c.kind === 'list'
+                ? 'FFEDE9FE'
+                : 'FFD1D5DB',
+        },
       };
       cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
       // Headers stay as they are: the upload finds the columns by them.
@@ -345,40 +388,51 @@ export class CatalogTransferService {
     lists.getColumn(1).values = ['categories', ...categoryList];
     lists.getColumn(2).values = ['yesNo', ...YES_NO.map((x) => x.ar)];
     lists.getColumn(3).values = ['types', ...PRODUCT_TYPES.map((x) => x.ar)];
-    const collectionList = snap.collections.map((c) => this.collectionName(c));
-    lists.getColumn(4).values = ['collections', ...collectionList];
+    lists.getColumn(4).values = ['list', LIST_COLUMN.mark];
     const listRange: Record<string, string | null> = {
       category: categoryList.length ? `lists!$A$2:$A$${categoryList.length + 1}` : null,
       yesNo: `lists!$B$2:$B$${YES_NO.length + 1}`,
       choice: `lists!$C$2:$C$${PRODUCT_TYPES.length + 1}`,
-      collections: collectionList.length ? `lists!$D$2:$D$${collectionList.length + 1}` : null,
+      list: 'lists!$D$2:$D$2',
     };
     const lastRow = TRANSFER_MAX_ROWS + 1;
     columns.forEach((c, i) => {
       const range = listRange[c.kind];
       if (!range) return;
       const letter = ws.getColumn(i + 1).letter;
+      const ref = `${letter}2:${letter}${lastRow}`;
+      const tick = c.kind === 'list';
       // `dataValidations.add` sets one rule for a whole range (missing from the typings).
-      // Several lists in one cell are allowed: Excel only reminds, it does not refuse.
-      const several = c.kind === 'collections';
-      (ws as unknown as WithValidations).dataValidations.add(`${letter}2:${letter}${lastRow}`, {
+      (ws as unknown as WithValidations).dataValidations.add(ref, {
         type: 'list',
         allowBlank: true,
         formulae: [range],
         showErrorMessage: true,
-        errorStyle: several ? 'information' : 'stop',
+        errorStyle: 'stop',
         errorTitle: c.ar,
-        error: several
-          ? 'لأكثر من قائمة: اكتب الأسماء مفصولة بفاصلة «،» كما هي في القائمة.'
-          : 'اختر قيمة من القائمة.',
-        ...(several
-          ? {
-              showInputMessage: true,
-              promptTitle: c.ar,
-              prompt: 'اختر قائمة، أو اكتب أكثر من قائمة مفصولة بفاصلة «،».',
-            }
-          : {}),
+        error: tick ? 'اختر ✓ أو اترك الخانة فارغة.' : 'اختر قيمة من القائمة.',
       });
+      // A ticked list cell turns green, so the checklist reads at a glance.
+      if (tick)
+        ws.addConditionalFormatting({
+          ref,
+          rules: [
+            {
+              type: 'cellIs',
+              operator: 'equal',
+              priority: 1,
+              formulae: [`"${LIST_COLUMN.mark}"`],
+              style: {
+                fill: {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  bgColor: { argb: 'FFDCFCE7' },
+                },
+                font: { color: { argb: 'FF15803D' }, bold: true },
+              },
+            },
+          ],
+        });
     });
     if (withRows) {
       if (kind === 'products')
@@ -416,11 +470,12 @@ export class CatalogTransferService {
       nameAr: p.nameAr ?? '',
       nameEn: p.nameEn ?? '',
       category: p.categoryId ? (labels.get(p.categoryId) ?? '') : '',
-      collections: p.listing.collectionIds
-        .map((id) => collections.find((c) => c.id === id))
-        .filter((c): c is CollectionSnap => Boolean(c))
-        .map((c) => this.collectionName(c))
-        .join('، '),
+      ...Object.fromEntries(
+        collections.map((c) => [
+          `${LIST_COLUMN.prefix}${c.id}`,
+          p.listing.collectionIds.includes(c.id) ? LIST_COLUMN.mark : '',
+        ]),
+      ),
       price: v?.price ?? '',
       sku: v?.sku ?? '',
       barcodes: v ? v.barcodes.join(', ') : '',
@@ -466,6 +521,11 @@ export class CatalogTransferService {
       kind === 'products'
         ? '• منتج له خيارات (مقاسات، ألوان…): عدّل اسمه وتصنيفه ووصفه وظهوره هنا، أما أسعار الخيارات ورموزها ففي الكتالوج الكامل.'
         : '• تغيير الاسم يغيّر التصنيف في نقاط البيع أيضًا.',
+      ...(kind === 'products'
+        ? [
+            '• العروض والقوائم الخاصة: لكل قائمة في متجرك عمود بعنوان «قائمة: …» بعد التصنيف. اختر ✓ في كل قائمة تريد المنتج فيها (أكثر من قائمة معًا)، واترك الخانة فارغة لإخراجه منها. لإضافة قائمة جديدة أنشئها في المتجر أولًا ثم نزّل الملف من جديد.',
+          ]
+        : []),
       '',
       'الأعمدة:',
       ...columns.map(
@@ -594,12 +654,15 @@ export class CatalogTransferService {
     const columns = TRANSFER_COLUMNS[kind];
     const byHeader = new Map<number, string>();
     ws.getRow(1).eachCell((cell, col) => {
-      const h = cellText(cell)
+      const raw = cellText(cell)
         .replace(/\s*\*$/, '')
-        .trim()
-        .toLowerCase();
+        .trim();
+      const h = raw.toLowerCase();
       const c = columns.find((x) => [x.ar, x.en, x.key].some((n) => n.toLowerCase() === h));
       if (c) byHeader.set(col, c.key);
+      // A special list's column, by the list's name (matched to the store's lists later).
+      const list = kind === 'products' && !c ? listColumnName(raw) : null;
+      if (list) byHeader.set(col, `${LIST_COLUMN.prefix}${list}`);
     });
     const present = new Set(byHeader.values());
     const issues: TransferIssue[] = [];
@@ -640,6 +703,24 @@ export class CatalogTransferService {
     const byId = new Map(snap.products.map((p) => [p.id, p]));
     const seenIds = new Set<string>();
     const canPrice = can(actor.access, 'catalog.prices.manage', null);
+    // The special lists the file has a column for; a name the store does not have is reported
+    // once, on the header, and nothing is written.
+    const listColumns = new Map<string, string>();
+    for (const key of new Set(rows.flatMap((r) => Object.keys(r.cells)))) {
+      if (!key.startsWith(LIST_COLUMN.prefix)) continue;
+      const wanted = key.slice(LIST_COLUMN.prefix.length).toLowerCase();
+      const hit = snap.collections.find(
+        (c) => c.nameAr?.toLowerCase() === wanted || c.nameEn?.toLowerCase() === wanted,
+      );
+      if (hit) listColumns.set(key, hit.id);
+      else
+        issues.push({
+          row: 1,
+          column: key,
+          code: 'unknownCollection',
+          message: key.slice(LIST_COLUMN.prefix.length),
+        });
+    }
     // Codes in the file and in other products, to report duplicates before writing.
     const skuOwner = new Map<string, string>();
     const barcodeOwner = new Map<string, string>();
@@ -669,20 +750,19 @@ export class CatalogTransferService {
         else if (found === 'ambiguous') add([{ column: 'category', code: 'ambiguousCategory' }]);
         else categoryId = found.id;
       }
-      // Special lists by name (Arabic or English), several per cell.
-      const collectionIds: string[] = [];
-      let collectionsOk = true;
-      for (const name of values.collections) {
-        const wanted = name.toLowerCase();
-        const hit = snap.collections.find(
-          (c) => c.nameAr?.toLowerCase() === wanted || c.nameEn?.toLowerCase() === wanted,
-        );
-        if (!hit) {
-          collectionsOk = false;
-          add([{ column: 'collections', code: 'unknownCollection', message: name }]);
-        } else if (!collectionIds.includes(hit.id)) collectionIds.push(hit.id);
+      // The checklist: a tick adds the product to that list, an empty cell takes it out;
+      // lists without a column in the file stay as they are.
+      const collectionIds = new Set(existing?.listing.collectionIds ?? []);
+      let listsOk = true;
+      for (const [key, collectionId] of listColumns) {
+        const mark = readListMark(cells[key] ?? '');
+        if (mark === undefined) {
+          listsOk = false;
+          add([{ column: key, code: 'invalidChoice' }]);
+        } else if (mark) collectionIds.add(collectionId);
+        else collectionIds.delete(collectionId);
       }
-      if (cellIssues.length || !collectionsOk) continue;
+      if (cellIssues.length || !listsOk) continue;
       const owner = existing?.id ?? `row-${row}`;
       if (values.sku) {
         const key = values.sku.toLowerCase();
@@ -708,7 +788,7 @@ export class CatalogTransferService {
           existing: null,
           product: input as SaveProduct,
           listing: {
-            collectionIds,
+            collectionIds: [...collectionIds],
             visible: values.visible ?? true,
             featured: values.featured ?? false,
             maxPerOrder: values.maxPerOrder,
@@ -726,7 +806,7 @@ export class CatalogTransferService {
         existing,
         values,
         categoryId,
-        collectionIds,
+        [...collectionIds],
         canPrice,
         add,
       );

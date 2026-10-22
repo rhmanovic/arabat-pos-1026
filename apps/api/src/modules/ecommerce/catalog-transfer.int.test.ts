@@ -204,7 +204,7 @@ describe('products and categories in Excel (ADR-0132)', () => {
     });
   });
 
-  it('puts products in several special lists from one cell, and refuses an unknown list', async () => {
+  it('ticks products into several special lists, one column per list, and refuses an unknown list', async () => {
     const s = await setup();
     const offers = await s.ok('POST', '/manager/online/collections', { nameAr: 'عروض' });
     const fresh = await s.ok('POST', '/manager/online/collections', { nameAr: 'وصل حديثًا' });
@@ -214,36 +214,58 @@ describe('products and categories in Excel (ADR-0132)', () => {
     });
     const wb = await s.file('/manager/online/transfer/products/export');
     const ws = wb.getWorksheet('المنتجات')!;
-    let col = 0;
-    ws.getRow(1).eachCell((cell, i) => {
-      if (cell.value === 'العروض والقوائم الخاصة') col = i;
-    });
-    // The list's drop-down accepts several names (it only reminds, it does not refuse).
-    expect(ws.getCell(2, col).dataValidation).toMatchObject({
+    const at = (sheet: ExcelJS.Worksheet) => {
+      const cols: Record<string, number> = {};
+      sheet.getRow(1).eachCell((cell, i) => {
+        cols[String(cell.value)] = i;
+      });
+      return cols;
+    };
+    const cols = at(ws);
+    // One column per list, right after the category, with a ✓ drop-down; no comma column.
+    expect(cols['قائمة: عروض']).toBe(cols['التصنيف']! + 1);
+    expect(cols['قائمة: وصل حديثًا']).toBe(cols['التصنيف']! + 2);
+    expect(cols['العروض والقوائم الخاصة']).toBeUndefined();
+    expect(ws.getCell(2, cols['قائمة: عروض']!).dataValidation).toMatchObject({
       type: 'list',
-      errorStyle: 'information',
-      formulae: ['lists!$D$2:$D$3'],
+      errorStyle: 'stop',
+      formulae: ['lists!$D$2:$D$2'],
     });
-    ws.getCell(2, col).value = 'عروض، وصل حديثًا';
+    expect(wb.getWorksheet('lists')!.getCell('D2').value).toBe('✓');
+    expect(ws.getCell(2, cols['قائمة: عروض']!).value).toBe('');
+    // Two ticks at once put the product in both lists.
+    ws.getCell(2, cols['قائمة: عروض']!).value = '✓';
+    ws.getCell(2, cols['قائمة: وصل حديثًا']!).value = '✓';
     expect((await s.upload('products', wb, true)).counts).toMatchObject({ updated: 1 });
-    const listing = (
-      (await s.ok('GET', '/manager/online/listings')).products as {
-        productId: string;
-        collectionIds: string[];
-      }[]
-    ).find((l) => l.productId === tea.id)!;
-    expect([...listing.collectionIds].sort()).toEqual([offers.id, fresh.id].sort());
-    // The file shows them back, and an unknown name is named in the problem.
+    const lists = async () =>
+      [
+        ...(
+          (await s.ok('GET', '/manager/online/listings')).products as {
+            productId: string;
+            collectionIds: string[];
+          }[]
+        ).find((l) => l.productId === tea.id)!.collectionIds,
+      ].sort();
+    expect(await lists()).toEqual([offers.id, fresh.id].sort());
+    // The file shows the ticks back; clearing one takes the product out of that list only.
     const back = await s.file('/manager/online/transfer/products/export');
-    expect(back.getWorksheet('المنتجات')!.getCell(2, col).value).toBe('عروض، وصل حديثًا');
-    ws.getCell(2, col).value = 'عروض, تخفيضات';
-    expect((await s.upload('products', wb)).issues).toEqual([
+    const sheet = back.getWorksheet('المنتجات')!;
+    expect(sheet.getCell(2, cols['قائمة: عروض']!).value).toBe('✓');
+    expect(sheet.getCell(2, cols['قائمة: وصل حديثًا']!).value).toBe('✓');
+    sheet.getCell(2, cols['قائمة: عروض']!).value = '';
+    expect((await s.upload('products', back, true)).counts).toMatchObject({ updated: 1 });
+    expect(await lists()).toEqual([fresh.id]);
+    // A list renamed or missing in the store is named on the header; another mark is refused.
+    sheet.getRow(1).getCell(cols['قائمة: عروض']!).value = 'قائمة: تخفيضات';
+    sheet.getCell(2, cols['قائمة: وصل حديثًا']!).value = 'ربما';
+    expect((await s.upload('products', back)).issues).toEqual([
       expect.objectContaining({
-        row: 2,
-        column: 'collections',
+        row: 1,
+        column: 'list:تخفيضات',
         code: 'unknownCollection',
         message: 'تخفيضات',
       }),
+      expect.objectContaining({ row: 2, column: 'list:وصل حديثًا', code: 'invalidChoice' }),
     ]);
   });
 

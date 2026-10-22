@@ -1,4 +1,9 @@
-import { TRANSFER_COLUMNS, type TransferKind, type TransferResult } from '@arabat/contracts';
+import {
+  LIST_COLUMN,
+  TRANSFER_COLUMNS,
+  type TransferKind,
+  type TransferResult,
+} from '@arabat/contracts';
 import { Alert, Badge, Button, Dialog, Icon, cn } from '@arabat/ui';
 import { useApi, useNotify } from '@arabat/web-core';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -143,6 +148,9 @@ function UploadDialog({
   });
   const ar = i18n.language.startsWith('ar');
   const column = (k: string) => {
+    // A special list's column is named after the list (one column per list).
+    if (k.startsWith(LIST_COLUMN.prefix))
+      return `${ar ? LIST_COLUMN.ar : LIST_COLUMN.en}${k.slice(LIST_COLUMN.prefix.length)}`;
     const c = TRANSFER_COLUMNS[kind].find((x) => x.key === k);
     return c ? (ar ? c.ar : c.en) : '—';
   };

@@ -123,8 +123,9 @@ engineering defaults pending owner confirmation.
   deletes or archives. Prices are KWD with 3 decimals. A product with options keeps its option
   prices and codes in the full catalog. A new category may not reuse an existing category's
   name. Uploading needs the right to manage products; prices need the right to manage prices.
-  The ID column is locked in the file. A product's "Offers & special lists" cell sets exactly
-  its lists (several separated by commas; empty = in no list).
+  The ID column is locked in the file. "Offers & special lists" are a checklist: one column per
+  list of the store, ✓ = the product is in that list, empty = it is not; a list without a
+  column in the file keeps its products.
 - **BR-240** Section options, layout and motion (ADR-0128 amendment 7, owner 2026-10-21/22):
   new options never change how an existing design looks until the merchant picks them, except
   the page motion, which the owner asked to be on by default (sections rise softly into view;
