@@ -1276,6 +1276,11 @@ that is not `.xlsx` is turned away with a message.
   with no dialog behind it; a `.txt` file is refused; the template is checked in the dialog).
 - Verified (cloud sandbox): `pnpm verify` 421 unit/web, `pnpm test:integration` 316 (45 files),
   `pnpm test:e2e` 46.
+- Released (ADR-0122): production `25f554f9cfaf` (revision `arabat-web-00067-h2r`, previous
+  `arabat-web-00066-wnv`; migration job `arabat-migrate-5f7rq`, no new migration). Cloud Build
+  check `6eb6d663`: ready 200 with that version and database ok (3 ms); `live`, `/store/`,
+  `/manager/` and `/online/` 200. Signed out afterwards, `config.env` removed; no key, account
+  or secret deleted.
 
 ### 2026-10-22 — Excel: locked ID column, offers and special lists
 Owner's request: lock the ID column, and add an "Offers & special lists" column with several
