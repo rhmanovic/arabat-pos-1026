@@ -1280,6 +1280,11 @@ growing and pushing everything down; animated sections flashed before moving.
   cards → products in the same place.
 - Verified (cloud sandbox): `pnpm verify` 415 unit/web, `pnpm test:integration` 311 (44 files),
   `pnpm test:e2e` 45.
+- Released (ADR-0122): production `1d935d5feca1` (revision `arabat-web-00063-jcp`, previous
+  `arabat-web-00062-9st`; migration job `arabat-migrate-bbrzl`, no new migration). Cloud Build
+  check `7f0fe67f`: ready 200 with that version and database ok (3 ms); `live`, `/store/`,
+  `/manager/` and `/online/` 200. Signed out afterwards, `config.env` removed; no key, account
+  or secret deleted.
 
 ### 2026-10-22 — Motion that always plays, page motion, more room between sections
 Owner's report: "Motion and behaviour do nothing whatever I pick; the store page is just
