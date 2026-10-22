@@ -1290,6 +1290,11 @@ discounted price, below cost allowed after a warning.
   integration discounts (+3) and device ingest (+1), E2E (+1).
 - Verified (cloud sandbox): `pnpm verify` 429 unit/web, `pnpm test:integration` 320 (46 files),
   `pnpm test:e2e` 47.
+- Released (ADR-0122): production `057d8c8d88d4` (revision `arabat-web-00069-s69`, previous
+  `arabat-web-00068-kmx`; migration job `arabat-migrate-mtwp6` applied 0073). Cloud Build check
+  `0a392c27`: ready 200 with that version and database ok (3 ms); `live`, `/store/`, `/manager/`
+  and `/online/` 200. Signed out afterwards, `config.env` removed; no key, account or secret
+  deleted.
 
 ### 2026-10-22 — Excel: special lists as a checklist (one ✓ column per list)
 Owner's request: merchants cannot be expected to type list names with commas; they need to tick
