@@ -23,6 +23,10 @@ export const storeEn = {
     searchPlaceholder: 'What are you looking for?',
   },
   design: {
+    addToCart: 'Add to cart',
+    chooseOptions: 'Choose options',
+    added: 'Added',
+    soldOut: 'Sold out',
     showMore: 'Show more ({{count}})',
     openSection: 'Open',
     previewBadge: 'Preview: what shoppers will see once you publish',

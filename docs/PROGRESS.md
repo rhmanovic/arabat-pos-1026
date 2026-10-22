@@ -1265,6 +1265,23 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-22 — Product cards like the owner's two reference shops
+Owner's request (two screenshots): settings to build a framed row of products with whole
+pictures, the category above the name, a large price and a full-width coloured "Add to cart",
+and clean cards on white with a sold-out badge on the picture and a small "Buy now" beside the
+price under a centred title in the store colour.
+- Product cards (products and catalog sections): one frame with lines (`divided`), whole picture
+  on white (`imageFit`), category line, name in full / one / two lines, large price, start or
+  centred words, sold out as words or a badge on the picture, a buy button (none, beside the
+  price, across the card) with its own words and colour (readable text colour picked); a
+  product with one option goes to the cart at once ("Added"), one with options opens its page.
+  Up to six columns. The frame's title can take the store colour.
+- Ready styles for the products section: "Shop row" and "Clean".
+- Tests: store-web +1 (framed row, brand-coloured title, buy button colour, add to cart, sold-out
+  badge and disabled button). Checked in a browser at 1440 and 390 px.
+- Verified (cloud sandbox): `pnpm verify` 416 unit/web, `pnpm test:integration` 311 (44 files),
+  `pnpm test:e2e` 45.
+
 ### 2026-10-22 — The storefront loads in place (owner's screen recording)
 The owner's recording of a reload on a phone showed a blank screen with a spinner, then the
 page with the product list still spinning while the sections under it showed, then the list

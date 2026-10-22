@@ -2538,3 +2538,9 @@ ADR; supersede it.
     (`StoreSkeleton`) instead of a blank spinner, loads the design together with the store, and
     product lists hold their place with placeholder cards of the real size; animated sections
     are hidden from the first paint so they never flash.
+  - **Product cards follow-up (2026-10-22, owner's references):** cards gain a shared frame with
+    lines, whole pictures on white, a category line, name lines, a large price, alignment, a
+    sold-out badge on the picture and a buy button (beside the price or across the card, own
+    words and colour; one-option products go to the cart, others open their page); lists take
+    up to six columns; the frame title can use the store colour; ready styles "Shop row" and
+    "Clean". The button never sits inside the card's link.

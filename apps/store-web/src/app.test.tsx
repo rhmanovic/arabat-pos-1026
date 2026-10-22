@@ -1060,6 +1060,55 @@ describe('storefront', () => {
     expect(screen.queryByTestId('store-loading')).toBeNull();
   });
 
+  it('builds shop-style product cards: one frame, whole pictures, a buy button, sold-out badge', async () => {
+    const user = userEvent.setup();
+    const design = templateDesign('retail');
+    design.pages.home = sectionsOf([
+      {
+        id: 'row',
+        type: 'products',
+        source: 'all',
+        columns: 6,
+        title: { en: 'Featured products', ar: null },
+        cardStyle: 'divided',
+        imageFit: 'contain',
+        nameLines: '2',
+        priceSize: 'large',
+        buyButton: 'full',
+        buyLabel: { en: 'Buy now', ar: null },
+        buyColor: '#e5a823',
+        soldOut: 'corner',
+        look: { titleColor: 'brand' },
+      },
+    ]);
+    const products = {
+      products: [
+        PRODUCTS.products[0]!,
+        {
+          ...PRODUCTS.products[1]!,
+          variants: PRODUCTS.products[1]!.variants.map((v) => ({ ...v, available: false })),
+        },
+      ],
+    };
+    renderStore('/demo', {
+      'GET /store/demo/design': () => ({ status: 200, body: { design } }),
+      'GET /store/demo/products': () => ({ status: 200, body: products }),
+    });
+    expect(await screen.findByRole('heading', { name: 'Featured products' })).toHaveClass(
+      'text-primary',
+    );
+    expect(document.querySelector('[data-card="divided"]')).not.toBeNull();
+    // The buy button sits beside the card's link, in the chosen colour, and fills the cart.
+    const buy = screen.getByRole('button', { name: 'Buy now: Coffee beans' });
+    expect(buy).toHaveStyle({ backgroundColor: '#e5a823' });
+    await user.click(buy);
+    expect(buy).toHaveTextContent('Added');
+    expect(await screen.findByRole('link', { name: 'Cart (1)' })).toBeInTheDocument();
+    // A sold-out product says so on its picture and cannot be bought.
+    expect(screen.getByText('Sold out')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Buy now: Mug' })).toBeDisabled();
+  });
+
   it('pages the product list with its count, card style and search hint', async () => {
     const user = userEvent.setup();
     const design = templateDesign('retail');

@@ -377,6 +377,12 @@ function LookEditor({
           onChange={(titleAlign) => set({ titleAlign })}
         />
         <Choice
+          label={t('design.titleColor')}
+          value={look.titleColor}
+          options={opts('titleColor', ['default', 'brand'] as const)}
+          onChange={(titleColor) => set({ titleColor })}
+        />
+        <Choice
           label={t('design.titleSize')}
           value={look.titleSize}
           options={opts('titleSize', ['small', 'regular', 'large', 'huge'] as const)}
@@ -1456,7 +1462,7 @@ function ProductsEditor({
         <Choice
           label={t('design.columns')}
           value={s.columns}
-          options={[2, 3, 4].map((n) => ({ value: n, label: String(n) }))}
+          options={[2, 3, 4, 5, 6].map((n) => ({ value: n, label: String(n) }))}
           onChange={(v) => set({ columns: v })}
         />
       ) : null}
@@ -1935,7 +1941,7 @@ function CatalogEditor({ s, set }: { s: SectionOf<'catalog'>; set: Patch<Section
         <Choice
           label={t('design.columns')}
           value={s.columns}
-          options={[2, 3, 4].map((n) => ({ value: n, label: String(n) }))}
+          options={[2, 3, 4, 5, 6].map((n) => ({ value: n, label: String(n) }))}
           onChange={(v) => set({ columns: v })}
         />
       ) : null}
@@ -2095,7 +2101,19 @@ function CatalogEditor({ s, set }: { s: SectionOf<'catalog'>; set: Patch<Section
 
 type CardLook = Pick<
   SectionOf<'products'>,
-  'cardStyle' | 'aspect' | 'mobileColumns' | 'hoverImage'
+  | 'cardStyle'
+  | 'aspect'
+  | 'mobileColumns'
+  | 'hoverImage'
+  | 'imageFit'
+  | 'showCategory'
+  | 'nameLines'
+  | 'priceSize'
+  | 'textAlign'
+  | 'buyButton'
+  | 'buyLabel'
+  | 'buyColor'
+  | 'soldOut'
 >;
 /** How the product cards of a list look (products and catalog sections). */
 function CardLookFields({ s, set }: { s: CardLook; set: (p: Partial<CardLook>) => void }) {
@@ -2106,8 +2124,21 @@ function CardLookFields({ s, set }: { s: CardLook; set: (p: Partial<CardLook>) =
       <Choice
         label={t('design.cardStyle')}
         value={s.cardStyle}
-        options={opts('cardStyle', ['default', 'minimal', 'bordered', 'soft', 'overlay'] as const)}
+        options={opts('cardStyle', [
+          'default',
+          'minimal',
+          'bordered',
+          'soft',
+          'divided',
+          'overlay',
+        ] as const)}
         onChange={(cardStyle) => set({ cardStyle })}
+      />
+      <Choice
+        label={t('design.imageFit')}
+        value={s.imageFit}
+        options={opts('imageFit', ['cover', 'contain'] as const)}
+        onChange={(imageFit) => set({ imageFit })}
       />
       <Choice
         label={t('design.pictureShape')}
@@ -2126,6 +2157,57 @@ function CardLookFields({ s, set }: { s: CardLook; set: (p: Partial<CardLook>) =
         checked={s.hoverImage}
         onChange={(hoverImage) => set({ hoverImage })}
       />
+      <Choice
+        label={t('design.align')}
+        value={s.textAlign}
+        options={opts('align', ['start', 'center'] as const)}
+        onChange={(textAlign) => set({ textAlign })}
+      />
+      <Toggle
+        label={t('design.showCategoryLine')}
+        checked={s.showCategory}
+        onChange={(showCategory) => set({ showCategory })}
+      />
+      <Choice
+        label={t('design.nameLines')}
+        value={s.nameLines}
+        options={opts('nameLines', ['full', '1', '2'] as const)}
+        onChange={(nameLines) => set({ nameLines })}
+      />
+      <Choice
+        label={t('design.cardPrice')}
+        value={s.priceSize}
+        options={opts('cardPrice', ['regular', 'large'] as const)}
+        onChange={(priceSize) => set({ priceSize })}
+      />
+      <Choice
+        label={t('design.soldOutStyle')}
+        value={s.soldOut}
+        options={opts('soldOutStyle', ['text', 'corner'] as const)}
+        onChange={(soldOut) => set({ soldOut })}
+      />
+      <Choice
+        label={t('design.buyButton')}
+        value={s.buyButton}
+        options={opts('buyButton', ['none', 'inline', 'full'] as const)}
+        onChange={(buyButton) => set({ buyButton })}
+      />
+      {s.buyButton !== 'none' ? (
+        <>
+          <LocalizedField
+            label={t('design.buyLabel')}
+            value={s.buyLabel}
+            max={30}
+            onChange={(buyLabel) => set({ buyLabel })}
+          />
+          <ColourField
+            label={t('design.buyColor')}
+            value={s.buyColor}
+            onChange={(buyColor) => set({ buyColor })}
+          />
+          <p className="text-xs text-fg-muted">{t('design.buyButtonHint')}</p>
+        </>
+      ) : null}
     </Group>
   );
 }

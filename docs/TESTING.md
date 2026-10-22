@@ -66,6 +66,11 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-22 (shop-style product cards)
+- `apps/store-web/src/app.test.tsx` (+1): a framed six-column row with a brand-coloured title;
+  the buy button in its own colour adds the one-option product to the cart ("Added", cart 1);
+  a sold-out product shows the badge and its button is disabled.
+
 ### Results 2026-10-22 (the storefront loads in place)
 - `apps/store-web/src/app.test.tsx` (+1): the page outline (`store-loading`, `aria-busy`) is
   the first paint and gives way to the product grid.

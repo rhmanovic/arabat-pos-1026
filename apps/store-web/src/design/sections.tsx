@@ -7,7 +7,7 @@ import {
   videoEmbed,
 } from '@arabat/contracts';
 import { Badge, EmptyState, Select, cn } from '@arabat/ui';
-import { ErrorState } from '@arabat/web-core';
+import { ErrorState, readableOn } from '@arabat/web-core';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useSearchParams } from 'react-router';
@@ -519,13 +519,96 @@ function QuickAdd({ p, className }: { p: StoreProduct; className?: string }) {
 }
 
 /** How product cards look in a section (ADR-0128 amendment 7). */
-export type CardLook = {
-  cardStyle: 'default' | 'minimal' | 'bordered' | 'soft' | 'overlay';
-  aspect: 'square' | 'portrait' | 'landscape';
-  hoverImage: boolean;
+export type CardLook = Pick<
+  SectionOf<'products'>,
+  | 'cardStyle'
+  | 'aspect'
+  | 'hoverImage'
+  | 'imageFit'
+  | 'showCategory'
+  | 'nameLines'
+  | 'priceSize'
+  | 'textAlign'
+  | 'buyButton'
+  | 'buyLabel'
+  | 'buyColor'
+  | 'soldOut'
+>;
+const DEFAULT_LOOK: CardLook = {
+  cardStyle: 'default',
+  aspect: 'square',
+  hoverImage: false,
+  imageFit: 'cover',
+  showCategory: false,
+  nameLines: 'full',
+  priceSize: 'regular',
+  textAlign: 'start',
+  buyButton: 'none',
+  buyLabel: { en: null, ar: null },
+  buyColor: null,
+  soldOut: 'text',
 };
-const DEFAULT_LOOK: CardLook = { cardStyle: 'default', aspect: 'square', hoverImage: false };
 const ASPECT = { square: 'aspect-square', portrait: 'aspect-[4/5]', landscape: 'aspect-[4/3]' };
+
+/**
+ * The card's buy button: adds a product with a single option at once (and says so), and opens
+ * the page of a product with options.
+ */
+function BuyButton({
+  p,
+  look,
+  available,
+}: {
+  p: StoreProduct;
+  look: CardLook;
+  available: boolean;
+}) {
+  const cart = useCart();
+  const slug = useSlug();
+  const text = useText();
+  const name = useLocalName();
+  const { t } = useTranslation();
+  const [added, setAdded] = useState(false);
+  useEffect(() => {
+    if (!added) return;
+    const timer = setTimeout(() => setAdded(false), 1500);
+    return () => clearTimeout(timer);
+  }, [added]);
+  const label = text(look.buyLabel) || t('design.addToCart');
+  const style = look.buyColor
+    ? { backgroundColor: look.buyColor, color: readableOn(look.buyColor) }
+    : undefined;
+  const className = cn(
+    'inline-flex items-center justify-center gap-1 rounded-md font-semibold transition-opacity hover:opacity-90 disabled:opacity-50',
+    !look.buyColor && 'bg-primary text-primary-fg',
+    look.buyButton === 'full' ? 'min-h-11 w-full px-4 text-sm' : 'min-h-9 shrink-0 px-3 text-xs',
+  );
+  const single = p.variants.length === 1 ? p.variants[0]! : null;
+  if (!single)
+    return (
+      <Link to={`/${slug}/products/${p.productId}`} className={className} style={style}>
+        {t('design.chooseOptions')}
+      </Link>
+    );
+  return (
+    <button
+      type="button"
+      disabled={!available}
+      aria-label={`${label}: ${name(p)}`}
+      onClick={() => {
+        cart.add(
+          { variantId: single.variantId, productId: p.productId, quantity: 1 },
+          single.maxQuantity,
+        );
+        setAdded(true);
+      }}
+      className={className}
+      style={style}
+    >
+      {added ? `✓ ${t('design.added')}` : label}
+    </button>
+  );
+}
 
 export function ProductCard({
   p,
@@ -542,6 +625,7 @@ export function ProductCard({
   const name = useLocalName();
   const money = useMoney();
   const card = useCard();
+  const { data: store } = useStorefront();
   const { t, i18n } = useTranslation();
   const available = p.variants.some((v) => v.available);
   const prices = p.variants.map((v) => toMoney(v.price));
@@ -551,7 +635,7 @@ export function ProductCard({
   const description = i18n.language.startsWith('ar')
     ? p.descriptionAr || p.descriptionEn
     : p.descriptionEn || p.descriptionAr;
-  if (quickAdd)
+  if (quickAdd && look.buyButton === 'none')
     return (
       <div className="relative h-full">
         <ProductCard p={p} variant={variant} look={look} />
@@ -580,15 +664,30 @@ export function ProductCard({
         </div>
       </Link>
     );
+  const to = `/${slug}/products/${p.productId}`;
+  const contain = look.imageFit === 'contain';
   const second = look.hoverImage ? (p.images[1] ?? null) : null;
+  const corner =
+    !available && look.soldOut === 'corner' ? (
+      <span className="absolute top-2 end-2 z-[1] rounded-full bg-fg/55 px-2.5 py-0.5 text-xs font-semibold text-canvas">
+        {t('design.soldOut')}
+      </span>
+    ) : null;
   const pictureBox = (
-    <div className={cn('relative overflow-hidden bg-surface-muted', ASPECT[look.aspect])}>
+    <div
+      className={cn(
+        'relative overflow-hidden',
+        contain ? 'bg-white' : 'bg-surface-muted',
+        ASPECT[look.aspect],
+      )}
+    >
       {p.imageUrl ? (
         <img
           src={p.imageUrl}
           alt=""
           className={cn(
-            'size-full object-cover transition-all duration-500',
+            'size-full transition-all duration-500',
+            contain ? 'object-contain p-3' : 'object-cover',
             second ? 'group-hover:opacity-0' : 'group-hover:scale-105',
           )}
           loading="lazy"
@@ -599,16 +698,20 @@ export function ProductCard({
           src={second}
           alt=""
           data-hover-image
-          className="absolute inset-0 size-full object-cover opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+          className={cn(
+            'absolute inset-0 size-full opacity-0 transition-opacity duration-500 group-hover:opacity-100',
+            contain ? 'object-contain p-3' : 'object-cover',
+          )}
           loading="lazy"
         />
       ) : null}
+      {corner}
     </div>
   );
   if (look.cardStyle === 'overlay')
     return (
       <Link
-        to={`/${slug}/products/${p.productId}`}
+        to={to}
         className="group relative flex h-full flex-col overflow-hidden rounded-lg"
         data-card="overlay"
       >
@@ -616,36 +719,90 @@ export function ProductCard({
         <div className="absolute inset-x-0 bottom-0 flex flex-col gap-0.5 bg-gradient-to-t from-black/75 to-transparent p-3 pt-10 text-white">
           <p className="font-semibold">{name(p)}</p>
           <p className="text-sm tabular-nums opacity-90">{price}</p>
-          {!available ? <Badge tone="warning">{t('catalog.unavailable')}</Badge> : null}
+          {!available && look.soldOut === 'text' ? (
+            <Badge tone="warning">{t('catalog.unavailable')}</Badge>
+          ) : null}
         </div>
       </Link>
     );
-  return (
-    <Link
-      to={`/${slug}/products/${p.productId}`}
+  const category =
+    look.showCategory && p.categoryId
+      ? store?.categories.find((c) => c.id === p.categoryId)
+      : undefined;
+  const center = look.textAlign === 'center';
+  const priceLine = (
+    <p
       className={cn(
-        'group flex h-full flex-col overflow-hidden rounded-lg',
+        'tabular-nums',
+        look.priceSize === 'large' ? 'text-lg font-bold' : 'text-sm text-fg-muted',
+      )}
+    >
+      {price}
+    </p>
+  );
+  // The card's link holds the picture and the words; the buy button sits beside it, never in it.
+  return (
+    <div
+      className={cn(
+        'group flex h-full flex-col overflow-hidden',
+        look.cardStyle !== 'divided' && 'rounded-lg',
         look.cardStyle === 'default' && cn(card, 'hover:border-primary'),
         look.cardStyle === 'bordered' && 'border-2 border-border bg-surface hover:border-primary',
         look.cardStyle === 'soft' && 'bg-surface-muted transition-transform hover:-translate-y-1',
         look.cardStyle === 'minimal' && 'bg-transparent',
+        look.cardStyle === 'divided' && 'bg-surface',
+        center && 'text-center',
       )}
       data-card={look.cardStyle}
     >
-      <div className={cn(look.cardStyle === 'minimal' && 'overflow-hidden rounded-lg')}>
-        {pictureBox}
-      </div>
-      <div
-        className={cn(
-          'flex flex-1 flex-col gap-1',
-          look.cardStyle === 'minimal' ? 'px-0.5 py-2' : 'p-3',
-        )}
-      >
-        <p className="font-medium">{name(p)}</p>
-        <p className="text-sm tabular-nums text-fg-muted">{price}</p>
-        {!available ? <Badge tone="warning">{t('catalog.unavailable')}</Badge> : null}
-      </div>
-    </Link>
+      <Link to={to} className="flex flex-1 flex-col">
+        <div className={cn(look.cardStyle === 'minimal' && 'overflow-hidden rounded-lg')}>
+          {pictureBox}
+        </div>
+        <div
+          className={cn(
+            'flex flex-1 flex-col gap-1',
+            look.cardStyle === 'minimal' ? 'px-0.5 pt-2' : 'px-3 pt-3',
+            look.buyButton === 'none' && (look.cardStyle === 'minimal' ? 'pb-2' : 'pb-3'),
+          )}
+        >
+          {category ? (
+            <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-fg-muted">
+              {name(category)}
+            </p>
+          ) : null}
+          <p
+            className={cn(
+              'font-medium',
+              look.nameLines === '1' && 'truncate',
+              look.nameLines === '2' && 'line-clamp-2 min-h-[2.75em]',
+            )}
+          >
+            {name(p)}
+          </p>
+          {look.buyButton !== 'inline' ? priceLine : null}
+          {!available && look.soldOut === 'text' ? (
+            <Badge tone="warning">{t('catalog.unavailable')}</Badge>
+          ) : null}
+        </div>
+      </Link>
+      {look.buyButton === 'inline' ? (
+        <div
+          className={cn(
+            'flex items-center gap-3',
+            center ? 'justify-center' : 'justify-between',
+            look.cardStyle === 'minimal' ? 'px-0.5 pb-2 pt-1' : 'px-3 pb-3 pt-1',
+          )}
+        >
+          {priceLine}
+          <BuyButton p={p} look={look} available={available} />
+        </div>
+      ) : look.buyButton === 'full' ? (
+        <div className={cn(look.cardStyle === 'minimal' ? 'pb-2 pt-3' : 'p-3 pt-3')}>
+          <BuyButton p={p} look={look} available={available} />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -653,6 +810,8 @@ const COLS: Record<number, string> = {
   2: 'sm:grid-cols-2',
   3: 'sm:grid-cols-3',
   4: 'sm:grid-cols-3 lg:grid-cols-4',
+  5: 'sm:grid-cols-3 lg:grid-cols-5',
+  6: 'sm:grid-cols-3 lg:grid-cols-6',
 };
 
 export function ProductGrid({
@@ -688,7 +847,12 @@ export function ProductGrid({
   return (
     <ul
       className={cn(
-        'grid gap-3',
+        'grid',
+        // Divided cards share one frame: each card's 1px ring meets its neighbour's in the
+        // 1px gap, so the lines stay single and a short row leaves no empty block.
+        look.cardStyle === 'divided' && variant !== 'list'
+          ? 'gap-px p-px [&>li]:bg-surface [&>li]:shadow-[0_0_0_1px_var(--color-border)]'
+          : 'gap-3',
         variant === 'list'
           ? 'sm:grid-cols-2'
           : cn(mobileColumns === 1 ? 'grid-cols-1' : 'grid-cols-2', COLS[columns] ?? COLS[4]),

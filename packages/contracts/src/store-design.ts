@@ -205,6 +205,8 @@ export const sectionLookSchema = z
     dividerBottom: z.enum(SHAPE_DIVIDERS).default('none'),
     titleAlign: z.enum(['start', 'center']).default('start'),
     titleSize: z.enum(['small', 'regular', 'large', 'huge']).default('regular'),
+    /** The heading in the text colour or the store colour. */
+    titleColor: z.enum(['default', 'brand']).default('default'),
     /** A small line above the heading. */
     eyebrow: localized(60),
     /** The heading of a section without a title of its own (`ownTitle` says which have one). */
@@ -291,11 +293,30 @@ export const bannerSectionSchema = z.object({
 });
 /** How product cards look in a list (ADR-0128 amendment 7). */
 const cardOptions = {
-  cardStyle: z.enum(['default', 'minimal', 'bordered', 'soft', 'overlay']).default('default'),
+  /** `divided` = the cards share one frame with lines between them. */
+  cardStyle: z
+    .enum(['default', 'minimal', 'bordered', 'soft', 'overlay', 'divided'])
+    .default('default'),
   aspect: z.enum(['square', 'portrait', 'landscape']).default('square'),
   mobileColumns: z.union([z.literal(1), z.literal(2)]).default(2),
   /** The second picture shows when the pointer is on the card. */
   hoverImage: z.boolean().default(false),
+  /** `contain` shows the whole picture on white (products photographed on white). */
+  imageFit: z.enum(['cover', 'contain']).default('cover'),
+  /** The product's category as a small line above its name. */
+  showCategory: z.boolean().default(false),
+  /** The name in full, or cut after one or two lines. */
+  nameLines: z.enum(['full', '1', '2']).default('full'),
+  priceSize: z.enum(['regular', 'large']).default('regular'),
+  textAlign: z.enum(['start', 'center']).default('start'),
+  /** A buy button: none, small beside the price, or across the card's width. */
+  buyButton: z.enum(['none', 'inline', 'full']).default('none'),
+  /** Its words (empty = "Add to cart"); products with options open their page. */
+  buyLabel: localized(30),
+  /** Its colour (empty = the store colour); the words take the readable colour. */
+  buyColor: hexColor,
+  /** Sold out as words under the price, or a small badge on the picture's corner. */
+  soldOut: z.enum(['text', 'corner']).default('text'),
 };
 export const productsSectionSchema = z.object({
   ...base,
@@ -306,7 +327,7 @@ export const productsSectionSchema = z.object({
   categoryId: uuidLike.nullish().transform((v) => v ?? null),
   productIds: z.array(uuidLike).max(24).default([]),
   limit: z.number().int().min(1).max(24).default(8),
-  columns: z.number().int().min(2).max(4).default(4),
+  columns: z.number().int().min(2).max(6).default(4),
   sort: z.enum(['position', 'name', 'priceAsc', 'priceDesc']).default('position'),
   /** One-tap "add" on products with a single option. */
   showAdd: z.boolean().default(false),
@@ -426,7 +447,7 @@ export const catalogSectionSchema = z.object({
   showSort: z.boolean().default(true),
   showCategories: z.boolean().default(true),
   showFeatured: z.boolean().default(true),
-  columns: z.number().int().min(2).max(4).default(4),
+  columns: z.number().int().min(2).max(6).default(4),
   // ADR-0128 amendment 7.
   ...cardOptions,
   showAdd: z.boolean().default(false),
@@ -2224,7 +2245,7 @@ export const SECTION_STYLES = {
     },
   },
   products: {
-    grid: { variant: 'grid', columns: 4, showAdd: false, cardStyle: 'default' },
+    grid: { variant: 'grid', columns: 4, showAdd: false, cardStyle: 'default', buyButton: 'none' },
     swipe: { variant: 'carousel', showAdd: true },
     list: { variant: 'list', showAdd: true },
     spotlight: {
@@ -2233,7 +2254,40 @@ export const SECTION_STYLES = {
       showAdd: true,
       look: { background: 'tinted', titleAlign: 'center' },
     },
-    minimal: { variant: 'grid', columns: 4, showAdd: false, cardStyle: 'minimal' },
+    minimal: {
+      variant: 'grid',
+      columns: 4,
+      showAdd: false,
+      cardStyle: 'minimal',
+      buyButton: 'none',
+    },
+    // Like the shops the owner showed (2026-10-22): a framed row with full-width buttons…
+    shop: {
+      variant: 'grid',
+      columns: 6,
+      showAdd: false,
+      cardStyle: 'divided',
+      imageFit: 'contain',
+      showCategory: true,
+      nameLines: '2',
+      priceSize: 'large',
+      buyButton: 'full',
+      soldOut: 'corner',
+      showViewAll: true,
+    },
+    // …and clean cards on white with a small button beside the price.
+    clean: {
+      variant: 'grid',
+      columns: 5,
+      showAdd: false,
+      cardStyle: 'minimal',
+      imageFit: 'contain',
+      showCategory: true,
+      nameLines: '1',
+      buyButton: 'inline',
+      soldOut: 'corner',
+      look: { titleAlign: 'center' },
+    },
   },
   categories: {
     circles: { variant: 'circles', showCount: false },

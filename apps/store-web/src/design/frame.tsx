@@ -387,7 +387,13 @@ export function SectionTitle({ children, aside }: { children: string; aside?: Re
           </p>
         ) : null}
         {children ? (
-          <h2 className={cn('font-bold leading-tight', TITLE_SIZE[look?.titleSize ?? 'regular'])}>
+          <h2
+            className={cn(
+              'font-bold leading-tight',
+              TITLE_SIZE[look?.titleSize ?? 'regular'],
+              look?.titleColor === 'brand' && 'text-primary',
+            )}
+          >
             {children}
           </h2>
         ) : null}

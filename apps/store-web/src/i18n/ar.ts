@@ -25,6 +25,10 @@ export const storeAr: typeof storeEn = {
     searchPlaceholder: 'عن ماذا تبحث؟',
   },
   design: {
+    addToCart: 'أضف إلى السلة',
+    chooseOptions: 'اختر الخيارات',
+    added: 'أُضيف',
+    soldOut: 'نفد',
     showMore: 'عرض المزيد ({{count}})',
     openSection: 'افتح',
     previewBadge: 'معاينة: هذا ما سيراه المتسوقون بعد النشر',
