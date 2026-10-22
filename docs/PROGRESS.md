@@ -1285,6 +1285,12 @@ uploads stuck together, no motion, no order."
   above the fold is shown.
 - Verified (cloud sandbox): `pnpm verify` 414 unit/web, `pnpm test:integration` 311 (44 files),
   `pnpm test:e2e` 45.
+- Released (ADR-0122): production `4abcdb3bea59` (revision `arabat-web-00062-9st`, previous
+  `arabat-web-00061-xjp`; migration job `arabat-migrate-n92ck`, no new migration). The first
+  attempt failed while building the image (npm registry answered 503 to corepack) and changed
+  nothing; the retry passed. Cloud Build check `262383cf`: ready 200 with that version and
+  database ok (3 ms); `live`, `/store/`, `/manager/` and `/online/` 200. Signed out afterwards,
+  `config.env` removed; no key, account or secret deleted.
 
 ### 2026-10-22 — Section headings everywhere; the search and filter bar's look
 Owner's feedback on amendment 7: the heading group did nothing on the product list, the search
