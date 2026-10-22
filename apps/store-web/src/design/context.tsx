@@ -12,6 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 import { type ReactNode, createContext, useContext, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
+import { StoreSkeleton } from './skeleton.js';
 
 /**
  * Store design on the storefront (ADR-0128). Shoppers get the published design; inside the
@@ -29,17 +30,26 @@ type PreviewMessage =
 
 const DesignContext = createContext<StoreDesign | null>(null);
 
-export function DesignProvider({ slug, children }: { slug: string; children: ReactNode }) {
+/**
+ * The store's design (the draft inside the preview). The store layout starts it together with
+ * the store itself, so the page does not wait for one after the other.
+ */
+export function useDesignQuery(slug: string) {
   const api = useApi();
   const preview = isPreview();
-  const navigate = useNavigate();
-  const published = useQuery({
+  return useQuery({
     queryKey: ['store', slug, 'design', preview],
     queryFn: async () =>
       preview ? (await api.online.design()).draft : (await api.store.design(slug)).design,
     retry: false,
     staleTime: 60_000,
   });
+}
+
+export function DesignProvider({ slug, children }: { slug: string; children: ReactNode }) {
+  const preview = isPreview();
+  const navigate = useNavigate();
+  const published = useDesignQuery(slug);
   const [live, setLive] = useState<StoreDesign | null>(null);
 
   useEffect(() => {
@@ -82,8 +92,8 @@ export function DesignProvider({ slug, children }: { slug: string; children: Rea
     return () => window.removeEventListener('message', onMessage);
   }, [preview, navigate, slug]);
 
-  // While the design loads nothing is drawn, so the legacy layout never flashes.
-  if (published.isPending && !live) return null;
+  // While the design loads the page's outline shows, so the legacy layout never flashes.
+  if (published.isPending && !live) return <StoreSkeleton />;
   const design = live ?? published.data ?? legacyDesign();
   return <DesignContext.Provider value={design}>{children}</DesignContext.Provider>;
 }

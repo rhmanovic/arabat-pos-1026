@@ -2534,3 +2534,7 @@ ADR; supersede it.
     stores now rise softly into view, as the owner asked) or lively (list items follow one
     another, cards lift on hover). A section's `animation` `none` means "page default" and the
     new `off` opts out. Reduced motion keeps only a fade. Plain sections get more spacing.
+  - **Loading follow-up (2026-10-22, owner's recording):** the storefront shows its outline
+    (`StoreSkeleton`) instead of a blank spinner, loads the design together with the store, and
+    product lists hold their place with placeholder cards of the real size; animated sections
+    are hidden from the first paint so they never flash.

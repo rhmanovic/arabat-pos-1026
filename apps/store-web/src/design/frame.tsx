@@ -137,7 +137,10 @@ function EdgeShape({ shape, edge }: { shape: SectionLook['dividerTop']; edge: 't
  */
 function useReveal(animation: string) {
   const ref = useRef<HTMLDivElement>(null);
-  const [shown, setShown] = useState(true);
+  // Hidden from the first paint (in a browser), so a section never flashes before it moves.
+  const [shown, setShown] = useState(
+    () => animation === 'none' || typeof window.requestAnimationFrame !== 'function',
+  );
   useEffect(() => {
     const el = ref.current;
     if (animation === 'none' || !el || typeof window.requestAnimationFrame !== 'function') return;

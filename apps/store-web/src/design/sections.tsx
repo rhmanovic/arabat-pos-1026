@@ -6,7 +6,7 @@ import {
   WEEKDAYS,
   videoEmbed,
 } from '@arabat/contracts';
-import { Badge, EmptyState, Select, Spinner, cn } from '@arabat/ui';
+import { Badge, EmptyState, Select, cn } from '@arabat/ui';
 import { ErrorState } from '@arabat/web-core';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -25,6 +25,7 @@ import {
   useStorefront,
 } from '../shared.js';
 import { DesignAnchor, StoreIcon } from './parts.js';
+import { ProductGridSkeleton } from './skeleton.js';
 import {
   assetUrl,
   linkTarget,
@@ -714,7 +715,15 @@ function ProductsSection({ s }: { s: SectionOf<'products'> }) {
   const slug = useSlug();
   const name = useLocalName();
   const { t } = useTranslation();
-  if (!products.data) return null;
+  if (!products.data)
+    return products.isPending ? (
+      <ProductGridSkeleton
+        columns={s.columns}
+        mobileColumns={s.mobileColumns}
+        count={Math.min(s.limit, s.columns)}
+        list={s.variant === 'list'}
+      />
+    ) : null;
   const all = products.data.products;
   const chosen =
     s.source === 'featured'
@@ -1205,7 +1214,7 @@ function MenuSection({ s }: { s: SectionOf<'menu'> }) {
   const { t, i18n } = useTranslation();
   const [active, setActive] = useState<string | null>(null);
   if (!store || !products.data)
-    return products.isPending ? <Spinner label={t('common:status.loading')} /> : null;
+    return products.isPending ? <ProductGridSkeleton list count={4} /> : null;
   const all = products.data.products;
   const categories = (
     s.categoryIds.length > 0 ? s.categoryIds.map((id) => findGroup(store, id)) : navGroups(store)
@@ -1516,7 +1525,26 @@ export function CatalogSection({ s }: { s: SectionOf<'catalog'> }) {
     setCategory(fromUrl);
   }
 
-  if (products.isPending) return <Spinner label={t('common:status.loading')} />;
+  if (products.isPending)
+    return (
+      <div className="flex flex-col gap-4">
+        {/* The bar's place too, so nothing moves when the products arrive. */}
+        {s.showSearch || s.showSort || s.showCategories ? (
+          <span
+            aria-hidden
+            className={cn(
+              'block animate-pulse rounded-lg bg-surface-muted',
+              s.barLayout === 'stacked' || s.searchWidth === 'full' ? 'h-24' : 'h-10',
+            )}
+          />
+        ) : null}
+        <ProductGridSkeleton
+          columns={s.columns}
+          mobileColumns={s.mobileColumns}
+          list={s.variant === 'list'}
+        />
+      </div>
+    );
   if (products.isError)
     return <ErrorState error={products.error} onRetry={() => void products.refetch()} />;
 

@@ -1265,6 +1265,22 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-22 — The storefront loads in place (owner's screen recording)
+The owner's recording of a reload on a phone showed a blank screen with a spinner, then the
+page with the product list still spinning while the sections under it showed, then the list
+growing and pushing everything down; animated sections flashed before moving.
+- `StoreSkeleton` (header, large block, cards; gentle pulse) replaces the blank spinner while the
+  store or its design loads; the design now loads together with the store (`useDesignQuery`
+  started in `StoreLayout`), not after it.
+- Product lists (catalog, products section, menu) show `ProductGridSkeleton` cards of the real
+  list's size, plus the search bar's place, so nothing moves when the products arrive.
+- Animated sections are hidden from the first paint, so they play once instead of flashing.
+- Tests: store-web +1 (the outline shows first, then the real page). Checked in a browser at
+  390 px with every store request slowed by 600 ms: outline → heading fades in → placeholder
+  cards → products in the same place.
+- Verified (cloud sandbox): `pnpm verify` 415 unit/web, `pnpm test:integration` 311 (44 files),
+  `pnpm test:e2e` 45.
+
 ### 2026-10-22 — Motion that always plays, page motion, more room between sections
 Owner's report: "Motion and behaviour do nothing whatever I pick; the store page is just
 uploads stuck together, no motion, no order."

@@ -1052,6 +1052,14 @@ describe('storefront', () => {
     await waitFor(() => expect(page).toHaveAttribute('data-shown', 'true'));
   });
 
+  it('shows the page outline while the store loads, never a blank screen', async () => {
+    renderStore('/demo/products');
+    // The first paint is the outline (header, a large block, cards), then the real page.
+    expect(screen.getByTestId('store-loading')).toHaveAttribute('aria-busy', 'true');
+    expect(await screen.findByTestId('product-grid')).toBeInTheDocument();
+    expect(screen.queryByTestId('store-loading')).toBeNull();
+  });
+
   it('pages the product list with its count, card style and search hint', async () => {
     const user = userEvent.setup();
     const design = templateDesign('retail');

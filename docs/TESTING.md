@@ -66,6 +66,10 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-22 (the storefront loads in place)
+- `apps/store-web/src/app.test.tsx` (+1): the page outline (`store-loading`, `aria-busy`) is
+  the first paint and gives way to the product grid.
+
 ### Results 2026-10-22 (motion that always plays and page motion, ADR-0128 amendment 7 follow-up)
 - `apps/store-web/src/app.test.tsx` (+1): lively page motion on the shell, a section with
   "No motion" has no entrance, one keeps its own zoom, a default section rises and ends shown.
