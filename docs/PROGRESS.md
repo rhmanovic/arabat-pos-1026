@@ -1281,6 +1281,11 @@ price under a centred title in the store colour.
   badge and disabled button). Checked in a browser at 1440 and 390 px.
 - Verified (cloud sandbox): `pnpm verify` 416 unit/web, `pnpm test:integration` 311 (44 files),
   `pnpm test:e2e` 45.
+- Released (ADR-0122): production `a131b46833a7` (revision `arabat-web-00064-v9v`, previous
+  `arabat-web-00063-jcp`; migration job `arabat-migrate-kd5bb`, no new migration). Cloud Build
+  check `fbb7ad10`: ready 200 with that version and database ok (3 ms); `live`, `/store/`,
+  `/manager/` and `/online/` 200. Signed out afterwards, `config.env` removed; no key, account
+  or secret deleted.
 
 ### 2026-10-22 — The storefront loads in place (owner's screen recording)
 The owner's recording of a reload on a phone showed a blank screen with a spinner, then the
