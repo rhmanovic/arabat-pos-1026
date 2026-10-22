@@ -112,6 +112,16 @@ describe('products and categories in Excel (ADR-0132)', () => {
     // Codes and prices are text, so Excel keeps their zeros.
     expect(ws.getColumn(header('رمز المنتج SKU').col).numFmt).toBe('@');
     expect(ws.rowCount).toBe(1);
+    // The sheet is protected: the id column and the headers are locked, the rest is open.
+    expect(
+      (ws as unknown as { sheetProtection: { sheet: boolean } }).sheetProtection,
+    ).toMatchObject({ sheet: true });
+    // Locked is Excel's default (no mark); open columns carry an explicit unlock.
+    const lockedOf = (n: number | string) =>
+      ws.getColumn(Number(n)).style.protection?.locked ?? true;
+    expect(lockedOf(header('المعرّف (لا تعدّله)').col)).toBe(true);
+    expect(lockedOf(header('الاسم (عربي)').col)).toBe(false);
+    expect(header('الاسم (عربي)').protection?.locked ?? true).toBe(true);
     const lists = wb.getWorksheet('lists')!;
     expect(lists.state).toBe('hidden');
     expect(lists.getColumn(1).values).toContain('مشروبات');
@@ -192,6 +202,49 @@ describe('products and categories in Excel (ADR-0132)', () => {
       visible: true,
       category: expect.objectContaining({ id: drinks.id }),
     });
+  });
+
+  it('puts products in several special lists from one cell, and refuses an unknown list', async () => {
+    const s = await setup();
+    const offers = await s.ok('POST', '/manager/online/collections', { nameAr: 'عروض' });
+    const fresh = await s.ok('POST', '/manager/online/collections', { nameAr: 'وصل حديثًا' });
+    const tea = await s.ok('POST', '/manager/products', {
+      nameAr: 'شاي',
+      variants: [{ price: '1.000' }],
+    });
+    const wb = await s.file('/manager/online/transfer/products/export');
+    const ws = wb.getWorksheet('المنتجات')!;
+    let col = 0;
+    ws.getRow(1).eachCell((cell, i) => {
+      if (cell.value === 'العروض والقوائم الخاصة') col = i;
+    });
+    // The list's drop-down accepts several names (it only reminds, it does not refuse).
+    expect(ws.getCell(2, col).dataValidation).toMatchObject({
+      type: 'list',
+      errorStyle: 'information',
+      formulae: ['lists!$D$2:$D$3'],
+    });
+    ws.getCell(2, col).value = 'عروض، وصل حديثًا';
+    expect((await s.upload('products', wb, true)).counts).toMatchObject({ updated: 1 });
+    const listing = (
+      (await s.ok('GET', '/manager/online/listings')).products as {
+        productId: string;
+        collectionIds: string[];
+      }[]
+    ).find((l) => l.productId === tea.id)!;
+    expect([...listing.collectionIds].sort()).toEqual([offers.id, fresh.id].sort());
+    // The file shows them back, and an unknown name is named in the problem.
+    const back = await s.file('/manager/online/transfer/products/export');
+    expect(back.getWorksheet('المنتجات')!.getCell(2, col).value).toBe('عروض، وصل حديثًا');
+    ws.getCell(2, col).value = 'عروض, تخفيضات';
+    expect((await s.upload('products', wb)).issues).toEqual([
+      expect.objectContaining({
+        row: 2,
+        column: 'collections',
+        code: 'unknownCollection',
+        message: 'تخفيضات',
+      }),
+    ]);
   });
 
   it('reports duplicate codes before writing and keeps nothing when one row is refused', async () => {

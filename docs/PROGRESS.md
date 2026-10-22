@@ -1265,6 +1265,19 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-22 — Excel: locked ID column, offers and special lists
+Owner's request: lock the ID column, and add an "Offers & special lists" column with several
+choices per product.
+- The sheet is protected without a password: the ID column, the information column and the
+  headers are locked (grey); the other columns stay open; sorting, filters and new rows work.
+- Products: "Offers & special lists" with the store's lists as a drop-down (hidden sheet) that
+  also accepts several names separated by commas; download shows a product's lists, upload sets
+  exactly them; unknown names are reported.
+- Tests: integration +1 (several lists from one cell, shown back, unknown list named) and the
+  template test checks the protection (id locked, names open, headers locked).
+- Verified (cloud sandbox): `pnpm verify` 421 unit/web, `pnpm test:integration` 316 (45 files),
+  `pnpm test:e2e` 45.
+
 ### 2026-10-22 — Products and categories in Excel (ADR-0132, BR-241)
 Owner's request: upload and download products and categories with Excel in the store console,
 through the same saving logic.

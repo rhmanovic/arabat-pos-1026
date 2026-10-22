@@ -2211,6 +2211,14 @@ ADR; supersede it.
     the template", "Download all" and "Upload in one go"; the upload dialog shows the counts, the
     rows that change, and the problems with row, column and a plain explanation; "Apply" stays
     disabled until the file is clean.
+  - **Follow-up (2026-10-22, owner):** the sheet is protected without a password: the id
+    column (and the information column and the headers) are locked and grey, every other column
+    is open; sorting, filters, formatting and new rows stay allowed. A guard against slips, not a
+    secret: the upload still checks every id. Products get an "Offers & special lists" column:
+    a drop-down of the store's lists (hidden sheet, by range) that also accepts several names
+    separated by commas (Excel only reminds, it does not refuse; a real multi-choice drop-down
+    needs macros, which Excel blocks); the upload sets exactly those lists (empty = none)
+    through `saveListingInTx`, and an unknown name is reported with its text.
 
 ## ADR-0131 — Business management in the consoles' young look, phone-first
 - **Status:** Accepted (2026-10-21). Owner's request: "عدل واجهة إدارة نقطة المبيعات عشان تناسب جيل

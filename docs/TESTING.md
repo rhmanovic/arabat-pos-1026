@@ -66,6 +66,12 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-22 (Excel: locked ID column, offers and special lists)
+- `catalog-transfer.int.test.ts` (+1, 5): the template sheet is protected (id column locked,
+  name column open, headers locked); a product joins two special lists from one cell
+  ("عروض، وصل حديثًا"), the export shows them back, an unknown list ("تخفيضات") is reported
+  by name; the lists' drop-down allows several values (`errorStyle: information`).
+
 ### Results 2026-10-22 (products and categories in Excel, ADR-0132)
 - `packages/contracts/src/catalog-transfer.test.ts` (3): required columns derived from the save
   schemas (names "one of", price required); amounts read as "1.250" (Arabic digits too) and

@@ -45,6 +45,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const amount = (minor: string | bigint | null) =>
   minor === null ? null : Money.ofMinor(BigInt(minor), 'KWD').toJSON().amount;
 const yesNo = (v: boolean) => (v ? YES_NO[0]!.ar : YES_NO[1]!.ar);
+/** Columns nobody types in: the record id and the information column. */
+const locked = (c: TransferColumn) => c.kind === 'id' || c.kind === 'info';
 
 type Variant = {
   id: string;
@@ -71,6 +73,7 @@ type ProductSnap = {
   branchIds: string[];
   variants: Variant[];
   listing: {
+    collectionIds: string[];
     visible: boolean;
     featured: boolean;
     maxPerOrder: number | null;
@@ -91,7 +94,12 @@ type CategorySnap = {
   onlineNameAr: string | null;
   visible: boolean;
 };
-type Snapshot = { categories: CategorySnap[]; products: ProductSnap[] };
+type CollectionSnap = { id: string; nameAr: string | null; nameEn: string | null };
+type Snapshot = {
+  categories: CategorySnap[];
+  products: ProductSnap[];
+  collections: CollectionSnap[];
+};
 
 /** A row that changes something, ready to be written. */
 type ProductPlan = {
@@ -178,6 +186,21 @@ export class CatalogTransferService {
     const branchRows = (
       await tx.execute(sql`select product_id, branch_id from product_branch_availability`)
     ).rows;
+    const collections = (
+      await tx.execute(sql`
+        select id, name_ar, name_en from online_collections
+        where status = 'active' order by position, created_at`)
+    ).rows.map((r) => ({
+      id: String(r['id']),
+      nameAr: (r['name_ar'] as string | null) ?? null,
+      nameEn: (r['name_en'] as string | null) ?? null,
+    }));
+    const memberRows = (
+      await tx.execute(sql`
+        select cp.product_id, cp.collection_id from online_collection_products cp
+        join online_collections c on c.id = cp.collection_id and c.status = 'active'
+        order by c.position, c.created_at`)
+    ).rows;
     const products: ProductSnap[] = productRows.map((r) => {
       const id = String(r['id']);
       return {
@@ -208,6 +231,9 @@ export class CatalogTransferService {
             barcodes: (v['barcodes'] as string[]) ?? [],
           })),
         listing: {
+          collectionIds: memberRows
+            .filter((m) => m['product_id'] === id)
+            .map((m) => String(m['collection_id'])),
           visible: Boolean(r['visible']),
           featured: Boolean(r['featured']),
           maxPerOrder: r['max_per_order'] === null ? null : Number(r['max_per_order']),
@@ -218,7 +244,11 @@ export class CatalogTransferService {
         },
       };
     });
-    return { categories, products };
+    return { categories, products, collections };
+  }
+
+  private collectionName(c: CollectionSnap) {
+    return c.nameAr || c.nameEn || '';
   }
 
   /** "Parent › Child" labels of the drop-down list, by category id. */
@@ -270,7 +300,18 @@ export class CatalogTransferService {
       key: c.key,
       width: c.width,
       // Codes, amounts and ids stay text: Excel keeps leading zeros and long numbers.
-      style: { numFmt: '@', alignment: { vertical: 'top', wrapText: c.kind === 'longText' } },
+      style: {
+        numFmt: '@',
+        alignment: { vertical: 'top', wrapText: c.kind === 'longText' },
+        // The id (and the information column) are locked in grey; every other column is open.
+        protection: { locked: locked(c) },
+        ...(locked(c)
+          ? {
+              fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } },
+              font: { color: { argb: 'FF6B7280' } },
+            }
+          : {}),
+      },
     }));
     const header = ws.getRow(1);
     header.height = 30;
@@ -284,12 +325,15 @@ export class CatalogTransferService {
         fgColor: { argb: required ? 'FFDC2626' : c.kind === 'info' ? 'FFF3F4F6' : 'FFD1D5DB' },
       };
       cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      // Headers stay as they are: the upload finds the columns by them.
+      cell.protection = { locked: true };
       const notes = [
         c.required === 'yes'
           ? 'إلزامي'
           : c.required === 'oneOf'
             ? 'إلزامي: الاسم العربي أو الإنجليزي (أحدهما على الأقل)'
             : 'اختياري',
+        locked(c) ? 'مقفل: لا يُعدَّل.' : undefined,
         c.hint?.ar,
         c.choices ? `القيم: ${c.choices.map((x) => x.ar).join(' / ')}` : undefined,
       ].filter(Boolean);
@@ -301,10 +345,13 @@ export class CatalogTransferService {
     lists.getColumn(1).values = ['categories', ...categoryList];
     lists.getColumn(2).values = ['yesNo', ...YES_NO.map((x) => x.ar)];
     lists.getColumn(3).values = ['types', ...PRODUCT_TYPES.map((x) => x.ar)];
+    const collectionList = snap.collections.map((c) => this.collectionName(c));
+    lists.getColumn(4).values = ['collections', ...collectionList];
     const listRange: Record<string, string | null> = {
       category: categoryList.length ? `lists!$A$2:$A$${categoryList.length + 1}` : null,
       yesNo: `lists!$B$2:$B$${YES_NO.length + 1}`,
       choice: `lists!$C$2:$C$${PRODUCT_TYPES.length + 1}`,
+      collections: collectionList.length ? `lists!$D$2:$D$${collectionList.length + 1}` : null,
     };
     const lastRow = TRANSFER_MAX_ROWS + 1;
     columns.forEach((c, i) => {
@@ -312,26 +359,56 @@ export class CatalogTransferService {
       if (!range) return;
       const letter = ws.getColumn(i + 1).letter;
       // `dataValidations.add` sets one rule for a whole range (missing from the typings).
+      // Several lists in one cell are allowed: Excel only reminds, it does not refuse.
+      const several = c.kind === 'collections';
       (ws as unknown as WithValidations).dataValidations.add(`${letter}2:${letter}${lastRow}`, {
         type: 'list',
         allowBlank: true,
         formulae: [range],
         showErrorMessage: true,
-        errorStyle: 'stop',
+        errorStyle: several ? 'information' : 'stop',
         errorTitle: c.ar,
-        error: 'اختر قيمة من القائمة.',
+        error: several
+          ? 'لأكثر من قائمة: اكتب الأسماء مفصولة بفاصلة «،» كما هي في القائمة.'
+          : 'اختر قيمة من القائمة.',
+        ...(several
+          ? {
+              showInputMessage: true,
+              promptTitle: c.ar,
+              prompt: 'اختر قائمة، أو اكتب أكثر من قائمة مفصولة بفاصلة «،».',
+            }
+          : {}),
       });
     });
     if (withRows) {
       if (kind === 'products')
-        for (const p of snap.products) ws.addRow(this.productCells(p, labels, showCost));
+        for (const p of snap.products)
+          ws.addRow(this.productCells(p, labels, showCost, snap.collections));
       else for (const c of snap.categories) ws.addRow(this.categoryCells(c, labels));
     }
+    // Without a password: it guards against slips (Excel refuses typing in the id), and anyone
+    // who really needs to can lift it; the upload still checks every id.
+    await ws.protect('', {
+      selectLockedCells: true,
+      selectUnlockedCells: true,
+      formatCells: true,
+      formatColumns: true,
+      formatRows: true,
+      insertRows: true,
+      deleteRows: true,
+      sort: true,
+      autoFilter: true,
+    });
     this.instructions(wb, kind, columns);
     return Buffer.from(await wb.xlsx.writeBuffer());
   }
 
-  private productCells(p: ProductSnap, labels: Map<string, string>, showCost: boolean) {
+  private productCells(
+    p: ProductSnap,
+    labels: Map<string, string>,
+    showCost: boolean,
+    collections: CollectionSnap[],
+  ) {
     const simple = !p.hasVariants && p.variants.length === 1;
     const v = simple ? p.variants[0]! : null;
     return {
@@ -339,6 +416,11 @@ export class CatalogTransferService {
       nameAr: p.nameAr ?? '',
       nameEn: p.nameEn ?? '',
       category: p.categoryId ? (labels.get(p.categoryId) ?? '') : '',
+      collections: p.listing.collectionIds
+        .map((id) => collections.find((c) => c.id === id))
+        .filter((c): c is CollectionSnap => Boolean(c))
+        .map((c) => this.collectionName(c))
+        .join('، '),
       price: v?.price ?? '',
       sku: v?.sku ?? '',
       barcodes: v ? v.barcodes.join(', ') : '',
@@ -373,7 +455,8 @@ export class CatalogTransferService {
       kind === 'products' ? 'رفع المنتجات دفعة واحدة' : 'رفع التصنيفات دفعة واحدة',
       '',
       '• الأعمدة الحمراء إلزامية، والرمادية اختيارية.',
-      '• صف بلا معرّف = إضافة جديدة. صف فيه معرّف = تعديل نفس السجل. لا تغيّر المعرّف.',
+      '• صف بلا معرّف = إضافة جديدة. صف فيه معرّف = تعديل نفس السجل. عمود المعرّف مقفل حتى لا يتغيّر بالخطأ.',
+      '• لإضافة صف جديد اكتب في أول صف فارغ واترك المعرّف فارغًا.',
       '• الملف لا يحذف شيئًا: السجلات غير الموجودة في الملف تبقى كما هي.',
       '• قبل التطبيق تظهر معاينة بالجديد والمعدّل والأخطاء. لا يُكتب شيء حتى تضغط «تطبيق».',
       '• التطبيق يكتب كل الصفوف مرة واحدة: إذا رُفض صف واحد لا يُكتب أي صف.',
@@ -586,7 +669,20 @@ export class CatalogTransferService {
         else if (found === 'ambiguous') add([{ column: 'category', code: 'ambiguousCategory' }]);
         else categoryId = found.id;
       }
-      if (cellIssues.length) continue;
+      // Special lists by name (Arabic or English), several per cell.
+      const collectionIds: string[] = [];
+      let collectionsOk = true;
+      for (const name of values.collections) {
+        const wanted = name.toLowerCase();
+        const hit = snap.collections.find(
+          (c) => c.nameAr?.toLowerCase() === wanted || c.nameEn?.toLowerCase() === wanted,
+        );
+        if (!hit) {
+          collectionsOk = false;
+          add([{ column: 'collections', code: 'unknownCollection', message: name }]);
+        } else if (!collectionIds.includes(hit.id)) collectionIds.push(hit.id);
+      }
+      if (cellIssues.length || !collectionsOk) continue;
       const owner = existing?.id ?? `row-${row}`;
       if (values.sku) {
         const key = values.sku.toLowerCase();
@@ -612,6 +708,7 @@ export class CatalogTransferService {
           existing: null,
           product: input as SaveProduct,
           listing: {
+            collectionIds,
             visible: values.visible ?? true,
             featured: values.featured ?? false,
             maxPerOrder: values.maxPerOrder,
@@ -624,7 +721,15 @@ export class CatalogTransferService {
         });
         continue;
       }
-      const plan = this.productUpdate(row, existing, values, categoryId, canPrice, add);
+      const plan = this.productUpdate(
+        row,
+        existing,
+        values,
+        categoryId,
+        collectionIds,
+        canPrice,
+        add,
+      );
       if (plan === 'unchanged') unchanged++;
       else if (plan) changes.push(plan);
     }
@@ -637,6 +742,7 @@ export class CatalogTransferService {
     p: ProductSnap,
     v: ProductRowValues,
     categoryId: string | null,
+    collectionIds: string[],
     canPrice: boolean,
     add: (list: Omit<TransferIssue, 'row'>[]) => void,
   ): ProductPlan | 'unchanged' | null {
@@ -680,6 +786,7 @@ export class CatalogTransferService {
     if (found.length) return null;
     const listing = {
       ...p.listing,
+      collectionIds,
       visible: v.visible ?? p.listing.visible,
       featured: v.featured ?? p.listing.featured,
       maxPerOrder: v.maxPerOrder,
@@ -701,7 +808,8 @@ export class CatalogTransferService {
     const listingChanged =
       listing.visible !== p.listing.visible ||
       listing.featured !== p.listing.featured ||
-      listing.maxPerOrder !== p.listing.maxPerOrder;
+      listing.maxPerOrder !== p.listing.maxPerOrder ||
+      [...collectionIds].sort().join(',') !== [...p.listing.collectionIds].sort().join(',');
     if (!productChanged && !listingChanged) return 'unchanged';
     return {
       row,

@@ -1562,6 +1562,8 @@ export const onlineAr: typeof onlineEn = {
     issue_invalidCode: 'أحرف إنجليزية وأرقام ونقطة وشرطة وشرطة سفلية فقط (الباركود من 3 إلى 64).',
     issue_tooLong: 'أطول من المسموح.',
     issue_unknownCategory: 'لا يوجد تصنيف بهذا الاسم. اختره من القائمة.',
+    issue_unknownCollection:
+      'لا توجد قائمة خاصة باسم «{{detail}}». اختر من القائمة وافصل بينها بفاصلة «،».',
     issue_ambiguousCategory: 'يوجد تصنيفان بهذا الاسم. اختره من القائمة (مع التصنيف الأب).',
     issue_unknownId: 'هذا المعرّف غير موجود في المتجر. اتركه فارغًا لإضافة جديد.',
     issue_duplicateId: 'هذا المعرّف مكرّر في الملف.',

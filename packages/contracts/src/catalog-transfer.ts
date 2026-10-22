@@ -35,6 +35,8 @@ export type TransferColumnKind =
   | 'choice'
   /** A category of the store, from the drop-down list. */
   | 'category'
+  /** Special lists (collections): one from the drop-down, or several separated by commas. */
+  | 'collections'
   | 'int'
   /** Shown in the download for information; ignored when read. */
   | 'info';
@@ -92,6 +94,17 @@ const PRODUCT_SPECS: ColumnSpec[] = [
     group: 'name',
   },
   { key: 'category', ar: 'التصنيف', en: 'Category', kind: 'category', width: 26 },
+  {
+    key: 'collections',
+    ar: 'العروض والقوائم الخاصة',
+    en: 'Offers & special lists',
+    kind: 'collections',
+    width: 30,
+    hint: {
+      ar: 'اختر من القائمة، أو اكتب أكثر من قائمة مفصولة بفاصلة «،». فارغ = ليس في أي قائمة.',
+      en: 'Pick one from the list, or write several separated by commas. Empty = in no list.',
+    },
+  },
   {
     key: 'price',
     ar: 'السعر (د.ك)',
@@ -236,6 +249,7 @@ export const TRANSFER_ISSUE_CODES = [
   'tooLong',
   'unknownCategory',
   'ambiguousCategory',
+  'unknownCollection',
   'unknownId',
   'duplicateId',
   'duplicateName',
@@ -278,7 +292,7 @@ export function readAmount(value: string): string | null | undefined {
   return `${String(Number(whole))}.${fraction.padEnd(3, '0')}`;
 }
 
-/** Barcodes separated by commas, Arabic commas, semicolons or new lines. */
+/** Values separated by commas, Arabic commas, semicolons or new lines (barcodes, lists). */
 export function readCodes(value: string): string[] {
   return value
     .split(/[,،;\n]+/)
@@ -288,6 +302,8 @@ export function readCodes(value: string): string[] {
 
 /** The product a row describes, in the shape the catalog saves (before checks against data). */
 export type ProductRowValues = {
+  /** Names of special lists as written (matched to the store's lists by the API). */
+  collections: string[];
   nameAr: string | null;
   nameEn: string | null;
   price: string | null;
@@ -333,6 +349,7 @@ export function readProductRow(row: TransferRow): Read<ProductRowValues> {
     issues.push({ column: 'barcodes', code: 'invalidCode' });
   return {
     values: {
+      collections: readCodes(row['collections'] ?? ''),
       nameAr: textOrNull(row['nameAr']),
       nameEn: textOrNull(row['nameEn']),
       price: amount('price'),
@@ -516,7 +533,12 @@ function rowIsValid(kind: TransferKind, row: TransferRow): boolean {
 
 function withRequired(kind: TransferKind, specs: ColumnSpec[]): TransferColumn[] {
   return specs.map((spec) => {
-    if (spec.kind === 'id' || spec.kind === 'info' || spec.kind === 'category')
+    if (
+      spec.kind === 'id' ||
+      spec.kind === 'info' ||
+      spec.kind === 'category' ||
+      spec.kind === 'collections'
+    )
       return { ...spec, required: 'no' };
     if (!rowIsValid(kind, { ...SAMPLE[kind], [spec.key]: '' })) return { ...spec, required: 'yes' };
     if (spec.group) {
