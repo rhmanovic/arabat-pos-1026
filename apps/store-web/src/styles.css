@@ -88,15 +88,58 @@
   animation: store-pulse 2.2s ease-out infinite;
 }
 
+/*
+ * Lively page motion: the items of a list (products, cards, categories, steps…) follow one
+ * another as their section comes into view, and cards lift under the pointer.
+ */
+[data-motion='lively'] [data-reveal] :is(ul, ol) > li {
+  transition:
+    opacity 600ms ease,
+    transform 600ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+[data-motion='lively'] [data-reveal][data-shown='false'] :is(ul, ol) > li {
+  opacity: 0;
+  transform: translateY(1.5rem);
+}
+[data-motion='lively'] [data-reveal] :is(ul, ol) > li:nth-child(2) {
+  transition-delay: 80ms;
+}
+[data-motion='lively'] [data-reveal] :is(ul, ol) > li:nth-child(3) {
+  transition-delay: 160ms;
+}
+[data-motion='lively'] [data-reveal] :is(ul, ol) > li:nth-child(4) {
+  transition-delay: 240ms;
+}
+[data-motion='lively'] [data-reveal] :is(ul, ol) > li:nth-child(5) {
+  transition-delay: 320ms;
+}
+[data-motion='lively'] [data-reveal] :is(ul, ol) > li:nth-child(n + 6) {
+  transition-delay: 400ms;
+}
+[data-motion='lively'] [data-card] {
+  transition:
+    transform 250ms ease,
+    box-shadow 250ms ease;
+}
+[data-motion='lively'] [data-card]:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 18px 40px -22px rgb(0 0 0 / 0.45);
+}
+
+/* Reduced motion: sections only fade in; nothing slides, zooms, pulses or loops fast. */
 @media (prefers-reduced-motion: reduce) {
-  [data-reveal] {
-    transition: none;
-    opacity: 1 !important;
+  [data-reveal],
+  [data-motion='lively'] [data-reveal] :is(ul, ol) > li {
     transform: none !important;
   }
-  .store-marquee,
   .store-zoom,
   .store-pulse {
     animation: none;
+  }
+  .store-marquee {
+    animation-duration: calc(var(--marquee-duration, 30s) * 2.5);
+  }
+  [data-motion='lively'] [data-card]:hover {
+    transform: none;
   }
 }

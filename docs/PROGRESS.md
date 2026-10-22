@@ -1265,6 +1265,27 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-22 — Motion that always plays, page motion, more room between sections
+Owner's report: "Motion and behaviour do nothing whatever I pick; the store page is just
+uploads stuck together, no motion, no order."
+- Cause: a section with an entrance animation started hidden and waited for an
+  IntersectionObserver crossing; a fast scroll, or the preview jumping to the edited section,
+  skipped the crossing and left it hidden for good; a section already on screen never moved, so
+  choosing an animation in the editor showed nothing.
+- Fix (`frame.tsx` `useReveal`): every animated section starts hidden and shows once its top is
+  on screen or above it (checked on scroll and resize), sections on screen play at once, and
+  changing the animation plays it again.
+- Page motion `style.motion` (Template tab): none / subtle (default: sections rise into view) /
+  lively (list items follow one another, cards lift under the pointer). A section's animation
+  "Page default" follows it; "No motion" opts out. Reduced motion keeps a fade only, a slower
+  ticker, no zoom or pulse.
+- Plain sections get more room (regular `py-5 sm:py-7`, roomy `py-10 sm:py-14`).
+- Tests: store-web +1 (page motion lively, a section off, one with its own zoom, the default
+  section rising and ending shown). Checked in a browser: after a 1500 px jump every section
+  above the fold is shown.
+- Verified (cloud sandbox): `pnpm verify` 414 unit/web, `pnpm test:integration` 311 (44 files),
+  `pnpm test:e2e` 45.
+
 ### 2026-10-22 — Section headings everywhere; the search and filter bar's look
 Owner's feedback on amendment 7: the heading group did nothing on the product list, the search
 and filter bar was plain with nothing to style, and "Store order" means little to shoppers.
@@ -1280,6 +1301,10 @@ and filter bar was plain with nothing to style, and "Store order" means little t
   browser at 1280 and 390 px with three local products.
 - Verified (cloud sandbox): `pnpm verify` 413 unit/web, `pnpm test:integration` 311 (44 files),
   `pnpm test:e2e` 45.
+- Released (ADR-0122): production `c4e30e8e021b` (revision `arabat-web-00061-xjp`, previous
+  `arabat-web-00060-2d7`; migration job `arabat-migrate-zhdjg`, no new migration). Cloud Build check
+  `cd9eaaa6`: ready 200 with that version and database ok (3 ms); `live`, `/store/`,
+  `/manager/` and `/online/` 200.
 
 ### 2026-10-21 — Store design: section options, layout and motion (ADR-0128 amendment 7, BR-240)
 Owner's batch: a floating Save in store settings; editing a store product like adding one

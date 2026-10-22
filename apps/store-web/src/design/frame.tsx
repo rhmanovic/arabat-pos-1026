@@ -12,7 +12,7 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSlug } from '../shared.js';
-import { assetUrl, isPreview, useText } from './context.js';
+import { assetUrl, isPreview, useDesign, useText } from './context.js';
 
 /*
  * The frame every designed section sits in (ADR-0128 amendments 3 and 7): its background
@@ -86,7 +86,14 @@ export const GRADIENTS: Record<
 };
 
 const PAD = {
-  plain: { none: 'py-0', compact: 'py-1', regular: 'py-4', roomy: 'py-8', huge: 'py-16' },
+  // Breathing room between plain sections, a little more on larger screens.
+  plain: {
+    none: 'py-0',
+    compact: 'py-2',
+    regular: 'py-5 sm:py-7',
+    roomy: 'py-10 sm:py-14',
+    huge: 'py-16 sm:py-24',
+  },
   coloured: { none: 'py-0', compact: 'py-6', regular: 'py-10', roomy: 'py-16', huge: 'py-24' },
 } as const;
 
@@ -123,28 +130,42 @@ function EdgeShape({ shape, edge }: { shape: SectionLook['dividerTop']; edge: 't
   );
 }
 
-/** Whether the section has scrolled into view (always true without IntersectionObserver). */
-function useReveal(enabled: boolean) {
+/**
+ * Entrance motion: the section starts hidden and shows once its top is on screen, or above it
+ * (a fast scroll or a jump never leaves it hidden). Sections already on screen play at once,
+ * and changing the animation in the editor plays it again.
+ */
+function useReveal(animation: string) {
   const ref = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(true);
   useEffect(() => {
     const el = ref.current;
-    if (!enabled || !el || typeof IntersectionObserver === 'undefined') return;
-    const rect = el.getBoundingClientRect();
-    if (rect.top < window.innerHeight * 0.9) return;
+    if (animation === 'none' || !el || typeof window.requestAnimationFrame !== 'function') return;
     setShown(false);
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) {
-          setShown(true);
-          io.disconnect();
-        }
-      },
-      { rootMargin: '0px 0px -10% 0px' },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [enabled]);
+    let frame = 0;
+    const stop = () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+    const check = () => {
+      if (el.getBoundingClientRect().top < window.innerHeight * 0.92) {
+        setShown(true);
+        stop();
+      }
+    };
+    function onScroll() {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(check);
+    }
+    const start = window.setTimeout(check, 80);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      clearTimeout(start);
+      cancelAnimationFrame(frame);
+      stop();
+    };
+  }, [animation]);
   return { ref, shown };
 }
 
@@ -168,7 +189,17 @@ export function SectionFrame({
   const rounded = coloured && look.corners !== 'none';
   const bleed = (coloured && !rounded) || look.width === 'full';
   const live = sectionLive(look);
-  const { ref: revealRef, shown } = useReveal(look.animation !== 'none');
+  // The section's own animation, or the page's motion (ADR-0128 amendment 7).
+  const { style } = useDesign();
+  const animation =
+    look.animation === 'off'
+      ? 'none'
+      : look.animation !== 'none'
+        ? look.animation
+        : style.motion === 'none'
+          ? 'none'
+          : 'up';
+  const { ref: revealRef, shown } = useReveal(animation);
   const devices =
     look.devices === 'desktop' ? 'max-sm:hidden' : look.devices === 'phone' ? 'sm:hidden' : '';
   const bg = {
@@ -261,8 +292,8 @@ export function SectionFrame({
       id={`section-${section.id}`}
       data-section={section.type}
       data-background={background}
-      data-reveal={look.animation !== 'none' ? look.animation : undefined}
-      data-shown={look.animation !== 'none' ? String(shown) : undefined}
+      data-reveal={animation !== 'none' ? animation : undefined}
+      data-shown={animation !== 'none' ? String(shown) : undefined}
       className={cn(
         'relative scroll-mt-20',
         devices,

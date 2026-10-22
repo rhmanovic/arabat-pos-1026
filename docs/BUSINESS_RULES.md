@@ -117,10 +117,12 @@ engineering defaults pending owner confirmation.
   (the main register's first), and cannot sell while none is open. A device shift is never refused because
   the person left a shift open elsewhere; that shift is listed for the managers to close. Records
   that reach the server after the branch shift closed are booked to it and flagged "late".
-- **BR-240** Section options, layout and motion (ADR-0128 amendment 7, owner 2026-10-21): new
-  options never change how an existing design looks until the merchant picks them. Motion
-  (entrance animations, the ticker, counting numbers, slow zoom, pulsing button) stops for
-  shoppers whose device asks for reduced motion. Numbers and ready sections never invent
+- **BR-240** Section options, layout and motion (ADR-0128 amendment 7, owner 2026-10-21/22):
+  new options never change how an existing design looks until the merchant picks them, except
+  the page motion, which the owner asked to be on by default (sections rise softly into view;
+  "None" turns it off). Motion is reduced for shoppers whose device asks for it (sections only
+  fade in; no zoom or pulse). A section with motion is never left hidden: it shows once it
+  reaches the screen or has been scrolled past. Numbers and ready sections never invent
   figures: a number section shows only numbers the merchant entered. A section anchor uses
   lowercase letters, digits and dashes. Columns hold at most four columns of ten blocks.
 - **BR-239** Ready section styles and the categories page (ADR-0128 amendment 6, owner

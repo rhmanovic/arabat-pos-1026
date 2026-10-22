@@ -963,6 +963,13 @@ export const onlineEn = {
     type_catalog: 'Product list (search & filter)',
     typeHint_catalog: 'Every product with search, sorting and the category filter.',
     // ADR-0128 amendment 7: layout and motion.
+    animation_off: 'No motion',
+    pageMotion: 'Page motion',
+    pageMotion_none: 'None',
+    pageMotion_subtle: 'Subtle',
+    pageMotion_lively: 'Lively',
+    pageMotionHint:
+      'Subtle: sections rise softly into view. Lively: list items follow one another and cards lift under the pointer. A section can choose its own motion or none in its Look.',
     headingInContent:
       'This section’s title is set in its content; the size, kicker and subtitle below apply to it.',
     sectionHeading: 'Section title',
@@ -1111,7 +1118,7 @@ export const onlineEn = {
     titleSize_regular: 'Regular',
     titleSize_large: 'Large',
     titleSize_huge: 'Huge',
-    animation_none: 'None',
+    animation_none: 'Page default',
     animation_fade: 'Fade in',
     animation_up: 'Rise',
     animation_zoom: 'Zoom',

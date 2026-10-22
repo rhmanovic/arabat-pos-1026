@@ -168,8 +168,11 @@ export const SECTION_GRADIENTS = [
 ] as const;
 /** Shapes drawn on the top or bottom edge of a coloured section. */
 export const SHAPE_DIVIDERS = ['none', 'wave', 'curve', 'slant', 'zigzag', 'peaks'] as const;
-/** How a section appears when it scrolls into view (none with reduced motion). */
-export const SECTION_ANIMATIONS = ['none', 'fade', 'up', 'zoom', 'slide'] as const;
+/**
+ * How a section appears when it scrolls into view: `none` follows the page's motion
+ * (`style.motion`), `off` never moves.
+ */
+export const SECTION_ANIMATIONS = ['none', 'fade', 'up', 'zoom', 'slide', 'off'] as const;
 
 /**
  * How any section sits on the page (ADR-0128 amendments 3 and 7): its background (colours,
@@ -1218,8 +1221,13 @@ export const storeDesignSchema = z
         background: z.enum(['white', 'tinted', 'dark']).default('white'),
         cards: z.enum(['bordered', 'shadow', 'flat']).default('bordered'),
         buttons: z.enum(['solid', 'pill']).default('solid'),
+        /**
+         * Motion of the whole page (ADR-0128 amendment 7): sections rise into view (`subtle`),
+         * and list items follow one after another with cards lifting on hover (`lively`).
+         */
+        motion: z.enum(['none', 'subtle', 'lively']).default('subtle'),
       })
-      .default({ radius: 'soft', background: 'white', cards: 'bordered', buttons: 'solid' }),
+      .prefault({}),
     /** The top bar: the store's announcement and up to three rotating messages, with shortcuts. */
     announcement: z
       .object({

@@ -70,6 +70,16 @@ export function ThemeEditor({ design, set }: { design: StoreDesign; set: Set }) 
           </Link>
         </p>
         <Choice
+          label={t('design.pageMotion')}
+          value={design.style.motion}
+          options={(['none', 'subtle', 'lively'] as const).map((v) => ({
+            value: v,
+            label: t(`design.pageMotion_${v}`),
+          }))}
+          onChange={(v) => style({ motion: v })}
+        />
+        <p className="-mt-2 text-xs text-fg-muted">{t('design.pageMotionHint')}</p>
+        <Choice
           label={t('design.radius')}
           value={design.style.radius}
           options={(['sharp', 'soft', 'round'] as const).map((v) => ({

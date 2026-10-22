@@ -950,6 +950,13 @@ export const onlineAr: typeof onlineEn = {
     type_catalog: 'قائمة المنتجات (بحث وتصفية)',
     typeHint_catalog: 'كل المنتجات مع البحث والترتيب والتصفية حسب التصنيف.',
     // ADR-0128 amendment 7: layout and motion.
+    animation_off: 'بدون حركة',
+    pageMotion: 'حركة الصفحة',
+    pageMotion_none: 'بدون',
+    pageMotion_subtle: 'هادئة',
+    pageMotion_lively: 'حيوية',
+    pageMotionHint:
+      'هادئة: تظهر الأقسام بصعود ناعم عند التمرير. حيوية: تظهر عناصر القوائم واحدًا بعد الآخر وترتفع البطاقات عند المرور. ولكل قسم أن يختار حركته أو «بدون حركة» من مظهره.',
     headingInContent:
       'عنوان هذا القسم يُكتب في محتواه؛ الحجم والسطر الصغير والسطر تحت العنوان هنا تنطبق عليه.',
     sectionHeading: 'عنوان القسم',
@@ -1098,7 +1105,7 @@ export const onlineAr: typeof onlineEn = {
     titleSize_regular: 'عادي',
     titleSize_large: 'كبير',
     titleSize_huge: 'ضخم',
-    animation_none: 'بدون',
+    animation_none: 'حسب الصفحة',
     animation_fade: 'تلاشي',
     animation_up: 'صعود',
     animation_zoom: 'تكبير',

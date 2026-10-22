@@ -2528,3 +2528,9 @@ ADR; supersede it.
     round, underline), magnifier icon, full width, sorting as buttons, category buttons' shape,
     chosen style, pictures and a one-line swipe on phones, the categories in their own row, a
     card or soft background, centring and size. "Store order" reads "Default" for shoppers.
+  - **Motion follow-up (2026-10-22, owner):** an animated section shows once its top is on
+    screen or above it (a fast scroll or a jump never leaves it hidden) and replays when its
+    animation changes. `style.motion` sets the page's motion: none, subtle (default; existing
+    stores now rise softly into view, as the owner asked) or lively (list items follow one
+    another, cards lift on hover). A section's `animation` `none` means "page default" and the
+    new `off` opts out. Reduced motion keeps only a fade. Plain sections get more spacing.

@@ -51,6 +51,7 @@ export function StoreShell() {
         'flex min-h-dvh flex-col overflow-x-clip bg-canvas text-fg',
         bar && 'max-sm:pb-16',
       )}
+      data-motion={design.style.motion}
     >
       {isPreview() ? (
         <p className="bg-fg py-1 text-center text-xs font-medium text-canvas">

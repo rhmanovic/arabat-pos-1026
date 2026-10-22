@@ -1033,6 +1033,25 @@ describe('storefront', () => {
     expect(within(folded).getByText('Our return policy')).toBeInTheDocument();
   });
 
+  it('moves the page: sections rise into view by default, a section can opt out or choose its own', async () => {
+    const design = templateDesign('retail');
+    design.style = { ...design.style, motion: 'lively' };
+    design.pages.home = sectionsOf([
+      { id: 'quiet', type: 'text', title: { en: 'Quiet', ar: null }, look: { animation: 'off' } },
+      { id: 'zoomy', type: 'text', title: { en: 'Zoomy', ar: null }, look: { animation: 'zoom' } },
+      { id: 'page', type: 'text', title: { en: 'Page motion', ar: null } },
+    ]);
+    renderStore('/demo', { 'GET /store/demo/design': () => ({ status: 200, body: { design } }) });
+    await screen.findByText('Page motion');
+    expect(document.querySelector('[data-motion="lively"]')).not.toBeNull();
+    expect(document.getElementById('section-quiet')).not.toHaveAttribute('data-reveal');
+    expect(document.getElementById('section-zoomy')).toHaveAttribute('data-reveal', 'zoom');
+    const page = document.getElementById('section-page')!;
+    expect(page).toHaveAttribute('data-reveal', 'up');
+    // On screen (or scrolled past) a section always ends up shown.
+    await waitFor(() => expect(page).toHaveAttribute('data-shown', 'true'));
+  });
+
   it('pages the product list with its count, card style and search hint', async () => {
     const user = userEvent.setup();
     const design = templateDesign('retail');
