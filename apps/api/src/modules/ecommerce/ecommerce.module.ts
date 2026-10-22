@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module.js';
+import { CatalogModule } from '../catalog/catalog.module.js';
 import { InventoryModule } from '../inventory/inventory.module.js';
 import { PrintingModule } from '../printing/printing.module.js';
 import { RegistersModule } from '../registers/registers.module.js';
@@ -11,6 +12,8 @@ import {
   StoreAccountController,
   StorefrontController,
 } from './ecommerce.controller.js';
+import { CatalogTransferController } from './catalog-transfer.controller.js';
+import { CatalogTransferService } from './catalog-transfer.service.js';
 import { EcommerceService } from './ecommerce.service.js';
 import { FulfilmentService } from './fulfilment.service.js';
 import { OnlinePaymentsService } from './online-payments.service.js';
@@ -23,7 +26,14 @@ import { StoreDesignController, StoreDesignPublicController } from './store-desi
 import { StoreDesignService } from './store-design.service.js';
 
 @Module({
-  imports: [SalesModule, InventoryModule, AuthModule, PrintingModule, RegistersModule],
+  imports: [
+    SalesModule,
+    InventoryModule,
+    AuthModule,
+    PrintingModule,
+    RegistersModule,
+    CatalogModule,
+  ],
   controllers: [
     OnlineManagerController,
     StorefrontController,
@@ -32,6 +42,7 @@ import { StoreDesignService } from './store-design.service.js';
     StoreAccountController,
     StoreDesignController,
     StoreDesignPublicController,
+    CatalogTransferController,
   ],
   providers: [
     EcommerceService,
@@ -42,6 +53,7 @@ import { StoreDesignService } from './store-design.service.js';
     PromotionsService,
     StoreAccountsService,
     StoreDesignService,
+    CatalogTransferService,
   ],
   exports: [OnlinePaymentsService, OrderNotificationsService],
 })

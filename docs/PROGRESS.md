@@ -1265,6 +1265,27 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-22 — Products and categories in Excel (ADR-0132, BR-241)
+Owner's request: upload and download products and categories with Excel in the store console,
+through the same saving logic.
+- Contracts: `catalog-transfer.ts` (columns, required derived from the save schemas, row
+  readers, issue codes, `transferResultSchema`).
+- API: `CatalogTransferService` / `CatalogTransferController` (`/manager/online/transfer/:kind/
+  template|export|import`), `exceljs` 4.4.0; the catalog's and the store's save functions now
+  have in-transaction versions used by both their endpoints and the import.
+- Console: the Excel bar on the products page and the categories tab, the upload dialog
+  (counts, changes, problems by row and column, apply all at once).
+- Tests: contracts +3 (required derived from schemas, amounts / yes-no, row → product),
+  integration +4 (template: RTL, frozen, red required, text format, hidden list sheet and its
+  range validation; download all → unchanged → errors → apply; duplicate SKU before writing and
+  a cycle refused while writing rolls back the earlier row; categories with a parent from an
+  earlier row and duplicate names), online-web +2 (bar links, check then apply; problems by row
+  and column, apply disabled). Checked in a browser: files downloaded from the console (raw XML:
+  `rightToLeft`, frozen pane, hidden `lists`, `lists!$B$2:$B$3` validations), an edited file
+  uploaded with one wrong price (row 6 flagged), fixed, applied (2 new, 1 updated).
+- Verified (cloud sandbox): `pnpm verify` 421 unit/web, `pnpm test:integration` 315 (45 files),
+  `pnpm test:e2e` 45.
+
 ### 2026-10-22 — Product cards like the owner's two reference shops
 Owner's request (two screenshots): settings to build a framed row of products with whole
 pictures, the category above the name, a large price and a full-width coloured "Add to cart",

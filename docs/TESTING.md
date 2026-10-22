@@ -66,6 +66,21 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-22 (products and categories in Excel, ADR-0132)
+- `packages/contracts/src/catalog-transfer.test.ts` (3): required columns derived from the save
+  schemas (names "one of", price required); amounts read as "1.250" (Arabic digits too) and
+  yes / no in both languages; a row becomes the catalog's product and its checks become cell
+  issues.
+- `apps/api/src/modules/ecommerce/catalog-transfer.int.test.ts` (4): the template per store
+  (Arabic headers, RTL, frozen, red / grey headers, `@` format, hidden `lists` sheet, category
+  validation by range); "download all" round trip (unchanged = nothing), a nameless row blocks
+  the whole file, then one update (price 1.500, SKU / barcode / cost kept) and one new product
+  in a category are applied; a duplicate SKU is reported before writing; a parent cycle refused
+  on the second row rolls back the first; categories with a parent added by an earlier row and
+  a duplicate name refused.
+- `apps/online-web/src/app.test.tsx` (+2): the bar's template / export links, the check then
+  the apply (`?apply=true`); problems listed by row and column with "Apply" disabled.
+
 ### Results 2026-10-22 (shop-style product cards)
 - `apps/store-web/src/app.test.tsx` (+1): a framed six-column row with a brand-coloured title;
   the buy button in its own colour adds the one-option product to the cart ("Added", cart 1);

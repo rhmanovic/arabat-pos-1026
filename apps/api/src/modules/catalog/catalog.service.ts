@@ -101,63 +101,78 @@ export class CatalogService {
     input: SaveCategoryInput,
     ip: string,
   ): Promise<Category> {
-    const categoryId = id ?? newId();
-    await this.database.withMerchantTx(actor.merchantId, async (tx) => {
-      if (input.parentId) await this.assertParentValid(tx, categoryId, input.parentId);
-      let changes = {};
-      if (id) {
-        if (!input.version)
-          throw AppError.validation([
-            { path: 'version', code: 'required', message: 'version is required' },
-          ]);
-        const before = await this.findCategory(tx, id);
-        changes = diffFields(
-          before,
-          {
-            nameEn: input.nameEn,
-            nameAr: input.nameAr,
-            parentId: input.parentId,
-            sortOrder: input.sortOrder,
-          },
-          ['nameEn', 'nameAr', 'parentId', 'sortOrder'],
-        );
-        const [row] = await tx
-          .update(categories)
-          .set({
-            nameEn: input.nameEn,
-            nameAr: input.nameAr,
-            parentId: input.parentId,
-            sortOrder: input.sortOrder,
-            version: sql`${categories.version} + 1`,
-            updatedAt: sql`now()`,
-          })
-          .where(and(eq(categories.id, id), eq(categories.version, input.version)))
-          .returning({ id: categories.id });
-        if (!row) {
-          await this.findCategory(tx, id);
-          throw versionConflict();
-        }
-      } else {
-        await tx.insert(categories).values({
-          id: categoryId,
-          merchantId: actor.merchantId,
+    const categoryId = await this.database.withMerchantTx(actor.merchantId, (tx) =>
+      this.saveCategoryInTx(tx, actor, id, input, ip),
+    );
+    return (await this.listCategories(actor)).find((c) => c.id === categoryId)!;
+  }
+
+  /**
+   * Creates (`id` null) or updates a category inside the caller's transaction; the Excel import
+   * (ADR-0132) saves many in one. Returns the category's id.
+   */
+  async saveCategoryInTx(
+    tx: Transaction,
+    actor: MerchantActor,
+    id: string | null,
+    input: SaveCategoryInput,
+    ip: string,
+    categoryId: string = id ?? newId(),
+  ): Promise<string> {
+    if (input.parentId) await this.assertParentValid(tx, categoryId, input.parentId);
+    let changes = {};
+    if (id) {
+      if (!input.version)
+        throw AppError.validation([
+          { path: 'version', code: 'required', message: 'version is required' },
+        ]);
+      const before = await this.findCategory(tx, id);
+      changes = diffFields(
+        before,
+        {
           nameEn: input.nameEn,
           nameAr: input.nameAr,
           parentId: input.parentId,
           sortOrder: input.sortOrder,
-        });
-      }
-      await this.record(
-        tx,
-        actor,
-        id ? 'category.updated' : 'category.created',
-        'category',
-        categoryId,
-        ip,
-        id ? { changes } : {},
+        },
+        ['nameEn', 'nameAr', 'parentId', 'sortOrder'],
       );
-    });
-    return (await this.listCategories(actor)).find((c) => c.id === categoryId)!;
+      const [row] = await tx
+        .update(categories)
+        .set({
+          nameEn: input.nameEn,
+          nameAr: input.nameAr,
+          parentId: input.parentId,
+          sortOrder: input.sortOrder,
+          version: sql`${categories.version} + 1`,
+          updatedAt: sql`now()`,
+        })
+        .where(and(eq(categories.id, id), eq(categories.version, input.version)))
+        .returning({ id: categories.id });
+      if (!row) {
+        await this.findCategory(tx, id);
+        throw versionConflict();
+      }
+    } else {
+      await tx.insert(categories).values({
+        id: categoryId,
+        merchantId: actor.merchantId,
+        nameEn: input.nameEn,
+        nameAr: input.nameAr,
+        parentId: input.parentId,
+        sortOrder: input.sortOrder,
+      });
+    }
+    await this.record(
+      tx,
+      actor,
+      id ? 'category.updated' : 'category.created',
+      'category',
+      categoryId,
+      ip,
+      id ? { changes } : {},
+    );
+    return categoryId;
   }
 
   async setCategoryStatus(
@@ -282,23 +297,34 @@ export class CatalogService {
   }
 
   async createProduct(actor: MerchantActor, input: SaveProductInput, ip: string): Promise<Product> {
-    this.assertPriceRights(actor);
-    const productId = newId();
     return this.write(async () =>
       this.database.withMerchantTx(actor.merchantId, async (tx) => {
-        await this.subscriptions.assertCapacity(tx, actor.merchantId, 'products');
-        await this.validateReferences(tx, input);
-        await tx
-          .insert(products)
-          .values({ id: productId, merchantId: actor.merchantId, ...productFields(input) });
-        await this.saveAvailability(tx, actor.merchantId, productId, input);
-        const changes = await this.saveVariants(tx, actor, productId, input, []);
-        await this.record(tx, actor, 'product.created', 'product', productId, ip, {
-          variants: changes,
-        });
+        const productId = await this.createProductInTx(tx, actor, input, ip);
         return this.loadProduct(tx, actor, productId);
       }),
     );
+  }
+
+  /** Creates a product inside the caller's transaction (also the Excel import, ADR-0132). */
+  async createProductInTx(
+    tx: Transaction,
+    actor: MerchantActor,
+    input: SaveProductInput,
+    ip: string,
+  ): Promise<string> {
+    this.assertPriceRights(actor);
+    const productId = newId();
+    await this.subscriptions.assertCapacity(tx, actor.merchantId, 'products');
+    await this.validateReferences(tx, input);
+    await tx
+      .insert(products)
+      .values({ id: productId, merchantId: actor.merchantId, ...productFields(input) });
+    await this.saveAvailability(tx, actor.merchantId, productId, input);
+    const changes = await this.saveVariants(tx, actor, productId, input, []);
+    await this.record(tx, actor, 'product.created', 'product', productId, ip, {
+      variants: changes,
+    });
+    return productId;
   }
 
   async updateProduct(
@@ -307,55 +333,66 @@ export class CatalogService {
     input: SaveProductInput,
     ip: string,
   ): Promise<Product> {
+    return this.write(async () =>
+      this.database.withMerchantTx(actor.merchantId, async (tx) => {
+        await this.updateProductInTx(tx, actor, productId, input, ip);
+        return this.loadProduct(tx, actor, productId);
+      }),
+    );
+  }
+
+  /** Updates a product inside the caller's transaction (also the Excel import, ADR-0132). */
+  async updateProductInTx(
+    tx: Transaction,
+    actor: MerchantActor,
+    productId: string,
+    input: SaveProductInput,
+    ip: string,
+  ): Promise<void> {
     if (!input.version)
       throw AppError.validation([
         { path: 'version', code: 'required', message: 'version is required' },
       ]);
-    return this.write(async () =>
-      this.database.withMerchantTx(actor.merchantId, async (tx) => {
-        const existing = await this.loadProduct(tx, actor, productId);
-        await this.validateReferences(tx, input);
-        const fields = productFields(input);
-        const currentVariants = await tx
-          .select()
-          .from(productVariants)
-          .where(eq(productVariants.productId, productId));
-        // Stock never disappears silently (BR-171): tracking stays on, goods stay goods and
-        // variants stay active while any balance is not zero.
-        if (existing.trackInventory && !fields.trackInventory)
-          await assertNoStockOnHand(
-            tx,
-            currentVariants.map((v) => v.id),
-            'switch stock tracking off',
-          );
-        const requestedIds = new Set(input.variants.map((v) => v.id).filter(Boolean));
-        await assertNoStockOnHand(
-          tx,
-          currentVariants
-            .filter((v) => v.status === 'active' && !requestedIds.has(v.id))
-            .map((v) => v.id),
-          'remove a variant',
-        );
-        const [row] = await tx
-          .update(products)
-          .set({
-            ...fields,
-            version: sql`${products.version} + 1`,
-            updatedAt: sql`now()`,
-          })
-          .where(and(eq(products.id, productId), eq(products.version, input.version!)))
-          .returning({ id: products.id });
-        if (!row) throw versionConflict();
-        await this.saveAvailability(tx, actor.merchantId, productId, input);
-        const changes = await this.saveVariants(tx, actor, productId, input, currentVariants);
-        await this.record(tx, actor, 'product.updated', 'product', productId, ip, {
-          before: { status: existing.status, name: existing.nameEn ?? existing.nameAr },
-          changes: diffFields(existing, fields, Object.keys(fields) as (keyof typeof fields)[]),
-          variants: changes,
-        });
-        return this.loadProduct(tx, actor, productId);
-      }),
+    const existing = await this.loadProduct(tx, actor, productId);
+    await this.validateReferences(tx, input);
+    const fields = productFields(input);
+    const currentVariants = await tx
+      .select()
+      .from(productVariants)
+      .where(eq(productVariants.productId, productId));
+    // Stock never disappears silently (BR-171): tracking stays on, goods stay goods and
+    // variants stay active while any balance is not zero.
+    if (existing.trackInventory && !fields.trackInventory)
+      await assertNoStockOnHand(
+        tx,
+        currentVariants.map((v) => v.id),
+        'switch stock tracking off',
+      );
+    const requestedIds = new Set(input.variants.map((v) => v.id).filter(Boolean));
+    await assertNoStockOnHand(
+      tx,
+      currentVariants
+        .filter((v) => v.status === 'active' && !requestedIds.has(v.id))
+        .map((v) => v.id),
+      'remove a variant',
     );
+    const [row] = await tx
+      .update(products)
+      .set({
+        ...fields,
+        version: sql`${products.version} + 1`,
+        updatedAt: sql`now()`,
+      })
+      .where(and(eq(products.id, productId), eq(products.version, input.version!)))
+      .returning({ id: products.id });
+    if (!row) throw versionConflict();
+    await this.saveAvailability(tx, actor.merchantId, productId, input);
+    const changes = await this.saveVariants(tx, actor, productId, input, currentVariants);
+    await this.record(tx, actor, 'product.updated', 'product', productId, ip, {
+      before: { status: existing.status, name: existing.nameEn ?? existing.nameAr },
+      changes: diffFields(existing, fields, Object.keys(fields) as (keyof typeof fields)[]),
+      variants: changes,
+    });
   }
 
   async setProductStatus(

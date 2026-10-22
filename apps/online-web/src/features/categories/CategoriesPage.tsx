@@ -23,6 +23,7 @@ import { CollectionList } from '../collections/CollectionsPage.js';
 import { PictureField, usePendingPicture } from '../picture.js';
 import { key } from '../shared.js';
 import { SortableList, SortableRow } from '../sortable.js';
+import { TransferBar } from '../transfer.js';
 
 /** The store's name of a category: its own name when set, else the shared one. */
 export function storeCategoryName(c: StoreCategory, language: string) {
@@ -56,6 +57,7 @@ export function CategoriesPage() {
         ]}
       >
         <TabPanel value="categories">
+          <TransferBar kind="categories" />
           <p className="mb-3 text-sm text-fg-muted">{t('categories.hint')}</p>
           <Alert tone="info" className="mb-4" data-testid="categories-shared">
             {t('categories.sharedNote')}

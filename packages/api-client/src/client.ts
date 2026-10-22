@@ -1,4 +1,5 @@
 import { imageForm } from './image.js';
+import { type TransferKind, transferResultSchema } from '@arabat/contracts';
 import {
   type SaveLinkItem,
   type SaveLinkPage,
@@ -396,6 +397,25 @@ export function createApiClient(options: ApiClientOptions = {}) {
     schema: T,
   ): Promise<z.output<T>> {
     const form = await imageForm(file);
+    const response = await doFetch(`${baseUrl}${path}`, {
+      method: 'POST',
+      body: form,
+      credentials: 'same-origin',
+    }).catch((error: unknown) => {
+      throw new NetworkError(error);
+    });
+    if (!response.ok) throw await toApiError(response);
+    return schema.parse(await response.json()) as z.output<T>;
+  }
+
+  /** Multipart upload of a file as it is (no picture conversion). */
+  async function uploadFile<T extends z.ZodType>(
+    path: string,
+    file: Blob,
+    schema: T,
+  ): Promise<z.output<T>> {
+    const form = new FormData();
+    form.append('file', file, file instanceof File ? file.name : 'file');
     const response = await doFetch(`${baseUrl}${path}`, {
       method: 'POST',
       body: form,
@@ -1209,6 +1229,16 @@ export function createApiClient(options: ApiClientOptions = {}) {
           body: { ids },
           schema: onlineCollectionListSchema,
         }),
+      /** Excel files of products or categories (ADR-0132): where to download, and the upload. */
+      transferUrl: (kind: TransferKind, file: 'template' | 'export') =>
+        `${baseUrl}/manager/online/transfer/${kind}/${file}`,
+      /** Checks the file (`apply` false) or writes it all in one transaction (`apply` true). */
+      transferImport: (kind: TransferKind, file: Blob, apply: boolean) =>
+        uploadFile(
+          `/manager/online/transfer/${kind}/import${apply ? '?apply=true' : ''}`,
+          file,
+          transferResultSchema,
+        ),
       async uploadCollectionImage(id: string, file: Blob) {
         return uploadImage(`/manager/online/collections/${id}/image`, file, onlineCollectionSchema);
       },

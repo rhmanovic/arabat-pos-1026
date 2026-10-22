@@ -789,6 +789,101 @@ describe('online store console', () => {
     ).toBe(false);
   });
 
+  it('downloads the Excel files and uploads one: a check first, then everything at once', async () => {
+    const user = userEvent.setup();
+    let uploads = 0;
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'online.manage', 'catalog.manage']),
+      routes: {
+        'GET /manager/online/listings': () => ({ status: 200, body: { products: [] } }),
+        'GET /manager/online/categories': () => ({
+          status: 200,
+          body: { categories: [], uncategorized: 0 },
+        }),
+        'GET /manager/online/collections': () => ({ status: 200, body: { collections: [] } }),
+        'POST /manager/online/transfer/products/import': () => {
+          // The first upload is the check, the second one applies.
+          const apply = ++uploads === 2;
+          return {
+            status: 201,
+            body: {
+              mode: apply ? 'applied' : 'preview',
+              counts: { created: 1, updated: 1, unchanged: 3 },
+              rows: [
+                { row: 2, action: 'update', name: 'Tea' },
+                { row: 6, action: 'create', name: 'Coffee' },
+              ],
+              issues: [],
+            },
+          };
+        },
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/products', fetch });
+    const bar = await screen.findByTestId('transfer-products');
+    expect(within(bar).getByRole('link', { name: /Download the template/ })).toHaveAttribute(
+      'href',
+      '/api/v1/manager/online/transfer/products/template',
+    );
+    expect(within(bar).getByRole('link', { name: /Download all/ })).toHaveAttribute(
+      'href',
+      '/api/v1/manager/online/transfer/products/export',
+    );
+    await user.click(within(bar).getByRole('button', { name: /Upload in one go/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Upload products from Excel' });
+    const file = new File([new Uint8Array([0x50, 0x4b])], 'products.xlsx');
+    await user.upload(within(dialog).getByLabelText('Choose a file'), file);
+    // The check shows what changes; nothing is applied yet.
+    expect(await within(dialog).findByTestId('transfer-counts')).toHaveTextContent('1New');
+    expect(within(dialog).getByText('Coffee')).toBeInTheDocument();
+    const imports = () => fetch.calls.filter((c) => c.path.endsWith('/import'));
+    expect(imports().map((c) => c.query)).toEqual(['']);
+    await user.click(within(dialog).getByRole('button', { name: 'Apply 2 changes' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(imports().map((c) => c.query)).toEqual(['', 'apply=true']);
+  });
+
+  it('shows the problems of an uploaded file by row and column and does not apply it', async () => {
+    const user = userEvent.setup();
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'online.manage', 'catalog.manage']),
+      routes: {
+        'GET /manager/online/listings': () => ({ status: 200, body: { products: [] } }),
+        'GET /manager/online/categories': () => ({
+          status: 200,
+          body: { categories: [], uncategorized: 0 },
+        }),
+        'GET /manager/online/collections': () => ({ status: 200, body: { collections: [] } }),
+        'POST /manager/online/transfer/products/import': () => ({
+          status: 201,
+          body: {
+            mode: 'preview',
+            counts: { created: 2, updated: 0, unchanged: 0 },
+            rows: [],
+            issues: [
+              { row: 4, column: 'price', code: 'invalidAmount' },
+              { row: 5, column: 'category', code: 'unknownCategory' },
+            ],
+          },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/products', fetch });
+    await user.click(await screen.findByRole('button', { name: /Upload in one go/ }));
+    const dialog = await screen.findByRole('dialog');
+    await user.upload(
+      within(dialog).getByLabelText('Choose a file'),
+      new File([new Uint8Array([1])], 'bad.xlsx'),
+    );
+    expect(
+      await within(dialog).findByText('Fix 2 problems in the file, then upload it again:'),
+    ).toBeInTheDocument();
+    const row = within(dialog).getByText('Price (KWD)').closest('tr')!;
+    expect(row).toHaveTextContent('4');
+    expect(row).toHaveTextContent('Write an amount with up to 3 decimals, like 1.250.');
+    expect(within(dialog).getByRole('button', { name: /Apply/ })).toBeDisabled();
+  });
+
   it('does not offer to add products without the catalog right', async () => {
     const fetch = fakeApiFetch({
       session: makeSession('manager', ['manager.access', 'online.manage']),

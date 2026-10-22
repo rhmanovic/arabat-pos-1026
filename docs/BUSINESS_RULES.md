@@ -117,6 +117,12 @@ engineering defaults pending owner confirmation.
   (the main register's first), and cannot sell while none is open. A device shift is never refused because
   the person left a shift open elsewhere; that shift is listed for the managers to close. Records
   that reach the server after the branch shift closed are booked to it and flagged "late".
+- **BR-241** Products and categories in Excel (ADR-0132, owner 2026-10-22): an uploaded file
+  is checked before anything is saved, and is then saved completely or not at all. A row with
+  an id changes that product or category; a row without one adds a new one; a file never
+  deletes or archives. Prices are KWD with 3 decimals. A product with options keeps its option
+  prices and codes in the full catalog. A new category may not reuse an existing category's
+  name. Uploading needs the right to manage products; prices need the right to manage prices.
 - **BR-240** Section options, layout and motion (ADR-0128 amendment 7, owner 2026-10-21/22):
   new options never change how an existing design looks until the merchant picks them, except
   the page motion, which the owner asked to be on by default (sections rise softly into view;

@@ -500,45 +500,49 @@ export class EcommerceService {
     ip: string,
   ) {
     this.assertManage(actor);
-    await this.database.withMerchantTx(actor.merchantId, async (tx) => {
-      const [row] = await tx
-        .select({ productId: onlineListings.productId })
-        .from(onlineListings)
-        .where(eq(onlineListings.productId, productId))
-        .for('update');
-      if (!row) throw AppError.notFound('Product not found.');
-      if (input.categoryId !== undefined)
-        await this.moveToCategory(tx, actor, [productId], input.categoryId, ip);
-      if (input.collectionIds)
-        await this.setProductCollections(tx, actor.merchantId, productId, input.collectionIds);
-      await tx
-        .update(onlineListings)
-        .set({
-          titleEn: input.titleEn,
-          titleAr: input.titleAr,
-          descriptionEn: input.descriptionEn,
-          descriptionAr: input.descriptionAr,
-          featured: input.featured,
-          maxPerOrder: input.maxPerOrder,
-          ...(input.visible === undefined ? {} : { visible: input.visible }),
-          updatedAt: sql`now()`,
-        })
-        .where(eq(onlineListings.productId, productId));
-      await this.record(
-        tx,
-        actor.merchantId,
-        actor.userId,
-        'online.listing_updated',
-        productId,
-        ip,
-        {
-          featured: input.featured,
-          ...(input.visible === undefined ? {} : { visible: input.visible }),
-          ...(input.collectionIds ? { collectionIds: input.collectionIds } : {}),
-        },
-      );
-    });
+    await this.database.withMerchantTx(actor.merchantId, (tx) =>
+      this.saveListingInTx(tx, actor, productId, input, ip),
+    );
     return this.listings(actor);
+  }
+
+  /** The store's fields of one product inside the caller's transaction (also the Excel import). */
+  async saveListingInTx(
+    tx: Transaction,
+    actor: MerchantActor,
+    productId: string,
+    input: z.output<typeof saveListingSchema>,
+    ip: string,
+  ): Promise<void> {
+    this.assertManage(actor);
+    const [row] = await tx
+      .select({ productId: onlineListings.productId })
+      .from(onlineListings)
+      .where(eq(onlineListings.productId, productId))
+      .for('update');
+    if (!row) throw AppError.notFound('Product not found.');
+    if (input.categoryId !== undefined)
+      await this.moveToCategory(tx, actor, [productId], input.categoryId, ip);
+    if (input.collectionIds)
+      await this.setProductCollections(tx, actor.merchantId, productId, input.collectionIds);
+    await tx
+      .update(onlineListings)
+      .set({
+        titleEn: input.titleEn,
+        titleAr: input.titleAr,
+        descriptionEn: input.descriptionEn,
+        descriptionAr: input.descriptionAr,
+        featured: input.featured,
+        maxPerOrder: input.maxPerOrder,
+        ...(input.visible === undefined ? {} : { visible: input.visible }),
+        updatedAt: sql`now()`,
+      })
+      .where(eq(onlineListings.productId, productId));
+    await this.record(tx, actor.merchantId, actor.userId, 'online.listing_updated', productId, ip, {
+      featured: input.featured,
+      ...(input.visible === undefined ? {} : { visible: input.visible }),
+      ...(input.collectionIds ? { collectionIds: input.collectionIds } : {}),
+    });
   }
 
   /**
@@ -823,27 +827,39 @@ export class EcommerceService {
     ip: string,
   ): Promise<StoreCategory> {
     this.assertManage(actor);
-    await this.database.withMerchantTx(actor.merchantId, async (tx) => {
-      const row = await this.lockStoreCategory(tx, id);
-      if (input.version !== undefined && row.version !== input.version) throw versionConflict();
-      const renamed = input.nameEn !== row.nameEn || input.nameAr !== row.nameAr;
-      if (renamed) assertCan(actor, 'catalog.manage', null);
-      const next = {
-        nameEn: input.nameEn,
-        nameAr: input.nameAr,
-        onlineNameEn: input.onlineNameEn,
-        onlineNameAr: input.onlineNameAr,
-        onlineVisible: input.visible,
-      };
-      await tx
-        .update(categories)
-        .set({ ...next, version: sql`${categories.version} + 1`, updatedAt: sql`now()` })
-        .where(eq(categories.id, id));
-      await this.record(tx, actor.merchantId, actor.userId, 'online.category_updated', id, ip, {
-        changes: diffFields(row, next, Object.keys(next) as (keyof typeof next)[]),
-      });
-    });
+    await this.database.withMerchantTx(actor.merchantId, (tx) =>
+      this.updateCategoryInTx(tx, actor, id, input, ip),
+    );
     return this.storeCategory(actor, id);
+  }
+
+  /** A shared category's store settings inside the caller's transaction (also the Excel import). */
+  async updateCategoryInTx(
+    tx: Transaction,
+    actor: MerchantActor,
+    id: string,
+    input: z.output<typeof saveStoreCategorySchema>,
+    ip: string,
+  ): Promise<void> {
+    this.assertManage(actor);
+    const row = await this.lockStoreCategory(tx, id);
+    if (input.version !== undefined && row.version !== input.version) throw versionConflict();
+    const renamed = input.nameEn !== row.nameEn || input.nameAr !== row.nameAr;
+    if (renamed) assertCan(actor, 'catalog.manage', null);
+    const next = {
+      nameEn: input.nameEn,
+      nameAr: input.nameAr,
+      onlineNameEn: input.onlineNameEn,
+      onlineNameAr: input.onlineNameAr,
+      onlineVisible: input.visible,
+    };
+    await tx
+      .update(categories)
+      .set({ ...next, version: sql`${categories.version} + 1`, updatedAt: sql`now()` })
+      .where(eq(categories.id, id));
+    await this.record(tx, actor.merchantId, actor.userId, 'online.category_updated', id, ip, {
+      changes: diffFields(row, next, Object.keys(next) as (keyof typeof next)[]),
+    });
   }
 
   /** The store's order of the shared categories (the point of sale keeps its own). */

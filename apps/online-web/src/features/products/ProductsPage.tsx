@@ -31,6 +31,7 @@ import { storeCategoryName } from '../categories/CategoriesPage.js';
 import { GalleryField, PictureField, usePendingGallery, usePendingPicture } from '../picture.js';
 import { formatAmount, key } from '../shared.js';
 import { SortableList, SortableRow } from '../sortable.js';
+import { TransferBar } from '../transfer.js';
 
 const SHOW = ['all', 'website', 'hidden', 'uncategorized'] as const;
 type Show = (typeof SHOW)[number];
@@ -62,6 +63,7 @@ export function ProductsPage() {
           </div>
         }
       />
+      <TransferBar kind="products" />
       <Listings />
       {adding ? <AddProductDialog onClose={() => setAdding(false)} /> : null}
     </div>

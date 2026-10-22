@@ -2167,6 +2167,51 @@ ADR; supersede it.
 - **Consequences:** smaller pictures for shoppers, no personal metadata kept, one place to change
   the format or the size rule.
 
+## ADR-0132 — Products and categories in Excel from the store console
+- **Status:** Accepted (2026-10-22). Owner's request: upload and download products and
+  categories in one go with Excel (.xlsx) in the store console's products and categories
+  pages: a template, "download all" in the same shape, and an upload through the same saving
+  logic, no new write path.
+- **Decision:**
+  - **One column definition** (`packages/contracts/src/catalog-transfer.ts`,
+    `TRANSFER_COLUMNS`): key, Arabic / English header, kind, width, choices, hint. It builds the
+    template, the "download all" file and reads uploads. **Required columns are derived** from
+    the save schemas (`saveProductSchema` + `saveListingSchema`, `saveCategorySchema` +
+    `saveStoreCategorySchema`): a complete sample row is checked with each cell emptied, and the
+    name pair as a group ("one of"). The same module turns a row into the input those schemas
+    check, and maps their issues to cells.
+  - **Files built on the server per store** (`exceljs` 4.4.0, `CatalogTransferService`):
+    Arabic headers, RTL sheet, frozen first row, red headers for required columns and grey for
+    optional ones (with a note), text format (`@`) for every column so SKUs, barcodes and prices
+    keep their zeros (prices written as "1.250"), drop-down lists for categories, yes / no and
+    product type read from a hidden `lists` sheet by range (no 255-character limit), and an
+    instructions sheet. The category list is the store's current categories as
+    "Parent › Child" labels. Costs appear only for holders of `catalog.prices.manage`.
+  - **Upload = check, then apply in ONE transaction.** `POST
+    /manager/online/transfer/:kind/import` checks every row (cell formats, the save schemas,
+    known ids and categories, SKUs and barcodes against the file and the other products,
+    duplicate category names) and answers counts (new / updated / unchanged), the rows that
+    change and the issues by row and column; nothing is written. With `?apply=true` and no
+    issue, every row is written in one transaction through the catalog's and the store's own
+    functions, extracted for this from the existing endpoints (`createProductInTx`,
+    `updateProductInTx`, `saveCategoryInTx`, `saveListingInTx`, `updateCategoryInTx`): the
+    same checks, plan limits, stock rules, price rights and audit entries. If any row is
+    refused while writing, the whole file rolls back and the row is reported. One
+    `catalog.products_imported` / `catalog.categories_imported` audit entry sums it up.
+  - **Matching and safety:** a row with an id updates that record, a row without one creates;
+    rows that change nothing are skipped. A file never deletes or archives anything. A product
+    with options keeps its options: its name, category, description and website fields can be
+    changed, its prices and codes stay in the full catalog (the row must leave them empty). A
+    new category's parent may be an existing category or one added by an earlier row. At most
+    2,000 rows and 2 MB per file.
+  - **Permissions:** the routes need `online.manage` (the store console); uploading also needs
+    `catalog.manage` (the catalog is shared with the point of sale), prices
+    `catalog.prices.manage`, as in the console.
+  - **Console:** a bar at the top of the products page and of the categories tab with "Download
+    the template", "Download all" and "Upload in one go"; the upload dialog shows the counts, the
+    rows that change, and the problems with row, column and a plain explanation; "Apply" stays
+    disabled until the file is clean.
+
 ## ADR-0131 — Business management in the consoles' young look, phone-first
 - **Status:** Accepted (2026-10-21). Owner's request: "عدل واجهة إدارة نقطة المبيعات عشان تناسب جيل
   زي وتأكد أنها متناسقة مع الهاتف" (make Business management suit Gen Z and fit phones).

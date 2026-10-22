@@ -69,6 +69,9 @@ const PATHS = {
   plus: 'M12 5v14M5 12h14',
   sparkle:
     'M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM19 17l.9 2.1L22 20l-2.1.9L19 23l-.9-2.1L16 20l2.1-.9z',
+  download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
+  upload: 'M12 20V9M7 14l5-5 5 5M5 4h14',
+  sheet: 'M5 3h10l4 4v14H5zM15 3v4h4M8 12h8M8 16h8M12 12v8',
 } as const;
 
 export type IconName = keyof typeof PATHS;
