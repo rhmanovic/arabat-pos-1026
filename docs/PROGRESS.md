@@ -1285,6 +1285,11 @@ through the same saving logic.
   uploaded with one wrong price (row 6 flagged), fixed, applied (2 new, 1 updated).
 - Verified (cloud sandbox): `pnpm verify` 421 unit/web, `pnpm test:integration` 315 (45 files),
   `pnpm test:e2e` 45.
+- Released (ADR-0122): production `fbbc31269220` (revision `arabat-web-00065-9ld`, previous
+  `arabat-web-00064-v9v`; migration job `arabat-migrate-jr75g`, no new migration). Cloud Build
+  check `122ab755`: ready 200 with that version and database ok (3 ms); `live`, `/store/`,
+  `/manager/` and `/online/` 200. Signed out afterwards, `config.env` removed; no key, account
+  or secret deleted.
 
 ### 2026-10-22 — Product cards like the owner's two reference shops
 Owner's request (two screenshots): settings to build a framed row of products with whole
