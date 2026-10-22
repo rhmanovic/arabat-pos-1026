@@ -1277,6 +1277,11 @@ choices per product.
   template test checks the protection (id locked, names open, headers locked).
 - Verified (cloud sandbox): `pnpm verify` 421 unit/web, `pnpm test:integration` 316 (45 files),
   `pnpm test:e2e` 45.
+- Released (ADR-0122): production `81a4a71e9859` (revision `arabat-web-00066-wnv`, previous
+  `arabat-web-00065-9ld`; migration job `arabat-migrate-n4g4l`, no new migration). Cloud Build
+  check `b2e6878e`: ready 200 with that version and database ok (3 ms); `live`, `/store/`,
+  `/manager/` and `/online/` 200. Signed out afterwards, `config.env` removed; no key, account
+  or secret deleted.
 
 ### 2026-10-22 — Products and categories in Excel (ADR-0132, BR-241)
 Owner's request: upload and download products and categories with Excel in the store console,
