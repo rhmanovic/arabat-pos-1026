@@ -2521,3 +2521,10 @@ ADR; supersede it.
   - Pictures used by the new fields count as in use (`designImageIds`); the design API schemas
     carry explicit types because the design schema is now too large for TypeScript to write
     out inline.
+  - **Follow-up (2026-10-22, owner):** the frame's heading worked only on sections that draw
+    their own title. Sections without one (catalog, banner, text, split, ticker…, see
+    `OWN_TITLE_SECTIONS`) now get the frame's own `heading` with its kicker, size, alignment and
+    subtitle above them. The catalog bar gains its own look: search box (bordered, filled,
+    round, underline), magnifier icon, full width, sorting as buttons, category buttons' shape,
+    chosen style, pictures and a one-line swipe on phones, the categories in their own row, a
+    card or soft background, centring and size. "Store order" reads "Default" for shoppers.

@@ -1,4 +1,4 @@
-import type { DesignSection, SectionLook } from '@arabat/contracts';
+import { type DesignSection, OWN_TITLE_SECTIONS, type SectionLook } from '@arabat/contracts';
 import { cn } from '@arabat/ui';
 import { readableOn } from '@arabat/web-core';
 import {
@@ -226,7 +226,14 @@ export function SectionFrame({
           ? 'px-4 sm:px-8'
           : 'mx-auto max-w-6xl px-4'
         : '';
-  let content: ReactNode = <LookContext.Provider value={look}>{children}</LookContext.Provider>;
+  // Sections without a title of their own get the frame's heading (kicker, title, subtitle).
+  const frameHeading = !OWN_TITLE_SECTIONS.includes(section.type);
+  let content: ReactNode = (
+    <LookContext.Provider value={look}>
+      {frameHeading ? <SectionTitle>{text(look.heading)}</SectionTitle> : null}
+      {children}
+    </LookContext.Provider>
+  );
   if (look.collapsible)
     content = (
       <details className="group rounded-2xl border border-border bg-surface" data-collapsible>

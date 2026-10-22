@@ -204,6 +204,8 @@ export const sectionLookSchema = z
     titleSize: z.enum(['small', 'regular', 'large', 'huge']).default('regular'),
     /** A small line above the heading. */
     eyebrow: localized(60),
+    /** The heading of a section without a title of its own (`ownTitle` says which have one). */
+    heading: localized(120),
     subtitle: localized(200),
     animation: z.enum(SECTION_ANIMATIONS).default('none'),
     /** A direct link to the section: `/#anchor` in a button or menu item. */
@@ -435,6 +437,24 @@ export const catalogSectionSchema = z.object({
   /** "24 products" above the list. */
   showCount: z.boolean().default(false),
   searchPlaceholder: localized(60),
+  // The bar's own look (ADR-0128 amendment 7): defaults keep today's look.
+  /** The search box: bordered, filled, round or a line under it. */
+  searchStyle: z.enum(['outline', 'filled', 'pill', 'underline']).default('outline'),
+  searchIcon: z.boolean().default(false),
+  searchWidth: z.enum(['auto', 'full']).default('auto'),
+  /** Sorting as a drop-down list or as buttons. */
+  sortStyle: z.enum(['select', 'pills']).default('select'),
+  /** Category buttons: shape, how the chosen one stands out, and their pictures. */
+  chipShape: z.enum(['pill', 'rounded', 'square']).default('pill'),
+  chipActive: z.enum(['solid', 'outline', 'soft']).default('solid'),
+  chipImages: z.boolean().default(true),
+  /** Category buttons in one line that swipes on phones, instead of wrapping. */
+  chipScroll: z.boolean().default(false),
+  /** Search and sort with the categories in one row, or the categories in their own row. */
+  barLayout: z.enum(['row', 'stacked']).default('row'),
+  barStyle: z.enum(['plain', 'card', 'soft']).default('plain'),
+  barAlign: z.enum(['start', 'center']).default('start'),
+  controlSize: z.enum(['small', 'regular', 'large']).default('regular'),
 });
 
 /** An offer that ends at a moment, with a live countdown; it hides itself once ended. */
@@ -548,6 +568,27 @@ export const spacerSectionSchema = z.object({
   size: z.enum(['small', 'medium', 'large', 'huge']).default('medium'),
   line: z.boolean().default(false),
 });
+
+/**
+ * Section types that draw their own title with the frame's heading; the others get the
+ * frame's `heading` above them (ADR-0128 amendment 7).
+ */
+export const OWN_TITLE_SECTIONS: readonly SectionType[] = [
+  'products',
+  'categories',
+  'features',
+  'menu',
+  'video',
+  'faq',
+  'gallery',
+  'logos',
+  'testimonials',
+  'cards',
+  'columns',
+  'stats',
+  'steps',
+  'tabs',
+];
 
 // -------------------------------------------------- layout and motion (ADR-0128 amendment 7)
 /** A visual separator: a line in several styles, optionally with words or an emoji in it. */

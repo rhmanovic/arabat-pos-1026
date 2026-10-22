@@ -1265,6 +1265,22 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-22 — Section headings everywhere; the search and filter bar's look
+Owner's feedback on amendment 7: the heading group did nothing on the product list, the search
+and filter bar was plain with nothing to style, and "Store order" means little to shoppers.
+- Frame heading: sections without their own title (`OWN_TITLE_SECTIONS` lists those with one)
+  get `look.heading` with kicker, size, alignment and subtitle above them; the console shows a
+  "Section title" field for them and a hint for the others.
+- Catalog bar: search box style (bordered / filled / round / underline), magnifier icon, full
+  width, sorting as a list or buttons, category button shape / chosen style / pictures / one
+  swiping line on phones, categories in their own row, card or soft background, centring and
+  size; defaults keep today's look. The first sort option reads "Default" / «افتراضي».
+- Tests: contracts default look lists `heading`; store-web catalog test extended (frame heading
+  with kicker and size, round search, card bar in two rows, sorting buttons). Checked in a
+  browser at 1280 and 390 px with three local products.
+- Verified (cloud sandbox): `pnpm verify` 413 unit/web, `pnpm test:integration` 311 (44 files),
+  `pnpm test:e2e` 45.
+
 ### 2026-10-21 — Store design: section options, layout and motion (ADR-0128 amendment 7, BR-240)
 Owner's batch: a floating Save in store settings; editing a store product like adding one
 (name, price, pictures, no trip to the catalog); and far more options and section kinds in the

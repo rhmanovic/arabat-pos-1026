@@ -154,7 +154,7 @@ export const storeEn = {
     search: 'Search products',
     featured: 'Featured',
     sort: 'Sort',
-    sort_default: 'Store order',
+    sort_default: 'Default',
     sort_name: 'Name',
     sort_priceAsc: 'Price: low to high',
     sort_priceDesc: 'Price: high to low',

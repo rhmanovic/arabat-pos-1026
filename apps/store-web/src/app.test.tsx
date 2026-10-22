@@ -1045,6 +1045,17 @@ describe('storefront', () => {
         pageSize: 12,
         cardStyle: 'overlay',
         searchPlaceholder: { en: 'Find a gift', ar: null },
+        searchStyle: 'pill',
+        searchIcon: true,
+        sortStyle: 'pills',
+        barStyle: 'card',
+        barLayout: 'stacked',
+        // The catalog has no title of its own: the frame's heading shows above it.
+        look: {
+          heading: { en: 'All products' },
+          eyebrow: { en: 'Fresh picks' },
+          titleSize: 'large',
+        },
       },
     ]);
     const many = {
@@ -1064,6 +1075,21 @@ describe('storefront', () => {
     expect(grid.querySelector('[data-card="overlay"]')).not.toBeNull();
     expect(screen.getByTestId('catalog-count')).toHaveTextContent('14');
     expect(screen.getByPlaceholderText('Find a gift')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'All products' })).toHaveClass('text-2xl');
+    expect(screen.getByText('Fresh picks')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Find a gift')).toHaveAttribute('data-search-style', 'pill');
+    expect(document.querySelector('[data-bar="stacked-card"]')).not.toBeNull();
+    // Sorting as buttons, the first one named plainly.
+    const sorting = screen.getByRole('group', { name: 'Sort' });
+    expect(within(sorting).getByRole('button', { name: 'Default' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await user.click(within(sorting).getByRole('button', { name: 'Name' }));
+    expect(within(sorting).getByRole('button', { name: 'Name' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     await user.click(screen.getByRole('button', { name: 'Show more (2)' }));
     expect(within(grid).getAllByRole('link')).toHaveLength(14);
     expect(screen.queryByRole('button', { name: /Show more/ })).toBeNull();

@@ -156,7 +156,7 @@ export const storeAr: typeof storeEn = {
     search: 'ابحث عن منتج',
     featured: 'مميّزة',
     sort: 'الترتيب',
-    sort_default: 'ترتيب المتجر',
+    sort_default: 'افتراضي',
     sort_name: 'الاسم',
     sort_priceAsc: 'السعر: من الأقل',
     sort_priceDesc: 'السعر: من الأعلى',

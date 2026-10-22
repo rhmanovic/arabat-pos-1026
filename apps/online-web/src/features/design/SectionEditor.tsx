@@ -5,6 +5,7 @@ import {
   type SectionOf,
   type SectionLook,
   type SectionType,
+  OWN_TITLE_SECTIONS,
   SECTION_ANIMATIONS,
   SECTION_GRADIENTS,
   SECTION_TYPES,
@@ -359,6 +360,16 @@ function LookEditor({
         />
       </Group>
       <Group title={t('design.lookGroup_heading')}>
+        {OWN_TITLE_SECTIONS.includes(section.type) ? (
+          <p className="text-xs text-fg-muted">{t('design.headingInContent')}</p>
+        ) : (
+          <LocalizedField
+            label={t('design.sectionHeading')}
+            value={look.heading}
+            max={120}
+            onChange={(heading) => set({ heading })}
+          />
+        )}
         <Choice
           label={t('design.titleAlign')}
           value={look.titleAlign}
@@ -1977,6 +1988,87 @@ function CatalogEditor({ s, set }: { s: SectionOf<'catalog'>; set: Patch<Section
           checked={s.stickyFilters}
           onChange={(stickyFilters) => set({ stickyFilters })}
         />
+      </Group>
+      <Group title={t('design.barLook')}>
+        <Choice
+          label={t('design.barLayout')}
+          value={s.barLayout}
+          options={opts('barLayout', ['row', 'stacked'] as const)}
+          onChange={(barLayout) => set({ barLayout })}
+        />
+        <Choice
+          label={t('design.barStyle')}
+          value={s.barStyle}
+          options={opts('barStyle', ['plain', 'card', 'soft'] as const)}
+          onChange={(barStyle) => set({ barStyle })}
+        />
+        <Choice
+          label={t('design.align')}
+          value={s.barAlign}
+          options={opts('align', ['start', 'center'] as const)}
+          onChange={(barAlign) => set({ barAlign })}
+        />
+        <Choice
+          label={t('design.controlSize')}
+          value={s.controlSize}
+          options={opts('blockSize', ['small', 'regular', 'large'] as const)}
+          onChange={(controlSize) => set({ controlSize })}
+        />
+        {s.showSearch ? (
+          <>
+            <Choice
+              label={t('design.searchBox')}
+              value={s.searchStyle}
+              options={opts('searchBox', ['outline', 'filled', 'pill', 'underline'] as const)}
+              onChange={(searchStyle) => set({ searchStyle })}
+            />
+            <Choice
+              label={t('design.searchWidth')}
+              value={s.searchWidth}
+              options={opts('searchWidth', ['auto', 'full'] as const)}
+              onChange={(searchWidth) => set({ searchWidth })}
+            />
+            <Toggle
+              label={t('design.searchIcon')}
+              checked={s.searchIcon}
+              onChange={(searchIcon) => set({ searchIcon })}
+            />
+          </>
+        ) : null}
+        {s.showSort ? (
+          <Choice
+            label={t('design.sortStyle')}
+            value={s.sortStyle}
+            options={opts('sortStyle', ['select', 'pills'] as const)}
+            onChange={(sortStyle) => set({ sortStyle })}
+          />
+        ) : null}
+        {s.showCategories && s.filterStyle === 'chips' ? (
+          <>
+            <Choice
+              label={t('design.chipShape')}
+              value={s.chipShape}
+              options={opts('chipShape', ['pill', 'rounded', 'square'] as const)}
+              onChange={(chipShape) => set({ chipShape })}
+            />
+            <Choice
+              label={t('design.chipActive')}
+              value={s.chipActive}
+              options={opts('chipActive', ['solid', 'outline', 'soft'] as const)}
+              onChange={(chipActive) => set({ chipActive })}
+            />
+            <Toggle
+              label={t('design.chipImages')}
+              checked={s.chipImages}
+              onChange={(chipImages) => set({ chipImages })}
+            />
+            <Toggle
+              label={t('design.chipScroll')}
+              checked={s.chipScroll}
+              onChange={(chipScroll) => set({ chipScroll })}
+            />
+          </>
+        ) : null}
       </Group>
       <Toggle
         label={t('design.showFeatured')}

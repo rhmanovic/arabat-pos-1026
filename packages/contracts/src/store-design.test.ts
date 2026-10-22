@@ -45,6 +45,7 @@ describe('home page sections (ADR-0128 amendment 3)', () => {
       titleAlign: 'start',
       titleSize: 'regular',
       eyebrow: { en: null, ar: null },
+      heading: { en: null, ar: null },
       subtitle: { en: null, ar: null },
       animation: 'none',
       anchor: '',

@@ -66,6 +66,12 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-22 (section headings and the catalog bar, ADR-0128 amendment 7 follow-up)
+- `apps/store-web/src/app.test.tsx`: the catalog test also checks the frame's heading over a
+  section without its own title (kicker, large size), the round search box, the card bar in two
+  rows and sorting as buttons ("Default" chosen first, "Name" after a tap).
+- `packages/contracts/src/store-design.test.ts`: the default look includes `heading`.
+
 ### Results 2026-10-21 (section options, layout and motion, ADR-0128 amendment 7, cloud sandbox run)
 - `packages/contracts/src/store-design.test.ts` (+1): columns with blocks (at most four columns),
   every new section type parses, frames with a picture background, a custom colour, an anchor

@@ -6,7 +6,7 @@ import {
   WEEKDAYS,
   videoEmbed,
 } from '@arabat/contracts';
-import { Badge, EmptyState, Input, Select, Spinner, cn } from '@arabat/ui';
+import { Badge, EmptyState, Select, Spinner, cn } from '@arabat/ui';
 import { ErrorState } from '@arabat/web-core';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -1496,7 +1496,7 @@ export function CatalogSection({ s }: { s: SectionOf<'catalog'> }) {
   const [params] = useSearchParams();
   const [category, setCategory] = useState<string | null>(params.get('category'));
   // The header's search bar opens this page with `?q=`.
-  const [search, setSearch] = useState(params.get('q') ?? '');
+  const [searchText, setSearch] = useState(params.get('q') ?? '');
   const [sort, setSort] = useState<'default' | 'name' | 'priceAsc' | 'priceDesc'>(s.defaultSort);
   const wantsSearch = params.get('search') === '1';
   useEffect(() => {
@@ -1520,7 +1520,7 @@ export function CatalogSection({ s }: { s: SectionOf<'catalog'> }) {
   if (products.isError)
     return <ErrorState error={products.error} onRetry={() => void products.refetch()} />;
 
-  const term = search.trim().toLowerCase();
+  const term = searchText.trim().toLowerCase();
   const sorted = [...products.data.products].sort((a, b) => {
     if (sort === 'name') return name(a).localeCompare(name(b));
     if (sort === 'priceAsc') return lowestPrice(a).compare(lowestPrice(b));
@@ -1551,12 +1551,59 @@ export function CatalogSection({ s }: { s: SectionOf<'catalog'> }) {
     setCategory(id);
     setPages(1);
   };
+  // The bar's look (ADR-0128 amendment 7).
+  const height = { small: 'h-9 text-sm', regular: 'h-10 text-sm', large: 'h-12 text-base' }[
+    s.controlSize
+  ];
+  const shape = { pill: 'rounded-full', rounded: 'rounded-lg', square: 'rounded-none' }[
+    s.chipShape
+  ];
+  const field = cn(
+    'w-full text-fg placeholder:text-fg-subtle focus:outline-none',
+    height,
+    s.searchStyle === 'outline' &&
+      'rounded-md border border-border bg-surface px-3 focus:border-primary',
+    s.searchStyle === 'filled' &&
+      cn(
+        'rounded-lg border border-transparent px-3 focus:border-primary focus:bg-surface',
+        // On a soft bar the filled box takes the page colour, so it still stands out.
+        s.barStyle === 'soft' ? 'bg-surface' : 'bg-surface-muted',
+      ),
+    s.searchStyle === 'pill' &&
+      'rounded-full border border-border bg-surface px-4 focus:border-primary',
+    s.searchStyle === 'underline' &&
+      'rounded-none border-0 border-b-2 border-border bg-transparent px-1 focus:border-primary',
+    s.searchIcon && 'ps-9',
+  );
+  const select = cn(
+    height,
+    'cursor-pointer pe-8',
+    s.searchStyle === 'outline' && 'rounded-md border border-border bg-surface ps-3',
+    s.searchStyle === 'filled' &&
+      cn(
+        'rounded-lg border border-transparent ps-3',
+        s.barStyle === 'soft' ? 'bg-surface' : 'bg-surface-muted',
+      ),
+    s.searchStyle === 'pill' && 'rounded-full border border-border bg-surface ps-4',
+    s.searchStyle === 'underline' &&
+      'rounded-none border-0 border-b-2 border-border bg-transparent ps-1',
+  );
+  const chip = (active: boolean) =>
+    cn(
+      'flex shrink-0 items-center gap-2 border text-sm font-medium transition-colors',
+      shape,
+      s.controlSize === 'small' ? 'py-0.5' : s.controlSize === 'large' ? 'py-2 text-base' : 'py-1',
+      !active && 'border-border bg-surface hover:border-primary',
+      active && s.chipActive === 'solid' && 'border-primary bg-primary text-primary-fg',
+      active && s.chipActive === 'outline' && 'border-2 border-primary bg-surface text-primary',
+      active && s.chipActive === 'soft' && 'border-transparent bg-primary-soft text-primary',
+    );
   const filters =
     s.showCategories && categories.length > 0 ? (
       s.filterStyle === 'dropdown' ? (
         <Select
           aria-label={t('catalog.category')}
-          className="w-48"
+          className={cn('w-48', select)}
           value={category ?? ''}
           onChange={(e) => choose(e.target.value || null)}
         >
@@ -1572,7 +1619,10 @@ export function CatalogSection({ s }: { s: SectionOf<'catalog'> }) {
             'flex gap-2',
             s.filterStyle === 'tabs'
               ? '-mb-px w-full overflow-x-auto border-b border-border [scrollbar-width:none]'
-              : 'flex-wrap',
+              : s.chipScroll
+                ? 'max-sm:-mx-4 max-sm:overflow-x-auto max-sm:px-4 max-sm:[scrollbar-width:none] sm:flex-wrap'
+                : 'flex-wrap',
+            s.barAlign === 'center' && s.filterStyle !== 'tabs' && 'sm:justify-center',
           )}
           role="group"
           data-filter-style={s.filterStyle}
@@ -1594,13 +1644,23 @@ export function CatalogSection({ s }: { s: SectionOf<'catalog'> }) {
                 type="button"
                 aria-pressed={category === c.id}
                 onClick={() => choose(c.id)}
-                className="flex items-center gap-2 rounded-full border border-border bg-surface py-1 pe-3 ps-1 text-sm aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-fg"
+                className={cn(chip(category === c.id), s.chipImages ? 'pe-3 ps-1' : 'px-3')}
+                data-chip-shape={s.chipShape}
               >
-                {c.imageUrl ? (
-                  <img src={c.imageUrl} alt="" className="size-6 rounded-full object-cover" />
-                ) : (
-                  <span className="w-2" aria-hidden />
-                )}
+                {s.chipImages ? (
+                  c.imageUrl ? (
+                    <img
+                      src={c.imageUrl}
+                      alt=""
+                      className={cn(
+                        'size-6 object-cover',
+                        shape === 'rounded-none' ? '' : 'rounded-full',
+                      )}
+                    />
+                  ) : (
+                    <span className="w-2" aria-hidden />
+                  )
+                ) : null}
                 {c.label}
               </button>
             ),
@@ -1608,47 +1668,110 @@ export function CatalogSection({ s }: { s: SectionOf<'catalog'> }) {
         </div>
       )
     ) : null;
+  const sortOptions = ['default', 'name', 'priceAsc', 'priceDesc'] as const;
+  const sorter = s.showSort ? (
+    s.sortStyle === 'pills' ? (
+      <div role="group" aria-label={t('catalog.sort')} className="flex flex-wrap gap-1.5">
+        {sortOptions.map((o) => (
+          <button
+            key={o}
+            type="button"
+            aria-pressed={sort === o}
+            onClick={() => setSort(o)}
+            className={cn(chip(sort === o), 'px-3')}
+          >
+            {t(`catalog.sort_${o}`)}
+          </button>
+        ))}
+      </div>
+    ) : (
+      <Select
+        aria-label={t('catalog.sort')}
+        className={cn('w-44', select)}
+        value={sort}
+        onChange={(e) => setSort(e.target.value as typeof sort)}
+      >
+        {sortOptions.map((o) => (
+          <option key={o} value={o}>
+            {t(`catalog.sort_${o}`)}
+          </option>
+        ))}
+      </Select>
+    )
+  ) : null;
+  const search = s.showSearch ? (
+    <div className={cn('relative', s.searchWidth === 'full' ? 'w-full flex-1' : 'w-full max-w-xs')}>
+      {s.searchIcon ? (
+        <svg
+          aria-hidden
+          viewBox="0 0 24 24"
+          className="pointer-events-none absolute top-1/2 start-3 size-4 -translate-y-1/2 text-fg-subtle"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-3.5-3.5" />
+        </svg>
+      ) : null}
+      <input
+        type="search"
+        aria-label={t('catalog.search')}
+        placeholder={text(s.searchPlaceholder) || t('catalog.search')}
+        value={searchText}
+        onChange={(e) => {
+          setSearch(e.target.value);
+          setPages(1);
+        }}
+        className={field}
+        data-search-style={s.searchStyle}
+      />
+    </div>
+  ) : null;
   const perPage = s.pageSize === 0 ? visible.length : s.pageSize;
   const page = visible.slice(0, perPage * pages);
+  const stacked = s.barLayout === 'stacked' || s.searchWidth === 'full';
   return (
     <div className="flex flex-col gap-4">
-      {s.showSearch || s.showSort || filters ? (
+      {search || sorter || filters ? (
         <div
           className={cn(
-            'flex flex-wrap items-center gap-2',
+            'flex gap-3',
+            stacked ? 'flex-col' : 'flex-wrap items-center',
+            s.barAlign === 'center' && (stacked ? 'items-center text-center' : 'justify-center'),
+            s.barStyle === 'card' && 'rounded-2xl border border-border bg-surface p-3 shadow-sm',
+            s.barStyle === 'soft' && 'rounded-2xl bg-surface-muted p-3',
             s.stickyFilters &&
-              'sticky top-[var(--store-header-h,0px)] z-10 -mx-4 bg-canvas/90 px-4 py-2 backdrop-blur-md',
+              cn(
+                'sticky top-[var(--store-header-h,0px)] z-10',
+                s.barStyle === 'plain' && '-mx-4 bg-canvas/90 px-4 py-2 backdrop-blur-md',
+              ),
           )}
           data-sticky-filters={s.stickyFilters || undefined}
+          data-bar={`${s.barLayout}-${s.barStyle}`}
         >
-          {s.showSearch ? (
-            <Input
-              type="search"
-              aria-label={t('catalog.search')}
-              placeholder={text(s.searchPlaceholder) || t('catalog.search')}
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPages(1);
-              }}
-              className="max-w-xs"
-            />
-          ) : null}
-          {s.showSort ? (
-            <Select
-              aria-label={t('catalog.sort')}
-              className="w-44"
-              value={sort}
-              onChange={(e) => setSort(e.target.value as typeof sort)}
-            >
-              {(['default', 'name', 'priceAsc', 'priceDesc'] as const).map((o) => (
-                <option key={o} value={o}>
-                  {t(`catalog.sort_${o}`)}
-                </option>
-              ))}
-            </Select>
-          ) : null}
-          {filters}
+          {stacked ? (
+            <>
+              {search || sorter ? (
+                <div
+                  className={cn(
+                    'flex w-full flex-wrap items-center gap-2',
+                    s.barAlign === 'center' && 'justify-center',
+                  )}
+                >
+                  {search}
+                  {sorter}
+                </div>
+              ) : null}
+              {filters}
+            </>
+          ) : (
+            <>
+              {search}
+              {sorter}
+              {filters}
+            </>
+          )}
         </div>
       ) : null}
       {featured.length > 0 ? (
