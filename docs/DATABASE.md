@@ -1,6 +1,6 @@
 # Database
 
-Status: **Implemented** — 36 migrations (`0000`–`0035`, §8); RLS on every merchant table.
+Status: **Implemented** — 74 migrations (`0000`–`0073`, §8); RLS on every merchant table.
 The tenant is called **merchant** in the schema (`merchant_id`).
 
 ---
@@ -51,12 +51,13 @@ The tenant is called **merchant** in the schema (`merchant_id`).
 - Forbidden types for money: `real`, `double precision`, `money`. Money is never
   converted to a JS `number`.
 - `currencies (code, exponent, name_en, name_ar)` reference table (KWD=3).
-- Quantities: `numeric(18,3)`; handled with decimal.js in TS.
+- Quantities: `numeric(14,3)`; handled in TS as bigint thousandths (`parseQuantity` in
+  `packages/money`, e.g. `2.5` → `2500n`), never as `number` and not with decimal.js.
 - Rates: `numeric(9,6)` as a fraction (e.g. `0.050000` = 5%) or basis points —
   documented per column.
 
 ## 5. Append-only rules
-- Insert-only tables: `sales`, `sale_lines`, `sale_line_taxes`, `payments`,
+- Insert-only tables: `sales`, `sale_lines`, `payments`,
   `refunds`, `refund_lines`, `stock_movements`, `cash_movements`,
   `audit_log`, `goods_receipt_lines`.
 - Enforced by: no UPDATE/DELETE grants for `app_runtime` on these tables
@@ -251,7 +252,6 @@ erDiagram
   orders ||--o| sales : "converted to"
   orders ||--o{ order_lines : has
   sales ||--o{ sale_lines : has
-  sale_lines ||--o{ sale_line_taxes : has
   sales ||--o{ payments : "paid by"
   payment_methods ||--o{ payments : ""
   sales ||--o{ refunds : "refunded by"
@@ -352,34 +352,34 @@ erDiagram
 | `apps/api/drizzle/0000_bootstrap.sql` | `GRANT USAGE` on schema to `app_runtime`; default privileges (DML on tables, sequences, functions) for objects created by `app_owner`; function `app_current_merchant_id()` (NULL when unset) for RLS policies |
 | `apps/api/drizzle/0001_currencies.sql` | `currencies` reference table (code, exponent, `name_en`, `name_ar`); `app_runtime` is read-only on it |
 | `apps/api/drizzle/0002_identity.sql` | `merchants`, `branches`, `users`, `memberships`, `roles`, `role_permissions`, `role_assignments`, `sessions`, `auth_tickets`, `password_reset_tokens`, `rate_limit_buckets`, `platform_operators`, `audit_log` (generated) |
-| `apps/api/drizzle/0003_identity_rls.sql` | `app_current_user_id()`; RLS (forced) on merchants, memberships, branches, roles, role_permissions, role_assignments, audit_log; `DELETE` revoked on merchants; `UPDATE/DELETE` revoked on audit_log; lookup indexes |
+| `apps/api/drizzle/0003_identity_rls.sql` | `app_current_user_id()`; RLS (forced at the time; not forced since 0048) on merchants, memberships, branches, roles, role_permissions, role_assignments, audit_log; `DELETE` revoked on merchants; `UPDATE/DELETE` revoked on audit_log; lookup indexes |
 
 | `apps/api/drizzle/0004_employees.sql` | `invitations`, `invitation_assignments`; branch settings (`phone`, `address`, `receipt_header`, `receipt_footer`); employee profile on memberships (`job_title`, `phone`, `employee_code`) |
 | `apps/api/drizzle/0005_employees_rls.sql` | `app_current_invite_hash()`; RLS on invitations (merchant context or matching invite token hash) and invitation_assignments; data migration of renamed permission keys and `manager` → `company_manager` |
 
 | `apps/api/drizzle/0006_catalog.sql` | `categories` (self-referencing tree), `products`, `product_variants` (`price_minor`/`cost_minor` bigint, currency), `product_barcodes`, `product_branch_availability`, `product_images` |
-| `apps/api/drizzle/0007_catalog_rls.sql` | Forced RLS on all catalog tables; `DELETE` revoked on products and variants (archive only); `pg_trgm` + trigram indexes on names and SKU |
+| `apps/api/drizzle/0007_catalog_rls.sql` | RLS (forced until 0048) on all catalog tables; `DELETE` revoked on products and variants (archive only); `pg_trgm` + trigram indexes on names and SKU |
 
 | `apps/api/drizzle/0008_inventory.sql` | `inventory_settings`, `stock_levels`, `stock_adjustments`, `stock_adjustment_lines`, `stock_movements` (generated) |
-| `apps/api/drizzle/0009_inventory_rls.sql` | Forced RLS on all inventory tables; `UPDATE/DELETE` revoked on the ledger and adjustment documents; `DELETE` revoked on `stock_levels` |
+| `apps/api/drizzle/0009_inventory_rls.sql` | RLS (forced until 0048) on all inventory tables; `UPDATE/DELETE` revoked on the ledger and adjustment documents; `DELETE` revoked on `stock_levels` |
 
 | `apps/api/drizzle/0010_payments_registers.sql` | `financial_accounts`, `financial_account_entries`, `payment_methods`, `registers`, `register_members`, `shifts`, `cash_movements` (generated) |
-| `apps/api/drizzle/0011_payments_registers_rls.sql` | Forced RLS; append-only grants on entries and cash movements; no deletes of configuration; trigger making closed shifts immutable; trigger allowing cash movements only on open shifts |
+| `apps/api/drizzle/0011_payments_registers_rls.sql` | RLS (forced until 0048); append-only grants on entries and cash movements; no deletes of configuration; trigger making closed shifts immutable; trigger allowing cash movements only on open shifts |
 | `apps/api/drizzle/0012_shift_tolerance.sql` | `shifts.discrepancy_tolerance_minor` (tolerance snapshot at closing) |
 
 | `apps/api/drizzle/0013_sales.sql` | `sales_settings`, `receipt_sequences`, `orders`, `order_lines`, `sales`, `sale_lines`, `payments` (generated) |
-| `apps/api/drizzle/0014_sales_rls.sql` | Forced RLS; `UPDATE/DELETE` revoked on sales, sale lines and payments; triggers making completed/cancelled orders and their lines final |
+| `apps/api/drizzle/0014_sales_rls.sql` | RLS (forced until 0048); `UPDATE/DELETE` revoked on sales, sale lines and payments; triggers making completed/cancelled orders and their lines final |
 
 | `apps/api/drizzle/0015_refunds.sql` | `refunds`, `refund_lines`, `refund_payments`; refund policy columns on `sales_settings`; `payments.refund_id` + nullable method for exchange credit (generated) |
-| `apps/api/drizzle/0016_refunds_rls.sql` | Forced RLS; no deletes; refund lines immutable; triggers: final refund states immutable, only pending refund payments may settle |
+| `apps/api/drizzle/0016_refunds_rls.sql` | RLS (forced until 0048); no deletes; refund lines immutable; triggers: final refund states immutable, only pending refund payments may settle |
 | `apps/api/drizzle/0017_refund_zero_total.sql` | Allow zero-value refunds (returning free items to stock) |
 
 | `apps/api/drizzle/0018_purchasing_transfers.sql` | `document_sequences`, `suppliers`, `purchase_orders`, `purchase_order_lines`, `purchase_receipts`, `purchase_receipt_lines`, `stock_transfers`, `stock_transfer_lines` (generated) |
-| `apps/api/drizzle/0019_purchasing_transfers_rls.sql` | Forced RLS; no deletes; receipts append-only; triggers: order lines editable only while draft, final order/transfer states immutable, transfer line quantities set once |
+| `apps/api/drizzle/0019_purchasing_transfers_rls.sql` | RLS (forced until 0048); no deletes; receipts append-only; triggers: order lines editable only while draft, final order/transfer states immutable, transfer line quantities set once |
 | `apps/api/drizzle/0020_customers.sql` | `customers`, `customer_notes`; `orders.customer_id`, `sales.customer_id` with composite merchant FKs and `sales_customer_idx` (generated) |
-| `apps/api/drizzle/0021_customers_rls.sql` | Forced RLS; `DELETE` revoked on customers; notes append-only; trigram indexes on name and phone |
+| `apps/api/drizzle/0021_customers_rls.sql` | RLS (forced until 0048); `DELETE` revoked on customers; notes append-only; trigram indexes on name and phone |
 | `apps/api/drizzle/0022_report_indexes.sql` | Time-range indexes for reports: payments, completed refunds, refund payments, closed shifts, cash movements, purchase receipts, dispatched transfers (generated) |
-| `apps/api/drizzle/0023_restaurant.sql` | `restaurant_settings`, `dining_areas`, `dining_tables`, `kitchen_stations`, `kitchen_station_categories`, `modifier_groups`, `modifiers`, `product_modifier_groups`, `recipe_components`, `restaurant_orders`, `restaurant_order_items`, `restaurant_order_item_modifiers`, `kitchen_tickets`, `sale_line_modifiers`; `sales.restaurant_order_id`, `sales.service_type` (generated) |
+| `apps/api/drizzle/0023_restaurant.sql` | `restaurant_settings`, `dining_areas`, `dining_tables`, `kitchen_stations`, `kitchen_station_categories`, `modifier_groups`, `modifiers`, `product_modifier_groups`, `recipe_components`, `restaurant_orders`, `restaurant_order_items`, `restaurant_order_item_modifiers`, `kitchen_tickets`, `sale_line_modifiers`; `sales.restaurant_order_id`, `sales.service_type` (plain nullable text column with a CHECK: `dine_in` / `takeaway` / `pickup`) |
 | `apps/api/drizzle/0025_ecommerce.sql` | `online_stores` (one per merchant, unique address), `online_listings`, `online_orders` (intent, status history, tracking token, idempotency key + request hash, reservation deadline), `online_order_lines` (price snapshot), `stock_reservations` (active/consumed/released, expiry), `online_payments` (gateway attempts, unique provider + reference), `payment_events` (unique provider + event id); `sales.channel` (`pos`/`online`), `sales.online_order_id` (unique); register/shift/cashier columns of `sales` nullable for online sales (CHECK `sales_channel_valid`); `customers.created_by_user_id` nullable |
 | `apps/api/drizzle/0073_product_discounts.sql` | Product discounts (ADR-0133): `product_discounts` (name ar/en, `discount_type` percentage / amount, `percent` numeric(5,2) in (0, 100), `amount_minor`, `applies_to` all / categories / collections / products + `target_ids` jsonb, `pos_enabled` / `online_enabled` (one at least), `starts_at` / `ends_at`, `status` active / paused / archived, version; checks; RLS; `DELETE` revoked from `app_runtime`); `sale_lines.regular_unit_price_minor` + `product_discount_id` (FK, CHECK `sale_lines_regular_price_valid`: regular > list and a discount named); `online_order_lines.regular_unit_price_minor` + `product_discount_id`; `online_promotions.stacks_with_discounts` (default false) |
 | `apps/api/drizzle/0072_drop_online_categories.sql` | ADR-0130: drops `online_listings.online_category_id` (and its FK) and the `online_categories` table, copied into collections by 0071 |
@@ -389,10 +389,10 @@ erDiagram
 | `apps/api/drizzle/0068_online_fulfilment.sql` | Online store Phase 5 (ADR-0123): `online_delivery_areas` (name ar/en, `fee_minor`, `minimum_order_minor`, `free_delivery_from_minor`, `estimated_minutes`, `branch_id`, position, active, version; RLS), `online_store_branches` (PK merchant + branch, pickup / delivery flags, `preparation_minutes`, `hours` jsonb, position, active, version; RLS); `online_stores.hours / scheduling_enabled / slot_minutes (15–240) / slot_capacity / notify_email`; `online_orders.delivery_area_id` (FK → `online_delivery_areas(id)` on delete set null) / `delivery_area_name` / `scheduled_for` / `pos_idempotency_key`, partial index on scheduled orders; `print_jobs.online_order_id` and kind `online_order`; `online_listings.online_category_id` FK re-created on `online_categories(id)` only (a composite `set null` would null `merchant_id`); `sales_channel_valid` allows an online sale with register, shift and user (till hand-over) |
 | `apps/api/drizzle/0067_online_merchandising.sql` | Online store Phase 4 (ADR-0121): `online_categories` (merchant, `name_en` / `name_ar` (one required), `position`, `status` `active` / `hidden`, `image_key` + `image_content_type`, `version`; RLS); `online_listings.title_en / title_ar / description_en / description_ar / featured / max_per_order (1–20) / online_category_id (→ `online_categories`, on delete set null) / updated_at`; `online_stores.logo_key / logo_content_type / banner_key / banner_content_type / hide_out_of_stock` |
 | `apps/api/drizzle/0066_online_pay_on_receipt.sql` | Online store Phase 1 (ADR-0118): `online_orders.payment_mode` (`gateway` / `on_receipt`), `payment_method_id` and `reserved_until` nullable (CHECK `online_orders_gateway_fields`), `payment_reference`, `collected_by_user_id`, `confirmed_at`, statuses `placed` / `confirmed`; `online_stores.pay_on_receipt_enabled`; append-only `online_store_slug_history` (RLS, no update/delete); `store_merchant(slug)` also resolves unexpired former addresses; `link_slug_available` also refuses them |
-| `apps/api/drizzle/0026_ecommerce_rls.sql` | Forced RLS on all e-commerce tables; no deletes; `payment_events` and order lines append-only; triggers: completed/payment-failed/cancelled orders final, only initiated/expired payment attempts change; `SECURITY DEFINER` lookups `store_merchant(slug)`, `online_payment_merchant(provider, reference)`, `online_orders_due_merchants()` for the public API, webhooks and reconciliation |
+| `apps/api/drizzle/0026_ecommerce_rls.sql` | RLS (forced until 0048) on all e-commerce tables; no deletes; `payment_events` and order lines append-only; triggers: completed/payment-failed/cancelled orders final, only initiated/expired payment attempts change; `SECURITY DEFINER` lookups `store_merchant(slug)`, `online_payment_merchant(provider, reference)`, `online_orders_due_merchants()` for the public API, webhooks and reconciliation |
 | `apps/api/drizzle/0027_platform_subscriptions.sql` | `plans` (global: code, names, status, default/public flags, optional limits for branches/employees/products/registers, features, informational price + period, trial days), `subscriptions` (one per merchant: plan, status, start/end, trial end, version), `subscription_events` (append-only history: from/to plan and status, operator, reason) |
 | `apps/api/drizzle/0028_platform_rls.sql` | RLS on subscriptions and events; no deletes; events append-only; `app_current_operator_id()`; triggers: subscription updates, `changed` events and merchant status changes need an operator context, closed merchants final; seeded plans `standard` (default), `basic`, `professional`; existing merchants backfilled to `standard`; `store_merchant` ignores non-active merchants; `SECURITY DEFINER` platform summaries `platform_merchants`, `platform_overview`, `platform_audit`, `platform_plan_counts` |
-| `apps/api/drizzle/0024_restaurant_rls.sql` | Forced RLS; no deletes of configuration, orders, items, tickets; modifier snapshots immutable; triggers: paid and cancelled items unchangeable, sent items keep product and quantity, final orders immutable; one open order per table; one default station per branch |
+| `apps/api/drizzle/0024_restaurant_rls.sql` | RLS (forced until 0048); no deletes of configuration, orders, items, tickets; modifier snapshots immutable; triggers: paid and cancelled items unchangeable, sent items keep product and quantity, final orders immutable; one open order per table; one default station per branch |
 | `apps/api/drizzle/0032_cash_custody.sql` | Cash custody (ADR-0090): `financial_accounts` gains `branch_id`, `register_id`, `counted_at`, kinds `register`/`treasury`, status `archived`, a shape check per kind and unique indexes (one account per register, one treasury per branch, one company treasury where `branch_id` is null); `financial_account_entries.shift_id`; `registers.needs_count` and unique `(merchant_id, id, branch_id)`; shift opening count columns (`opening_expected_minor`, `opening_discrepancy_minor`, `opening_is_initial`, `opening_follows_shift_id`, `opening_breakdown`), `legacy_open`, close type `forced_uncounted`; table `cash_transfers` |
 | `apps/api/drizzle/0033_cash_custody_rules.sql` | RLS and no UPDATE/DELETE on `cash_transfers`; trigger `financial_account_entries_guard` (no entries on archived accounts; register entries carry the register's open shift, other accounts none); `cash_transfers_direction` (register ↔ treasury of the same branch, both active); deferred `cash_transfers_balanced` (exactly two entries summing to 0); function `cash_custody_cutover(merchant)` run for every merchant (archives the old cash account, unlinks the cash method, creates treasuries and register accounts at 0, marks open shifts `legacy_open`, audit row); removes `cash.move` from cashier-template roles (audit row) |
 | `apps/api/drizzle/0034_cash_disbursements.sql` | Phase B (ADR-0091): `cash_disbursements` (expense / supplier payment, category, supplier, purchase order, source register or treasury, shift, reversal link), `cash_branch_transfers` (sent / received amounts, status, notes, version); `financial_accounts` kind `in_transit` (one per merchant); entry types `expense`, `supplier_payment`; `cash_transfers.branch_transfer_id`, `reference`, origins `deposit`, `branch_transfer`; `cash_movements.bank_account_id`; unique `purchase_orders (merchant_id, id, supplier_id)` |
@@ -599,8 +599,12 @@ with check (merchant_id = app_current_merchant_id())
 ```
 
 ## 9. Migration workflow
-1. Change the Drizzle schema in the owning module (`modules/<m>/infrastructure/schema.ts`).
-2. `pnpm db:generate` → review SQL by hand; add RLS policies, grants, checks.
-3. `pnpm db:migrate` locally; run integration tests incl. isolation tests.
-4. Commit schema + migration together. **Never edit an applied migration.**
+1. Change the Drizzle schema in the owning module (`apps/api/src/modules/<m>/<name>.schema.ts`).
+2. `pnpm db:generate` (take the next free number from `origin/main` first) → rename the
+   file to `NNNN_<short_name>.sql` **and** set the same name as the `tag` of its entry in
+   `apps/api/drizzle/meta/_journal.json`; review SQL by hand; add RLS policies (enabled,
+   never forced), grants, checks.
+3. Build the API, then `pnpm db:migrate` locally (runs as `app_owner` through
+   `DATABASE_OWNER_URL`); run integration tests incl. isolation tests.
+4. Commit schema + migration + `meta/_journal.json` + `meta/NNNN_snapshot.json` together. **Never edit an applied migration.**
 5. Production changes follow expand → migrate data → contract.

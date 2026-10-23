@@ -104,10 +104,10 @@ time; minor/patch updates are routine, major upgrades get an ADR.
 | Frontend | **React + Vite** | React 19.3, Vite 8.3 | Standard SPA toolchain, fast HMR, simple static output. |
 | Routing | **React Router** (data mode, `createBrowserRouter`) | 8.x | Mature, lazy routes, loaders/errors, `basename` per app. |
 | Server state | **TanStack Query** | 5.x | Caching, retries, optimistic updates, offline-friendly persistence later. |
-| Client state | **Zustand** (only where needed, e.g. POS cart/terminal) | 5.x | Tiny, explicit; no global Redux store. |
+| Client state | React context (e.g. the POS cart); no Zustand, no global Redux store | — | Tiny, explicit. |
 | Forms | React Hook Form + Zod resolver | 7.x | Same Zod schemas as backend. |
-| Tables | TanStack Table | 9.x | Headless, works with our design system and RTL. |
-| UI system | **Tailwind CSS 4 + shadcn/ui pattern on Radix primitives** (`radix-ui`), lucide icons | Tailwind 4.3 | Owned, accessible components; logical CSS properties for RTL. |
+| Tables | `DataTable` primitive in `packages/ui` (no TanStack Table) | — | Works with our design system and RTL. |
+| UI system | **Tailwind CSS 4 + shadcn/ui pattern on Radix primitives** (`radix-ui`), inline SVG `Icon` set in `packages/ui/src/icons.tsx` (no icon package) | Tailwind 4.3 | Owned, accessible components; logical CSS properties for RTL. |
 | i18n | **i18next + react-i18next**, ICU plurals; `Intl` for numbers/dates | 26.x / 17.x | Arabic/English, namespaces per app. |
 | Unit/integration tests | **Vitest** | 5.x | Fast, TS-native, same runner for API and web. |
 | API tests | Vitest + Fastify `inject` via Nest testing module | — | No network, real guards. |
@@ -156,7 +156,7 @@ Rules:
 - Frontend apps never import from `apps/api`; they depend on `contracts`.
 - `packages/ui` has no business logic and no API calls.
 
-### 3.1 Frontend app structure (same in all three apps)
+### 3.1 Frontend app structure
 
 Manager app as implemented (Prompt 6): `src/app` (branch context, navigation config),
 `src/layouts/ManagerLayout.tsx`, `src/features/<module>/…Page.tsx`, `src/routes.tsx`.
@@ -167,11 +167,19 @@ and `@arabat/web-core` (AppRoot, auth state, guards, auth forms, `useNotify`).
 
 ```
 src/
-  app/          router.tsx, providers (QueryClient, i18n, theme, auth), layout shell
-  features/     <feature>/ { routes.tsx, pages/, components/, api.ts (query hooks), model.ts }
-  shared/       app-local hooks, utils, guards (RequirePermission)
-  main.tsx
+  main.tsx      mounts AppRoot (@arabat/web-core: QueryClient, i18n, theme, auth providers)
+  routes.tsx    route table (createBrowserRouter, basename per app), guards from web-core
+  layouts/      the app's own layout shell (ManagerLayout, POSLayout, PlatformLayout, …)
+  i18n/         ar.ts, en.ts, index.ts — the app's single i18n namespace
+  features/     manager-web, online-web: one folder per module, flat page files
+                (features/<module>/XPage.tsx, query hooks inside the page or a sibling .ts)
+  pages/        pos-web, platform-web, store-web, links-web: page files (pos-web also
+                has sale/ and restaurant/ folders); app/ holds app-wide context where needed
 ```
+
+landing-web is static (`src/*.tsx`, copy in `content.ts`); device-web uses `App.tsx`,
+`app/` and `screens/`. Query hooks are colocated with their pages; there is no per-feature
+`routes.tsx` or `api.ts` convention.
 
 Each app has its **own layout, navigation and workflows** (ADR-0001):
 
@@ -200,7 +208,7 @@ Each app has its **own layout, navigation and workflows** (ADR-0001):
   sell → (hold/recall, refund, cash in/out) → close shift (count, variance).
 - Performance design:
   - Catalog for the active branch (products, barcodes, prices) is loaded once
-    and cached (TanStack Query, persisted to IndexedDB); barcode lookup is a
+    and cached (TanStack Query, in memory; no IndexedDB persistence); barcode lookup is a
     local map lookup — no request per scan.
   - Barcode scanners in keyboard-wedge mode are captured by a global input
     buffer (fast keystroke burst + Enter) independent of focus.
@@ -439,8 +447,9 @@ Merchant ─< Role
 - **Bilingual master data:** user-facing names that appear on receipts
   (products, categories, branches, payment methods) have `name_en` and
   `name_ar` columns (at least one required). Receipts can print both.
-- **Translations:** i18next namespaces: `common` (shared package), plus one per
-  app feature; keys in English; missing-key check in CI.
+- **Translations:** i18next namespaces: `common` (shared package `@arabat/i18n`), plus
+  one namespace per app (`src/i18n/{ar,en}.ts`, e.g. `manager`); keys in English;
+  missing-key check in CI.
 - **Server messages:** errors carry codes; the API localizes `title`, the
   frontend may localize by code.
 
@@ -487,7 +496,8 @@ Full design in `AUTH.md`.
   first e-mail (invitations) exists.
 - `pnpm dev` runs: API (`:3000`), manager-web (`:5173`, base `/manager`),
   pos-web (`:5174`, base `/pos`), platform-web (`:5175`, base `/platform`), store-web (`:5176`, base `/store`),
-  links-web (`:5177`, base `/links`), online-web (`:5178`, base `/online`).
+  links-web (`:5177`, base `/links`), online-web (`:5178`, base `/online`),
+  landing-web (`:5179`, base `/`), device-web (`:5180`, base `./`, served at `/device-app/`).
   Each Vite dev server proxies `/api` to the API (cookies are host-scoped, so the
   ports share sessions on `localhost`). For a single-origin run use
   `pnpm build && SERVE_WEB=true pnpm start` (ADR-0021).

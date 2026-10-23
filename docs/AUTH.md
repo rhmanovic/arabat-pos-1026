@@ -1,8 +1,8 @@
 # Authentication & Permissions Design
 
 Status: **Implemented (Prompt 4)** — sessions, sign-in for all three interfaces, owner
-registration, password recovery, operator TOTP, rate limits, CSRF origin check.
-Employee/role management APIs follow in Prompt 5.
+registration, password recovery, operator TOTP, rate limits, CSRF origin check;
+employee/role management (Prompt 5, §6).
 Implements requirements BR-010..BR-015 and ADR-0001, ADR-0006, ADR-0007, ADR-0011.
 
 ---
@@ -22,9 +22,13 @@ identities.
 
 ## 2. Authentication (centralized)
 
-One `AuthService` implements credential checks, session issuing, revocation,
-password reset and MFA for all interfaces. Interface-specific endpoints are
-thin wrappers:
+The `auth` module (`apps/api/src/modules/auth`) is shared by all interfaces and split by
+concern: `LoginService` (credentials, merchant/branch selection, interface switch),
+`RegistrationService`, `PasswordResetService`, `PlatformAuthService` (operator password +
+TOTP), `SessionService` / `DbSessionResolver` (issuing, validation, revocation),
+`TicketService`, `PosLockService`, `PinSignInService`, `AccountService` (self-service
+password and sessions) and `RateLimiterService`. Interface-specific endpoints are thin
+wrappers:
 
 Implemented endpoints (prefix `/api/v1`):
 
@@ -187,14 +191,16 @@ can(actor, permission, branchId?):
 | Purchasing | `purchasing.read`, `purchasing.manage`, `purchasing.approve`, `purchasing.receive` | branch |
 | Customers | `customers.read`, `customers.create`, `customers.manage` | branch |
 | Reports | `reports.sales`, `reports.financial`, `reports.inventory` | branch |
+| Restaurant | `restaurant.manage`, `restaurant.orders`, `restaurant.void_item`, `kitchen.access` | branch |
+| Online | `online.manage` (merchant); `online.orders` (branch) | mixed |
 | Period close | `periods.close` (close a month and lock it; BR-189) | merchant |
-
-Ownership transfer and the platform's owner freeze are described in BR-020 (ADR-0104); self-service
-password change and session management in BR-193.
 | Payments | `payments.settings` | merchant |
 | Employees | `employees.read`, `employees.manage` (branch); `roles.manage` (merchant) | mixed |
 | Branches | `branches.read`, `branches.update` (branch); `branches.manage` (merchant) | mixed |
 | Company | `merchant.settings.read`, `merchant.settings.update`, `audit.read` | merchant |
+
+Ownership transfer and the platform's owner freeze are described in BR-020 (ADR-0104); self-service
+password change and session management in BR-193.
 
 ### 3.5 Default roles (templates, editable by holders of `roles.manage`)
 | Template | Typical assignment | Highlights |
@@ -204,6 +210,7 @@ password change and session management in BR-193.
 | `branch_manager` — مدير الفرع | one branch | branch operations, staff of that branch, **no POS** |
 | `supervisor` — مشرف | one branch | POS + overrides, voids, refund approval, cash moves |
 | `cashier` — كاشير | one branch | POS selling, limited discounts, refunds, restaurant orders (no `cash.move` since ADR-0090; granted per employee) |
+| `treasurer` — أمين الخزينة | one branch | cash custody, counts, transfers, bank deposits, financial reports; **no POS**, no selling (BR-165) |
 | `kitchen` — طاقم المطبخ | one branch | POS sign-in to the kitchen display only (`kitchen.access`) |
 
 Restaurant permissions (Prompt 15): `restaurant.manage` (branch: tables, areas, stations;
@@ -243,37 +250,55 @@ missing templates to existing merchants without touching customized roles.
 - Grants at a deactivated branch grant nothing.
 - Violations answer `403 PRIVILEGE_ESCALATION` and are never partially applied.
 
-## 4. Request pipeline (NestJS guards, in order)
+## 4. Request pipeline (one global `AccessGuard`)
 
-| # | Guard | Fails with |
+Every route declares exactly one access rule (`apps/api/src/kernel/access/access.decorators.ts`):
+`@Public()`, `@Authenticated(iface)`, `@RequirePermission(iface, key)`,
+`@RequirePlatformRole(...roles)`, `@RequirePrintAgent()` (print-agent device token, ADR-0111) or
+`@RequireDevice()` (registered till token, ADR-0112). A startup check (`RouteAccessAuditor`)
+enumerates all routes and fails the boot if any route lacks a declaration; the guard also
+refuses (403) a route without one, so it never fails open.
+
+The global `AccessGuard` (`kernel/access/access.guard.ts`) then checks, in order:
+
+| # | Step | Fails with |
 |---|---|---|
-| 1 | `SessionGuard` — reads the namespace's cookie, loads & validates session, sliding idle | 401 |
-| 2 | `RealmGuard` — merchant vs platform matches namespace | 403 |
-| 3 | `InterfaceGuard` — session.interface matches namespace | 403 |
-| 4 | `MerchantContextGuard` — merchant from session (never request), merchant active, sets request context | 403 / 423 (suspended) |
-| 5 | `FeatureGuard` — `@RequireFeature()` vs subscription | 403 `FEATURE_NOT_IN_PLAN` |
-| 6 | `PermissionGuard` — `@RequirePermission(key)`; **routes without a declaration fail closed** (`@Public()` is the explicit opt-out) | 403 |
-| 7 | `BranchGuard` — target branch (path/body or POS session binding) ∈ accessible branches for that permission | 403 |
+| 1 | `@Public` → allowed. `@RequirePrintAgent` / `@RequireDevice` → the device token is resolved instead of a session | 401 (`DEVICE_REVOKED` for a removed till); 403 `NOT_PRIMARY_DEVICE` |
+| 2 | Session — `SessionResolver` (`DbSessionResolver`) reads the interface's cookie and validates the session (§2.2: user, membership, **merchant active**, owner not frozen, interface permission, POS branch) | 401 |
+| 3 | Interface / realm — session interface matches the declaration; platform roles only for platform actors, permissions only for merchant actors | 403 |
+| 4 | Permission — `@RequirePermission(iface, key)` | 403 |
 
-Branch handling in `PermissionGuard`: with a branch in the request (POS session
+The merchant comes only from the session (never the request). A suspended or closed merchant's
+sessions fail validation (401); sign-in answers `403 MERCHANT_SUSPENDED` (§3.5).
+Subscription features are not a guard: services call `SubscriptionsService.assertFeature`
+(`409 PLAN_FEATURE_UNAVAILABLE`) and `assertCapacity` (`PLAN_LIMIT_REACHED`) inside the
+transaction.
+
+Branch handling in the permission step: with a branch in the request (POS session
 binding, `:branchId`, `?branchId`) the permission must hold **at that branch**;
 otherwise the guard only checks that it is held **somewhere** (`canAnywhere`) and the
 service performs the exact per-branch checks (`assertCan`) and filters queries to the
 actor's branches (`permissionBranchScope`).
 
-Then the service runs inside `withMerchantTx(ctx, fn)` which executes
-`SET LOCAL app.merchant_id = <id>` (and `app.actor_id`) so PostgreSQL RLS
-applies to every statement. A startup check enumerates all routes and fails
-the boot if any route lacks a permission/public declaration.
+Then the service runs inside `DatabaseService.withMerchantTx(merchantId, fn)`, which sets
+`app.merchant_id` with `set_config(..., true)` (transaction-local) so PostgreSQL RLS applies to
+every statement. `withContext({merchantId?, userId?, inviteHash?})` also sets `app.user_id` /
+`app.invite_hash` (sign-in, invitations before a merchant context exists), and
+`withPlatformContext(operatorId, merchantId)` sets `app.operator_id`, which the database requires
+for merchant-status and subscription changes (ADR-0080).
 
 ---
 
 ## 5. Tenant isolation (defence in depth)
 1. Merchant id only from the session.
-2. Repositories require a `MerchantContext` argument (type-level enforcement).
-3. RLS (`FORCE ROW LEVEL SECURITY`) on every merchant-owned table.
-4. Runtime DB role without `BYPASSRLS`; platform module uses a dedicated,
-   audited code path for cross-merchant operations.
+2. Services and repositories receive the merchant id from the actor and run inside
+   `withMerchantTx(merchantId, …)`; queries also filter by `merchant_id` explicitly.
+3. RLS (`ENABLE ROW LEVEL SECURITY`, policies on `app.merchant_id`) on every merchant-owned
+   table. RLS is **not forced** (ADR-0105, migration 0048): `app_owner` owns the tables and is
+   not filtered, so migrations, seeds and fixtures filter by `merchant_id` themselves.
+4. Runtime DB role `app_runtime` is not the owner and has no `BYPASSRLS` (nor does
+   `app_owner`); the platform module uses `withPlatformContext`, an audited code path for
+   cross-merchant operations.
 5. Composite FKs `(merchant_id, id)` prevent cross-merchant references.
 6. Automated isolation test suite (see `TESTING.md`).
 
