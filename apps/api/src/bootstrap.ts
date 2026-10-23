@@ -11,6 +11,7 @@ import { ProblemDetailsFilter } from './kernel/errors/problem.filter.js';
 import { registerOriginCheck } from './kernel/http/origin-check.js';
 import { genRequestId } from './kernel/http/request-id.js';
 import { PinoNestLogger, createLoggerOptions } from './kernel/logging/logger.js';
+import { StoreShareService } from './modules/ecommerce/store-share.service.js';
 import { serveWebApps } from './web/serve-web.js';
 
 export const API_PREFIX = 'api/v1';
@@ -74,7 +75,10 @@ export async function configureApp(app: NestFastifyApplication, env: Env): Promi
   app.useGlobalFilters(new ProblemDetailsFilter());
   app.enableShutdownHooks();
 
-  if (env.SERVE_WEB) await serveWebApps(fastify);
+  if (env.SERVE_WEB)
+    await serveWebApps(fastify, {
+      storeMeta: (path, query) => app.get(StoreShareService, { strict: false }).tags(path, query),
+    });
 }
 
 /** Builds the fully configured application (used by main.ts). */

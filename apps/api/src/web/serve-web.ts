@@ -1,6 +1,7 @@
 import fastifyStatic from '@fastify/static';
-import type { FastifyInstance, FastifyReply } from 'fastify';
-import { existsSync } from 'node:fs';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { AppInterface } from '@arabat/contracts';
 
@@ -24,7 +25,13 @@ const APPS: Record<AppInterface | 'store' | 'links' | 'online', string> = {
  * and the landing pages at `/` and `/pricing`.
  * In production a CDN/reverse proxy may serve these files instead (ARCHITECTURE.md §12).
  */
-export async function serveWebApps(fastify: FastifyInstance): Promise<void> {
+/** The link-preview tags of a storefront address (ADR-0134), or null for the plain page. */
+export type StoreMeta = (path: string, query: URLSearchParams) => Promise<string | null>;
+
+export async function serveWebApps(
+  fastify: FastifyInstance,
+  options: { storeMeta?: StoreMeta } = {},
+): Promise<void> {
   let first = true;
   for (const [appInterface, folder] of Object.entries(APPS)) {
     const root = fileURLToPath(new URL(`../../../${folder}/dist`, import.meta.url));
@@ -64,6 +71,22 @@ export async function serveWebApps(fastify: FastifyInstance): Promise<void> {
           requestId: String(request.id),
         }),
     );
+    if (appInterface === 'store' && options.storeMeta) {
+      // Link previews (WhatsApp and others read tags without running scripts): the store's
+      // page is sent with its title, description and picture already in (ADR-0134).
+      const html = readFileSync(join(root, 'index.html'), 'utf8');
+      const storeMeta = options.storeMeta;
+      fastify.get(`/${appInterface}/*`, async (request: FastifyRequest, reply: FastifyReply) => {
+        const url = new URL(request.url, 'http://store.local');
+        const tags = await storeMeta(url.pathname, url.searchParams).catch(() => null);
+        const page = tags ? html.replace(/<title>[^<]*<\/title>/, tags) : html;
+        return reply
+          .header('cache-control', 'no-cache')
+          .header('content-type', 'text/html; charset=utf-8')
+          .send(page);
+      });
+      continue;
+    }
     fastify.get(`/${appInterface}/*`, sendIndex);
   }
 

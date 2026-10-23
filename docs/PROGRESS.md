@@ -1265,6 +1265,18 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-23 — Link previews of the store (ADR-0134)
+Merchant's request: a store link on WhatsApp shows the logo and the store's name; a category
+link the category's name; a product link the product's name.
+- The served storefront page carries Open Graph / Twitter tags for the store, a category or
+  list, and a product (name, description or price, picture), HTML-escaped.
+- `GET /store/:slug/share.jpg`: the product's, category's, logo or banner picture as a
+  1200 × 630 JPEG.
+- Tests: integration (+1: store without and with a logo, escaping, product, category, plain page
+  for others, the JPEG's size) and the E2E checks the served page's tags.
+- Verified (cloud sandbox): `pnpm verify` 429 unit/web, `pnpm test:integration` 321 (46 files),
+  `pnpm test:e2e` 47.
+
 ### 2026-10-22 — Product discounts for the store and the point of sale (ADR-0133, BR-242)
 Owner's request: a professional way in the store console to discount products by a price or a
 percentage, shown in the store and charged at the point of sale at the same time, with the

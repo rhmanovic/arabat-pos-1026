@@ -66,6 +66,12 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-23 (link previews, ADR-0134)
+- `ecommerce.int.test.ts` (+1): store tags without a logo (no picture) and with one, a name with
+  markup escaped, product title / price / type / picture address, category title, plain page for
+  an unknown store and `/pay`, `share.jpg` is a 1200 × 630 JPEG.
+- `e2e/store.spec.ts`: the served `/store/:slug` page has the store's `<title>` and `og:title`.
+
 ### Results 2026-10-22 (product discounts, ADR-0133)
 - `packages/pos-core` (+3): percentage half-up to the fils, amount, never down to zero or 100%;
   the largest offer in force wins, start inclusive / end exclusive, first on a tie; saved %.

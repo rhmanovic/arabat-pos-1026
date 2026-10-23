@@ -1,6 +1,7 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { createHmac } from 'node:crypto';
 import type pg from 'pg';
+import sharp from 'sharp';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { newId } from '../../kernel/ids.js';
 import { DbFixtures, createCompany } from '../../testing/auth-fixtures.js';
@@ -8,6 +9,7 @@ import { prepareIntegrationDatabase } from '../../testing/integration-db.js';
 import { InMemoryMailer, createTestApp, testEnv } from '../../testing/test-app.js';
 import { OrderNotificationsService } from './order-notifications.service.js';
 import { StoreAccountsService } from './store-accounts.service.js';
+import { StoreShareService } from './store-share.service.js';
 
 let app: NestFastifyApplication;
 let owner: pg.Pool;
@@ -2657,5 +2659,59 @@ describe('one catalog for the point of sale and the store (ADR-0130)', () => {
     // Another merchant sees nothing of it.
     const other = await setup({ gateway: false });
     expect((await other.ok('GET', '/manager/online/collections')).collections).toEqual([]);
+  });
+});
+
+describe('link previews (ADR-0134)', () => {
+  it('gives the store, a category and a product their title, description and picture', async () => {
+    const s = await setup({ gateway: false });
+    const share = app.get(StoreShareService);
+    const page = (path: string) => {
+      const url = new URL(path, 'http://store.local');
+      return share.tags(url.pathname, url.searchParams);
+    };
+    // Without a logo there is no picture; a store name with markup is escaped.
+    const current = await s.ok('GET', '/manager/online/store');
+    await s.ok('PUT', '/manager/online/store', {
+      ...current,
+      deliveryFee: current.deliveryFee.amount,
+      minimumOrder: current.minimumOrder.amount,
+      nameAr: 'متجر <الزعفران> & شاي',
+      taglineAr: 'أجود الشاي',
+    });
+    const plain = (await page(`/store/${s.slug}`))!;
+    expect(plain).toContain('<title>متجر &lt;الزعفران&gt; &amp; شاي</title>');
+    expect(plain).toContain('<meta property="og:description" content="أجود الشاي" />');
+    expect(plain).not.toContain('og:image');
+    await upload(s, '/manager/online/store/logo');
+    const home = (await page(`/store/${s.slug}`))!;
+    expect(home).toMatch(
+      new RegExp(`og:image" content="[^"]+/api/v1/store/${s.slug}/share\\.jpg\\?v=`),
+    );
+    expect(home).toContain('<meta name="twitter:card" content="summary_large_image" />');
+    // A product: its name with the store's, its price and its own picture address.
+    const product = (await page(`/store/${s.slug}/products/${s.teaProduct}`))!;
+    expect(product).toContain('<meta property="og:title" content="Saffron tea | متجر');
+    expect(product).toContain('<meta property="og:description" content="1.250 د.ك" />');
+    expect(product).toContain('<meta property="og:type" content="product" />');
+    expect(product).toContain(`share.jpg?product=${s.teaProduct}`);
+    // A category shown in the store.
+    const cat = await s.ok('POST', '/manager/categories', { nameAr: 'شاي' });
+    await s.ok('PUT', '/manager/online/listings', {
+      productIds: [s.teaProduct],
+      categoryId: cat.id,
+    });
+    const category = (await page(`/store/${s.slug}/products?category=${cat.id}`))!;
+    expect(category).toContain('<meta property="og:title" content="شاي | متجر');
+    expect(category).toContain(`share.jpg?category=${cat.id}`);
+    // Anything else is the plain page.
+    expect(await page('/store/no-such-store')).toBeNull();
+    expect(await page(`/store/pay/abc`)).toBeNull();
+    // The picture: a 1200 × 630 JPEG (the logo when the product has no picture).
+    const image = await s.req('GET', `/store/${s.slug}/share.jpg?product=${s.teaProduct}`);
+    expect(image.statusCode).toBe(200);
+    expect(image.headers['content-type']).toBe('image/jpeg');
+    const meta = await sharp(image.rawPayload).metadata();
+    expect([meta.format, meta.width, meta.height]).toEqual(['jpeg', 1200, 630]);
   });
 });

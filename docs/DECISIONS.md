@@ -2167,6 +2167,29 @@ ADR; supersede it.
 - **Consequences:** smaller pictures for shoppers, no personal metadata kept, one place to change
   the format or the size rule.
 
+## ADR-0134 — Link previews of the store (WhatsApp and other apps)
+- **Status:** Accepted (2026-10-23). A merchant asked that a store link sent on WhatsApp show
+  the logo and the store's name, a category link the category's name, and a product link the
+  product's name.
+- **Context:** link previews are built by the apps' crawlers from the page's Open Graph tags
+  without running scripts. The storefront is a single-page app whose title is set in the
+  browser, so every link showed "Online store" and no picture.
+- **Decision:**
+  - When the API serves the storefront (`SERVE_WEB`, production), `/store/*` is answered with
+    the built `index.html` whose `<title>` is replaced by the page's tags
+    (`StoreShareService.tags`): title, description, canonical, `og:*` (type, site name, title,
+    description, url, locale `ar_KW`, image with type and size), `product:price:*` and
+    `twitter:*`. Store: its name (Arabic first) and tagline; category or list
+    (`/products?category=…`): "name | store"; product: "name | store", the lowest price in KWD
+    and the start of its description. Anything else (unknown or unpublished store, `/pay`,
+    `/links`) gets the plain page; every value is HTML-escaped.
+  - Pictures: `GET /store/:slug/share.jpg?product=&category=` (public, cached a day) renders
+    the product's first picture, else the category's or list's, else the logo, else the banner,
+    as a 1200 × 630 JPEG on white (stored pictures are WebP, which not every app previews);
+    404 when the store has no picture. The address carries the logo's version so apps refresh it.
+- **Consequences:** links show the right name and picture in WhatsApp and other apps; apps
+  cache previews, so a link already shared may keep its old preview for a while.
+
 ## ADR-0133 — Product discounts for the store and the point of sale
 - **Status:** Accepted (2026-10-22). Owner's request: a professional way, in the store console,
   to lower product prices by a percentage or an amount, shown in the online store and charged at

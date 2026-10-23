@@ -871,4 +871,9 @@ test('a product discount made in the console shows in the store with its badge a
   await expect(product.locator('[data-sale-badge]')).toHaveText('-25%');
   await expect(product.locator('[data-old-price]')).toContainText('2.000');
   await expect(product.locator('[data-sale-price]')).toContainText('1.500');
+
+  // Link previews (ADR-0134): the served page already carries the store's tags.
+  const html = await (await page.request.get(`/store/${slug}`)).text();
+  expect(html).toContain('<title>Rose</title>');
+  expect(html).toContain('<meta property="og:title" content="Rose" />');
 });

@@ -76,6 +76,7 @@ import { EcommerceService } from './ecommerce.service.js';
 import { FulfilmentService } from './fulfilment.service.js';
 import { PosHandoverService } from './pos-handover.service.js';
 import { PromotionsService } from './promotions.service.js';
+import { StoreShareService } from './store-share.service.js';
 import { StoreAccountsService } from './store-accounts.service.js';
 import { OnlinePaymentsService } from './online-payments.service.js';
 
@@ -573,7 +574,28 @@ export class StorefrontController {
     private readonly store: EcommerceService,
     private readonly limiter: RateLimiterService,
     private readonly accounts: StoreAccountsService,
+    private readonly share: StoreShareService,
   ) {}
+
+  /** The picture of a link preview (ADR-0134): a JPEG of the product, category or logo. */
+  @Public()
+  @Get('share.jpg')
+  async shareImage(
+    @Param('slug') slug: string,
+    @Query('product') product: string | undefined,
+    @Query('category') category: string | undefined,
+    @Res() reply: FastifyReply,
+  ) {
+    const data = await this.share.image(slug, {
+      product: product ?? null,
+      category: category ?? null,
+    });
+    await reply
+      .header('content-type', 'image/jpeg')
+      .header('cache-control', 'public, max-age=86400')
+      .header('x-content-type-options', 'nosniff')
+      .send(data);
+  }
 
   @Public()
   @Get()
