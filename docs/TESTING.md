@@ -81,7 +81,9 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   shows the sub-domain; the old address answers 301 with the query; the page carries
   `arabat-store` and `og:url` of the sub-domain; a product link stays on the sub-domain;
   `/manager/` there is the store's "Page not found"; `/store/{slug}/cart` there answers 301 to
-  `/cart`.
+  `/cart`. The design test first registers the storefront's service worker on the shared host and
+  follows the old address's 301; the preview frame still opens (it failed before the
+  `?preview=1` fix, reproduced 2026-10-23).
 
 ### Results 2026-10-23 (settings tabs, ADR-0135)
 - `apps/online-web/src/app.test.tsx`: General is the first tab; Payment shows pay on receipt and

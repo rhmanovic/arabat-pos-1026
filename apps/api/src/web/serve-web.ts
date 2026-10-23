@@ -97,9 +97,11 @@ export async function serveWebApps(
             return reply.redirect(`/${rest.join('/')}${url.search}`, 301);
         } else if (stores && slug && !STORE_APP_PATHS.includes(slug)) {
           // The old address moves to the store's sub-domain, except inside the console's
-          // preview frame, which must stay on the console's origin (ADR-0128).
+          // preview frame (`?preview`), which must stay on the console's origin (ADR-0128).
           const target = stores.subdomain(slug);
-          if (target && request.headers['sec-fetch-dest'] !== 'iframe')
+          const framed =
+            request.headers['sec-fetch-dest'] === 'iframe' || url.searchParams.has('preview');
+          if (target && !framed)
             return reply.redirect(`${target}/${rest.join('/')}${url.search}`, 301);
         }
         const tags = await storeMeta(url.pathname, url.searchParams).catch(() => null);

@@ -1523,7 +1523,7 @@ describe('online store console', () => {
       renderApp({ routes, appInterface: 'manager', i18n, path: '/design', fetch });
       const frame = await screen.findByTestId('design-preview');
       expect(frame).toHaveAttribute('name', 'arabat-design-preview');
-      expect(frame).toHaveAttribute('src', '/store/demo');
+      expect(frame).toHaveAttribute('src', '/store/demo?preview=1');
       // The store is laid out at a true device width (then scaled to fit), so the desktop
       // preview shows the desktop header rather than the phone one.
       expect(frame).toHaveStyle({ width: '1280px' });

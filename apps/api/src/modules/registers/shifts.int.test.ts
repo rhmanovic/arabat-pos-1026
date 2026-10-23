@@ -305,7 +305,9 @@ describe('payment methods', () => {
       'custom',
       'bank_transfer',
     ]);
-    expect(res.body).not.toContain('fee');
+    // No fee field reaches the till (field names only: a random id may contain "fee").
+    for (const method of res.json().methods as Record<string, unknown>[])
+      expect(Object.keys(method).filter((key) => /fee/i.test(key))).toEqual([]);
   });
 });
 

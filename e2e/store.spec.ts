@@ -511,6 +511,15 @@ test('the owner designs the store as a restaurant, previews it live and publishe
   ).toBe(200);
 
   // The editor shows the store in its preview frame; the restaurant template replaces the layout.
+  // A shopper's browser may hold the storefront's service worker on the shared host (scope
+  // `/store/`) and the old address's 301 to the sub-domain (ADR-0136); the preview frame must
+  // still open on the console's origin.
+  await page.goto('/store/');
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+  });
+  await page.goto(`/store/${slug}`);
+  await expect(page).toHaveURL(new RegExp(`//${slug}\\.localhost:\\d+/$`));
   await page.goto('/online/design');
   const preview = page.frameLocator('iframe[name="arabat-design-preview"]');
   await expect(preview.getByText('Preview: what shoppers will see once you publish')).toBeVisible();

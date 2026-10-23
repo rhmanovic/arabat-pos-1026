@@ -1265,6 +1265,14 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-23 — Fix: live preview blocked after the sub-domain release (ADR-0136)
+Owner's report: the design editor's live preview showed "This content is blocked". Cause: a
+browser holding the storefront's service worker on `www` (scope `/store/`) fetched the preview
+page through it and followed the 301 to the sub-domain, which may not be framed by the console.
+Production answered the frame itself correctly (200). Fix: the frame opens
+`/store/{slug}?preview=1`, which is never redirected. E2E reproduces it (service worker + 301)
+and passes with the fix.
+
 ### 2026-10-23 — Every store at its own sub-domain (ADR-0136)
 Owner's decision after the Cloudflare discussion: stores at `{slug}.arabatapp.com` (first phase
 of `docs/CUSTOM_DOMAINS_PLAN.md`).

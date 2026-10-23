@@ -395,7 +395,10 @@ function Editor({
                 device={device}
                 name={PREVIEW_FRAME_NAME}
                 title={t('design.livePreview')}
-                src={`/store/${slug}`}
+                // `?preview`: never redirected to the store's sub-domain, whose page may not be
+                // framed here; a separate address also escapes a 301 the browser cached for the
+                // store's plain address (ADR-0136).
+                src={`/store/${slug}?preview=1`}
               />
             </div>
           ) : (

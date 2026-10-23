@@ -2184,8 +2184,11 @@ ADR; supersede it.
     the storefront then runs at `/` (`hostRoutes`) and builds every internal link with
     `storePath` (`apps/store-web/src/address.ts`).
   - **Old addresses:** `GET /store/{slug}/…` answers 301 to `https://{slug}.STORE_DOMAIN/…`
-    (query kept), except inside the console's preview frame (`Sec-Fetch-Dest: iframe`), which
-    stays on the console's origin; `pay`, `links` and `assets` are not stores. `/store/{slug}/…`
+    (query kept), except inside the console's preview frame, which stays on the console's
+    origin: the frame opens `/store/{slug}?preview=1` (never redirected) and `Sec-Fetch-Dest:
+    iframe` is honoured too. Fix 2026-10-23: a browser holding the storefront's service worker
+    on the shared host fetched the preview through it and followed the 301 to the sub-domain,
+    which may not be framed ("content is blocked"); `pay`, `links` and `assets` are not stores. `/store/{slug}/…`
     typed on the store's own host answers 301 to `/…`.
   - **One address builder:** `storeAddress(env, slug)` (`kernel/http/store-host.ts`) for the
     console's address, payment return links, order e-mails, password-reset e-mails and link
