@@ -117,6 +117,20 @@ Read first: `docs/adr/ADR-0112-local-first-pos.md` (with amendments 2–4 summar
 | Bundle publish | DEVICE_API §7 | `apps/device-web/vite.config.ts`, `scripts/build-device-manifest.mjs`, `apps/api/src/web/serve-web.ts` |
 | Browser guard | — | `scripts/ci/check-pos-core-browser.mjs` |
 
+## Printing alternatives already researched (2026-10, owner discussion)
+
+Read before re-opening "how should receipts print". Why a native app / print agent and not the browser alone:
+- Safari on iPhone/iPad has no Web Bluetooth (and no WebUSB); cheap thermal printers mostly use classic
+  Bluetooth SPP, which no browser's Web Bluetooth (BLE only) can reach. The browser print dialog works,
+  but adds a step per receipt and cannot kick the cash drawer.
+- Cloud printers (Star CloudPRNT, Epson Server Direct Print) poll a server and work from any device,
+  but cost roughly 80+ KWD (e.g. Epson TM-m30III ~82 KWD in Kuwait, Oct 2026) against ~10–25 KWD for
+  cheap printers.
+- Ready-made bridges each cover one platform: PrintNode (Windows/macOS/Linux only, per-print monthly
+  fee), RawBT (Android only, local), QZ Tray (desktop only, local; branded build ~2,999 USD/year).
+- Trap: cheap printers often have no Arabic code page or shape Arabic wrongly; print the receipt as
+  a raster image, not text.
+
 ## Checklist for a device/printing change
 
 1. Rule change? Put it in pos-core, test it there, `pnpm build:packages`.

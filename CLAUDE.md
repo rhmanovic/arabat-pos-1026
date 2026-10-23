@@ -25,6 +25,10 @@ historical data to preserve.
   financial risk, or destructive operations.
 - Report actual results honestly. Never present mocked, stubbed or partial
   functionality as complete.
+- When the owner asks a strategy or market question, answer from a business angle (customers,
+  competitors, price, risk), not with code or implementation detail.
+- The owner often dictates by voice and words can be mistranscribed (e.g. "أمنية" for "فنية");
+  when a message reads oddly, confirm the meaning in one line before answering.
 
 ## 3. Permanent architectural requirements (non-negotiable)
 
