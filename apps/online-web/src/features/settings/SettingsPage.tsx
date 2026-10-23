@@ -607,16 +607,19 @@ function SettingsForm({ store }: { store: OnlineStore }) {
           </ul>
         </Alert>
       ) : null}
-      <FloatingBar label={t('store.actions')}>
-        {dirty ? (
-          <Badge tone="warning" data-testid="settings-unsaved">
-            {t('store.unsaved')}
-          </Badge>
-        ) : null}
-        <Button loading={save.isPending} disabled={!dirty} onClick={() => save.mutate()}>
-          {t('common.save')}
-        </Button>
-      </FloatingBar>
+      {/* The Domain tab saves each action itself: no save bar there. */}
+      {tab !== 'domain' ? (
+        <FloatingBar label={t('store.actions')}>
+          {dirty ? (
+            <Badge tone="warning" data-testid="settings-unsaved">
+              {t('store.unsaved')}
+            </Badge>
+          ) : null}
+          <Button loading={save.isPending} disabled={!dirty} onClick={() => save.mutate()}>
+            {t('common.save')}
+          </Button>
+        </FloatingBar>
+      ) : null}
     </div>
   );
 }

@@ -1461,6 +1461,57 @@ describe('online store console', () => {
     expect(screen.getByTestId('address-main')).toHaveTextContent('https://www.raghefkarak.com');
     expect(screen.getByTestId('address-store')).toHaveTextContent(addresses.storeUrl);
     expect(screen.getByRole('button', { name: 'Use the Arabat address instead' })).toBeEnabled();
+    // Once it works the merchant sees only that: no records, steps or checks, and no save bar.
+    expect(screen.queryByTestId('dns-records')).toBeNull();
+    expect(screen.queryByTestId('domain-steps')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Check now' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    expect(screen.getByTestId('domain-root-tip')).toHaveTextContent('raghefkarak.com');
+  });
+
+  it('tells the merchant plainly when a working domain stops (ADR-0137)', async () => {
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'online.manage', 'branches.read']),
+      routes: {
+        'GET /manager/branches': () => ({ status: 200, body: branches }),
+        'GET /manager/online/store': () => ({ status: 200, body: store }),
+        'GET /manager/online/domain': () => ({
+          status: 200,
+          body: {
+            ...addresses,
+            domain: {
+              domain: 'raghefkarak.com',
+              status: 'pending',
+              isPrimary: false,
+              www: {
+                hostname: 'www.raghefkarak.com',
+                status: 'pending',
+                certificate: 'active',
+                errors: [],
+              },
+              root: {
+                hostname: 'raghefkarak.com',
+                status: 'pending',
+                certificate: 'pending',
+                errors: [],
+              },
+              records: [
+                { type: 'CNAME', name: 'www', value: 'stores.arabatapp.com', purpose: 'required' },
+                { type: 'CNAME', name: '@', value: 'stores.arabatapp.com', purpose: 'root' },
+              ],
+              lastCheckedAt: '2026-10-25T10:00:00.000Z',
+              activatedAt: '2026-10-24T10:00:00.000Z',
+            },
+          },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/settings?tab=domain', fetch });
+    expect(await screen.findByText('Your domain stopped working')).toBeInTheDocument();
+    expect(screen.getByTestId('domain-status')).toHaveTextContent('Stopped');
+    expect(screen.getByTestId('dns-records')).toHaveTextContent('stores.arabatapp.com');
+    expect(screen.queryByTestId('domain-steps')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Check now' })).toBeEnabled();
   });
 
   it('shows the launch steps of a draft store and shares its link on WhatsApp (ADR-0127)', async () => {

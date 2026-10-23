@@ -66,6 +66,11 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-24 (plain Domain tab, ADR-0137)
+- `apps/online-web/src/app.test.tsx` (+1, 1 extended): a working domain shows only "Your domain
+  works" (no records, steps, check button or save bar) and a tip for the bare domain; a domain that
+  worked and stopped says so plainly, shows the record to check and "Check now".
+
 ### Results 2026-10-23 (permanent code and own domains, ADR-0137)
 - `store-domains.int.test.ts` (+4, fake provider): permanent code given once, refused change even
   for the table owner, code-shaped addresses reserved, found by code; connecting (typed with

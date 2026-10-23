@@ -1910,13 +1910,7 @@ export const onlineEn = {
     purpose_verify: 'Speeds up the check',
     dnsHint: 'Changes can take from a few minutes to a few hours to reach everyone.',
     workingTitle: 'Your domain works',
-    workingHint:
-      'Shoppers open your store at {{domain}}, with a security certificate renewed for you.',
     problemsTitle: 'What the check found',
-    rootTitle: 'Without “www” ({{domain}})',
-    rootHint:
-      'So that {{domain}} also opens the store, add this record if your provider allows it at the root (ALIAS, ANAME or CNAME flattening):',
-    rootForward: 'Otherwise, set a forwarding at your provider from {{from}} to {{to}}.',
     verify: 'Check now',
     makeMain: 'Make it the main address',
     useArabat: 'Use the Arabat address instead',
@@ -1924,9 +1918,19 @@ export const onlineEn = {
     removeConfirm:
       'Remove {{domain}} from your store? Shoppers will be sent to the Arabat address.',
     removed: 'The domain was removed.',
-    lastChecked: 'Last checked {{at}}',
-    autoCheck:
-      'We check by ourselves every few minutes. The record points www to {{target}}; nothing else is needed.',
+    workingHint:
+      'Shoppers open your store at {{address}}. The security certificate is free and renews by itself.',
+    workingNotMain:
+      'Your domain works. Shoppers are sent to your Arabat address because you chose it as the main one.',
+    status_stopped: 'Stopped',
+    stoppedTitle: 'Your domain stopped working',
+    stoppedHint:
+      'Your store opens on its Arabat address until {{domain}} works again. Check that the domain has not expired at the company you bought it from and that this record is still there:',
+    rootOptional:
+      'Optional: so that {{domain}} also opens the store, add a CNAME record named @ to {{target}} if your provider allows it, or ask it to forward {{domain}} to {{address}}.',
+    rootTip:
+      'To open the store also when shoppers type {{domain}}, ask the company you bought the domain from to forward it to {{address}}.',
+    statusUpdates: 'The status updates here by itself within minutes.',
   },
   settingsTabs: {
     label: 'Settings',

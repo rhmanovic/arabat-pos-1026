@@ -1,5 +1,4 @@
 import type { StoreAddresses, StoreDomain } from '@arabat/contracts';
-import { formatDateTime } from '@arabat/i18n';
 import { Alert, Badge, Button, Field, Input, Section, cn } from '@arabat/ui';
 import { ErrorState, useApi, useNotify } from '@arabat/web-core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -226,11 +225,18 @@ function ConnectedDomain({
   onPrimary: (value: boolean) => void;
   onRemove: () => void;
 }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const working = d.status === 'active';
+  // Worked before and stopped (expired at the provider, record removed): the store is on its
+  // Arabat address meanwhile. The checks behind it are the platform's business, not the merchant's.
+  const stopped = !working && d.activatedAt !== null;
+  const address = `www.${d.domain}`;
+  const rootWorks = d.root.status === 'active' && d.root.certificate === 'active';
+  const required = d.records.filter((r) => r.purpose !== 'root');
   const steps = [
     { key: 'record', done: d.www.status === 'active' },
     { key: 'certificate', done: d.www.certificate === 'active' },
-    { key: 'live', done: d.status === 'active' },
+    { key: 'live', done: working },
   ];
   const errors = [...new Set(d.www.errors)];
   return (
@@ -239,79 +245,73 @@ function ConnectedDomain({
         <span dir="ltr" className="text-lg font-bold">
           {d.domain}
         </span>
-        <Badge tone={STATUS_TONE[d.status]} data-testid="domain-status">
-          {t(`domain.status_${d.status}`)}
+        <Badge tone={stopped ? 'danger' : STATUS_TONE[d.status]} data-testid="domain-status">
+          {stopped ? t('domain.status_stopped') : t(`domain.status_${d.status}`)}
         </Badge>
         {d.isPrimary ? <Badge tone="success">{t('domain.main')}</Badge> : null}
       </div>
 
-      <ol className="flex flex-col gap-0 sm:flex-row" data-testid="domain-steps">
-        {steps.map((step, i) => (
-          <li
-            key={step.key}
-            className="flex flex-1 items-center gap-2 py-1.5 sm:flex-col sm:text-center"
-          >
-            <span
-              className={cn(
-                'grid size-8 shrink-0 place-items-center rounded-full border-2 text-xs font-bold',
-                step.done ? 'border-success bg-success text-white' : 'border-border text-fg-muted',
-              )}
-            >
-              {step.done ? '✓' : i + 1}
-            </span>
-            <span className="text-sm font-medium">{t(`domain.step_${step.key}`)}</span>
-          </li>
-        ))}
-      </ol>
-
-      {d.status !== 'active' ? (
+      {working ? (
+        <Alert tone="success" title={t('domain.workingTitle')}>
+          {t(d.isPrimary ? 'domain.workingHint' : 'domain.workingNotMain', { address })}
+        </Alert>
+      ) : stopped ? (
         <div className="flex flex-col gap-2">
-          <p className="text-sm font-medium">{t('domain.dnsTitle')}</p>
-          <RecordsTable
-            rows={d.records.filter((r) => r.purpose !== 'root')}
-            label={(purpose) => t(`domain.purpose_${purpose}`)}
-          />
-          <p className="text-xs text-fg-muted">{t('domain.dnsHint')}</p>
+          <Alert tone="danger" title={t('domain.stoppedTitle')}>
+            {t('domain.stoppedHint', { domain: d.domain })}
+          </Alert>
+          <RecordsTable rows={required} label={(purpose) => t(`domain.purpose_${purpose}`)} />
         </div>
       ) : (
-        <Alert tone="success" title={t('domain.workingTitle')}>
-          {t('domain.workingHint', { domain: `www.${d.domain}` })}
-        </Alert>
+        <>
+          <ol className="flex flex-col gap-0 sm:flex-row" data-testid="domain-steps">
+            {steps.map((step, i) => (
+              <li
+                key={step.key}
+                className="flex flex-1 items-center gap-2 py-1.5 sm:flex-col sm:text-center"
+              >
+                <span
+                  className={cn(
+                    'grid size-8 shrink-0 place-items-center rounded-full border-2 text-xs font-bold',
+                    step.done
+                      ? 'border-success bg-success text-white'
+                      : 'border-border text-fg-muted',
+                  )}
+                >
+                  {step.done ? '✓' : i + 1}
+                </span>
+                <span className="text-sm font-medium">{t(`domain.step_${step.key}`)}</span>
+              </li>
+            ))}
+          </ol>
+          <div className="flex flex-col gap-2">
+            <p className="text-sm font-medium">{t('domain.dnsTitle')}</p>
+            <RecordsTable rows={required} label={(purpose) => t(`domain.purpose_${purpose}`)} />
+            <p className="text-xs text-fg-muted">{t('domain.dnsHint')}</p>
+            <p className="text-xs text-fg-muted">
+              {t('domain.rootOptional', { domain: d.domain, target, address })}
+            </p>
+          </div>
+          {errors.length > 0 ? (
+            <Alert tone="warning" title={t('domain.problemsTitle')}>
+              <ul className="list-disc ps-5" dir="ltr">
+                {errors.map((e) => (
+                  <li key={e}>{e}</li>
+                ))}
+              </ul>
+            </Alert>
+          ) : null}
+        </>
       )}
 
-      {errors.length > 0 && d.status !== 'active' ? (
-        <Alert tone="warning" title={t('domain.problemsTitle')}>
-          <ul className="list-disc ps-5" dir="ltr">
-            {errors.map((e) => (
-              <li key={e}>{e}</li>
-            ))}
-          </ul>
-        </Alert>
+      {working && !rootWorks ? (
+        <p className="text-sm text-fg-muted" data-testid="domain-root-tip">
+          {t('domain.rootTip', { domain: d.domain, address })}
+        </p>
       ) : null}
 
-      <details className="rounded-lg border border-border p-3 text-sm">
-        <summary className="cursor-pointer font-semibold">
-          {t('domain.rootTitle', { domain: d.domain })}
-          {d.root.status === 'active' && d.root.certificate === 'active' ? (
-            <Badge tone="success" className="ms-2">
-              {t('domain.status_active')}
-            </Badge>
-          ) : null}
-        </summary>
-        <p className="mt-2 text-fg-muted">{t('domain.rootHint', { domain: d.domain })}</p>
-        <div className="mt-2">
-          <RecordsTable
-            rows={d.records.filter((r) => r.purpose === 'root')}
-            label={(purpose) => t(`domain.purpose_${purpose}`)}
-          />
-        </div>
-        <p className="mt-2 text-fg-muted" dir="auto">
-          {t('domain.rootForward', { from: d.domain, to: `https://www.${d.domain}` })}
-        </p>
-      </details>
-
       <div className="flex flex-wrap items-center gap-2">
-        {d.status !== 'active' ? (
+        {!working ? (
           <Button onClick={onCheck} loading={checking} disabled={busy}>
             {t('domain.verify')}
           </Button>
@@ -327,13 +327,10 @@ function ConnectedDomain({
         <Button variant="ghost" onClick={onRemove} disabled={busy}>
           {t('domain.remove')}
         </Button>
-        {d.lastCheckedAt ? (
-          <span className="text-xs text-fg-muted">
-            {t('domain.lastChecked', { at: formatDateTime(d.lastCheckedAt, i18n.language) })}
-          </span>
-        ) : null}
       </div>
-      <p className="text-xs text-fg-muted">{t('domain.autoCheck', { target })}</p>
+      {!working && !stopped ? (
+        <p className="text-xs text-fg-muted">{t('domain.statusUpdates')}</p>
+      ) : null}
     </div>
   );
 }
