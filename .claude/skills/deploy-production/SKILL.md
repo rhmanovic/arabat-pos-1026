@@ -43,7 +43,8 @@ or disable a test), merge to `main`, start again. Work from a `claude/*` branch 
   run the `Staging smoke` GitHub workflow (`check=health`) if the sandbox cannot reach it.
 - If Railway answers "Deploys have been paused temporarily", retry later and record
   "Staging not updated" in the release entry. If no Railway tool/access exists in the session,
-  say so to the owner (in Arabic) instead of inventing a result.
+  say so to the owner (in Arabic) instead of inventing a result, and write
+  `Staging not updated: no Railway access in this session` in the release entry.
 
 ## 3. Production (Google Cloud `arabat-511416`, `me-central1`, ADR-0122)
 Needs: `gcloud` (at `/usr/local/bin/gcloud` in the sandbox) and the admin service-account key in
@@ -71,6 +72,11 @@ traffic only after `/api/v1/health/ready` passes. It always sets `PAYMENT_MOCK_E
 those secrets already exist (never create them yourself). If it stops right after
 `builds submit` (an identity without project Viewer cannot stream build logs), run it once more:
 the image is found and the release continues.
+
+Read the log of **this** run only (a new file per run, started in the same command): a wait loop
+on an older log reads the previous release. `Released <tag>` must equal `git rev-parse --short=12
+HEAD`. If the push of `main` is refused ("fetch first", another session pushed), `git pull
+--rebase origin main` your unpushed commits, check what came in, then push.
 
 Migrations must be expand-only and backward compatible with the previous revision (OPERATIONS
 §3); never edit a released migration. From the log note: commit tag, migration execution name

@@ -47,7 +47,10 @@ landing page's "Our apps" menu (ADR-0117), **not** the store.
 | `store-design.service.ts` | Draft / publish of the design document |
 | `store-share.service.ts` | Share links / QR |
 | `catalog/discount-offers.ts` | `offersFor` / `inForce` — price in force for every price path |
-| `kernel/http/store-host.ts` | `storeSlugFromHost`, `storeAddress`, `storeHostRewrite` (Fastify `rewriteUrl`) |
+| `kernel/http/store-host.ts` | `storeSlugFromHost`, `storeAddress`, `domainAddress`, `ownHosts`, `storeHostRewrite` (Fastify `rewriteUrl`, sync: no DB) |
+| `store-address.service.ts` | `StoreAddressService.of` / `find` / `byDomain` — the main address of a store (own domain, sub-domain or `/store/{slug}`) |
+| `store-domains.service.ts`, `store-domains.schema.ts` | Own domains (ADR-0137): connect, check, main address, remove, background checks, 7-day release |
+| `kernel/domains/custom-hostnames.ts` | `CustomHostnames` driver: Cloudflare for SaaS / fake / off (`CUSTOM_HOSTNAMES_DRIVER`) |
 | `web/serve-web.ts` | Serves the SPAs, 301 from old `/store/{slug}`, link-preview tags (ADR-0134) |
 
 Contracts: `packages/contracts/src/ecommerce.ts` (`RESERVED_STORE_SLUGS`, `isStoreSubdomain`),
@@ -66,10 +69,14 @@ Contracts: `packages/contracts/src/ecommerce.ts` (`RESERVED_STORE_SLUGS`, `isSto
    Reservations go through `StockLedgerService.reserve`; deductions only through
    `StockLedgerService.apply`. Pay-on-receipt orders reserve **nothing**; the sale (and deduction)
    happens when payment is recorded (`completeOnlineSaleInTx`).
-4. **Addresses:** build links only with `storeAddress` (API) and `storePath`
+4. **Addresses:** build links only with `StoreAddressService` (API) and `storePath`
    (`apps/store-web/src/address.ts`). Host `{slug}.STORE_DOMAIN` is rewritten to `/store/{slug}/…`;
-   old `/store/{slug}/…` answers 301 to the sub-domain, except the console preview frame
-   (`?preview=1`, `Sec-Fetch-Dest: iframe`). Store and link-page slugs share one namespace
+   any non-Arabat host (own domain) to `/store/~/…`, resolved per page in `serve-web.ts`. Every
+   other address (sub-domain, permanent code `st-xxxxxx`, old `/store/{slug}`, bare domain) answers
+   301 to the main address, except the console preview frame (it always opens
+   `/store/{slug}?preview=1`: a store service worker on `www` refetches the frame and follows the
+   cached 301, so `Sec-Fetch-Dest` alone is not enough). `online_stores.public_code` never changes
+   (trigger); an own domain is tied to the merchant, never the slug. Store and link-page slugs share one namespace
    (`link_slug_available`); renamed slugs live 90 days in `online_store_slug_history`.
 5. **Tenancy:** the merchant comes from the slug/host via SECURITY DEFINER functions
    (`store_merchant`, `link_page_merchant`, `customer_session_lookup`) — never from the client.
@@ -82,7 +89,8 @@ Contracts: `packages/contracts/src/ecommerce.ts` (`RESERVED_STORE_SLUGS`, `isSto
    draft; shoppers see the published doc. Every new field needs a default that keeps today's look
    (an unparsable design falls back to the legacy layout). The preview orders nothing.
 9. **Payments:** sandbox `MockGateway` only (`PAYMENT_MOCK_ENABLED`, off in production). Gateway
-   and custom-domain screens in settings are UI placeholders. A real gateway, live payments or paid
+   screens in settings are UI placeholders; the Domain tab is real (ADR-0137) and shows "coming
+   soon" while the driver is `off`. Arabat never buys domains for merchants. A real gateway, live payments or paid
    domain services need the owner's explicit approval (CLAUDE.md §3.13).
 10. **One catalog:** every product gets a listing by trigger `products_online_listing`; listings are
     never deleted. `online_listings.visible` is set only in the console; `products.pos_visible`
@@ -124,11 +132,15 @@ Schema and catalogs of options: `packages/contracts/src/store-design.ts` (`store
 | Product discounts | 0133 | `catalog/discount-offers.ts`, `features/discounts/DiscountsPage.tsx` |
 | Link previews (WhatsApp) | 0134 | `apps/api/src/web/serve-web.ts` |
 | Sub-domains, 301s | 0136 | `kernel/http/store-host.ts`, `store-web/src/address.ts` |
+| Permanent code, own domains | 0137 | `store-domains.service.ts`, `features/settings/DomainTab.tsx` |
 | Earlier store / gateway basis | 0076–0079 | `online-payments.service.ts` |
 
 ## Tests
 
-Integration: `apps/api/src/modules/ecommerce/ecommerce.int.test.ts`, `catalog-transfer.int.test.ts`,
+Section entrance motion (`design/frame.tsx` `useReveal`) watches with `IntersectionObserver`: a
+scroll listener alone left sections blank when the page settled under a still screen.
+
+Integration: `apps/api/src/modules/ecommerce/ecommerce.int.test.ts`, `store-domains.int.test.ts` (fake driver), `catalog-transfer.int.test.ts`,
 `modules/links/links.int.test.ts`, `modules/catalog/discounts.int.test.ts`; unit:
 `kernel/http/store-host.test.ts`, `packages/contracts/src/store-design.test.ts`,
 `apps/store-web/src/address.test.ts`; e2e: `e2e/store.spec.ts`, `e2e/links.spec.ts`.

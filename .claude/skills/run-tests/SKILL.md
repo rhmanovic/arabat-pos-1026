@@ -25,7 +25,9 @@ Config: `vitest.config.ts` (projects `unit`, `web`, `integration`), `vitest.web-
 `playwright.config.ts`. Integration tests throw (never skip) when the TEST_ env is missing.
 
 E2E details: Playwright starts `node apps/api/dist/main.js` with `SERVE_WEB=true` on port 3100
-(`E2E_PORT`), `STORE_DOMAIN=localhost`. `reuseExistingServer` is on locally: a stale API already
+(`E2E_PORT`), `STORE_DOMAIN=localhost`, `CUSTOM_HOSTNAMES_DRIVER=fake`. Chromium resolves
+`*.localhost` and (via `--host-resolver-rules`) `*.arabat-e2e.test` to this server; Node
+(`page.request`) does not: call `http://localhost:PORT` with a `host` header instead. `reuseExistingServer` is on locally: a stale API already
 listening on 3100 is reused, so after code changes rebuild and stop it first
 (`kill $(pgrep -f "^node --env-file")`). E2E serves the **built** bundles: always `pnpm build`
 after changing API or web code, and `pnpm db:migrate` after a new migration (migrate/seed run from
@@ -86,6 +88,10 @@ before API integration tests or e2e: the API consumes their `dist/` (Vitest itse
   from Mailpit, `uniqueEmail`).
 
 ## Reading failures
+- A lint or format failure stops `verify` before `build`: an e2e run after it uses the old
+  `dist`. Rerun e2e once `verify` passes.
+- Never assert on a whole response body with `toContain` / `not.toContain`: random ids can hold
+  the word (a uuid with `fee` failed a test). Check fields or keys.
 - `verify` stops at the first failing step; the step name tells what to rerun alone
   (`pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm build`, `pnpm test`).
 - API refuses to boot in tests: a route lacks `@Public` / `@Authenticated` / `@RequirePermission` /

@@ -105,7 +105,16 @@ are in the **deploy-production** skill; local runs in **run-api-locally** / **sa
 - A failed `arabat-migrate` execution stops the release (deploy-production §3); read the job
   log, fix forward. Migrations run under an advisory lock, so parallel runs wait.
 
-## 5. Scripts
+## 5. Cloudflare and domains
+- The session reaches `api.cloudflare.com` through the proxy (credentials injected; never print
+  them). Allowed: read zones, read and create/edit DNS records of `arabatapp.com`
+  (`*.arabatapp.com` and `stores.arabatapp.com` are proxied; `www`, root and mail records DNS
+  only), read SSL settings. Not allowed: Registrar (domains, renewals), creating API tokens,
+  Custom Hostnames (needs Cloudflare for SaaS enabled by the owner, OPERATIONS §9). Never delete a
+  record or a token without the owner.
+- A domain's registrar and expiry: RDAP (`https://rdap.verisign.com/com/v1/domain/<name>`) through Firecrawl (the sandbox cannot reach it).
+
+## 6. Scripts
 - `scripts/verify-managed-postgres.sh` — local rehearsal of Cloud SQL (admin without
   SUPERUSER/BYPASSRLS): parallel `--migrate-only`, idempotent re-run, API ready as
   `app_runtime`, dump restore, RLS visibility. Needs Docker, `pnpm build`, seeded dev DB

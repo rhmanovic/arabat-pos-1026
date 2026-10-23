@@ -47,6 +47,9 @@ pnpm db:generate            # drizzle-kit generate → apps/api/drizzle/NNNN_<ra
   `apps/api/drizzle/meta/_journal.json` to the same name (`idx` must equal NNNN).
 - For SQL that has no schema change (data backfill, function, trigger only):
   `pnpm --filter @arabat/api exec drizzle-kit generate --custom --name <short_snake_name>`.
+- A `NOT NULL` column whose default is a SQL function (``.default(sql`new_store_code()`)``):
+  drizzle-kit does not create the function; add `CREATE FUNCTION` (and `GRANT EXECUTE … TO
+  app_runtime`) at the **top** of the file. A VOLATILE default fills each existing row on its own.
 - Read the generated SQL line by line: no unintended `DROP`, no `ON DELETE set null` on a
   multi-column FK, composite FKs present, checks rendered with qualified column names.
 - Append, after the generated statements, each separated by `--> statement-breakpoint`:

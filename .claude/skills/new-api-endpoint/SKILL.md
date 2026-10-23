@@ -131,7 +131,9 @@ template `roles`, `hire(assignments, 'manager'|'pos')`, `ownerPos(branchId)`. Co
 - **permission denied**: a hired role without the key gets 403, e.g.
   `const bm = await c.hire([{ roleId: c.roles.branch_manager, branchId: c.main }], 'manager');`
   `expect((await c.client.request('POST', path, { cookies: bm.cookies, body })).statusCode).toBe(403);`
-- no session → 401; wrong interface (pos cookie on `/manager/*`) → 403 (TESTING.md §3.3);
+- no session → 401; a pos-interface cookie on `/manager/*` was seen answering 401
+  (`/manager/online/domain`, 2026-10-23), so test "denied" with a manager-interface hire that
+  lacks the key (403, above);
 - other branch: a branch-scoped role acting on `c.second` → 403;
 - tenant isolation: a second `createCompany` cannot read/update the first's ids (404/403,
   TESTING.md §3.2); invalid body → 400 `VALIDATION_FAILED`.
