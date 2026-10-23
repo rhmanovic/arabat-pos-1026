@@ -22,6 +22,10 @@ are in the **deploy-production** skill; local runs in **run-api-locally** / **sa
   §9.5, §9.6) without approval. Monthly drill clones cost money: ask before creating one.
 - Ending sessions or suspending a merchant in production is a security action: confirm with
   the owner unless an active compromise is confirmed, then report at once.
+- The session's safety layer refuses, whatever IAM allows: a service account granting itself
+  roles (the owner adds roles in the console), `provision.sh` without an explicit approval
+  sentence from the owner in the conversation, and reading production data through an ad-hoc
+  Cloud Run job (check through `/platform`, e.g. its audit log, instead).
 - A read-only diagnosis (logs, `describe`, `list`) needs no approval; sign in exactly as in
   deploy-production §3 and clean up as in its §6.
 
@@ -112,6 +116,11 @@ are in the **deploy-production** skill; local runs in **run-api-locally** / **sa
   only), read SSL settings. Not allowed: Registrar (domains, renewals), creating API tokens,
   Custom Hostnames (needs Cloudflare for SaaS enabled by the owner, OPERATIONS §9). Never delete a
   record or a token without the owner.
+- Adding or changing a production host (done 2026-10-15 for `www.arabatapp.com`): `A` record
+  → `34.49.242.209`, DNS only; set `DOMAIN` / `REDIRECT_DOMAINS` in `infra/gcp/config.env` and
+  re-run `provision.sh` (approval): one managed certificate per host (`arabat-cert-<host>`) and a
+  301 host rule. Keep the old certificate on `arabat-https-proxy` until the new ones are ACTIVE
+  (15–40 min), then detach it; redeploy so the app's public URLs follow.
 - A domain's registrar and expiry: RDAP (`https://rdap.verisign.com/com/v1/domain/<name>`) through Firecrawl (the sandbox cannot reach it).
 
 ## 6. E-mail delivery (OPERATIONS §8)

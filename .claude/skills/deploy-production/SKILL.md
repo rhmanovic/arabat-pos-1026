@@ -117,6 +117,11 @@ Pass = `ready` 200 with `"version":"<commit tag>"` and database ok, every page 2
 checks the change itself needs (e.g. a store sub-domain `https://<slug>.arabatapp.com/` 200, old
 `/store/<slug>` 301). Note the build id (8 chars).
 
+Production and staging have separate databases (production started empty, 2026-10-15):
+accounts made on Railway do not exist on `www.arabatapp.com`. An owner who says "the password
+is right on Railway but refused here" needs a production account (`/manager/register` or the
+platform), or an approved move of Railway's data before anything is registered (OPERATIONS §9.6).
+
 ## 5. Rollback (any failed check)
 ```bash
 gcloud run services update-traffic arabat-web --region=me-central1 --to-revisions=PREVIOUS=100

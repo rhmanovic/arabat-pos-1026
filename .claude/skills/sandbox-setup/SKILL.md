@@ -112,4 +112,7 @@ Then run the real gates: `pnpm verify`, `pnpm test:integration`, `pnpm test:e2e`
 - **Git/GitHub:** the git proxy refuses remote branch deletion (403), which matches the house
   rule (never delete a remote branch). A `workflow_dispatch` workflow can be started only when
   its file exists on the default branch; a file pushed to a side branch answers 404.
+- **Waiting:** a long foreground `sleep` is refused. Wait for a condition with
+  `timeout 580 sh -c 'until <check>; do sleep 15; done'` (Bash timeout 600000), or run the
+  poll with `run_in_background` and wait for its notification.
 - After a container restart, re-run every step: each skips what is still there (the checks are cheap).
