@@ -1276,6 +1276,11 @@ link the category's name; a product link the product's name.
   for others, the JPEG's size) and the E2E checks the served page's tags.
 - Verified (cloud sandbox): `pnpm verify` 429 unit/web, `pnpm test:integration` 321 (46 files),
   `pnpm test:e2e` 47.
+- Released (ADR-0122): production `3b44ed4597d3` (revision `arabat-web-00070-bg7`, migration job
+  `arabat-migrate-ztqcn`, no new migration). Cloud Build check `83c26b44`: ready 200, database ok;
+  `live`, `/store/`, `/manager/`, `/online/` 200; `/store/store666` carries its title, `og:title`,
+  `og:description` and `og:image`, and its `share.jpg` answers 200 `image/jpeg`. Signed out,
+  `config.env` removed; no key deleted.
 
 ### 2026-10-22 — Product discounts for the store and the point of sale (ADR-0133, BR-242)
 Owner's request: a professional way in the store console to discount products by a price or a
