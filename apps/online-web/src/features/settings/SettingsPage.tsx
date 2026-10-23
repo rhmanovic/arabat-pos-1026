@@ -594,7 +594,7 @@ function SettingsForm({ store }: { store: OnlineStore }) {
             <GatewaysTab origin={new URL(store.url).origin} />
           </>
         ) : null}
-        {tab === 'domain' ? <DomainTab url={store.url} slug={store.slug} /> : null}
+        {tab === 'domain' ? <DomainTab /> : null}
       </div>
       {Object.keys(issues).length > 0 ? (
         <Alert tone="danger" title={t('store.fixFields')}>

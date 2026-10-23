@@ -223,7 +223,8 @@ Invariants (details, files and ADRs in the skill named in brackets):
 - Ownership moves only through `OwnershipService`; security and financial actions are audited in the same
   transaction; price/cost changes go to `price_history` [`ownership-and-accounts`, `audit-log`].
 - Catalog prices never change for discounts; the price in force comes from `offersFor` / `inForce` /
-  `offerAt`; store links only via `storeAddress` / `storePath` [`online-store`].
+  `offerAt`; store links only via `StoreAddressService` (API) / `storePath` (store-web); permanent
+  store code `public_code` and merchants' own domains (ADR-0137, `store_domains`) [`online-store`].
 
 Skills in `.claude/skills/` hold the procedures (setup, tests, migrations, ADRs, endpoints, permissions,
 web apps, release, operations, finishing a task) and the module maps; use them instead of re-reading

@@ -97,6 +97,9 @@ served at `https://{slug}.arabatapp.com/…` with the same pages without the `/s
 (`/`, `/products`, `/products/:productId`, `/cart`, `/checkout`, `/orders/:token`, `/account…`).
 `/store/:slug/…` on the shared host answers 301 there (query kept; not inside the console's
 preview frame); `/store/pay/…` and `/store/links/…` stay on the shared host.
+**Permanent code and own domains (ADR-0137):** `https://st-xxxxxx.arabatapp.com/…` and a connected
+`https://www.{domain}/…` serve the same pages; every address moves (301) to the store's main
+address; `{domain}` without `www.` moves to `www.`; an unknown host gets "not connected" (404).
 
 | Route | Screen |
 |---|---|
@@ -418,6 +421,7 @@ only staff land on `/pos/kitchen`. Sales list and reports show the service type.
 | Method & path | Permission |
 |---|---|
 | `GET/PUT /manager/online/store`, `GET /manager/online/store/slug-availability?slug=`, `GET/PUT /manager/online/listings`, `POST /manager/online/reconcile` | merchant-wide `online.manage` |
+| `GET/POST/DELETE /manager/online/domain`, `POST /manager/online/domain/check`, `PUT /manager/online/domain/primary` (the store's addresses and own domain, ADR-0137) | merchant-wide `online.manage` |
 | `PUT /manager/online/listings` (`{ productIds, visible?, categoryId?, addToCollectionId? }`; a category change also needs `catalog.manage`), `PUT /manager/online/listings/order` (`{ productIds }`, every active product), `PUT /manager/online/listings/:productId` (store title / description, featured, max per order, `visible`, `categoryId` (needs `catalog.manage`), `collectionIds`), `GET /manager/online/categories` (shared categories with store settings, `uncategorized`), `POST /manager/online/categories` (also `catalog.manage`), `PUT /manager/online/categories/order` (`{ ids }`, the store's order), `PUT /manager/online/categories/:id` (store name, shown; the shared name needs `catalog.manage`), `GET/POST/DELETE /manager/online/categories/:id/image`, `GET/POST /manager/online/collections`, `PUT /manager/online/collections/order`, `PUT/DELETE /manager/online/collections/:id` (`productIds` replaces the members), `GET/POST/DELETE /manager/online/collections/:id/image`, `GET/POST/DELETE /manager/online/store/:kind(logo\|banner)` (multipart `file`, JPEG / PNG / WebP ≤ 2 MB, stored as WebP; ADR-0121, ADR-0129, ADR-0130) | merchant-wide `online.manage` |
 | `GET/POST /manager/online/delivery-areas`, `PUT /manager/online/delivery-areas/order` (`{ ids }`), `PUT/DELETE /manager/online/delivery-areas/:id`, `GET /manager/online/branches`, `PUT /manager/online/branches/order` (`{ branchIds }`), `PUT/DELETE /manager/online/branches/:branchId` (ADR-0123) | merchant-wide `online.manage` |
 | `GET/POST /manager/online/promotions`, `PUT /manager/online/promotions/order` (`{ ids }`), `PUT /manager/online/promotions/:id`, `DELETE /manager/online/promotions/:id` (pauses a used promotion; ADR-0125) | merchant-wide `online.manage` |

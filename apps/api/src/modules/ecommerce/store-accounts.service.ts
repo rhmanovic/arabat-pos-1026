@@ -13,12 +13,10 @@ import type {
 } from '@arabat/contracts';
 import { normalizePhone } from '@arabat/contracts';
 import { Money, formatQuantity, parseQuantity } from '@arabat/money';
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import type { z } from 'zod';
-import { ENV } from '../../config/config.module.js';
-import { storeAddress } from '../../kernel/http/store-host.js';
-import type { Env } from '../../config/env.js';
+import { StoreAddressService } from './store-address.service.js';
 import { DatabaseService, type Transaction } from '../../database/database.service.js';
 import { nextDocumentNumber } from '../../database/schema/sequences.schema.js';
 import { generateToken, hashToken } from '../../kernel/crypto/tokens.js';
@@ -66,7 +64,7 @@ export class StoreAccountsService {
     private readonly audit: AuditService,
     private readonly passwords: PasswordService,
     private readonly mailer: Mailer,
-    @Inject(ENV) private readonly env: Env,
+    private readonly addresses: StoreAddressService,
   ) {}
 
   /** Waits for background e-mails (tests). */
@@ -330,7 +328,7 @@ export class StoreAccountsService {
       };
     });
     if (!sent) return;
-    const url = `${storeAddress(this.env, slug)}/account/reset/${token}`;
+    const url = `${await this.addresses.of(slug)}/account/reset/${token}`;
     const job: Promise<void> = this.mailer
       .send({
         to: email,

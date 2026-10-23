@@ -1,6 +1,6 @@
 # Custom domains for online stores — plan
 
-Status: **phase 1 done** (ADR-0136); the rest is a plan (2026-10-23, ADR-0135). The store console already shows the screens
+Status: **phases 1–2 done** (ADR-0136, ADR-0137); buying domains through Arabat is dropped (owner, 2026-10-23: merchants buy their own). (2026-10-23, ADR-0135.) The store console already shows the screens
 (Settings → Domain), disabled. Nothing below is built yet; each phase needs the owner's go-ahead,
 and anything that costs money (Cloudflare plans, domain purchases) needs explicit approval
 (CLAUDE.md §3.13).
@@ -53,61 +53,43 @@ A merchant can:
 - Phase 0's host-based resolution is in place for sub-domains; the `store_domains` table comes
   with phase 2.
 
-## Phase 2 — connect a domain the merchant owns (Cloudflare for SaaS)
+## Phase 2 — the merchant connects a domain they bought — **done (ADR-0137, 2026-10-23)**
 
-- Use **Cloudflare for SaaS / Custom Hostnames** on the `arabatapp.com` zone:
-  - fallback origin `stores.arabatapp.com` → the production service;
-  - the merchant adds `CNAME www → stores.arabatapp.com` (and, for the bare domain, the redirect
-    their DNS host offers, or an ALIAS / CNAME-flattening record);
-  - Arabat creates the custom hostname through the Cloudflare API
-    (`POST /zones/{zone_id}/custom_hostnames`) with HTTP or TXT validation, shows the records to
-    add (the console's table), and polls its `status` and `ssl.status` until `active`.
-- "Check the connection" re-reads the hostname from Cloudflare and resolves the merchant's DNS
-  to give a precise message (record missing, pointing elsewhere, waiting for the certificate).
-- A scheduled job re-checks every domain daily and e-mails the merchant when one stops working.
-- Costs to confirm with the owner before starting: Cloudflare for SaaS includes a number of
-  custom hostnames on paid plans and charges per extra hostname per month (check current prices).
+- Every store has a permanent code `st-xxxxxx` (`st-xxxxxx.arabatapp.com`, never changes).
+- Console → Settings → Domain: the main address, the Arabat address, the permanent link; the
+  merchant types the domain bought anywhere, adds `CNAME www → stores.arabatapp.com` (the bare
+  domain: ALIAS / flattening or forwarding to `www.`), and the platform does the rest through
+  Cloudflare for SaaS custom hostnames: checks, certificate, activation, main address, daily
+  re-checks, release after 7 days without the record. Nobody at Arabat acts per merchant.
+- One-time platform step (owner): enable Cloudflare for SaaS on `arabatapp.com`, fallback origin
+  `stores.arabatapp.com` (record created 2026-10-23), API token in Secret Manager
+  `cloudflare-api-token` (OPERATIONS.md). Until then the console says "coming soon".
 
-## Phase 3 — search and buy a domain
+## Phase 3 — buying domains through Arabat — **dropped**
 
-- **Availability and price:** a registrar API that answers availability and the yearly price for
-  a name and ending (`.com`, `.store`, `.shop`, `.net`, `.co`, `.online`…). Cloudflare Registrar
-  sells at cost. Its Registrar API (beta since 2026-04) searches, checks availability and
-  registers new domains (`POST /accounts/{id}/registrar/registrations`, registrant contact
-  inline), charged to the Arabat account's payment method, for a curated set of endings;
-  renewals and transfers are not in the API yet (auto-renew, dashboard). Re-check its terms for
-  registering on behalf of merchants at the start of the phase.
-- **Who owns the domain:** registered with the merchant's details as the registrant (they own
-  it), Arabat as the technical contact; documented in the terms of service.
-- **Paying:** the merchant pays the yearly price (plus a margin, if the owner wants one) before
-  the purchase; this needs a real payment gateway (see the payment gateways screens) or a manual
-  invoice at first. Renewal reminders 30 / 7 / 1 days before expiry; auto-renew on by default
-  with consent.
-- After the purchase the domain is connected automatically (phase 2 flow, without any DNS work
-  for the merchant because the zone is managed by Arabat).
+Owner, 2026-10-23: merchants buy their domain themselves from any provider; Arabat gives them the
+records. No registrar integration, no domain billing.
 
 ## Phase 4 — operations
 
-- Dashboard in `/platform` for operators: every domain, its status, failures, renewals.
-- Removing a domain: the custom hostname is deleted, the store answers at its Arabat address
-  again; a purchased domain stays the merchant's (transfer code on request).
+- Dashboard in `/platform` for operators: every domain, its status, failures (not built).
+- E-mail to the merchant when a domain starts or stops working (not built; the console shows it).
+- Removing a domain: the custom hostnames are deleted, the store answers at its Arabat address
+  again (built).
 - Security: hostnames are unique across merchants; a hostname is only attached after its
   validation succeeds; API tokens for Cloudflare are least-privilege (Custom Hostnames on one
   zone; Registrar separately) and live in Secret Manager.
 
-## Console (already built, disabled)
+## Console
 
-Settings → **Domain** tab: current address with copy, the sub-domain line, "Buy a new domain"
-(name, ending, availability results with yearly price, note on Cloudflare), "I already have a
-domain" (domain field, DNS records table, "Check the connection"), and the steps
-search → buy → connect → verify → certificate → live. Each control is wired to an API in the
-phase that builds it.
+Settings → **Domain** tab (ADR-0137): the addresses (main, Arabat, permanent link) with copy;
+"Your own domain": how-to, the domain field and "Connect"; once connected the status, three steps
+(record found → certificate → working), the record to add, what the check found, the bare-domain
+help, "Check now", "Make it the main address" / "Use the Arabat address instead", "Remove". The
+status refreshes by itself every 30 seconds while waiting.
 
 ## Open questions for the owner
 
-1. ~~Do we put Cloudflare in front of `arabatapp.com`?~~ Yes for store sub-domains (ADR-0136);
-   `www` stays DNS only for now. Phase 2 also needs Cloudflare for SaaS enabled on the zone
-   (a payment method on the Cloudflare account; first 100 hostnames included, then $0.10 per
-   hostname per month, checked 2026-10-23).
-2. Charge for the sub-domain / connected domain, or include them in a plan?
-3. Margin on domain prices, and which endings to offer first (`.com`, `.store`, `.shop`…)?
+1. ~~Cloudflare in front of `arabatapp.com`?~~ Yes for store hosts (ADR-0136).
+2. Charge for an own domain, or include it in a plan? (Today: free for every store; each costs
+   two Cloudflare host names beyond the first 100, $0.10 each a month.)

@@ -3,6 +3,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { ENV } from '../../config/config.module.js';
 import { storeAddress } from '../../kernel/http/store-host.js';
+import { StoreAddressService } from './store-address.service.js';
 import type { Env } from '../../config/env.js';
 import { DatabaseService } from '../../database/database.service.js';
 import { type MailMessage, Mailer } from '../../kernel/mail/mailer.js';
@@ -72,6 +73,7 @@ export class OrderNotificationsService {
   constructor(
     private readonly database: DatabaseService,
     private readonly mailer: Mailer,
+    private readonly addresses: StoreAddressService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -131,7 +133,8 @@ export class OrderNotificationsService {
       return mail;
     });
     if (!order) return;
-    for (const message of this.messages(order, event)) {
+    const storeUrl = await this.addresses.of(order.storeSlug);
+    for (const message of this.messages(order, event, storeUrl)) {
       try {
         await this.mailer.send(message);
       } catch (error) {
@@ -140,8 +143,8 @@ export class OrderNotificationsService {
     }
   }
 
-  private trackingUrl(order: OrderMail) {
-    return `${storeAddress(this.env, order.storeSlug)}/orders/${order.trackingToken}`;
+  private trackingUrl(order: OrderMail, storeUrl: string) {
+    return `${storeUrl}/orders/${order.trackingToken}`;
   }
 
   private consoleUrl() {
@@ -149,7 +152,11 @@ export class OrderNotificationsService {
   }
 
   /** The e-mails one event produces (shopper first, then the store when it should hear). */
-  messages(order: OrderMail, event: OrderEvent): MailMessage[] {
+  messages(
+    order: OrderMail,
+    event: OrderEvent,
+    storeUrl = storeAddress(this.env, order.storeSlug),
+  ): MailMessage[] {
     const out: MailMessage[] = [];
     const pickup = order.fulfillment === 'pickup';
     const total = kwd(order.totalMinor);
@@ -244,7 +251,7 @@ export class OrderNotificationsService {
           intro: s.intro,
           action: {
             label: { ar: 'متابعة الطلب', en: 'Track your order' },
-            url: this.trackingUrl(order),
+            url: this.trackingUrl(order, storeUrl),
           },
         }),
       });

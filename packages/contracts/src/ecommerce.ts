@@ -90,6 +90,8 @@ export const STORE_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{1,40}$/;
  * the end, no `xx--` prefix kept for encoded names) that is not reserved. Others keep the
  * `/store/{slug}` address.
  */
+/** A store's permanent code (ADR-0137), e.g. `st-4k9m2p`; never a store address. */
+export const STORE_CODE_PATTERN = /^st-[a-z0-9]{6}$/;
 export const isStoreSubdomain = (slug: string): boolean =>
   /^[a-z0-9](?:[a-z0-9-]{0,40}[a-z0-9])?$/.test(slug) &&
   slug.slice(2, 4) !== '--' &&
@@ -173,7 +175,7 @@ export const saveOnlineStoreSchema = z
       .regex(STORE_SLUG_PATTERN, {
         error: 'Letters, digits and dashes (2–41 characters).',
       })
-      .refine((slug) => !RESERVED_STORE_SLUGS.includes(slug), {
+      .refine((slug) => !RESERVED_STORE_SLUGS.includes(slug) && !STORE_CODE_PATTERN.test(slug), {
         error: 'This address is reserved.',
       }),
     status: z.enum(STORE_STATUSES),
@@ -225,6 +227,82 @@ export const saveOnlineStoreSchema = z
     path: ['pickupEnabled'],
   });
 export type SaveOnlineStore = z.input<typeof saveOnlineStoreSchema>;
+
+// ---------------------------------------------------------------- own domains (ADR-0137)
+export const STORE_DOMAIN_STATUSES = [
+  'pending',
+  'verifying',
+  'active',
+  'failed',
+  'removed',
+] as const;
+export type StoreDomainStatus = (typeof STORE_DOMAIN_STATUSES)[number];
+/** A domain as typed (`https://www.Shop.com/x` → `shop.com`), without `www.`. */
+export function normalizeDomain(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/^[a-z]+:\/\//, '')
+    .replace(/[/?#].*$/, '')
+    .replace(/:\d+$/, '')
+    .replace(/\.$/, '')
+    .replace(/^www\./, '');
+}
+export const DOMAIN_PATTERN = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+/** `POST /manager/online/domain`: the domain the merchant bought. */
+export const connectStoreDomainSchema = z.object({
+  domain: z
+    .string()
+    .max(253)
+    .transform(normalizeDomain)
+    .pipe(z.string().regex(DOMAIN_PATTERN, { error: 'Type a domain such as your-store.com.' })),
+});
+/** `PUT /manager/online/domain/primary`: shoppers' main address is the domain, or not. */
+export const storeDomainPrimarySchema = z.object({ primary: z.boolean() });
+/** One host name of a connected domain as Cloudflare sees it. */
+export const storeDomainHostSchema = z.object({
+  hostname: z.string(),
+  /** pending | active | failed (the host name is reached through Arabat). */
+  status: z.enum(['pending', 'active', 'failed']),
+  /** pending | active | failed (the certificate). */
+  certificate: z.enum(['pending', 'active', 'failed']),
+  errors: z.array(z.string()),
+});
+/** A DNS record the merchant adds at their domain provider. */
+export const dnsRecordSchema = z.object({
+  type: z.string(),
+  name: z.string(),
+  value: z.string(),
+  /** required: the store answers through it; root: the bare domain (optional); verify: speeds up checks. */
+  purpose: z.enum(['required', 'root', 'verify']),
+});
+export const storeDomainSchema = z.object({
+  domain: z.string(),
+  status: z.enum(STORE_DOMAIN_STATUSES),
+  isPrimary: z.boolean(),
+  www: storeDomainHostSchema,
+  root: storeDomainHostSchema,
+  records: z.array(dnsRecordSchema),
+  lastCheckedAt: z.string().nullable(),
+  activatedAt: z.string().nullable(),
+});
+export type StoreDomain = z.infer<typeof storeDomainSchema>;
+/** `GET /manager/online/domain`: every address of the store. */
+export const storeAddressesSchema = z.object({
+  /** Connecting a domain works on this server (Cloudflare for SaaS configured). */
+  available: z.boolean(),
+  code: z.string(),
+  /** Never changes: `https://st-xxxxxx.arabatapp.com` (null without sub-domains). */
+  permanentUrl: z.string().nullable(),
+  /** The store's own sub-domain or `/store/{slug}` address. */
+  storeUrl: z.string(),
+  /** Where shoppers are sent: the primary domain when there is one, else `storeUrl`. */
+  primaryUrl: z.string(),
+  /** The CNAME target, e.g. `stores.arabatapp.com`. */
+  target: z.string().nullable(),
+  domain: storeDomainSchema.nullable(),
+});
+export type StoreAddresses = z.infer<typeof storeAddressesSchema>;
 
 /** `GET /manager/online/slug-availability?slug=`: can this merchant take the address? */
 export const slugAvailabilityQuerySchema = z.object({

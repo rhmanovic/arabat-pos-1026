@@ -2167,6 +2167,41 @@ ADR; supersede it.
 - **Consequences:** smaller pictures for shoppers, no personal metadata kept, one place to change
   the format or the size rule.
 
+## ADR-0137 — Permanent store code and merchants' own domains (self-service, Cloudflare for SaaS)
+- **Status:** Accepted (2026-10-23). Owner's decisions: work like Shopify; each store has a code
+  that never changes; a connected domain must survive a change of the store address; merchants
+  buy their domain themselves from any provider (Arabat never buys domains) and connect it
+  themselves from the console, Arabat giving the records; nobody at Arabat connects domains by
+  hand ("you are not available for every customer").
+- **Decision:**
+  - **Permanent code** `online_stores.public_code` (`st-` + 6 characters without look-alikes),
+    given by the database, never changed (trigger); `st-xxxxxx.arabatapp.com` always answers and
+    moves to the main address. Code-shaped store addresses are reserved.
+  - **Own domain** (`store_domains`, one live per store and per domain), tied to the merchant,
+    not the slug. Connecting creates two Cloudflare for SaaS custom hostnames on the
+    `arabatapp.com` zone (`www.{domain}` and `{domain}`, HTTP validation, DV certificate issued
+    and renewed by Cloudflare). The merchant adds `CNAME www → stores.arabatapp.com` (the bare
+    domain: ALIAS / flattening to the same target, or forwarding to `www.`). Status from the `www`
+    host name: pending (record not seen) → verifying (certificate) → active, or failed.
+  - **Checks:** "Check now" in the console; a background round every minute picks domains
+    waiting (every 4 min) and working ones (daily). First activation makes the domain the main
+    address; a main domain that stops working gives the main address back to the Arabat address
+    and takes it again once it works; never-working domains are released after 7 days (kept as
+    removed). Every change is audited (`online.domain_*`).
+  - **Serving:** any host that is not Arabat's own is rewritten to `/store/~/…` and resolved per
+    page (`store_domain_store`); the bare domain answers 301 to `www.`; a domain that is not the
+    main address moves to it; an unknown host gets a small "not connected" page (404). The
+    sub-domain, the permanent code and old `/store/{slug}` links move to the main address
+    (`store_public_address`). `StoreAddressService` gives every store link (console, payment
+    returns, e-mails, link previews).
+  - **Driver** `CUSTOM_HOSTNAMES_DRIVER` = `cloudflare` (token limited to the zone's custom
+    hostnames, in Secret Manager `cloudflare-api-token`) | `fake` (development, tests, E2E) |
+    `off` (the console says "coming soon").
+  - Buying domains through Arabat (ADR-0135 plan phase 3) is dropped.
+- **Consequences:** one-time platform step: Cloudflare for SaaS enabled on the zone (first 100
+  host names included, then $0.10 each a month; two per connected domain), the fallback origin
+  `stores.arabatapp.com` and the token. Until then connecting stays "coming soon".
+
 ## ADR-0136 — Every store at its own sub-domain (`{slug}.arabatapp.com`)
 - **Status:** Accepted (2026-10-23). Owner's choice after discussing Cloudflare: each store at
   `store666.arabatapp.com` rather than `www.arabatapp.com/store/store666` or

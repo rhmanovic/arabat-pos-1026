@@ -273,6 +273,7 @@ import {
   onlineTenderListSchema,
   publicOrderSchema,
   slugAvailabilitySchema,
+  storeAddressesSchema,
   storeCheckoutResultSchema,
   storeProductListSchema,
   storeProductSchema,
@@ -1177,6 +1178,22 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request('GET', `/manager/online/store/slug-availability?slug=${encodeURIComponent(slug)}`, {
           schema: slugAvailabilitySchema,
         }),
+      /** The store's addresses and its own domain (ADR-0137). */
+      domain: () => request('GET', '/manager/online/domain', { schema: storeAddressesSchema }),
+      connectDomain: (domain: string) =>
+        request('POST', '/manager/online/domain', {
+          body: { domain },
+          schema: storeAddressesSchema,
+        }),
+      checkDomain: () =>
+        request('POST', '/manager/online/domain/check', { schema: storeAddressesSchema }),
+      setDomainPrimary: (primary: boolean) =>
+        request('PUT', '/manager/online/domain/primary', {
+          body: { primary },
+          schema: storeAddressesSchema,
+        }),
+      removeDomain: () =>
+        request('DELETE', '/manager/online/domain', { schema: storeAddressesSchema }),
       /** Tenders staff may record for a pay-on-receipt order. */
       tenders: () => request('GET', '/manager/online/tenders', { schema: onlineTenderListSchema }),
       listings: () => request('GET', '/manager/online/listings', { schema: listingListSchema }),

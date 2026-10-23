@@ -21,6 +21,8 @@ import { OrderNotificationsService } from './order-notifications.service.js';
 import { PosHandoverService } from './pos-handover.service.js';
 import { PromotionsService } from './promotions.service.js';
 import { StoreAccountsService } from './store-accounts.service.js';
+import { StoreAddressService } from './store-address.service.js';
+import { StoreDomainsService } from './store-domains.service.js';
 import { StoreShareService } from './store-share.service.js';
 
 import { StoreDesignController, StoreDesignPublicController } from './store-design.controller.js';
@@ -47,6 +49,8 @@ import { StoreDesignService } from './store-design.service.js';
   ],
   providers: [
     StoreShareService,
+    StoreAddressService,
+    StoreDomainsService,
     EcommerceService,
     OnlinePaymentsService,
     FulfilmentService,
@@ -57,6 +61,11 @@ import { StoreDesignService } from './store-design.service.js';
     StoreDesignService,
     CatalogTransferService,
   ],
-  exports: [StoreShareService, OnlinePaymentsService, OrderNotificationsService],
+  exports: [
+    StoreShareService,
+    StoreAddressService,
+    OnlinePaymentsService,
+    OrderNotificationsService,
+  ],
 })
 export class EcommerceModule {}

@@ -3,6 +3,7 @@ import { ConfigModule } from './config/config.module.js';
 import type { Env } from './config/env.js';
 import { DatabaseModule } from './database/database.module.js';
 import { AccessModule } from './kernel/access/access.module.js';
+import { DomainsModule } from './kernel/domains/domains.module.js';
 import { MailModule } from './kernel/mail/mail.module.js';
 import { StorageModule } from './kernel/storage/storage.module.js';
 import { CatalogModule } from './modules/catalog/catalog.module.js';
@@ -45,6 +46,7 @@ export class AppModule {
         ConfigModule.forRoot(env),
         DatabaseModule,
         MailModule,
+        DomainsModule,
         StorageModule,
         AuditModule,
         SubscriptionsModule,

@@ -66,6 +66,27 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-23 (permanent code and own domains, ADR-0137)
+- `store-domains.int.test.ts` (+4, fake provider): permanent code given once, refused change even
+  for the table owner, code-shaped addresses reserved, found by code; connecting (typed with
+  scheme / `www.` / path / upper case), pending records, one domain per store and per domain,
+  Arabat's domains and invalid names refused, not main before it works, check → active and main,
+  console URL / public address / domain lookup follow, keep the Arabat address, remove frees the
+  domain and keeps the record, audit trail; the domain survives a store rename; release after 7
+  days without records; a main domain that stops working gives the main address back and takes
+  it again; closed to a manager without `online.manage`.
+- `custom-hostnames.test.ts` (+2): Cloudflare states (pending / active / failed, TXT records,
+  errors); create once, reuse an existing host name, a missing one reads as gone, every call on
+  the zone's custom hostnames.
+- `store-host.test.ts` (+1): a merchant domain is served under `/store/~`, never Arabat's hosts,
+  bare IPs or deeper names; the permanent code host; nothing without custom domains.
+- `apps/online-web/src/app.test.tsx` (+1, 1 updated): the addresses and "coming soon" when off;
+  connecting, the record to add, "Check now", working, main address and the Arabat address.
+- `e2e/store.spec.ts` (fake provider, Chromium maps `*.arabat-e2e.test` here): the merchant
+  connects a domain from the console, checks it, the store opens on `www.` of the domain; the bare
+  domain, the sub-domain and the permanent code answer 301 to it; an unknown domain gets the "not
+  connected" page.
+
 ### Results 2026-10-23 (sections shown without a scroll)
 - `apps/store-web/src/app.test.tsx` (+1): a section stays hidden while the observer reports it
   below the screen and shows when it comes into view with no scroll event.

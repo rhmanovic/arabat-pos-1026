@@ -76,6 +76,17 @@ export const envSchema = z.object({
     })
     .default(''),
   /**
+   * Merchants' own domains (ADR-0137): `cloudflare` (Cloudflare for SaaS custom hostnames on the
+   * platform zone, needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ZONE_ID`), `fake` (development
+   * and tests: no network) or `off` (default: the console says it is not available yet).
+   */
+  CUSTOM_HOSTNAMES_DRIVER: z.enum(['off', 'fake', 'cloudflare']).default('off'),
+  /** Token limited to "SSL and Certificates: Edit" on the platform zone. */
+  CLOUDFLARE_API_TOKEN: z.string().trim().min(1).optional(),
+  CLOUDFLARE_ZONE_ID: z.string().trim().min(1).optional(),
+  /** CNAME target merchants point `www` to; default `stores.STORE_DOMAIN`. */
+  CUSTOM_HOSTNAME_TARGET: z.string().trim().toLowerCase().default(''),
+  /**
    * The mock payment gateway (test payments, no money moves). Off by default in
    * production; real gateways (Tap, UPayments, Hesabe, Bookeey) are never live without
    * approval and tested credentials (ADR-0078).
@@ -166,6 +177,15 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
   if (env.MAIL_PROVIDER !== 'smtp' && !env.MAIL_API_KEY)
     throw new InvalidEnvironmentError([
       `MAIL_API_KEY: required when MAIL_PROVIDER is ${env.MAIL_PROVIDER}`,
+    ]);
+  if (
+    env.CUSTOM_HOSTNAMES_DRIVER === 'cloudflare' &&
+    (!env.CLOUDFLARE_API_TOKEN ||
+      !env.CLOUDFLARE_ZONE_ID ||
+      !(env.CUSTOM_HOSTNAME_TARGET || env.STORE_DOMAIN))
+  )
+    throw new InvalidEnvironmentError([
+      'CUSTOM_HOSTNAMES_DRIVER: cloudflare needs CLOUDFLARE_API_TOKEN, CLOUDFLARE_ZONE_ID and STORE_DOMAIN (or CUSTOM_HOSTNAME_TARGET)',
     ]);
   // Development secrets must never protect production data (audit finding, Prompt 18).
   if (env.NODE_ENV === 'production') {

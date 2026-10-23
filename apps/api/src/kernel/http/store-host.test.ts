@@ -45,7 +45,7 @@ describe('store sub-domains (ADR-0136)', () => {
   });
 
   it('shows the store at the root of its host and keeps the API and files', () => {
-    const rewrite = storeHostRewrite('arabatapp.com');
+    const rewrite = storeHostRewrite({ storeDomain: 'arabatapp.com', own: null });
     expect(rewrite(req('store666.arabatapp.com', '/'))).toBe('/store/store666/');
     expect(rewrite(req('store666.arabatapp.com', '/products/1?x=2'))).toBe(
       '/store/store666/products/1?x=2',
@@ -57,6 +57,25 @@ describe('store sub-domains (ADR-0136)', () => {
     );
     expect(rewrite(req('store666.arabatapp.com', '/store/assets/a.js'))).toBe('/store/assets/a.js');
     expect(rewrite(req('www.arabatapp.com', '/manager/'))).toBe('/manager/');
+  });
+
+  it("serves a merchant domain under its own path, never Arabat's hosts (ADR-0137)", () => {
+    const rewrite = storeHostRewrite({
+      storeDomain: 'arabatapp.com',
+      own: new Set(['www.arabatapp.com', 'arabatapp.com', 'localhost']),
+    });
+    expect(rewrite(req('www.raghefkarak.com', '/products/1'))).toBe('/store/~/products/1');
+    expect(rewrite(req('raghefkarak.com', '/'))).toBe('/store/~/');
+    expect(rewrite(req('www.raghefkarak.com', '/api/v1/store/x'))).toBe('/api/v1/store/x');
+    expect(rewrite(req('www.raghefkarak.com', '/store/assets/a.js'))).toBe('/store/assets/a.js');
+    // Arabat's own hosts, the zone's names and bare addresses are never a merchant domain.
+    expect(rewrite(req('www.arabatapp.com', '/manager/'))).toBe('/manager/');
+    expect(rewrite(req('localhost:3000', '/manager/'))).toBe('/manager/');
+    expect(rewrite(req('10.0.0.5:8080', '/'))).toBe('/');
+    expect(rewrite(req('a.b.arabatapp.com', '/'))).toBe('/');
+    expect(rewrite(req('st-4k9m2p.arabatapp.com', '/'))).toBe('/store/st-4k9m2p/');
+    // Without custom domains, other hosts are left alone.
+    expect(storeHostRewrite({ storeDomain: '', own: null })(req('shop.com', '/'))).toBe('/');
   });
 });
 

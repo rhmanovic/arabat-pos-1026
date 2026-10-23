@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { AppInterface } from '@arabat/contracts';
+import { type AppInterface, STORE_CODE_PATTERN } from '@arabat/contracts';
 
 /**
  * The storefront (`/store`) is a public app, not an authenticated interface (ADR-0076); the
@@ -27,13 +27,23 @@ const APPS: Record<AppInterface | 'store' | 'links' | 'online', string> = {
  */
 /** The link-preview tags of a storefront address (ADR-0134), or null for the plain page. */
 export type StoreMeta = (path: string, query: URLSearchParams) => Promise<string | null>;
-/** Stores at their own sub-domain (ADR-0136). */
+/** Stores at their own sub-domain (ADR-0136) and at merchants' own domains (ADR-0137). */
 export type StoreHosts = {
-  /** The store a request's host stands for, or null. */
+  /** The store (or permanent code) a request's host stands for on the platform zone, or null. */
   slugOfHost: (host: string | undefined) => string | null;
-  /** A store's address at its sub-domain, or null when its address cannot be one. */
-  subdomain: (slug: string) => string | null;
+  /** A public store by slug or permanent code: its current slug and main address. */
+  find: (key: string) => Promise<{ slug: string; url: string } | null>;
+  /** The store a connected domain stands for, and where its shoppers belong. */
+  byDomain: (domain: string) => Promise<{ slug: string; isPrimary: boolean; url: string } | null>;
+  /** `https://www.{domain}`. */
+  domainUrl: (domain: string) => string;
 };
+
+/** The page for a host name that is no connected store (a domain pointed here by mistake). */
+const NOT_CONNECTED = `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" /><title>Arabat</title>
+<style>body{font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;color:#334155;text-align:center}</style>
+</head><body><main><h1>هذا الدومين غير مربوط بمتجر</h1><p>This domain is not connected to a store.</p></main></body></html>`;
 
 /** Paths under `/store/` that are not a store (sandbox payments, link pages, files). */
 const STORE_APP_PATHS = ['pay', 'links', 'assets'];
@@ -89,22 +99,56 @@ export async function serveWebApps(
       const stores = options.stores;
       fastify.get(`/${appInterface}/*`, async (request: FastifyRequest, reply: FastifyReply) => {
         const url = new URL(request.url, 'http://store.local');
-        const [slug = '', ...rest] = url.pathname.replace(/^\/store\/?/, '').split('/');
-        const hostSlug = stores?.slugOfHost(request.headers.host) ?? null;
-        if (stores && hostSlug) {
+        const [first = '', ...rest] = url.pathname.replace(/^\/store\/?/, '').split('/');
+        let slug = first;
+        const tail = `/${rest.join('/')}${url.search}`;
+        let hostSlug = stores?.slugOfHost(request.headers.host) ?? null;
+        // Compared by host name and port only: behind the proxies the scheme is always https.
+        const moved = (target: string) =>
+          new URL(target).host !== (request.headers.host ?? '').toLowerCase();
+        if (stores && slug === '~') {
+          // A merchant's own domain (ADR-0137): the bare domain moves to `www.`, a domain that
+          // is not the main address to the main address; otherwise the store is served here.
+          const host = (request.headers.host ?? '').toLowerCase().replace(/:\d+$/, '');
+          const domain = host.replace(/^www\./, '');
+          const found = await stores.byDomain(domain).catch(() => null);
+          if (!found)
+            return reply
+              .status(404)
+              .header('cache-control', 'no-cache')
+              .header('content-type', 'text/html; charset=utf-8')
+              .send(NOT_CONNECTED);
+          if (!host.startsWith('www.'))
+            return reply.redirect(`${stores.domainUrl(domain)}${tail}`, 301);
+          if (!found.isPrimary && moved(found.url))
+            return reply.redirect(`${found.url}${tail}`, 301);
+          slug = found.slug;
+          hostSlug = found.slug;
+        } else if (stores && hostSlug) {
           // `/store/{slug}/…` typed on the store's own host: its address there is `/…`.
           if (request.originalUrl.startsWith('/store/') && slug === hostSlug)
-            return reply.redirect(`/${rest.join('/')}${url.search}`, 301);
+            return reply.redirect(tail, 301);
+          // The permanent code, a former address or a store whose main address is its own
+          // domain: shoppers move to the main address (ADR-0137).
+          const found = await stores.find(hostSlug).catch(() => null);
+          if (found && moved(found.url)) return reply.redirect(`${found.url}${tail}`, 301);
+          if (!found && STORE_CODE_PATTERN.test(hostSlug))
+            return reply
+              .status(404)
+              .header('content-type', 'text/html; charset=utf-8')
+              .send(NOT_CONNECTED);
         } else if (stores && slug && !STORE_APP_PATHS.includes(slug)) {
-          // The old address moves to the store's sub-domain, except inside the console's
+          // The old address moves to the store's main address, except inside the console's
           // preview frame (`?preview`), which must stay on the console's origin (ADR-0128).
-          const target = stores.subdomain(slug);
           const framed =
             request.headers['sec-fetch-dest'] === 'iframe' || url.searchParams.has('preview');
-          if (target && !framed)
-            return reply.redirect(`${target}/${rest.join('/')}${url.search}`, 301);
+          const found = framed ? null : await stores.find(slug).catch(() => null);
+          if (found && new URL(found.url).pathname === '/')
+            return reply.redirect(`${found.url}${tail}`, 301);
         }
-        const tags = await storeMeta(url.pathname, url.searchParams).catch(() => null);
+        const tags = await storeMeta(`/store/${slug}/${rest.join('/')}`, url.searchParams).catch(
+          () => null,
+        );
         let page = tags ? html.replace(/<title>[^<]*<\/title>/, tags) : html;
         // On its own host the storefront runs at `/` and learns its store from this tag.
         if (hostSlug && slug === hostSlug)
