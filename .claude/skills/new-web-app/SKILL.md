@@ -21,7 +21,7 @@ CLAUDE.md §3.4: a separate interface is a separate application, never hidden me
   or `online.orders`). Prefer existing permissions; a new one goes through the permission catalog.
 - Dev port: must be unique, every config uses `strictPort: true`. Run
   `grep -n "port:" apps/*/vite.config.ts`. Taken today: 5173 manager, 5174 pos, 5175 platform,
-  5176 store, 5177 links **and** landing, 5178 online **and** device. Use 5179 or higher.
+  5176 store, 5177 links, 5178 online, 5179 landing, 5180 device. Use 5181 or higher.
 
 ## 2. Package files (copy from `apps/links-web`)
 

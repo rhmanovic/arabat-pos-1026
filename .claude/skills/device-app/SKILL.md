@@ -55,7 +55,7 @@ Read first: `docs/adr/ADR-0112-local-first-pos.md` (with amendments 2–4 summar
 ## Build and publish
 
 - `apps/device-web/vite.config.ts` uses `base: './'` (relative URLs, served from `arabat://app/`);
-  dev/preview port 5178. Never set `NODE_ENV` in `.env` (build refuses).
+  dev/preview port 5180. Never set `NODE_ENV` in `.env` (build refuses).
 - `pnpm --filter @arabat/device-web build` = `vite build` + `scripts/build-device-manifest.mjs`,
   which writes `apps/device-web/dist/manifest.json` (each file's path, SHA-256, size, and a
   version = build time + content hash).

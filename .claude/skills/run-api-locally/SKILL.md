@@ -84,13 +84,12 @@ Demo seeds are skipped when `NODE_ENV` is `production` (output says `[skipped] .
 | platform | `@arabat/platform-web` | http://localhost:5175/platform/ |
 | store | `@arabat/store-web` | http://localhost:5176/store/<address> |
 | links | `@arabat/links-web` | http://localhost:5177/links/ |
-| landing | `@arabat/landing-web` | http://localhost:5177/ |
+| landing | `@arabat/landing-web` | http://localhost:5179/ |
 | online | `@arabat/online-web` | http://localhost:5178/online/ |
-| device | `@arabat/device-web` | http://localhost:5178/ (base `./`, needs `window.ArabatApp`) |
+| device | `@arabat/device-web` | http://localhost:5180/ (base `./`, needs `window.ArabatApp`) |
 
-`pnpm dev` runs the API plus every app in parallel, but all ports are `strictPort` and
-links/landing share 5177 and online/device share 5178, so one of each pair fails to start.
-Start only what you need instead:
+`pnpm dev` runs the API plus every app in parallel (each on its own `strictPort`). To save
+time, start only what you need:
 
 ```bash
 pnpm --filter @arabat/api --filter @arabat/manager-web --filter @arabat/pos-web --parallel run dev

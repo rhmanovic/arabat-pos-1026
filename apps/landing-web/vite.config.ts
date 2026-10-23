@@ -19,7 +19,7 @@ export default defineConfig(({ command, mode }) => {
     plugins: [react(), tailwindcss()],
     resolve: { conditions: ['source', ...defaultClientConditions] },
     server: {
-      port: 5177,
+      port: 5179,
       strictPort: true,
       proxy: {
         '/api': {
@@ -28,7 +28,7 @@ export default defineConfig(({ command, mode }) => {
         },
       },
     },
-    preview: { port: 5177, strictPort: true },
+    preview: { port: 5179, strictPort: true },
     build: {
       outDir: 'dist',
       emptyOutDir: true,

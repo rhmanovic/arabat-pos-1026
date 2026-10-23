@@ -17,8 +17,8 @@ export default defineConfig(({ command }) => {
     plugins: [react(), tailwindcss()],
     resolve: { conditions: ['source', ...defaultClientConditions] },
     worker: { format: 'es' },
-    server: { port: 5178, strictPort: true },
-    preview: { port: 5178, strictPort: true },
+    server: { port: 5180, strictPort: true },
+    preview: { port: 5180, strictPort: true },
     build: {
       outDir: 'dist',
       emptyOutDir: true,

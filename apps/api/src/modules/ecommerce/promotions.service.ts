@@ -3,7 +3,7 @@ import type {
   StoreQuoteResult,
   saveOnlinePromotionSchema,
 } from '@arabat/contracts';
-import { Money, divideHalfUp, parseDecimal, pow10 } from '@arabat/money';
+import { Money, parseDecimal, pow10 } from '@arabat/money';
 import { can } from '@arabat/permissions';
 import { Injectable } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
@@ -315,7 +315,8 @@ export class PromotionsService {
       if (type === 'percentage') {
         if (base <= 0n) return { issue: 'no_match', applied: null };
         const { units, scale } = parseDecimal(String(r['percent']));
-        discountMinor = divideHalfUp(base * units, pow10(scale) * 100n);
+        // Rounded down to fils (BR-224): a shopper never gets more than the advertised percentage.
+        discountMinor = (base * units) / (pow10(scale) * 100n);
       } else if (type === 'fixed') {
         if (base <= 0n) return { issue: 'no_match', applied: null };
         discountMinor = BigInt(r['amount_minor'] as string);

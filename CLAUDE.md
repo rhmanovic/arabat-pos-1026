@@ -178,8 +178,8 @@ Before reporting work as done, run `pnpm verify`, `pnpm test:integration` and
 - NestJS needs decorator metadata: API code must keep value imports for injected
   classes (the type-import lint rule is disabled under `apps/api`), and Vitest uses
   SWC for API tests.
-- Every API route needs `@Public`, `@Authenticated`, `@RequirePermission` or
-  `@RequirePlatformRole`; otherwise the API refuses to boot.
+- Every API route needs `@Public`, `@Authenticated`, `@RequirePermission`,
+  `@RequirePlatformRole`, `@RequireDevice` or `@RequirePrintAgent`; otherwise the API refuses to boot.
 - Use logical Tailwind utilities (`ms-/me-/ps-/pe-/start-/end-`); ESLint rejects
   physical left/right classes.
 - Fonts must not be inlined as `data:` URIs (CSP `font-src 'self'`).
@@ -194,80 +194,37 @@ Before reporting work as done, run `pnpm verify`, `pnpm test:integration` and
   owner-role fixtures: `select set_config('app.operator_id', gen_random_uuid()::text, true)`.
 - Uploaded files go through `FileStorage` (`apps/api/src/kernel/storage`); never write
   to disk directly. Pictures go through `toStorableImage` first (stored as WebP, ADR-0129). Local storage lives in `var/` (git-ignored).
-- In this cloud sandbox: Node 24 is at `~/.local/node24/bin` (if missing, unpack the official
-  linux-x64 tarball there), Docker must be started with `dockerd &`, Docker Hub may answer 429
-  (pull `mirror.gcr.io/library/postgres:18` and tag it `postgres:18`), and Playwright needs
-  `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium`.
-- The sandbox exports `ANTHROPIC_BASE_URL` for Claude Code's own tunnel; the Anthropic SDK
-  reads it too, so start the API with `env -u ANTHROPIC_BASE_URL …` when testing the POS
-  assistant with a real key, or its requests never reach `api.anthropic.com`.
+- Cloud sandbox setup (Node 24, `dockerd`, Docker Hub 429 mirror, Playwright Chromium,
+  `ANTHROPIC_BASE_URL`) and starting / stopping the API: skills `sandbox-setup` and
+  `run-api-locally`. Never `pkill -f dist/main.js` (it kills the calling shell).
 - `pnpm db:migrate` and `pnpm db:seed` run from `apps/api/dist`: build the API first.
-- `pkill -f dist/main.js` kills the calling shell too (the pattern matches its own command
-  line); stop the API with `kill $(pgrep -f "^node --env-file")`.
 
-## 10. Repository status
+## 10. Repository status and invariants
 
-Implemented: foundation, authentication, branches/employees/RBAC, manager dashboard,
-product catalog, inventory engine, payments/registers/shifts, POS checkout, returns/refunds,
-purchasing and branch transfers, customers, reports, restaurant module, online store with a
-sandbox payment gateway, platform administration with subscription plans and limits (see
-`docs/PROGRESS.md`). No real payment gateway is connected and nothing is billed.
-Plan limits are checked with `SubscriptionsService.assertCapacity` in the creating transaction;
-platform code uses `withPlatformContext` (merchant status/subscription changes need it).
-Online reservations (`stock_reservations`) are honoured by `StockLedgerService.apply`.
-Stock consumption of sold items is expanded by `stockConsumption` (recipes, modifier ingredients).
-Stock balances change **only** through `StockLedgerService.apply` (inventory module).
-Cash balances (registers, treasuries) change **only** through `apps/api/src/modules/payments/cash-ledger.ts`
-(`postEntries` / `postTransfer` / `postDisbursement`); a shift opens and closes with a count against the
-drawer balance (ADR-0090). Expenses and supplier payments are `cash_disbursements`, never transfers (ADR-0091).
-Bank deposits go register/treasury → `deposit_transit` with a mandatory slip reference and reach the bank only
-through a second person's confirmation transfer (`confirms_transfer_id`, ADR-0096); bank accounts are reconciled by hand.
-Stock adjustments above the company limit at cost are `pending` until a second holder of `inventory.adjust`
-approves (ADR-0097); master data that still holds stock cannot be untracked, archived or deactivated (BR-171).
-Transfer shortages are explicit `stock_transfer_losses` documents (approved at the source above the limit); in-transit
-stock is computed from transfer lines, never stored, and a transfer in transit can be recalled (ADR-0098).
-The moving average is carried in `avg_cost_micro` (fils × 1000); `avg_cost_minor` is display only (ADR-0099).
-Non-restocked refund lines become `damaged_returns` custody records (held → disposed once).
-Selling rights are checked in `completeSaleInTx`, where a single-use `sale_overrides` grant from a supervisor
-(`POST /pos/overrides`) may supply what the cashier lacks; price changes need a reason and stay within the
-company bounds; free sales need `sales.zero_total` and a reason (ADR-0100).
-Refunds of one's own sales wait for a second person and exchange credit goes back to the original tenders;
-non-cash methods need a settlement account and card / transfer tenders a reference; held sales expire;
-reprints and cleared carts are logged (ADR-0101). The discount limit is combined per line (D4).
-Periods are cut only through `apps/api/src/kernel/time/period.ts` in the merchant's single time zone (BR-184);
-refunds count on their completion day; report views and exports are audited; the supplier statement is
-received at order cost vs. cash paid (ADR-0102). Months close in order through `PeriodsService` with a stored
-pack; `assertPeriodOpen` refuses purchasing documents dated in a closed month (ADR-0103, BR-189/190).
-Ownership moves only through `OwnershipService` (owner flow with e-mailed code, or platform with a reason); a
-frozen owner is refused at login and on every request; audit entries carry `changes` from `diffFields`;
-variant price / cost changes are appended to `price_history` (ADR-0104, BR-020/191/192/193).
-Production is prepared for Google Cloud in Doha (Cloud Run + Cloud SQL, `infra/gcp/`, OPERATIONS.md §9,
-ADR-0105) and live since 2026-10-15 at `https://www.arabatapp.com` (started empty); `hosted-start` works without SUPERUSER/BYPASSRLS
-(`scripts/verify-managed-postgres.sh`); `FILE_STORAGE_DRIVER=gcs` stores images in Cloud Storage.
-Receipts also print server-side through print agents (ADR-0111): jobs are queued in the sale's transaction
-(`PrintJobsService.queueAutoInTx`), announced over PostgreSQL NOTIFY to the Socket.IO namespace `/print-agent`.
-Selling decisions (prices, limits, rights, tenders, shift notes, refunds) live in `packages/pos-core` (pure, no DB);
-the services load data and call it through `rules()` (`kernel/errors/pos-rule.ts`). Local-first devices: ADR-0112 (Accepted), contract `docs/DEVICE_API.md`, handover `docs/DEVICE_APP_HANDOVER.md`.
-Plan A (ADR-0112 amendment 2): one `primary` device per branch (`pos_devices.role`), which is also the branch's print
-agent with its device token; the browser POS signs in with name + PIN through a branch link (`PinSignInService`).
-Public site: landing `/` and pricing `/pricing` (`apps/landing-web`, ADR-0113/0114); pricing-page items live in the `pricing`
-module (`/platform/offer`); the pricing page's form opens a trial account through `/public/trial/start` (ADR-0115 amendment 3).
-Free-trial funnel `/start` and `/platform/trials` (`trials` module, ADR-0115): the account opens at once (no e-mail
-code in this phase, amendment 1), through `RegistrationService.createAccount`; every trial number is an operator setting.
-The landing navbar's "Our apps" dropdown reads `site_apps` (`site` module, `/platform/site-apps`, ADR-0117).
-Business management and the online console share the young look (ADR-0131): `@arabat/ui/vibe.css`, `Icon`,
-`ThemeSwitch` / `applyTheme` in web-core (key `arabat.theme`); other apps keep the Arabat palette.
-Online store (`docs/ONLINE_STORE_PLAN.md`): pay on receipt and store address (ADR-0118), the `/online` console
-(ADR-0119), merchandising (ADR-0121; one catalog with shared categories, a website switch on the listing, a POS switch
-`products.pos_visible`, collections and a trigger that lists every new product: ADR-0130), fulfilment (ADR-0123: delivery areas, serving branches, hours / slots, order
-e-mails after commit, packing slips, till hand-over through `/pos/online-orders`), shopper accounts (ADR-0124: e-mail +
-password realm `customer_accounts`, bearer `st_…` tokens, reset by e-mail, no SMS), promotions (ADR-0125: one per order,
-`POST /store/:slug/quote`, discount recorded on the sale), Phases 8–10 frontend only (ADR-0126); the console has its own palette and dark mode (ADR-0127); store design with draft / publish and live preview (ADR-0128; header system v2 with seven layouts, top bar, sub-menus / categories menu and ordered header buttons: amendment 1; footer system v2 with seven layouts, presets, recommendations, CTA, badges and folding blocks: amendment 2; page sections v2 with a look / screens / schedule per section, 8 new types, ready sections, ready home pages and recommendations: amendment 3; product page designer with `productPage` settings, presets, `pages.product` sections and `fewLeft` shown only under the merchant's own threshold: amendment 4; cart and checkout designer with `cartPage` / `checkoutPage`, `cartPreset` and `pages.cart` sections, nothing ordered from the preview: amendment 5; ready styles for every section type (`SECTION_STYLES`, `applySectionStyle`) and the categories page with ready layouts, recommendations and a richer categories section: amendment 6). Product discounts (ADR-0133): `product_discounts` never change catalog prices; the price in force comes from
-`catalog/discount-offers.ts` (`offersFor` / `inForce`) in every price path and `offerAt` (pos-core) on the tills; sale and
-online order lines keep `regular_unit_price_minor` + `product_discount_id`. Composite FKs must never carry
-`on delete set null` (it nulls `merchant_id`); reference the parent `id` alone.
-Stores answer at `{slug}.arabatapp.com` (ADR-0136, `STORE_DOMAIN`): the host names the store
-(`kernel/http/store-host.ts`, Fastify `rewriteUrl`), old `/store/{slug}` links answer 301 there; build
-store links only with `storeAddress` (API) and `storePath` (store-web). Plan for merchants' own domains:
-`docs/CUSTOM_DOMAINS_PLAN.md`.
-See `docs/PROGRESS.md` for the current state and `docs/ROADMAP.md` for next steps.
+Implemented: foundation, authentication, branches/employees/RBAC, manager dashboard, catalog,
+inventory, payments/registers/shifts, POS checkout, returns/refunds, purchasing and transfers,
+customers, reports, restaurant, online store (sandbox gateway only), local-first device tills,
+print agents, platform administration with plans and limits, landing / pricing / free trials.
+Production is live since 2026-10-15 at `https://www.arabatapp.com` (Google Cloud Doha, ADR-0105).
+No real payment gateway is connected and nothing is billed. Current state: `docs/PROGRESS.md`.
+
+Invariants (details, files and ADRs in the skill named in brackets):
+- Stock balances change **only** through `StockLedgerService.apply` / `reserve` [`stock-ledger`].
+- Cash balances change **only** through `payments/cash-ledger.ts`; expenses and supplier payments are
+  `cash_disbursements`; bank deposits need a second person's confirmation [`cash-ledger`].
+- Selling decisions live in `packages/pos-core` (pure); sale rights are checked in `completeSaleInTx`
+  with single-use supervisor overrides; refunds of one's own sales need a second person [`pos-selling-rules`, `device-app`].
+- Money is bigint fils, half-up, except online promotions which round down (BR-224) [`money-rules`].
+- Periods are cut only through `kernel/time/period.ts` in the merchant's time zone; closed months refuse
+  documents [`periods-and-time`].
+- Merchant id never comes from the client; platform code uses `withPlatformContext`; plan limits use
+  `assertCapacity` in the creating transaction [`tenant-isolation`, `subscriptions-platform`].
+- Composite FKs never carry `on delete set null` (it nulls `merchant_id`) [`new-migration`].
+- Ownership moves only through `OwnershipService`; security and financial actions are audited in the same
+  transaction; price/cost changes go to `price_history` [`ownership-and-accounts`, `audit-log`].
+- Catalog prices never change for discounts; the price in force comes from `offersFor` / `inForce` /
+  `offerAt`; store links only via `storeAddress` / `storePath` [`online-store`].
+
+Skills in `.claude/skills/` hold the procedures (setup, tests, migrations, ADRs, endpoints, permissions,
+web apps, release, operations, finishing a task) and the module maps; use them instead of re-reading
+the long docs.

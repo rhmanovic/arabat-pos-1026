@@ -59,8 +59,8 @@ the API through `packages/pos-core` (`evaluateSale` in `sale.ts`, called via `ru
 - Product discounts: `discountedPrice` (`packages/pos-core/src/discounts.ts`) half-up; never
   changes catalog prices; price in force via `offersFor`/`inForce`
   (`apps/api/src/modules/catalog/discount-offers.ts`) and `offerAt` (ADR-0133; `online-store` skill).
-- Online promotions: `apps/api/src/modules/ecommerce/promotions.service.ts` (percent half-up,
-  capped at the scoped lines, total kept above zero).
+- Online promotions: `apps/api/src/modules/ecommerce/promotions.service.ts` (percent rounded
+  **down** to fils, BR-224 — the one exception to half-up; capped at the scoped lines, total kept above zero).
 - Tax: not implemented (OQ-002, M12); there is no cash rounding (OQ-003). When tax is added it
   is half-up per line then summed (BR-033) and needs an ADR (`new-adr` skill).
 

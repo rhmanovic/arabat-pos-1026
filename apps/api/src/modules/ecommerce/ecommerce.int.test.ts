@@ -2154,6 +2154,23 @@ describe('promotions (ADR-0125)', () => {
     ).toEqual([ten.id, freeShip.id]);
     await app.get(OrderNotificationsService).drain();
   });
+
+  it('rounds a percentage discount down to fils (BR-224)', async () => {
+    const s = await setup({ gateway: false });
+    await s.ok('POST', '/manager/online/promotions', {
+      nameEn: 'Three and a half off',
+      kind: 'code',
+      code: 'odd35',
+      discountType: 'percentage',
+      percent: '3.5',
+    });
+    // 3.5% of 2.500 is 0.0875: the shopper gets 0.087, not 0.088.
+    expect((await quote(s, { promotionCode: 'ODD35' })).json()).toMatchObject({
+      subtotal: { amount: '2.500' },
+      discount: { amount: '0.087' },
+      promotion: { code: 'ODD35' },
+    });
+  });
 });
 
 describe('store design (ADR-0128)', () => {

@@ -12,6 +12,8 @@ Three separate applications on one origin:
 | `/store`    | Public online store (per merchant)  | http://localhost:5176/store/<address> |
 | `/links`    | Link-page editor (manager account)  | http://localhost:5177/links/     |
 | `/online`   | Online store console (manager account) | http://localhost:5178/online/  |
+| `/`         | Public landing and pricing pages    | http://localhost:5179/           |
+| `/device-app` | Local-first till (native app only) | http://localhost:5180/           |
 | `/api/v1`   | Backend API (NestJS + Fastify)      | http://localhost:3000/api/v1/    |
 
 Start with [CLAUDE.md](CLAUDE.md) and the documents in [docs/](docs/).
