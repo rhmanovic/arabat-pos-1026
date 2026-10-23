@@ -41,6 +41,8 @@ export default defineConfig({
       PUBLIC_MANAGER_URL: `${baseURL}/manager`,
       PUBLIC_POS_URL: `${baseURL}/pos`,
       PUBLIC_STORE_URL: `${baseURL}/store`,
+      // Stores at their own sub-domain (ADR-0136): Chromium resolves `*.localhost` to this server.
+      STORE_DOMAIN: 'localhost',
     },
   },
 });

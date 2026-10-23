@@ -2,14 +2,17 @@ import 'reflect-metadata';
 import fastifyCookie from '@fastify/cookie';
 import fastifyHelmet from '@fastify/helmet';
 import fastifyMultipart from '@fastify/multipart';
+import { isStoreSubdomain } from '@arabat/contracts';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { pino } from 'pino';
 import { AppModule } from './app.module.js';
 import type { Env } from './config/env.js';
 import { ProblemDetailsFilter } from './kernel/errors/problem.filter.js';
+import { trustProxyOption } from './kernel/http/client-ip.js';
 import { registerOriginCheck } from './kernel/http/origin-check.js';
 import { genRequestId } from './kernel/http/request-id.js';
+import { storeAddress, storeSlugFromHost, storeHostRewrite } from './kernel/http/store-host.js';
 import { PinoNestLogger, createLoggerOptions } from './kernel/logging/logger.js';
 import { StoreShareService } from './modules/ecommerce/store-share.service.js';
 import { serveWebApps } from './web/serve-web.js';
@@ -23,9 +26,14 @@ export function createAdapter(env: Env) {
     genReqId: genRequestId,
     requestIdHeader: false,
     bodyLimit: 1024 * 1024,
-    // Only configured proxies may set the client IP (rate limits, audit).
-    // Fastify accepts a hop count too; the Nest adapter's type omits it.
-    trustProxy: env.TRUST_PROXY as boolean | string[],
+    // Only configured proxies may set the client IP (rate limits, audit); behind the hop count,
+    // Cloudflare's own hop too (store sub-domains, ADR-0136). Fastify accepts a function; the
+    // Nest adapter's type omits it.
+    trustProxy: trustProxyOption(env.TRUST_PROXY) as boolean | string[],
+    // A store's sub-domain shows the store at `/` (ADR-0136).
+    ...(env.SERVE_WEB && env.STORE_DOMAIN
+      ? { rewriteUrl: storeHostRewrite(env.STORE_DOMAIN) }
+      : {}),
   });
   return { adapter, logger };
 }
@@ -78,6 +86,14 @@ export async function configureApp(app: NestFastifyApplication, env: Env): Promi
   if (env.SERVE_WEB)
     await serveWebApps(fastify, {
       storeMeta: (path, query) => app.get(StoreShareService, { strict: false }).tags(path, query),
+      ...(env.STORE_DOMAIN
+        ? {
+            stores: {
+              slugOfHost: (host) => storeSlugFromHost(host, env.STORE_DOMAIN),
+              subdomain: (slug) => (isStoreSubdomain(slug) ? storeAddress(env, slug) : null),
+            },
+          }
+        : {}),
     });
 }
 

@@ -1,3 +1,4 @@
+import { storePath } from '../address.js';
 import {
   type DesignLink,
   type DesignPage,
@@ -70,7 +71,7 @@ export function DesignProvider({ slug, children }: { slug: string; children: Rea
           cart: '/cart',
           checkout: '/checkout',
         }[msg.page];
-        void navigate(`/${slug}${path}`);
+        void navigate(storePath(slug, path));
       } else if (msg?.type === 'arabat:scroll') {
         // The editor's header and footer tabs bring their part of the store into view.
         requestAnimationFrame(() => {
@@ -123,26 +124,26 @@ export function linkTarget(
   link: DesignLink | null,
 ): { to: string; external: boolean } | null {
   if (!link) return null;
-  const base = `/${slug}`;
+  const to = (path = '') => storePath(slug, path);
   switch (link.kind) {
     case 'page':
       return {
         to: {
-          home: base,
-          products: `${base}/products`,
-          categories: `${base}/categories`,
-          cart: `${base}/cart`,
-          account: `${base}/account`,
+          home: to(),
+          products: to('/products'),
+          categories: to('/categories'),
+          cart: to('/cart'),
+          account: to('/account'),
         }[link.page],
         external: false,
       };
     case 'category':
-      return { to: `${base}/products?category=${link.categoryId}`, external: false };
+      return { to: to(`/products?category=${link.categoryId}`), external: false };
     case 'product':
-      return { to: `${base}/products/${link.productId}`, external: false };
+      return { to: to(`/products/${link.productId}`), external: false };
     case 'url':
       return link.url.startsWith('/')
-        ? { to: `${base}${link.url === '/' ? '' : link.url}`, external: false }
+        ? { to: to(link.url === '/' ? '' : link.url), external: false }
         : { to: link.url, external: true };
   }
 }

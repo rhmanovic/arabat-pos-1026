@@ -1,3 +1,4 @@
+import { storePath } from '../address.js';
 import { type FooterBlock, type FooterDesign, WEEKDAYS } from '@arabat/contracts';
 import { cn } from '@arabat/ui';
 import { type ReactNode, useId, useState } from 'react';
@@ -238,7 +239,7 @@ function Brand({
     >
       <div className={cn('flex flex-col gap-3', center && 'items-center')}>
         {logo || footer.brand.showName ? (
-          <Link to={`/${slug}`} className="inline-flex items-center gap-3">
+          <Link to={storePath(slug)} className="inline-flex items-center gap-3">
             {logo ? (
               <img src={store.logoUrl!} alt="" className="size-12 rounded-full object-cover" />
             ) : null}
@@ -438,7 +439,10 @@ function BlockView({
             .slice(0, 8)
             .map((c) => (
               <li key={c.id}>
-                <Link to={`/${slug}/products?category=${c.id}`} className="hover:underline">
+                <Link
+                  to={storePath(slug, `/products?category=${c.id}`)}
+                  className="hover:underline"
+                >
                   {name(c)}
                 </Link>
               </li>

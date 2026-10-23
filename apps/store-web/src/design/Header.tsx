@@ -1,3 +1,4 @@
+import { storePath } from '../address.js';
 import type { DesignLink, HeaderAction, NavItem, StoreDesign } from '@arabat/contracts';
 import { cn } from '@arabat/ui';
 import { LanguageSwitcher } from '@arabat/web-core';
@@ -414,7 +415,7 @@ function Brand({
   const showName = header.showName || !store.logoUrl;
   return (
     <Link
-      to={`/${slug}`}
+      to={storePath(slug)}
       className={cn(
         'flex min-w-0 items-center gap-2.5',
         stacked && 'lg:flex-col lg:gap-1 lg:text-center',
@@ -520,7 +521,7 @@ function Nav({ items, className }: { items: Item[]; className?: string }) {
         ) : (
           <NavLink
             to={target.to}
-            end={target.to === `/${slug}`}
+            end={target.to === storePath(slug)}
             className={({ isActive }) => cn(base, isActive && active)}
           >
             {item.label}
@@ -616,7 +617,7 @@ function CategoryMenu({ mega }: { mega: boolean }) {
               {categories.map((c) => (
                 <li key={c.id}>
                   <Link
-                    to={`/${slug}/products?category=${c.id}`}
+                    to={storePath(slug, `/products?category=${c.id}`)}
                     className="group flex flex-col items-center gap-2 rounded-2xl p-2 text-center text-sm font-semibold transition-colors hover:bg-surface-muted"
                   >
                     <span className="grid aspect-square w-full place-items-center overflow-hidden rounded-xl bg-primary-soft">
@@ -639,7 +640,7 @@ function CategoryMenu({ mega }: { mega: boolean }) {
             </ul>
           )}
           <Link
-            to={`/${slug}/categories`}
+            to={storePath(slug, `/categories`)}
             className="mt-5 inline-flex text-sm font-semibold text-primary hover:underline"
           >
             {t('nav.allCategories')}
@@ -653,7 +654,7 @@ function CategoryMenu({ mega }: { mega: boolean }) {
         {categories.map((c) => (
           <li key={c.id}>
             <Link
-              to={`/${slug}/products?category=${c.id}`}
+              to={storePath(slug, `/products?category=${c.id}`)}
               className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm hover:bg-surface-muted"
             >
               {c.imageUrl ? (
@@ -665,7 +666,7 @@ function CategoryMenu({ mega }: { mega: boolean }) {
         ))}
         <li className="mt-1 border-t border-border pt-1">
           <Link
-            to={`/${slug}/categories`}
+            to={storePath(slug, `/categories`)}
             className="block rounded-lg px-3 py-2 text-sm font-semibold text-primary hover:bg-surface-muted"
           >
             {t('nav.allCategories')}
@@ -695,7 +696,7 @@ function SearchBar({
   const location = useLocation();
   const [params] = useSearchParams();
   const { t } = useTranslation();
-  const onProducts = location.pathname === `/${slug}/products`;
+  const onProducts = location.pathname === storePath(slug, `/products`);
   const [q, setQ] = useState(onProducts ? (params.get('q') ?? '') : '');
   const go = (value: string, replace: boolean) => {
     const next = new URLSearchParams(onProducts ? params : undefined);
@@ -703,7 +704,7 @@ function SearchBar({
     if (value.trim()) next.set('q', value.trim());
     else next.delete('q');
     const query = next.toString();
-    void navigate(`/${slug}/products${query ? `?${query}` : ''}`, { replace });
+    void navigate(storePath(slug, `/products${query ? `?${query}` : ''}`), { replace });
   };
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -811,7 +812,7 @@ function Actions({
         );
       case 'account':
         return store?.accountsEnabled || token ? (
-          <Link to={`/${slug}/account`} className={cn(icon, 'max-sm:hidden')}>
+          <Link to={storePath(slug, `/account`)} className={cn(icon, 'max-sm:hidden')}>
             <StoreIcon name="user" />
             <span className="sr-only">{token ? t('nav.account') : t('nav.signIn')}</span>
           </Link>
@@ -852,7 +853,7 @@ function Actions({
         if (header.cartStyle === 'pill')
           return (
             <Link
-              to={`/${slug}/cart`}
+              to={storePath(slug, `/cart`)}
               // On phones the words hide: the button is a round icon with the count on its corner.
               className="relative inline-flex h-10 items-center gap-2 rounded-full bg-current/[0.07] text-sm font-semibold whitespace-nowrap transition-colors hover:bg-current/15 max-sm:w-10 max-sm:justify-center sm:px-4"
               data-testid="cart-button"
@@ -865,14 +866,14 @@ function Actions({
         if (header.cartStyle === 'text')
           return (
             <Link
-              to={`/${slug}/cart`}
+              to={storePath(slug, `/cart`)}
               className="inline-flex h-10 items-center px-2 text-sm font-semibold whitespace-nowrap hover:underline"
             >
               {label}
             </Link>
           );
         return (
-          <Link to={`/${slug}/cart`} className={cn(icon, 'relative')}>
+          <Link to={storePath(slug, `/cart`)} className={cn(icon, 'relative')}>
             <StoreIcon name="bag" />
             <span className="sr-only">{label}</span>
             {badge}
@@ -955,7 +956,7 @@ export function Drawer({ onClose }: { onClose: () => void }) {
             ) : (
               <NavLink
                 to={target.to}
-                end={target.to === `/${slug}`}
+                end={target.to === storePath(slug)}
                 className={({ isActive }) => cn(row, isActive && 'bg-primary-soft text-primary')}
               >
                 {item.label}
@@ -999,7 +1000,7 @@ export function Drawer({ onClose }: { onClose: () => void }) {
               {navGroups(store).map((c) => (
                 <li key={c.id}>
                   <Link
-                    to={`/${slug}/products?category=${c.id}`}
+                    to={storePath(slug, `/products?category=${c.id}`)}
                     className="flex flex-col items-center gap-1.5 rounded-xl p-2 text-center text-xs font-semibold hover:bg-surface-muted"
                   >
                     <span className="grid size-14 place-items-center overflow-hidden rounded-full bg-primary-soft">
@@ -1022,7 +1023,7 @@ export function Drawer({ onClose }: { onClose: () => void }) {
           <div className="flex flex-wrap items-center gap-3">
             {store.accountsEnabled || token ? (
               <Link
-                to={`/${slug}/account`}
+                to={storePath(slug, `/account`)}
                 className="inline-flex items-center gap-2 rounded-full bg-surface-muted px-4 py-2 text-sm font-semibold"
               >
                 <StoreIcon name="user" className="size-4" />

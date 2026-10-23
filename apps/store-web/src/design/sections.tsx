@@ -1,3 +1,4 @@
+import { storePath } from '../address.js';
 import {
   type DesignPage,
   type DesignSection,
@@ -599,7 +600,7 @@ function BuyButton({
   const single = p.variants.length === 1 ? p.variants[0]! : null;
   if (!single)
     return (
-      <Link to={`/${slug}/products/${p.productId}`} className={className} style={style}>
+      <Link to={storePath(slug, `/products/${p.productId}`)} className={className} style={style}>
         {t('design.chooseOptions')}
       </Link>
     );
@@ -662,7 +663,7 @@ export function ProductCard({
   if (variant === 'list')
     return (
       <Link
-        to={`/${slug}/products/${p.productId}`}
+        to={storePath(slug, `/products/${p.productId}`)}
         className={cn('flex gap-3 overflow-hidden rounded-lg p-2 hover:border-primary', card)}
       >
         <div className="size-20 shrink-0 overflow-hidden rounded-md bg-surface-muted">
@@ -680,7 +681,7 @@ export function ProductCard({
         </div>
       </Link>
     );
-  const to = `/${slug}/products/${p.productId}`;
+  const to = storePath(slug, `/products/${p.productId}`);
   const contain = look.imageFit === 'contain';
   const second = look.hoverImage ? (p.images[1] ?? null) : null;
   const corner =
@@ -936,8 +937,8 @@ function ProductsSection({ s }: { s: SectionOf<'products'> }) {
   if (shown.length === 0) return null;
   const more =
     s.source === 'category' && s.categoryId
-      ? `/${slug}/products?category=${s.categoryId}`
-      : `/${slug}/products`;
+      ? storePath(slug, `/products?category=${s.categoryId}`)
+      : storePath(slug, `/products`);
   return (
     <section aria-label={text(s.title) || undefined}>
       <SectionTitle
@@ -983,7 +984,7 @@ function CategoriesSection({ s }: { s: SectionOf<'categories'> }) {
   // On the categories page an empty store says so; elsewhere the section just stays out.
   if (list.length === 0)
     return page === 'categories' ? <EmptyState title={t('design.noCategories')} /> : null;
-  const to = (id: string) => `/${slug}/products?category=${id}`;
+  const to = (id: string) => storePath(slug, `/products?category=${id}`);
   const all = products.data?.products ?? [];
   // A category counts its own products and those of its subcategories.
   const familyOf = (id: string) => [
@@ -1086,7 +1087,7 @@ function CategoriesSection({ s }: { s: SectionOf<'categories'> }) {
         aside={
           s.showViewAll && page !== 'categories' ? (
             <Link
-              to={`/${slug}/categories`}
+              to={storePath(slug, `/categories`)}
               className="shrink-0 text-sm font-semibold text-primary hover:underline"
             >
               {t('design.seeAll')}
@@ -1502,7 +1503,7 @@ function MenuSection({ s }: { s: SectionOf<'menu'> }) {
                       className="flex items-center gap-3 border-b border-dashed border-border py-2"
                     >
                       <Link
-                        to={`/${store.slug}/products/${p.productId}`}
+                        to={storePath(store.slug, `/products/${p.productId}`)}
                         className="min-w-0 flex-1 font-medium hover:underline"
                       >
                         {name(p)}
@@ -1544,7 +1545,7 @@ function MenuSection({ s }: { s: SectionOf<'menu'> }) {
                       )}
                     >
                       <Link
-                        to={`/${store.slug}/products/${p.productId}`}
+                        to={storePath(store.slug, `/products/${p.productId}`)}
                         className="font-semibold after:absolute after:inset-0"
                       >
                         {name(p)}

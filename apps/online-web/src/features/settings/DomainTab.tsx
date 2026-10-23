@@ -21,6 +21,9 @@ export function DomainTab({ url, slug }: { url: string; slug: string }) {
       setTimeout(() => setCopied(false), 2000);
     });
   const host = new URL(url).host;
+  // The store's own sub-domain (ADR-0136) when its address is one; the shared domain otherwise.
+  const subdomain = host.startsWith(`${slug}.`);
+  const zone = subdomain ? host.slice(slug.length + 1) : host.replace(/^www\./, '');
   return (
     <div className="flex flex-col gap-4" data-testid="domain-tab">
       <Section title={t('domain.currentTitle')} description={t('domain.currentHint')}>
@@ -39,11 +42,17 @@ export function DomainTab({ url, slug }: { url: string; slug: string }) {
           </Button>
           <Badge tone="success">{t('domain.active')}</Badge>
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-fg-muted">
-          {t('domain.subdomain')}:
-          <span dir="ltr" className="font-medium text-fg">{`${slug}.arabatapp.com`}</span>
-          <Badge>{t('gateways.soon')}</Badge>
-        </div>
+        {subdomain ? (
+          <p className="mt-3 text-sm text-fg-muted" data-testid="domain-subdomain">
+            {t('domain.subdomainActive')}
+          </p>
+        ) : (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-fg-muted">
+            {t('domain.subdomain')}:
+            <span dir="ltr" className="font-medium text-fg">{`${slug}.arabatapp.com`}</span>
+            <Badge>{t('gateways.soon')}</Badge>
+          </div>
+        )}
       </Section>
 
       <Alert tone="info" title={t('domain.soonTitle')}>
@@ -129,7 +138,7 @@ export function DomainTab({ url, slug }: { url: string; slug: string }) {
                     <tr className="border-t border-border">
                       <td className="px-3 py-2 font-mono">CNAME</td>
                       <td className="px-3 py-2 font-mono">www</td>
-                      <td className="px-3 py-2 font-mono">{`stores.${host.replace(/^www\./, '')}`}</td>
+                      <td className="px-3 py-2 font-mono">{`stores.${zone}`}</td>
                     </tr>
                     <tr className="border-t border-border">
                       <td className="px-3 py-2 font-mono">TXT</td>

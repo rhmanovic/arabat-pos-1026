@@ -63,6 +63,19 @@ export const envSchema = z.object({
   /** Public URL of the storefront app (payment return links). */
   PUBLIC_STORE_URL: z.url().default('http://localhost:5176/store'),
   /**
+   * Stores answer at their own sub-domain `{slug}.STORE_DOMAIN` (ADR-0136), e.g. `arabatapp.com`
+   * behind a wildcard DNS record; the old `PUBLIC_STORE_URL/{slug}` addresses then redirect
+   * there. Empty (default): stores are served under `PUBLIC_STORE_URL` only.
+   */
+  STORE_DOMAIN: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^$|^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/, {
+      error: 'a host name such as arabatapp.com',
+    })
+    .default(''),
+  /**
    * The mock payment gateway (test payments, no money moves). Off by default in
    * production; real gateways (Tap, UPayments, Hesabe, Bookeey) are never live without
    * approval and tested credentials (ADR-0078).

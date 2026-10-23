@@ -1,3 +1,4 @@
+import { storePath } from '../address.js';
 import { ApiError } from '@arabat/api-client';
 import { formatDateTime } from '@arabat/i18n';
 import { Alert, Button, Checkbox, Field, Input, Select, Spinner, Textarea, cn } from '@arabat/ui';
@@ -122,7 +123,7 @@ export function CheckoutPage() {
     onSuccess: ({ order }) => {
       // Leave the page before emptying the cart, or the empty cart would send us to the cart page.
       if (order.paymentUrl) window.location.assign(order.paymentUrl);
-      else void navigate(`/${slug}/orders/${order.trackingToken}`, { replace: true });
+      else void navigate(storePath(slug, `/orders/${order.trackingToken}`), { replace: true });
       cart.clear();
     },
     onError: (error) => {
@@ -185,7 +186,7 @@ export function CheckoutPage() {
 
   if (!store || products.isPending) return <Spinner label={t('common:status.loading')} />;
   if (!products.data || (cart.lines.length === 0 && !checkout.isSuccess && !sample))
-    return <Navigate to={`/${slug}/cart`} replace />;
+    return <Navigate to={storePath(slug, `/cart`)} replace />;
 
   const payment =
     form.payment ?? store.paymentMethods[0]?.id ?? (store.payOnReceipt ? ON_RECEIPT : null);
@@ -268,7 +269,7 @@ export function CheckoutPage() {
           </Step>
           {store.accountsEnabled && !token ? (
             <p className="text-sm text-fg-muted">
-              <Link to={`/${slug}/account`} className="text-primary hover:underline">
+              <Link to={storePath(slug, `/account`)} className="text-primary hover:underline">
                 {t('nav.signIn')}
               </Link>{' '}
               {t('account.signInHint')}

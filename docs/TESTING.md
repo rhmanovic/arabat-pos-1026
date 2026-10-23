@@ -66,6 +66,23 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-23 (store sub-domains, ADR-0136)
+- `apps/api/src/kernel/http/store-host.test.ts` (+5): the store from the host name (case, port,
+  trailing dot; the platform's names, deeper names, look-alike domains, invalid labels refused);
+  `storeAddress` (sub-domain, shared address for labels that cannot be host names or without
+  `STORE_DOMAIN`, port kept); the rewrite (`/`, paths with query, other apps, API and `/store`
+  files kept); Cloudflare ranges; the client IP through the load balancer, through Cloudflare
+  and with a faked Cloudflare entry.
+- `apps/store-web/src/address.test.ts` (+2) and `apps/online-web/.../address.test.ts` (+2):
+  internal links at `/{slug}…` and at the root on the store's host; the console's address preview
+  for a sub-domain and for the shared address.
+- `e2e/store.spec.ts` (E2E runs with `STORE_DOMAIN=localhost`; Chromium resolves `*.localhost`):
+  every shopper flow now opens the store at its sub-domain through the old address; the console
+  shows the sub-domain; the old address answers 301 with the query; the page carries
+  `arabat-store` and `og:url` of the sub-domain; a product link stays on the sub-domain;
+  `/manager/` there is the store's "Page not found"; `/store/{slug}/cart` there answers 301 to
+  `/cart`.
+
 ### Results 2026-10-23 (settings tabs, ADR-0135)
 - `apps/online-web/src/app.test.tsx`: General is the first tab; Payment shows pay on receipt and
   five providers "Coming soon", choosing one changes the title and notification address, the

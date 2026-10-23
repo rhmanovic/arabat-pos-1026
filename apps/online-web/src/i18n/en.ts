@@ -1877,6 +1877,8 @@ export const onlineEn = {
     currentHint: 'Where shoppers find the store now. Share it anywhere.',
     active: 'Active',
     subdomain: 'Your sub-domain',
+    subdomainActive:
+      'This is your store’s own sub-domain, free and secured. Old links to your store move here by themselves.',
     soonTitle: 'Your own domain is coming',
     soonHint:
       'The screens are ready; searching, buying and connecting a domain come in a later phase. Nothing is searched or bought now.',

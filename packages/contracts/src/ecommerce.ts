@@ -68,8 +68,32 @@ export const RESERVED_STORE_SLUGS: readonly string[] = [
   'help',
   'support',
   'arabat',
+  // Host names of the platform's own DNS zone (stores answer at `{slug}.arabatapp.com`, ADR-0136).
+  'stores',
+  'send',
+  'rsend',
+  'smtp',
+  'ftp',
+  'cdn',
+  'static',
+  'status',
+  'docs',
+  'blog',
+  'dev',
+  'staging',
+  'ns1',
+  'ns2',
 ];
 export const STORE_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{1,40}$/;
+/**
+ * Whether a store address can be its own sub-domain (ADR-0136): a valid DNS label (no dash at
+ * the end, no `xx--` prefix kept for encoded names) that is not reserved. Others keep the
+ * `/store/{slug}` address.
+ */
+export const isStoreSubdomain = (slug: string): boolean =>
+  /^[a-z0-9](?:[a-z0-9-]{0,40}[a-z0-9])?$/.test(slug) &&
+  slug.slice(2, 4) !== '--' &&
+  !RESERVED_STORE_SLUGS.includes(slug);
 // ---------------------------------------------------------------- hours and slots (ADR-0123)
 export const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
 export type Weekday = (typeof WEEKDAYS)[number];

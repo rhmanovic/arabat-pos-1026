@@ -1,3 +1,4 @@
+import { storePath } from '../address.js';
 import type { StoreProduct } from '@arabat/contracts';
 import { Alert, Button, Spinner, cn } from '@arabat/ui';
 import { useEffect, useRef } from 'react';
@@ -70,7 +71,7 @@ export function CartPage() {
           {text(page.empty.text) ? (
             <p className="max-w-md text-fg-muted">{text(page.empty.text)}</p>
           ) : null}
-          <Link to={`/${slug}`} className="text-primary hover:underline">
+          <Link to={storePath(slug)} className="text-primary hover:underline">
             {t('cart.browse')}
           </Link>
         </div>
@@ -93,7 +94,7 @@ export function CartPage() {
       : Math.min(100, Number((priced.subtotal.minor * 100n) / minimum.minor));
   const canCheckout = !belowMinimum && store.acceptingOrders && priced.priced.length > 0;
   const checkoutLabel = text(page.checkoutLabel) || t('cart.checkout');
-  const goCheckout = () => void navigate(`/${slug}/checkout`);
+  const goCheckout = () => void navigate(storePath(slug, `/checkout`));
   const upsell = page.upsell.enabled
     ? upsellProducts(
         all,
@@ -147,7 +148,10 @@ export function CartPage() {
         </Button>
       </div>
       {page.continueShopping ? (
-        <Link to={`/${slug}/products`} className="text-center text-sm text-primary hover:underline">
+        <Link
+          to={storePath(slug, `/products`)}
+          className="text-center text-sm text-primary hover:underline"
+        >
           {t('cart.continue')}
         </Link>
       ) : null}
@@ -183,7 +187,7 @@ export function CartPage() {
                 <li key={l.variantId} className="flex flex-wrap items-center gap-3 p-3">
                   {page.images ? (
                     <Link
-                      to={`/${slug}/products/${l.productId}`}
+                      to={storePath(slug, `/products/${l.productId}`)}
                       className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-md bg-surface-muted text-fg-subtle"
                       tabIndex={-1}
                       aria-hidden

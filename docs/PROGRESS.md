@@ -1265,6 +1265,22 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-23 — Every store at its own sub-domain (ADR-0136)
+Owner's decision after the Cloudflare discussion: stores at `{slug}.arabatapp.com` (first phase
+of `docs/CUSTOM_DOMAINS_PLAN.md`).
+- Cloudflare: proxied `A *.arabatapp.com` → `34.49.242.209` created 2026-10-23 (free Universal
+  certificate for `*.arabatapp.com`, zone SSL Full); `www`, the bare domain and mail untouched.
+- API: `STORE_DOMAIN`; the host names the store (`rewriteUrl`), the page carries
+  `arabat-store`; old `/store/{slug}` addresses answer 301 to the sub-domain (not in the
+  console's preview frame); one `storeAddress` for the console, payment returns, order and
+  reset e-mails and link previews; zone names reserved; Cloudflare hop trusted for the client IP.
+- Storefront runs at `/` on its host (`hostRoutes`, every link through `storePath`); console
+  shows the sub-domain (address preview, Domain tab).
+- Not done (by design): merchants' own domains (phase 2, Cloudflare for SaaS) and buying domains
+  (phase 3). A shopper's cart and sign-in start fresh once on the new address.
+- Verified (cloud sandbox): `pnpm verify` 439 unit/web, `pnpm test:integration` 321 (46 files),
+  `pnpm test:e2e` 47 (with `STORE_DOMAIN=localhost`).
+
 ### 2026-10-23 — Settings tabs, gateway and domain screens (ADR-0135)
 Owner's requests: tabs in the store settings; a payment gateways tab (interface only, server
 controls disabled); domain search / buy / connect screens (interface only) and a plan; a round

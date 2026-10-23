@@ -1,3 +1,4 @@
+import { hostStore } from './address.js';
 import type { StoreProduct, Storefront } from '@arabat/contracts';
 import { isPreview } from './design/context.js';
 import { formatMoney } from '@arabat/i18n';
@@ -122,7 +123,9 @@ export function useBranchChoice() {
 }
 
 export function useSlug(): string {
-  return useParams()['slug'] ?? '';
+  const param = useParams()['slug'];
+  // On the store's own sub-domain the host names the store (ADR-0136).
+  return hostStore() ?? param ?? '';
 }
 
 export function useStorefront() {

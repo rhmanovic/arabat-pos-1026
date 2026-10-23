@@ -1,3 +1,4 @@
+import { storePath } from '../address.js';
 import { Alert, cn } from '@arabat/ui';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -94,15 +95,15 @@ function MobileBar() {
       className="fixed inset-x-0 bottom-0 z-30 flex border-t border-border bg-surface/95 backdrop-blur sm:hidden"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
-      <NavLink to={`/${slug}`} end className={item}>
+      <NavLink to={storePath(slug)} end className={item}>
         <StoreIcon name="home" />
         {t('nav.home')}
       </NavLink>
-      <NavLink to={`/${slug}/products`} className={item}>
+      <NavLink to={storePath(slug, `/products`)} className={item}>
         <StoreIcon name="grid" />
         {template === 'restaurant' ? t('nav.menu') : t('nav.catalog')}
       </NavLink>
-      <NavLink to={`/${slug}/cart`} className={item}>
+      <NavLink to={storePath(slug, `/cart`)} className={item}>
         <StoreIcon name="cart" />
         {t('nav.cart')}
         {cart.count > 0 ? (
@@ -115,7 +116,7 @@ function MobileBar() {
         ) : null}
       </NavLink>
       {store?.accountsEnabled || token ? (
-        <NavLink to={`/${slug}/account`} className={item}>
+        <NavLink to={storePath(slug, `/account`)} className={item}>
           <StoreIcon name="user" />
           {t('nav.accountShort')}
         </NavLink>

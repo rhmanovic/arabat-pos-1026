@@ -2167,6 +2167,40 @@ ADR; supersede it.
 - **Consequences:** smaller pictures for shoppers, no personal metadata kept, one place to change
   the format or the size rule.
 
+## ADR-0136 — Every store at its own sub-domain (`{slug}.arabatapp.com`)
+- **Status:** Accepted (2026-10-23). Owner's choice after discussing Cloudflare: each store at
+  `store666.arabatapp.com` rather than `www.arabatapp.com/store/store666` or
+  `store.arabatapp.com/store666`; first phase of `docs/CUSTOM_DOMAINS_PLAN.md`.
+- **Decision:**
+  - **DNS:** one proxied (orange) Cloudflare record `*.arabatapp.com` → the load balancer's IP;
+    `arabatapp.com`, `www` and the mail records stay DNS only (explicit records win over the
+    wildcard). Cloudflare's free Universal certificate covers `*.arabatapp.com`; the zone's SSL
+    mode is Full (the load balancer answers with its own certificate). No per-store record.
+  - **Setting `STORE_DOMAIN`** (production `arabatapp.com`, empty = old behaviour). A host
+    `{label}.STORE_DOMAIN` whose label is a store address that can be a host name
+    (`isStoreSubdomain`: DNS label, no `xx--`, not reserved) is that store: Fastify `rewriteUrl`
+    turns `/…` into `/store/{slug}/…` (the API and `/store/…` files keep their address; the
+    other apps are not served on a store host). The page carries `<meta name="arabat-store">`;
+    the storefront then runs at `/` (`hostRoutes`) and builds every internal link with
+    `storePath` (`apps/store-web/src/address.ts`).
+  - **Old addresses:** `GET /store/{slug}/…` answers 301 to `https://{slug}.STORE_DOMAIN/…`
+    (query kept), except inside the console's preview frame (`Sec-Fetch-Dest: iframe`), which
+    stays on the console's origin; `pay`, `links` and `assets` are not stores. `/store/{slug}/…`
+    typed on the store's own host answers 301 to `/…`.
+  - **One address builder:** `storeAddress(env, slug)` (`kernel/http/store-host.ts`) for the
+    console's address, payment return links, order e-mails, password-reset e-mails and link
+    previews (`og:url`, canonical). Addresses that cannot be host names keep `/store/{slug}`.
+  - **Reserved addresses** gain the zone's own names (`stores`, `send`, `rsend`, `smtp`, `ftp`,
+    `cdn`, `static`, `status`, `docs`, `blog`, `dev`, `staging`, `ns1`, `ns2`).
+  - **Client IP:** with a hop count in `TRUST_PROXY`, a hop from Cloudflare's published ranges
+    behind those hops is trusted too, so rate limits and the audit see the shopper.
+  - The sandbox payment page and link pages stay at `www.arabatapp.com/store/pay|links/…`; the
+    storefront's service worker is only registered under `/store/`.
+- **Consequences:** a shopper's cart and sign-in, kept in the browser per address, start fresh
+  once on the new address. A renamed store's old sub-domain still answers and moves to the new
+  one while the old slug resolves. Merchants' own domains (Cloudflare for SaaS) build on the same
+  host resolution (plan phase 2).
+
 ## ADR-0135 — Store settings in tabs; payment gateway and domain screens (interface only)
 - **Status:** Accepted (2026-10-23). Owner's requests: tabs for the store settings; a payment
   gateways tab with everything the interface needs, without backend or database work (controls

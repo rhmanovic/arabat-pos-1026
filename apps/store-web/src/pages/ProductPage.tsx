@@ -1,3 +1,4 @@
+import { storePath } from '../address.js';
 import type { ProductPageDesign, StoreProduct } from '@arabat/contracts';
 import { Badge, Button, Field, Select, cn, useToast } from '@arabat/ui';
 import { useEffect, useRef, useState } from 'react';
@@ -77,7 +78,7 @@ export function ProductPage() {
     return (
       <div className="flex flex-col items-start gap-3">
         <p>{t('product.notFound')}</p>
-        <Link to={`/${slug}`} className="text-primary hover:underline">
+        <Link to={storePath(slug)} className="text-primary hover:underline">
           {t('product.back')}
         </Link>
       </div>
@@ -309,14 +310,18 @@ function ProductView({ product, all }: { product: StoreProduct; all: StoreProduc
         <nav aria-label={t('product.breadcrumb')}>
           <ol className="flex flex-wrap items-center gap-1 text-xs text-fg-muted">
             <li>
-              <Link to={`/${slug}`} className="hover:text-primary hover:underline">
+              <Link to={storePath(slug)} className="hover:text-primary hover:underline">
                 {t('product.home')}
               </Link>
             </li>
             <li aria-hidden>/</li>
             <li>
               <Link
-                to={category ? `/${slug}/products?category=${category.id}` : `/${slug}/products`}
+                to={
+                  category
+                    ? storePath(slug, `/products?category=${category.id}`)
+                    : storePath(slug, `/products`)
+                }
                 className="hover:text-primary hover:underline"
               >
                 {category ? name(category) : t('product.products')}
@@ -329,13 +334,13 @@ function ProductView({ product, all }: { product: StoreProduct; all: StoreProduc
           </ol>
         </nav>
       ) : (
-        <Link to={`/${slug}`} className="text-sm text-primary hover:underline">
+        <Link to={storePath(slug)} className="text-sm text-primary hover:underline">
           {t('product.back')}
         </Link>
       )}
       {page.info.category && category ? (
         <Link
-          to={`/${slug}/products?category=${category.id}`}
+          to={storePath(slug, `/products?category=${category.id}`)}
           className="self-start rounded-full bg-primary-soft px-3 py-1 text-xs font-semibold text-primary"
         >
           {name(category)}
@@ -427,7 +432,7 @@ function ProductView({ product, all }: { product: StoreProduct; all: StoreProduc
                 disabled={!canAdd}
                 onClick={() => {
                   add();
-                  void navigate(`/${slug}/checkout`);
+                  void navigate(storePath(slug, `/checkout`));
                 }}
               >
                 {t('product.buyNow')}

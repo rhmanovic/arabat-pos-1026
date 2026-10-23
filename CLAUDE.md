@@ -266,4 +266,8 @@ password realm `customer_accounts`, bearer `st_…` tokens, reset by e-mail, no 
 `catalog/discount-offers.ts` (`offersFor` / `inForce`) in every price path and `offerAt` (pos-core) on the tills; sale and
 online order lines keep `regular_unit_price_minor` + `product_discount_id`. Composite FKs must never carry
 `on delete set null` (it nulls `merchant_id`); reference the parent `id` alone.
+Stores answer at `{slug}.arabatapp.com` (ADR-0136, `STORE_DOMAIN`): the host names the store
+(`kernel/http/store-host.ts`, Fastify `rewriteUrl`), old `/store/{slug}` links answer 301 there; build
+store links only with `storeAddress` (API) and `storePath` (store-web). Plan for merchants' own domains:
+`docs/CUSTOM_DOMAINS_PLAN.md`.
 See `docs/PROGRESS.md` for the current state and `docs/ROADMAP.md` for next steps.

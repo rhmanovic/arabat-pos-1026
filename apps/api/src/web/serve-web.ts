@@ -27,10 +27,20 @@ const APPS: Record<AppInterface | 'store' | 'links' | 'online', string> = {
  */
 /** The link-preview tags of a storefront address (ADR-0134), or null for the plain page. */
 export type StoreMeta = (path: string, query: URLSearchParams) => Promise<string | null>;
+/** Stores at their own sub-domain (ADR-0136). */
+export type StoreHosts = {
+  /** The store a request's host stands for, or null. */
+  slugOfHost: (host: string | undefined) => string | null;
+  /** A store's address at its sub-domain, or null when its address cannot be one. */
+  subdomain: (slug: string) => string | null;
+};
+
+/** Paths under `/store/` that are not a store (sandbox payments, link pages, files). */
+const STORE_APP_PATHS = ['pay', 'links', 'assets'];
 
 export async function serveWebApps(
   fastify: FastifyInstance,
-  options: { storeMeta?: StoreMeta } = {},
+  options: { storeMeta?: StoreMeta; stores?: StoreHosts } = {},
 ): Promise<void> {
   let first = true;
   for (const [appInterface, folder] of Object.entries(APPS)) {
@@ -76,10 +86,30 @@ export async function serveWebApps(
       // page is sent with its title, description and picture already in (ADR-0134).
       const html = readFileSync(join(root, 'index.html'), 'utf8');
       const storeMeta = options.storeMeta;
+      const stores = options.stores;
       fastify.get(`/${appInterface}/*`, async (request: FastifyRequest, reply: FastifyReply) => {
         const url = new URL(request.url, 'http://store.local');
+        const [slug = '', ...rest] = url.pathname.replace(/^\/store\/?/, '').split('/');
+        const hostSlug = stores?.slugOfHost(request.headers.host) ?? null;
+        if (stores && hostSlug) {
+          // `/store/{slug}/…` typed on the store's own host: its address there is `/…`.
+          if (request.originalUrl.startsWith('/store/') && slug === hostSlug)
+            return reply.redirect(`/${rest.join('/')}${url.search}`, 301);
+        } else if (stores && slug && !STORE_APP_PATHS.includes(slug)) {
+          // The old address moves to the store's sub-domain, except inside the console's
+          // preview frame, which must stay on the console's origin (ADR-0128).
+          const target = stores.subdomain(slug);
+          if (target && request.headers['sec-fetch-dest'] !== 'iframe')
+            return reply.redirect(`${target}/${rest.join('/')}${url.search}`, 301);
+        }
         const tags = await storeMeta(url.pathname, url.searchParams).catch(() => null);
-        const page = tags ? html.replace(/<title>[^<]*<\/title>/, tags) : html;
+        let page = tags ? html.replace(/<title>[^<]*<\/title>/, tags) : html;
+        // On its own host the storefront runs at `/` and learns its store from this tag.
+        if (hostSlug && slug === hostSlug)
+          page = page.replace(
+            '</head>',
+            `<meta name="arabat-store" content="${hostSlug}" />\n  </head>`,
+          );
         return reply
           .header('cache-control', 'no-cache')
           .header('content-type', 'text/html; charset=utf-8')

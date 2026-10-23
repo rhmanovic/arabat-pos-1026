@@ -78,7 +78,9 @@ test('a shopper buys online with the sandbox gateway; the order, stock and repor
   await page.getByLabel('Delivery fee').fill('0.500');
   await page.getByRole('button', { name: 'Save' }).click();
   await page.getByRole('tab', { name: /General/ }).click();
-  await expect(page.getByRole('link', { name: new RegExp(`/store/${slug}$`) })).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: new RegExp(`//${slug}\\.localhost:\\d+$`) }),
+  ).toBeVisible();
 
   // An anonymous shopper (separate browser context, no session) buys 2.
   const shopperContext = await browser.newContext();
@@ -206,7 +208,9 @@ test('a shopper orders without any gateway and pays at pickup; staff confirm, re
   const address = page.getByLabel('Store address');
   await address.fill(slug);
   await expect(page.getByText('Available', { exact: true })).toBeVisible();
-  await expect(page.getByTestId('store-url-preview')).toHaveText(new RegExp(`/store/${slug}$`));
+  await expect(page.getByTestId('store-url-preview')).toHaveText(
+    new RegExp(`//${slug}\\.localhost:\\d+$`),
+  );
   await page.getByLabel('Store name (English)').fill('Date House');
   await page.getByLabel('Status').selectOption('published');
   await page.getByRole('tab', { name: /Delivery and hours/ }).click();
@@ -215,7 +219,9 @@ test('a shopper orders without any gateway and pays at pickup; staff confirm, re
   await expect(page.getByRole('checkbox', { name: 'Allow payment on receipt' })).toBeChecked();
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByRole('tab', { name: /General/ }).click();
-  await expect(page.getByRole('link', { name: new RegExp(`/store/${slug}$`) })).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: new RegExp(`//${slug}\\.localhost:\\d+$`) }),
+  ).toBeVisible();
 
   // The shopper orders 2 to pay at pickup; nothing is reserved.
   const shopperContext = await browser.newContext();
@@ -567,7 +573,7 @@ test('the owner designs the store as a restaurant, previews it live and publishe
   await menu.getByRole('button', { name: 'Add one Karak tea to the cart' }).click();
   await expect(shopper.getByRole('link', { name: 'Cart (1)' })).toBeVisible();
   await shopper.getByRole('link', { name: 'Menu' }).first().click();
-  await expect(shopper).toHaveURL(new RegExp(`/store/${slug}/products$`));
+  await expect(shopper).toHaveURL(new RegExp(`//${slug}\\.localhost:\\d+/products$`));
   await shopper.goto(`/store/${slug}/products/${product.id as string}`);
   await expect(shopper.getByTestId('product-page')).toHaveAttribute('data-layout', 'compact');
   await shopper.getByRole('button', { name: 'Increase quantity' }).click();
@@ -878,8 +884,35 @@ test('a product discount made in the console shows in the store with its badge a
   await expect(product.locator('[data-old-price]')).toContainText('2.000');
   await expect(product.locator('[data-sale-price]')).toContainText('1.500');
 
-  // Link previews (ADR-0134): the served page already carries the store's tags.
-  const html = await (await page.request.get(`/store/${slug}`)).text();
+  // Link previews (ADR-0134): the served page already carries the store's tags. Node does not
+  // resolve `*.localhost`, so requests name the store's host in the Host header (ADR-0136).
+  const port = new URL(page.url()).port;
+  const home = `http://${slug}.localhost:${port}`;
+  const onHost = (path: string) =>
+    page.request.get(`http://localhost:${port}${path}`, {
+      headers: { host: `${slug}.localhost:${port}` },
+      maxRedirects: 0,
+    });
+  const html = await (await onHost('/')).text();
   expect(html).toContain('<title>Rose</title>');
   expect(html).toContain('<meta property="og:title" content="Rose" />');
+
+  // Stores at their own sub-domain (ADR-0136): the old address moves there, the page names
+  // its store, the links point there, and the other apps are not served on it.
+  const old = await page.request.get(`/store/${slug}/products?category=x`, { maxRedirects: 0 });
+  expect(old.status()).toBe(301);
+  expect(old.headers()['location']).toBe(`${home}/products?category=x`);
+  expect(html).toContain(`<meta name="arabat-store" content="${slug}" />`);
+  expect(html).toContain(`<meta property="og:url" content="${home}" />`);
+  await expect(page).toHaveURL(`${home}/products`);
+  await page.getByRole('link', { name: 'Rose water' }).first().click();
+  await expect(page).toHaveURL(new RegExp(`^${home}/products/[0-9a-f-]{36}$`));
+  await page.goto(`${home}/manager/`);
+  await expect(
+    page.getByRole('heading', { name: /Page not found|الصفحة غير موجودة/ }),
+  ).toBeVisible();
+  // On its own host, `/store/{slug}/…` is the same page at its short address.
+  const long = await onHost(`/store/${slug}/cart`);
+  expect(long.status()).toBe(301);
+  expect(long.headers()['location']).toBe('/cart');
 });

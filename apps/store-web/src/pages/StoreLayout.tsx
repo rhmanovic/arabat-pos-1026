@@ -1,3 +1,4 @@
+import { hostStore } from '../address.js';
 import { ErrorState, NotFound } from '@arabat/web-core';
 import { ApiError } from '@arabat/api-client';
 import { Navigate, useLocation } from 'react-router';
@@ -22,6 +23,11 @@ export function StoreLayout() {
       <ErrorState error={store.error} onRetry={() => void store.refetch()} fullPage />
     );
   // A renamed store still answers on its old address for a while: move to the current one.
+  if (store.data.slug !== slug && hostStore()) {
+    // On its own sub-domain the address to change is the host name (ADR-0136).
+    window.location.replace(window.location.href.replace(`//${slug}.`, `//${store.data.slug}.`));
+    return <StoreSkeleton />;
+  }
   if (store.data.slug !== slug)
     return (
       <Navigate

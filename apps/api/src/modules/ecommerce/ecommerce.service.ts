@@ -37,6 +37,7 @@ import { type SQL, and, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import { createHash, randomBytes } from 'node:crypto';
 import type { z } from 'zod';
 import { ENV } from '../../config/config.module.js';
+import { storeAddress } from '../../kernel/http/store-host.js';
 import type { Env } from '../../config/env.js';
 import { DatabaseService, type Transaction } from '../../database/database.service.js';
 import { nextDocumentNumber } from '../../database/schema/sequences.schema.js';
@@ -168,7 +169,7 @@ export class EcommerceService {
   }
 
   private storeUrl(slug: string) {
-    return `${this.env.PUBLIC_STORE_URL.replace(/\/$/, '')}/${slug}`;
+    return storeAddress(this.env, slug);
   }
 
   private async onlineMethods(tx: Transaction) {

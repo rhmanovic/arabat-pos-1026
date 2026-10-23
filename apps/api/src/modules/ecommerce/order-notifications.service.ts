@@ -2,6 +2,7 @@ import { Money } from '@arabat/money';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { ENV } from '../../config/config.module.js';
+import { storeAddress } from '../../kernel/http/store-host.js';
 import type { Env } from '../../config/env.js';
 import { DatabaseService } from '../../database/database.service.js';
 import { type MailMessage, Mailer } from '../../kernel/mail/mailer.js';
@@ -140,7 +141,7 @@ export class OrderNotificationsService {
   }
 
   private trackingUrl(order: OrderMail) {
-    return `${this.env.PUBLIC_STORE_URL.replace(/\/$/, '')}/${order.storeSlug}/orders/${order.trackingToken}`;
+    return `${storeAddress(this.env, order.storeSlug)}/orders/${order.trackingToken}`;
   }
 
   private consoleUrl() {

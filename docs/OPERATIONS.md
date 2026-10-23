@@ -243,6 +243,7 @@ Created on 2026-10-15 with the owner's approval (cost, go-live, DNS). Project `a
 | Resource | Name / value |
 |---|---|
 | Domain | `https://www.arabatapp.com` (primary, owner 2026-10-15); `arabatapp.com` and `app.arabatpos.com` → 301 to it. Cloudflare `A` records (zones `arabatapp.com`, `arabatpos.com`) → `34.49.242.209`, DNS only (not proxied) |
+| Store sub-domains | `{slug}.arabatapp.com` (ADR-0136): Cloudflare `A *.arabatapp.com` → `34.49.242.209`, **proxied** (created 2026-10-23; Universal certificate covers `*.arabatapp.com`, zone SSL mode Full). Cloud Run gets `STORE_DOMAIN=arabatapp.com` from `config.env`. Create the record before a release sets `STORE_DOMAIN`, or old `/store/{slug}` links redirect to a host that does not answer |
 | Load balancer | static IP `arabat-ip` 34.49.242.209; `arabat-https-rule` (443) → `arabat-https-proxy` (certs `arabat-cert-<host>`, one per host) → `arabat-https` (host rule: redirect hosts → 301 to `DOMAIN`) → `arabat-backend` → serverless NEG `arabat-neg`; `arabat-http-rule` (80) → `arabat-http-redirect` (301 to HTTPS) |
 | Cloud Run | service `arabat-web` (ingress internal + load balancer; `https://arabat-web-881032041590.me-central1.run.app` is closed), job `arabat-migrate` |
 | Cloud SQL | `arabat-prod-db` (PostgreSQL 18, `db-custom-1-3840`, zonal), database `arabat`, connection `arabat-511416:me-central1:arabat-prod-db`; started **empty** (Railway untouched) |

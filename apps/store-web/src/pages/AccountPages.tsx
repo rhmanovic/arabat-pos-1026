@@ -1,3 +1,4 @@
+import { storePath } from '../address.js';
 import { ApiError } from '@arabat/api-client';
 import type { CustomerAddress } from '@arabat/contracts';
 import { formatDateTime } from '@arabat/i18n';
@@ -16,7 +17,7 @@ export function AccountLayout() {
   const { token, account, isPending, signOut } = useAccount();
   const { data: store } = useStorefront();
   const navigate = useNavigate();
-  if (store && !store.accountsEnabled && !token) return <Navigate to={`/${slug}`} replace />;
+  if (store && !store.accountsEnabled && !token) return <Navigate to={storePath(slug)} replace />;
   if (!token) return <SignInPage />;
   if (isPending) return <Spinner label={t('common:status.loading')} />;
   const tab = (to: string, label: string) => (
@@ -40,16 +41,16 @@ export function AccountLayout() {
           variant="ghost"
           size="sm"
           onClick={() => {
-            void signOut().then(() => navigate(`/${slug}`));
+            void signOut().then(() => navigate(storePath(slug)));
           }}
         >
           {t('account.signOut')}
         </Button>
       </div>
       <nav className="flex flex-wrap gap-1" aria-label={t('account.title')}>
-        {tab(`/${slug}/account`, t('account.orders'))}
-        {tab(`/${slug}/account/addresses`, t('account.addresses'))}
-        {tab(`/${slug}/account/profile`, t('account.profile'))}
+        {tab(storePath(slug, `/account`), t('account.orders'))}
+        {tab(storePath(slug, `/account/addresses`), t('account.addresses'))}
+        {tab(storePath(slug, `/account/profile`), t('account.profile'))}
       </nav>
       <Outlet />
     </div>
@@ -165,7 +166,10 @@ function SignInPage() {
         {mode === 'login' ? t('account.signIn') : t('account.createAccount')}
       </Button>
       {mode === 'login' ? (
-        <Link to={`/${slug}/account/forgot`} className="text-sm text-primary hover:underline">
+        <Link
+          to={storePath(slug, `/account/forgot`)}
+          className="text-sm text-primary hover:underline"
+        >
           {t('account.forgot')}
         </Link>
       ) : null}
@@ -194,7 +198,7 @@ export function AccountOrdersPage() {
         <li key={o.number} className="flex flex-wrap items-center justify-between gap-2 p-3">
           <span>
             <Link
-              to={`/${slug}/orders/${o.trackingToken}`}
+              to={storePath(slug, `/orders/${o.trackingToken}`)}
               className="font-medium text-primary hover:underline"
               dir="ltr"
             >
@@ -512,7 +516,7 @@ export function ForgotPasswordPage() {
           </Button>
         </>
       )}
-      <Link to={`/${slug}/account`} className="text-sm text-primary hover:underline">
+      <Link to={storePath(slug, `/account`)} className="text-sm text-primary hover:underline">
         {t('account.backToSignIn')}
       </Link>
     </form>
@@ -541,7 +545,7 @@ export function ResetPasswordPage() {
       {reset.isSuccess ? (
         <>
           <Alert tone="success">{t('account.resetDone')}</Alert>
-          <Link to={`/${slug}/account`} className="text-sm text-primary hover:underline">
+          <Link to={storePath(slug, `/account`)} className="text-sm text-primary hover:underline">
             {t('account.backToSignIn')}
           </Link>
         </>

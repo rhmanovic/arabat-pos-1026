@@ -1,6 +1,6 @@
 # Custom domains for online stores — plan
 
-Status: **plan only** (2026-10-23, ADR-0135). The store console already shows the screens
+Status: **phase 1 done** (ADR-0136); the rest is a plan (2026-10-23, ADR-0135). The store console already shows the screens
 (Settings → Domain), disabled. Nothing below is built yet; each phase needs the owner's go-ahead,
 and anything that costs money (Cloudflare plans, domain purchases) needs explicit approval
 (CLAUDE.md §3.13).
@@ -41,13 +41,17 @@ A merchant can:
 - **One canonical address.** When a domain is active and primary, the old `/store/{slug}` address
   answers with a 301 to it, and the link-preview `og:url` / canonical use it.
 
-## Phase 1 — free sub-domain `{slug}.arabatapp.com`
+## Phase 1 — free sub-domain `{slug}.arabatapp.com` — **done (ADR-0136, 2026-10-23)**
 
-- Needs a wildcard DNS record `*.arabatapp.com` and a wildcard certificate in front of Cloud Run.
-  Cloud Run domain mappings do not take wildcards: either a Google external HTTPS load balancer
-  with a wildcard certificate, or Cloudflare proxying `arabatapp.com` (wildcard proxied record,
-  Cloudflare edge certificate). Decision at the start of the phase, with costs.
-- Renaming the store address moves the sub-domain; the old one redirects for 30 days.
+- Cloudflare proxies a wildcard record `*.arabatapp.com` (free Universal certificate, SSL mode
+  Full) to the existing load balancer; `www`, the bare domain and mail records stay DNS only.
+- `STORE_DOMAIN=arabatapp.com`: the host names the store, the storefront runs at `/`, old
+  `/store/{slug}` addresses answer 301 to the sub-domain, every store link (console, e-mails,
+  payment return, link previews) uses `storeAddress`.
+- Renaming the store address moves the sub-domain; the old one keeps answering (and moves to the
+  new one) for the 90 days a former address resolves (ADR-0118).
+- Phase 0's host-based resolution is in place for sub-domains; the `store_domains` table comes
+  with phase 2.
 
 ## Phase 2 — connect a domain the merchant owns (Cloudflare for SaaS)
 
@@ -68,11 +72,11 @@ A merchant can:
 
 - **Availability and price:** a registrar API that answers availability and the yearly price for
   a name and ending (`.com`, `.store`, `.shop`, `.net`, `.co`, `.online`…). Cloudflare Registrar
-  sells at cost, but registering new domains through its public API must be confirmed at the
-  start of the phase (its API has long covered managing domains already in the account rather
-  than buying new ones). If it is not available, use a registrar with a full purchase API and
-  put the domain on Cloudflare DNS, or keep Cloudflare and buy from its dashboard by hand at
-  first. This is the first thing to verify in this phase.
+  sells at cost. Its Registrar API (beta since 2026-04) searches, checks availability and
+  registers new domains (`POST /accounts/{id}/registrar/registrations`, registrant contact
+  inline), charged to the Arabat account's payment method, for a curated set of endings;
+  renewals and transfers are not in the API yet (auto-renew, dashboard). Re-check its terms for
+  registering on behalf of merchants at the start of the phase.
 - **Who owns the domain:** registered with the merchant's details as the registrant (they own
   it), Arabat as the technical contact; documented in the terms of service.
 - **Paying:** the merchant pays the yearly price (plus a margin, if the owner wants one) before
@@ -101,6 +105,9 @@ phase that builds it.
 
 ## Open questions for the owner
 
-1. Do we put Cloudflare in front of `arabatapp.com` (needed for phases 1–2 in the simplest form)?
+1. ~~Do we put Cloudflare in front of `arabatapp.com`?~~ Yes for store sub-domains (ADR-0136);
+   `www` stays DNS only for now. Phase 2 also needs Cloudflare for SaaS enabled on the zone
+   (a payment method on the Cloudflare account; first 100 hostnames included, then $0.10 per
+   hostname per month, checked 2026-10-23).
 2. Charge for the sub-domain / connected domain, or include them in a plan?
 3. Margin on domain prices, and which endings to offer first (`.com`, `.store`, `.shop`…)?

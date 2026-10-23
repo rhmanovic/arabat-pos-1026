@@ -92,6 +92,12 @@ Anonymous funnel steps are counted. `/manager/register` stays open.
 
 No session; every call goes to the public store API. Cart kept per store in the browser.
 
+**Own sub-domain (ADR-0136):** with `STORE_DOMAIN` set (production `arabatapp.com`) each store is
+served at `https://{slug}.arabatapp.com/…` with the same pages without the `/store/:slug` prefix
+(`/`, `/products`, `/products/:productId`, `/cart`, `/checkout`, `/orders/:token`, `/account…`).
+`/store/:slug/…` on the shared host answers 301 there (query kept; not inside the console's
+preview frame); `/store/pay/…` and `/store/links/…` stay on the shared host.
+
 | Route | Screen |
 |---|---|
 | `/store/:slug` | Catalog: banner and logo, featured products, search, sorting (store order, name, price), store or catalog categories with pictures, sold-out badges (ADR-0121) |

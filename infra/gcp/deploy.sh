@@ -40,7 +40,7 @@ if gc secrets describe mail-api-key >/dev/null 2>&1; then
 else
   echo "== E-mail: SMTP_URL (no secret mail-api-key)"
 fi
-ENV_VARS="APP_VERSION=$TAG,PAYMENT_MOCK_ENABLED=false,FILE_STORAGE_DRIVER=gcs,GCS_BUCKET=$UPLOADS_BUCKET,TRUST_PROXY=$TRUST_PROXY,PUBLIC_MANAGER_URL=https://$DOMAIN/manager,PUBLIC_POS_URL=https://$DOMAIN/pos,PUBLIC_STORE_URL=https://$DOMAIN/store,MAIL_FROM=Arabat POS <no-reply@${MAIL_DOMAIN:-$DOMAIN}>$MAIL_VARS"
+ENV_VARS="APP_VERSION=$TAG,PAYMENT_MOCK_ENABLED=false,FILE_STORAGE_DRIVER=gcs,GCS_BUCKET=$UPLOADS_BUCKET,TRUST_PROXY=$TRUST_PROXY,PUBLIC_MANAGER_URL=https://$DOMAIN/manager,PUBLIC_POS_URL=https://$DOMAIN/pos,PUBLIC_STORE_URL=https://$DOMAIN/store,STORE_DOMAIN=${STORE_DOMAIN:-},MAIL_FROM=Arabat POS <no-reply@${MAIL_DOMAIN:-$DOMAIN}>$MAIL_VARS"
 
 echo "== Build $IMAGE"
 if ! gc artifacts docker images describe "$IMAGE" >/dev/null 2>&1; then

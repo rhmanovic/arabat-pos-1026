@@ -3,6 +3,7 @@ import { Money } from '@arabat/money';
 import { Inject, Injectable } from '@nestjs/common';
 import sharp from 'sharp';
 import { ENV } from '../../config/config.module.js';
+import { storeAddress } from '../../kernel/http/store-host.js';
 import type { Env } from '../../config/env.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { EcommerceService } from './ecommerce.service.js';
@@ -81,7 +82,7 @@ export class StoreShareService {
 
   private async meta(front: Storefront, rest: string[], query: URLSearchParams): Promise<Meta> {
     const storeName = name(front) || front.slug;
-    const pageUrl = `${this.base}/${encodeURIComponent(front.slug)}`;
+    const pageUrl = storeAddress(this.env, front.slug);
     const image = (target: Partial<ShareTarget> = {}) => {
       const q = new URLSearchParams();
       if (target.product) q.set('product', target.product);

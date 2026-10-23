@@ -29,27 +29,42 @@ export const routes: RouteObject[] = [
     path: '/:slug',
     element: <StoreLayout />,
     errorElement: <RouteErrorBoundary />,
-    children: [
-      // Pages built from the store design's sections (ADR-0128).
-      { index: true, element: <DesignedPage page="home" /> },
-      { path: 'products', element: <DesignedPage page="products" /> },
-      { path: 'categories', element: <DesignedPage page="categories" /> },
-      { path: 'products/:productId', element: <ProductPage /> },
-      { path: 'cart', element: <CartPage /> },
-      { path: 'checkout', element: <CheckoutPage /> },
-      { path: 'orders/:token', element: <OrderPage /> },
-      { path: 'account/forgot', element: <ForgotPasswordPage /> },
-      { path: 'account/reset/:token', element: <ResetPasswordPage /> },
-      {
-        path: 'account',
-        element: <AccountLayout />,
-        children: [
-          { index: true, element: <AccountOrdersPage /> },
-          { path: 'addresses', element: <AccountAddressesPage /> },
-          { path: 'profile', element: <AccountProfilePage /> },
-        ],
-      },
-      { path: '*', element: <NotFound /> },
-    ],
+    children: storePages(),
   },
 ];
+
+/** On the store's own sub-domain (ADR-0136) its pages are at the root. */
+export const hostRoutes: RouteObject[] = [
+  {
+    path: '/',
+    element: <StoreLayout />,
+    errorElement: <RouteErrorBoundary />,
+    children: storePages(),
+  },
+];
+
+/** The pages of one store, relative to its address. */
+function storePages(): RouteObject[] {
+  return [
+    // Pages built from the store design's sections (ADR-0128).
+    { index: true, element: <DesignedPage page="home" /> },
+    { path: 'products', element: <DesignedPage page="products" /> },
+    { path: 'categories', element: <DesignedPage page="categories" /> },
+    { path: 'products/:productId', element: <ProductPage /> },
+    { path: 'cart', element: <CartPage /> },
+    { path: 'checkout', element: <CheckoutPage /> },
+    { path: 'orders/:token', element: <OrderPage /> },
+    { path: 'account/forgot', element: <ForgotPasswordPage /> },
+    { path: 'account/reset/:token', element: <ResetPasswordPage /> },
+    {
+      path: 'account',
+      element: <AccountLayout />,
+      children: [
+        { index: true, element: <AccountOrdersPage /> },
+        { path: 'addresses', element: <AccountAddressesPage /> },
+        { path: 'profile', element: <AccountProfilePage /> },
+      ],
+    },
+    { path: '*', element: <NotFound /> },
+  ];
+}

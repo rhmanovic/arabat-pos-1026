@@ -221,7 +221,7 @@ function SettingsForm({ store }: { store: OnlineStore }) {
   );
   const ready = store.paymentMethods.filter((m) => m.ready);
   const slugCheck = useSlugCheck(v.slug, store.slug);
-  const preview = store.url.replace(/[^/]*$/, v.slug.trim().toLowerCase());
+  const preview = addressWithSlug(store.url, store.slug, v.slug.trim().toLowerCase());
   const [copied, setCopied] = useState(false);
   const copy = () => {
     void navigator.clipboard?.writeText(store.url).then(() => {
@@ -696,4 +696,15 @@ function ImageField({ kind, url }: { kind: 'logo' | 'banner'; url: string | null
       </div>
     </div>
   );
+}
+
+/**
+ * The store's address with another slug: its sub-domain (`store666.arabatapp.com`, ADR-0136)
+ * or the last part of the shared `/store/{slug}` address.
+ */
+export function addressWithSlug(url: string, current: string, slug: string): string {
+  const address = new URL(url);
+  if (address.hostname.startsWith(`${current}.`))
+    return `${address.protocol}//${slug}${address.host.slice(current.length)}`;
+  return url.replace(/[^/]*$/, slug);
 }
