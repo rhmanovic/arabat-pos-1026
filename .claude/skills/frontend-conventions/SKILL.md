@@ -138,3 +138,14 @@ it('closes a month and reports a refused close', async () => {
 Cover per feature: permission absent → `AccessDenied`/hidden action, an `ApiError` path, and
 one Arabic render (`changeLanguage('ar')`, check `document.documentElement.dir === 'rtl'`).
 Paths/bodies above are illustrative: copy the real ones from the contracts and client.
+
+jsdom gotchas (learned on the assistant panel):
+- jsdom has no media queries: every responsive variant renders at once, so a button that exists
+  in the phone row **and** the sidebar appears twice. Use `getAllByRole(...)[0]` /
+  `findAllByText`, or scope with `within(screen.getByRole('navigation', { name: '…' }))`.
+- `window.matchMedia` is undefined: pointer checks such as `hasCoarsePointer()` return false,
+  so "Enter sends" paths run in tests and touch-only paths never do.
+- A context setter passed through a provider must be `useCallback`-stable and ignore equal
+  values (compare JSON); otherwise a page that recomputes its payload every render and an
+  effect that publishes it loop forever, which shows up as a test timeout and a frozen page.
+- A TanStack query with `enabled: false` stays `isPending`; branch on `isLoading`/`data`, not `isPending`.

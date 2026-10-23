@@ -41,10 +41,14 @@ git ls-tree --name-only origin/main apps/api/drizzle/ | sort | tail -3   # highe
 
 ## 3. Generate and hand-finish the SQL
 ```bash
-pnpm db:generate            # drizzle-kit generate → apps/api/drizzle/NNNN_<random>.sql + meta/
+pnpm db:generate --name <short_snake_name>   # → apps/api/drizzle/NNNN_<short_snake_name>.sql + meta/
 ```
-- Rename the file to `NNNN_<short_snake_name>.sql` **and** change the `tag` of its entry in
+- With `--name` the file and its `_journal.json` `tag` already carry the name; without it,
+  rename the file to `NNNN_<short_snake_name>.sql` **and** change the `tag` of its entry in
   `apps/api/drizzle/meta/_journal.json` to the same name (`idx` must equal NNNN).
+- The number is only final once the branch is merged: parallel work renumbers (the assistant
+  migrations were 0048/0049 on their branch and are 0049/0050 on `main`). Take NNNN from
+  `origin/main` right before merging (step 1), not from when the work started.
 - For SQL that has no schema change (data backfill, function, trigger only):
   `pnpm --filter @arabat/api exec drizzle-kit generate --custom --name <short_snake_name>`.
 - A `NOT NULL` column whose default is a SQL function (``.default(sql`new_store_code()`)``):

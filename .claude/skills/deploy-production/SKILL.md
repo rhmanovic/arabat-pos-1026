@@ -63,6 +63,11 @@ or disable a test), merge to `main`, start again. Work from a `claude/*` branch 
   `MAIL_API_KEY`; 403 `domain is not verified` = sender not under `send.arabatapp.com`, the only
   domain verified at Resend). `types: ["dns","network-flow"]` in `get-logs` shows whether
   `api.resend.com` was contacted at all.
+- To show a feature branch on staging (only when the owner asks), connect the source to that
+  branch the same way; **reconnect `main` when done**, or staging keeps following the branch.
+- `list-variables` redacts values (OAuth): a key can be set but never read back. The platform
+  bootstrap operator's one-time password and TOTP secret were printed only in the first deploy
+  log (2026-10-12 14:42 UTC) and are never repeated.
 - If Railway answers "Deploys have been paused temporarily", retry later and record
   "Staging not updated" in the release entry. If no Railway tool/access exists in the session,
   say so to the owner (in Arabic) instead of inventing a result, and write

@@ -59,6 +59,16 @@ cd apps/api && env -u ANTHROPIC_BASE_URL ANTHROPIC_API_KEY=... node --env-file-i
 
 Without `ANTHROPIC_API_KEY` the assistant is simply off.
 
+Seen with the real model (`claude-opus-5-5`, low effort), already handled in
+`modules/assistant/assistant.service.ts` / `assistant.prompt.ts` — keep these when changing the loop:
+- it sometimes writes a literal `<invoke name="search_products">` text instead of calling the
+  tool and repeats it until `max_tokens`: a `max_tokens` stop without a `tool_use` block returns
+  `fallbackReply`, never the raw text;
+- it sometimes leaks `<thinking>…</thinking>` in the reply: `textOf` strips it;
+- reference numbers from the 2026-10 trial: ≈ $0.008–0.02 per question, guide cache write ≈ 1 700
+  tokens; every request is stored in `assistant_requests` (platform super admin only).
+Measure through `scripts/ops/assistant-trial.mjs --log var/api.log` (see `operations-runbook`).
+
 ## 4. Seeded logins (development only, `apps/api/src/database/seeds/dev-accounts.ts`)
 
 Password for all: `Demo-Pass-2026`
@@ -104,7 +114,9 @@ pnpm db:down                            # optional: stop Postgres + Mailpit (dat
 ```
 
 Never `pkill -f dist/main.js`: the pattern matches the calling shell's own command line and
-kills it. Do not run `db:down` if another agent is using Docker.
+kills it (the same happens with any `pkill -f` / `pgrep -f` pattern that appears in the same
+Bash command, e.g. killing Vitest; run the kill as a separate command). Do not run `db:down`
+if another agent is using Docker.
 
 ## 7. Common failures
 

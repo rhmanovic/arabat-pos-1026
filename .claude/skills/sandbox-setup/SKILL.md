@@ -105,6 +105,9 @@ Then run the real gates: `pnpm verify`, `pnpm test:integration`, `pnpm test:e2e`
 - **ANTHROPIC_BASE_URL** is set in this sandbox for Claude Code's own tunnel. When testing the
   POS assistant with a real key, start the API with `env -u ANTHROPIC_BASE_URL node ...`.
 - **Stopping the API:** `kill $(pgrep -f "^node --env-file")` (never `pkill -f dist/main.js`).
+  More generally, any `pkill -f <pattern>` / `pgrep -f <pattern>` whose pattern appears in the
+  same Bash command (also `grep '[v]itest'` tricks) kills the calling shell (exit 144): run the
+  kill as its own command, with a pattern absent from that command line.
 - **Proxy:** outbound HTTPS goes through the agent proxy; on TLS/403 errors read
   `/root/.ccr/README.md`. Never disable TLS verification. Blocked hosts seen: the staging URL
   `web-production-bf628.up.railway.app` and `api.resend.com` (use the Railway tools and the

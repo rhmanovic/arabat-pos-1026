@@ -87,6 +87,10 @@ before API integration tests or e2e: the API consumes their `dist/` (Vitest itse
 - Merchant status / subscription updates fire a trigger needing `app.operator_id`, also in owner fixtures:
   `select set_config('app.operator_id', gen_random_uuid()::text, true)` inside the transaction.
 - Use unique emails/codes per test (`uniqueEmail`, `newId()`); tests in one file share the database.
+- A second cashier opening a shift on a register that already has one gets `REGISTER_BUSY`: when
+  the test only needs a signed-in employee, hire without opening a shift (`c.hire(...)`).
+- Seeded names and formats: the first branch is `'Main branch'`; quantities and amounts come
+  back as decimal strings (`'12.000'`), compare against the string.
 - E2E helpers: `e2e/helpers.ts` (`signIn`, `useEnglish`, `DEV` seed accounts, `totp`, `latestMailText`
   from Mailpit, `uniqueEmail`).
 
@@ -109,6 +113,11 @@ before API integration tests or e2e: the API consumes their `dist/` (Vitest itse
 - E2E failures: read the `list` output, then the trace in `test-results/<test>/trace.zip`
   (`pnpm exec playwright show-trace <zip>`). "Old" behaviour means a stale build or reused server.
 - Web test "missing translation" or physical class errors come from i18n / lint checks: fix both `ar` and `en`.
+- A web test that **times out** while rendering is usually an infinite render loop (an effect
+  that sets state another effect reacts to), not a slow test; see `frontend-conventions` §9.
+- `pnpm verify` can fail on pre-existing lint/format errors under `docs/user-guide/booklets/`
+  (generated files): run `eslint` with `--ignore-pattern 'docs/user-guide/booklets/**'` to see
+  your own errors, and say so in the report.
 
 ## Reporting
 Record results in `docs/TESTING.md` (a dated "Results" entry) and `docs/PROGRESS.md`, with the real
