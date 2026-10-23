@@ -115,6 +115,13 @@ Then run the real gates: `pnpm verify`, `pnpm test:integration`, `pnpm test:e2e`
 - **Waiting:** a long foreground `sleep` is refused. Wait for a condition with
   `timeout 580 sh -c 'until <check>; do sleep 15; done'` (Bash timeout 600000), or run the
   poll with `run_in_background` and wait for its notification.
+- **Auto-mode classifier:** it reads the command text, so a harmless `cat`/`grep` naming
+  `SMTP_URL` or a commit message naming `ANTHROPIC_API_KEY` can be refused ("Production
+  Deploy", "Secret-Store Writes"). Read files with the Read tool and keep secret names out of
+  commit messages.
+- **Environment variables:** a secret the owner adds to the environment reaches only sessions
+  started afterwards, never the running one; ask for a new session (or `create_session` with a
+  complete standalone prompt on the same branch) and carry on there.
 - After a container restart, re-run every step: each skips what is still there (the checks are cheap).
   The first symptom of a restart (also after "Try again" / a usage-limit pause) is integration
   tests failing with `connect ECONNREFUSED 127.0.0.1:5432` or e2e with "API did not start":

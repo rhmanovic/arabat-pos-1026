@@ -43,7 +43,14 @@ or disable a test), merge to `main`, start again. Work from a `claude/*` branch 
   `skipDeploys: true`, then `connect-service-source` (one build instead of two).
 - Judge what is running by `list-deployments` (`meta.branch`, `commitHash`), never by
   `Mapped {…}` route lines in `get-logs`: Railway drops lines in the start-up burst, so a missing
-  route line proves nothing. The `get-logs` `filter` is a plain substring.
+  route line proves nothing. The `get-logs` `filter` is a plain substring. Read logs with a
+  `filter` and `limit` ≤ 50 per call (`rejected`, `not configured`, `@level:error`): a full
+  dump exceeds the tool's output limit and lands in a file. Waiting for a build: see
+  `sandbox-setup` "Waiting".
+- A provider key the owner asks to put on staging: check it first with a free read request
+  (Anthropic `GET /v1/models` with `env -u ANTHROPIC_BASE_URL`; Resend `GET /domains`), then
+  pass the value only inside the `set-variables` call; never echo it, and never paste it into a
+  commit, a doc or the chat.
 - Check readiness: `https://web-production-bf628.up.railway.app/api/v1/health/ready` → 200, or
   run the `Staging smoke` GitHub workflow (`check=health`) if the sandbox cannot reach it.
   `workflow_dispatch` works only for a workflow file that exists on the default branch (404

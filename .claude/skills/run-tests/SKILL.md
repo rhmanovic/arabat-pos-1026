@@ -97,6 +97,9 @@ before API integration tests or e2e: the API consumes their `dist/` (Vitest itse
   the word (a uuid with `fee` failed a test). Check fields or keys.
 - `verify` stops at the first failing step; the step name tells what to rerun alone
   (`pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm build`, `pnpm test`).
+- Lint / Prettier failures in files you did not touch come from a branch merged meanwhile
+  (seen: `docs/user-guide/booklets/`). Fix the source file, add generated output to
+  `.prettierignore`, and say so in the TESTING.md entry.
 - API refuses to boot in tests: a route lacks `@Public` / `@Authenticated` / `@RequirePermission` /
   `@RequirePlatformRole`, or an injected class was imported as `import type` (decorator metadata).
 - `TEST_DATABASE_URL ... must be set`: `.env` missing or DB not up (see `sandbox-setup`).
