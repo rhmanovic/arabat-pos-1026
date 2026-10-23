@@ -75,14 +75,32 @@ Read first: `docs/adr/ADR-0112-local-first-pos.md` (with amendments 2–4 summar
   `apps/api/src/modules/printing/printing.int.test.ts`,
   `apps/api/src/modules/auth/pin-sign-in.int.test.ts` (`pnpm test:integration`).
 
-## Plan A: primary device, PINs, printing
+## Plan A: registers are drawers, devices are devices (amendment 4), PINs, printing
 
-- `pos_devices.role` `primary` | `secondary`; one live primary per branch (`409 PRIMARY_EXISTS`).
-  Only the owner changes role/branch (`PUT /manager/devices/:id`). The primary holds the branch
-  shift and opens the drawer; secondaries sell into it and never kick the drawer.
-- **The primary device is the branch's print agent:** its device token is accepted by the
-  print-agent API and socket (`@RequirePrintAgent`); a secondary gets `403 NOT_PRIMARY_DEVICE`.
-  Jobs it prints (browser POS / manager receipts) carry `openDrawer: false`. The socket is native.
+- There is **no `pos_devices.role` column** any more (migration 0065 dropped it). A register is
+  a physical drawer that managers create (`registers.is_main`: one main per branch). A device
+  registers with a branch only and gets a permanent code `D1`, `D2`, … per branch
+  (`pos_devices.code`, counter `register_code_sequences.last_number`, never reused). Its receipt
+  series is `{branchCode}-{deviceCode}-{6 digits}` (`MAIN-D1-000001`); the device resets its counter
+  when its stored code or branch changes.
+- **Role is derived:** `primary` ⇔ `pos_devices.register_id is not null` (bound), else
+  `secondary`. Binding is manager-only (`registers.manage`): `PUT /manager/devices/:id
+  { registerId | null, branchId }` or `PUT /manager/registers/:id/device { deviceId | null }`;
+  refusals `REGISTER_BOUND` (register already on another device / moving a bound device),
+  `REGISTER_BUSY` (its shift is open), `REGISTER_INACTIVE`. A move to another branch needs the
+  device unbound and gives it a new code. Only the bound device opens the shift, holds cash, kicks
+  the drawer and prints browser receipts.
+- **Unbound devices** sell card / transfer only: a cash tender is refused on the device
+  (`PosRuleError CASH_NOT_ALLOWED`, cash methods hidden) and on upload (`409 CASH_NOT_ALLOWED`).
+  They sell into the branch's open register shift (`branchShift` in the snapshot: main register
+  first, else the oldest open); none open → `SHIFT_REQUIRED` ("لا توجد وردية مفتوحة في الفرع").
+  The snapshot's `register` is `null` for an unbound device.
+- **The bound device is the branch's print agent:** its device token is accepted by the
+  print-agent API and socket (`@RequirePrintAgent`); an unbound device gets `403
+  NOT_PRIMARY_DEVICE` (print-agent, shift open/close, cash movements). Jobs it prints (browser
+  POS / manager receipts) carry `openDrawer: false`. The socket is native.
+- Test company reset with one main, unbound register: `reset-merchant-data
+  --main-register=<Arabic name>` (operations-runbook skill §7).
 - Cashier PIN: set/reset by the cashier only (e-mailed link, `devices/pin-reset.service.ts`),
   stored as argon2id; devices verify locally (`packages/device-core/src/pin.ts`,
   `apps/device-web/src/app/pin.worker.ts`); 3 wrong PINs lock 5 minutes.

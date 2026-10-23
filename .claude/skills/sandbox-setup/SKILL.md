@@ -116,3 +116,7 @@ Then run the real gates: `pnpm verify`, `pnpm test:integration`, `pnpm test:e2e`
   `timeout 580 sh -c 'until <check>; do sleep 15; done'` (Bash timeout 600000), or run the
   poll with `run_in_background` and wait for its notification.
 - After a container restart, re-run every step: each skips what is still there (the checks are cheap).
+  The first symptom of a restart (also after "Try again" / a usage-limit pause) is integration
+  tests failing with `connect ECONNREFUSED 127.0.0.1:5432` or e2e with "API did not start":
+  `dockerd` and the compose services are gone, not the tests. Steps 3–5 bring them back; Node,
+  `node_modules` and the Docker images under `/var/lib/docker` usually survive.

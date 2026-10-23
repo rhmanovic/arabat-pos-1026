@@ -13,6 +13,9 @@ Environment prep (Node 24 on PATH, Docker, Postgres, Playwright browser) is in t
 - Before reporting work as done, run all three, in order, and report actual counts:
   `pnpm verify`, `pnpm test:integration`, `pnpm test:e2e`.
 - During development run the narrowest subset (below); the full runs are for the end.
+- Run the three suites **one after another, never two at once** (not even one in the background):
+  `pnpm verify` (builds + Vitest workers) next to `pnpm test:integration` exhausts the sandbox's
+  memory and one of them dies with `SIGKILL` / an "unexpected exit" with no test failure named.
 
 ## The three suites
 | Command | What it runs | Needs |

@@ -62,14 +62,20 @@ or disable a test), merge to `main`, start again. Work from a `claude/*` branch 
   `Staging not updated: no Railway access in this session` in the release entry.
 
 ## 3. Production (Google Cloud `arabat-511416`, `me-central1`, ADR-0122)
-Needs: `gcloud` (at `/usr/local/bin/gcloud` in the sandbox) and the admin service-account key in
-env var `GCP_Admin_KEY_01` (base64 of the JSON key; `GCP_ADMIN_KEY_B64` is a dead key, refused
-with `invalid_grant`). `GCP_SA_KEY_B64` (service account `arabat-deployer`, checked 2026-10-23
-with read-only commands): signs in; lists / describes Cloud Run services and revisions, Cloud SQL
-instances, Artifact Registry, secret names, buckets and builds; refused `projects get-iam-policy`.
-Deploying with it was not tried: use it for read-only diagnosis, not as the release key.
-If gcloud is missing, the variable is absent, or sign-in fails: **stop**,
-release nothing, and tell the owner in Arabic exactly what is missing and the error text as is.
+Needs: `gcloud` (at `/usr/local/bin/gcloud` in the sandbox) and a service-account key in an env
+var (base64 of the JSON key), tried in this order:
+- `GCP_Admin_KEY_01` — `arabat-admin` (project Owner).
+- `GCP_SA_KEY_B64` — `arabat-deployer@arabat-511416.iam.gserviceaccount.com`: enough for the whole
+  of `deploy.sh` and for `gcloud run jobs execute arabat-migrate` (release `50d8325b1d9e` on
+  2026-10-20 was made with it), and for read-only diagnosis (lists / describes Cloud Run services
+  and revisions, Cloud SQL instances, Artifact Registry, secret names, buckets and builds). It has
+  no project Viewer (so `builds submit` stops after submitting, see below), is refused
+  `projects get-iam-policy`, and has no IAM key rights.
+- `GCP_ADMIN_KEY_B64` is a dead key: `gcloud auth activate-service-account` fails with
+  `invalid_grant: Invalid JWT Signature` (the key was deleted in GCP). Check that the key you pick
+  still signs in before starting the work.
+If gcloud is missing, every variable is absent, or sign-in fails: **stop**, release nothing, and
+tell the owner in Arabic exactly what is missing and the error text as is.
 
 ```bash
 cp infra/gcp/config.example.env infra/gcp/config.env       # git-ignored; values are correct as is

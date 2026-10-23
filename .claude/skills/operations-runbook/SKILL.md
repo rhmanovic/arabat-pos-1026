@@ -157,6 +157,21 @@ are in the **deploy-production** skill; local runs in **run-api-locally** / **sa
   `types: ["dns","network-flow"]` shows whether the API reached `api.resend.com` at all.
 
 ## 7. Scripts
+- **Test-company reset in production** (`reset-merchant-data`, OPERATIONS §9.2a; only the
+  owner's test company بقاله سلطان `01a143fb-8b7a-7b18-a076-3504d52ded96`, only when the owner
+  asks in this conversation). It runs through the migrate job (same image, `app_owner` via the
+  job's secrets), signed in as in deploy-production §3. Dry run first, then `--apply`:
+  ```bash
+  gcloud run jobs execute arabat-migrate --region=me-central1 --wait --format='value(metadata.name)' \
+    --args='apps/api/dist/database/cli/reset-merchant-data.js,--merchant=<uuid>,--main-register=الصندوق الرئيسي'
+  # add ,--apply to the args for the real run; --main-register=<Arabic name> also drops every
+  # register and creates one main, unbound register per active branch (ADR-0112 amendment 4)
+  ```
+  The job prints nothing to the terminal: wait ~20 s, then read the per-table counts with
+  `gcloud logging read 'resource.type="cloud_run_job" AND labels."run.googleapis.com/execution_name"="arabat-migrate-xxxxx"' --limit=80 --format='value(textPayload)' --order=asc`
+  (the last line must be `Committed.`; `Dry run: rolled back` = no `--apply`). Record the counts
+  in PROGRESS.md. A dry run on a `--main-register` reset also proves the newest migration is
+  applied (it writes `registers.is_main`).
 - `scripts/verify-managed-postgres.sh` — local rehearsal of Cloud SQL (admin without
   SUPERUSER/BYPASSRLS): parallel `--migrate-only`, idempotent re-run, API ready as
   `app_runtime`, dump restore, RLS visibility. Needs Docker, `pnpm build`, seeded dev DB

@@ -50,6 +50,19 @@ pnpm db:generate            # drizzle-kit generate → apps/api/drizzle/NNNN_<ra
 - A `NOT NULL` column whose default is a SQL function (``.default(sql`new_store_code()`)``):
   drizzle-kit does not create the function; add `CREATE FUNCTION` (and `GRANT EXECUTE … TO
   app_runtime`) at the **top** of the file. A VOLATILE default fills each existing row on its own.
+- **drizzle-kit asks interactively** ("create column or rename?", "create table or rename?") and
+  hangs without a TTY. Give it one and answer with Enter (first choice = create):
+  `script -qec "pnpm db:generate" /dev/null < <(printf '\n\n\n')`; read the generated SQL to confirm
+  it chose create, not rename. Avoid renaming tables/columns in the same migration as adding
+  others (keep the old name and document it, as `register_code_sequences` in 0065).
+- **A new `NOT NULL` column on a table that has rows:** the generated `ADD COLUMN … NOT NULL`
+  fails in production (and in the test DB after seeds). Hand-edit to expand → backfill → contract:
+  `ADD COLUMN x text`, `UPDATE … SET x = …` (filtered/partitioned by `merchant_id`), then
+  `ALTER COLUMN x SET NOT NULL` (0065 `pos_devices.code`).
+- **Immutability triggers block backfills:** an `UPDATE` of closed/final rows in a migration is
+  refused by the row's own trigger (`shifts_closed_is_final` stopped 0064 in production). Inside
+  the migration: `ALTER TABLE t DISABLE TRIGGER <name>;` → update → `ENABLE TRIGGER <name>;`
+  (each as its own statement-breakpoint). Never `DISABLE TRIGGER ALL` (that includes FK checks).
 - Read the generated SQL line by line: no unintended `DROP`, no `ON DELETE set null` on a
   multi-column FK, composite FKs present, checks rendered with qualified column names.
 - Append, after the generated statements, each separated by `--> statement-breakpoint`:
