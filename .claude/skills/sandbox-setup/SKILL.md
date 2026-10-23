@@ -106,5 +106,10 @@ Then run the real gates: `pnpm verify`, `pnpm test:integration`, `pnpm test:e2e`
   POS assistant with a real key, start the API with `env -u ANTHROPIC_BASE_URL node ...`.
 - **Stopping the API:** `kill $(pgrep -f "^node --env-file")` (never `pkill -f dist/main.js`).
 - **Proxy:** outbound HTTPS goes through the agent proxy; on TLS/403 errors read
-  `/root/.ccr/README.md`. Never disable TLS verification.
+  `/root/.ccr/README.md`. Never disable TLS verification. Blocked hosts seen: the staging URL
+  `web-production-bf628.up.railway.app` and `api.resend.com` (use the Railway tools and the
+  `Staging smoke` GitHub workflow instead); `nodejs.org`, `api.cloudflare.com` and GitHub pass.
+- **Git/GitHub:** the git proxy refuses remote branch deletion (403), which matches the house
+  rule (never delete a remote branch). A `workflow_dispatch` workflow can be started only when
+  its file exists on the default branch; a file pushed to a side branch answers 404.
 - After a container restart, re-run every step: each skips what is still there (the checks are cheap).

@@ -39,8 +39,23 @@ or disable a test), merge to `main`, start again. Work from a `claude/*` branch 
   reconnect the source (Railway tool `connect-service-source`, repo `rhmanovic/arabat-pos-1026`,
   branch `main`), then `list-deployments` until the newest has `meta.branch = main`, the
   commit you pushed and status `SUCCESS`. Note the deployment id (8 chars).
+- A variable change alone also rebuilds from the stale branch: set it with `set-variables`
+  `skipDeploys: true`, then `connect-service-source` (one build instead of two).
+- Judge what is running by `list-deployments` (`meta.branch`, `commitHash`), never by
+  `Mapped {…}` route lines in `get-logs`: Railway drops lines in the start-up burst, so a missing
+  route line proves nothing. The `get-logs` `filter` is a plain substring.
 - Check readiness: `https://web-production-bf628.up.railway.app/api/v1/health/ready` → 200, or
   run the `Staging smoke` GitHub workflow (`check=health`) if the sandbox cannot reach it.
+  `workflow_dispatch` works only for a workflow file that exists on the default branch (404
+  otherwise).
+- E-mail on staging (Resend over HTTP, OPERATIONS §8): `check=forgot-password` with `email` in
+  the same workflow, for an address that **has an active account** (an unknown address answers
+  202 and logs nothing; 5 requests per address per hour, then 429). In the deploy log success is
+  `E-mail "…" sent` from `ResendMailer`; refusal is `Password reset request failed:
+  ResendMailer: provider answered <status> …` (seen: 401 `API key is invalid` = wrong
+  `MAIL_API_KEY`; 403 `domain is not verified` = sender not under `send.arabatapp.com`, the only
+  domain verified at Resend). `types: ["dns","network-flow"]` in `get-logs` shows whether
+  `api.resend.com` was contacted at all.
 - If Railway answers "Deploys have been paused temporarily", retry later and record
   "Staging not updated" in the release entry. If no Railway tool/access exists in the session,
   say so to the owner (in Arabic) instead of inventing a result, and write
@@ -90,12 +105,14 @@ cat > "$SCRATCHPAD/check.yaml" <<'EOF'
 steps:
 - name: gcr.io/cloud-builders/curl
   entrypoint: bash
-  args: ['-c', 'set -e; B=https://www.arabatapp.com; curl -sS -w " %{http_code}\n" $B/api/v1/health/ready;
+  args: ['-c', 'set -e; B=https://www.arabatapp.com; curl -sS -w " %{http_code}\n" $$B/api/v1/health/ready;
     for p in /api/v1/health/live /manager/ /pos/ /platform/ /store/ /online/ /links/; do
-    curl -s -o /dev/null -w "%{http_code} $p\n" $B$p; done']
+    curl -s -o /dev/null -w "%{http_code} $$p\n" $$B$$p; done']
 EOF
 gcloud builds submit --no-source --region=me-central1 --config="$SCRATCHPAD/check.yaml"
 ```
+Shell variables inside a Cloud Build step are written `$$B` / `$$p`: a single `$` is a Cloud
+Build substitution and the build is rejected.
 Pass = `ready` 200 with `"version":"<commit tag>"` and database ok, every page 200. Add the
 checks the change itself needs (e.g. a store sub-domain `https://<slug>.arabatapp.com/` 200, old
 `/store/<slug>` 301). Note the build id (8 chars).

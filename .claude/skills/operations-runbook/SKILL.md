@@ -114,7 +114,23 @@ are in the **deploy-production** skill; local runs in **run-api-locally** / **sa
   record or a token without the owner.
 - A domain's registrar and expiry: RDAP (`https://rdap.verisign.com/com/v1/domain/<name>`) through Firecrawl (the sandbox cannot reach it).
 
-## 6. Scripts
+## 6. E-mail delivery (OPERATIONS §8)
+- Every outgoing message is built by `renderEmail` (`apps/api/src/kernel/mail/template.ts`):
+  bilingual layout (Arabic RTL, then English), subject `ar | en`, caller text HTML-escaped, and
+  the plain-text part keeps the link or code on a line of its own (integration tests parse
+  `token=` and the code line from `text`). New e-mails go through it, never hand-written HTML.
+- Sender: only `send.arabatapp.com` is verified at Resend, so `MAIL_FROM` must be
+  `…@send.arabatapp.com`; a root-domain sender is refused with 403 `domain is not verified`.
+  Production sends over SMTP (`SMTP_URL` to `smtp.resend.com`), staging over Resend's HTTP API
+  (`MAIL_PROVIDER=resend`); both log `E-mail "<subject>" sent` (`SmtpMailer` / `ResendMailer`)
+  on success and `Password reset request failed: …` / `Invitation e-mail failed: …` on refusal.
+- "Nothing arrived" triage: `POST /auth/password/forgot` for an address without an active user
+  answers 202 and logs **nothing** (anti-enumeration); the per-address limit is 5 per hour
+  (429). So check first that the account exists, then the log lines above, then the provider's
+  dashboard. The sandbox proxy blocks `api.resend.com`; on Railway `get-logs` with
+  `types: ["dns","network-flow"]` shows whether the API reached `api.resend.com` at all.
+
+## 7. Scripts
 - `scripts/verify-managed-postgres.sh` — local rehearsal of Cloud SQL (admin without
   SUPERUSER/BYPASSRLS): parallel `--migrate-only`, idempotent re-run, API ready as
   `app_runtime`, dump restore, RLS visibility. Needs Docker, `pnpm build`, seeded dev DB
