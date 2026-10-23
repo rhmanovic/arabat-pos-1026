@@ -1285,6 +1285,12 @@ console (no buying through Arabat, nobody at Arabat linking domains by hand).
 - Not built: e-mail to the merchant when a domain starts / stops working; operator list in
   `/platform`.
 - Verified (cloud sandbox): `pnpm verify` 444, `pnpm test:integration` 325, `pnpm test:e2e` 47.
+- Released (ADR-0122): production `223b127eac32` (revision `arabat-web-00076-w4n`, previous
+  `arabat-web-00075-mmt`; migration job `arabat-migrate-bb57t`, migration 0074 applied), own
+  domains off (no `cloudflare-api-token` yet). Cloud Build check `dd4f9c88`: ready 200 (database
+  ok); `www` pages 200; preview 200; `/store/store666/cart` → 301 sub-domain; sub-domains 200; an
+  unknown permanent code 404; `/manager/online/domain` 401 signed out. Staging (Railway) not
+  updated: no Railway access in this session. Signed out, `config.env` removed; no key deleted.
 
 ### 2026-10-23 — Fix: home page sections blank until the screen is touched (ADR-0128 amendment 7)
 Owner's report (phone recording): on a designed home page only the banner and the hours strip
