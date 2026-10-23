@@ -1279,9 +1279,14 @@ console (no buying through Arabat, nobody at Arabat linking domains by hand).
 - Console Domain tab: main / Arabat / permanent addresses; connect, record to add, status steps,
   check now, main address, remove; "coming soon" while the platform switch is off.
 - Cloudflare: proxied `stores.arabatapp.com` created (CNAME target and fallback origin).
-- **Waiting on the owner (one time):** enable Cloudflare for SaaS on `arabatapp.com` with the
-  fallback origin, create the zone token, store it as `cloudflare-api-token` (OPERATIONS.md); until
-  then connecting shows "coming soon". The permanent link works at once.
+- Owner's one-time steps done 2026-10-24: Cloudflare for SaaS enabled on `arabatapp.com`, fallback
+  origin `stores.arabatapp.com` Active, zone token stored as `cloudflare-api-token` (53 characters,
+  checked without printing). Released `7873b8d66ad1` (revision `arabat-web-00077-f8p`, previous
+  `arabat-web-00076-w4n`, migration job `arabat-migrate-zk4wm`, nothing new) with own domains **on**
+  (`CUSTOM_HOSTNAMES_DRIVER=cloudflare`); code unchanged since the tested `223b127` (skills and
+  docs only). Cloud Build check `9c74c115`: ready 200, pages 200, redirects as before. For the first
+  real connection, `raghefkarak.com` (zone in the same Cloudflare account) got `CNAME www` and
+  `CNAME @` → `stores.arabatapp.com` (DNS only). Signed out, `config.env` removed; no key deleted.
 - Not built: e-mail to the merchant when a domain starts / stops working; operator list in
   `/platform`.
 - Verified (cloud sandbox): `pnpm verify` 444, `pnpm test:integration` 325, `pnpm test:e2e` 47.
