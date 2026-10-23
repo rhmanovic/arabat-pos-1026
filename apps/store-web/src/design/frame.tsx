@@ -133,7 +133,10 @@ function EdgeShape({ shape, edge }: { shape: SectionLook['dividerTop']; edge: 't
 /**
  * Entrance motion: the section starts hidden and shows once its top is on screen, or above it
  * (a fast scroll or a jump never leaves it hidden). Sections already on screen play at once,
- * and changing the animation in the editor plays it again.
+ * and changing the animation in the editor plays it again. The browser's intersection observer
+ * also sees the page moving under a still screen (pictures, the menu and the store's data
+ * arriving after the first paint), which a scroll listener alone missed: a section that came
+ * into view that way stayed blank until the shopper touched the screen.
  */
 function useReveal(animation: string) {
   const ref = useRef<HTMLDivElement>(null);
@@ -145,6 +148,19 @@ function useReveal(animation: string) {
     const el = ref.current;
     if (animation === 'none' || !el || typeof window.requestAnimationFrame !== 'function') return;
     setShown(false);
+    if (typeof IntersectionObserver !== 'undefined') {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (!entries.some((e) => e.isIntersecting || e.boundingClientRect.top < 0)) return;
+          setShown(true);
+          observer.disconnect();
+        },
+        // The section's top 8% inside the bottom of the screen, as with the scroll check.
+        { rootMargin: '0px 0px -8% 0px' },
+      );
+      observer.observe(el);
+      return () => observer.disconnect();
+    }
     let frame = 0;
     const stop = () => {
       window.removeEventListener('scroll', onScroll);

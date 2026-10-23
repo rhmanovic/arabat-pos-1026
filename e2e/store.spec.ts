@@ -575,6 +575,17 @@ test('the owner designs the store as a restaurant, previews it live and publishe
 
   await shopper.reload();
   await expect(shopper.getByText('Karak all day')).toBeVisible();
+  // Without touching the screen, every section that is on the first screen is shown (a section
+  // reached by the page settling, not by a scroll, once stayed blank).
+  await expect
+    .poll(() =>
+      shopper.evaluate(() =>
+        [...document.querySelectorAll('[data-reveal]')]
+          .filter((el) => el.getBoundingClientRect().top < window.innerHeight * 0.9)
+          .every((el) => el.getAttribute('data-shown') === 'true'),
+      ),
+    )
+    .toBe(true);
   await expect(shopper.getByRole('main').getByText('Open now')).toBeVisible();
   const menu = shopper.getByRole('region', { name: 'Menu' });
   await expect(menu.getByRole('heading', { name: 'Hot drinks' })).toBeVisible();

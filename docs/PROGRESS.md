@@ -1265,6 +1265,14 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-23 — Fix: home page sections blank until the screen is touched (ADR-0128 amendment 7)
+Owner's report (phone recording): on a designed home page only the banner and the hours strip
+showed; the menu below stayed white until the screen was pulled. Cause: the entrance motion
+checked once, 80 ms after the section appeared, and then only on scroll; the page settling under
+a still screen (data and pictures arriving) brought sections into view with no scroll event.
+Fix: sections are watched with the browser's intersection observer (the scroll check stays for
+browsers without it).
+
 ### 2026-10-23 — Fix: live preview blocked after the sub-domain release (ADR-0136)
 Owner's report: the design editor's live preview showed "This content is blocked". Cause: a
 browser holding the storefront's service worker on `www` (scope `/store/`) fetched the preview

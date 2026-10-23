@@ -66,6 +66,12 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-23 (sections shown without a scroll)
+- `apps/store-web/src/app.test.tsx` (+1): a section stays hidden while the observer reports it
+  below the screen and shows when it comes into view with no scroll event.
+- `e2e/store.spec.ts`: after publishing the restaurant design, every section on the first screen
+  is shown without touching the page.
+
 ### Results 2026-10-23 (store sub-domains, ADR-0136)
 - `apps/api/src/kernel/http/store-host.test.ts` (+5): the store from the host name (case, port,
   trailing dot; the platform's names, deeper names, look-alike domains, invalid labels refused);

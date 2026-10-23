@@ -1052,6 +1052,51 @@ describe('storefront', () => {
     await waitFor(() => expect(page).toHaveAttribute('data-shown', 'true'));
   });
 
+  it('shows a section that comes into view without a scroll (content above it settling)', async () => {
+    // The page moves under a still screen: no scroll event, only the observer sees it.
+    const observers: { fire: (entry: Partial<IntersectionObserverEntry>) => void }[] = [];
+    class FakeObserver {
+      constructor(private readonly callback: IntersectionObserverCallback) {
+        observers.push({
+          fire: (entry) =>
+            this.callback(
+              [entry as IntersectionObserverEntry],
+              this as unknown as IntersectionObserver,
+            ),
+        });
+      }
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+      takeRecords() {
+        return [];
+      }
+    }
+    vi.stubGlobal('IntersectionObserver', FakeObserver);
+    try {
+      const design = templateDesign('retail');
+      design.pages.home = sectionsOf([
+        { id: 'below', type: 'text', title: { en: 'Below', ar: null } },
+      ]);
+      renderStore('/demo', { 'GET /store/demo/design': () => ({ status: 200, body: { design } }) });
+      await screen.findByText('Below');
+      const section = document.getElementById('section-below')!;
+      expect(section).toHaveAttribute('data-shown', 'false');
+      const below = { top: 900 } as DOMRectReadOnly;
+      act(() =>
+        observers.forEach((o) => o.fire({ isIntersecting: false, boundingClientRect: below })),
+      );
+      expect(section).toHaveAttribute('data-shown', 'false');
+      const inView = { top: 300 } as DOMRectReadOnly;
+      act(() =>
+        observers.forEach((o) => o.fire({ isIntersecting: true, boundingClientRect: inView })),
+      );
+      expect(section).toHaveAttribute('data-shown', 'true');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('shows the page outline while the store loads, never a blank screen', async () => {
     renderStore('/demo/products');
     // The first paint is the outline (header, a large block, cards), then the real page.
