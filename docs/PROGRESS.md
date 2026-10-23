@@ -1265,6 +1265,27 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-23 — Permanent store code and merchants' own domains (ADR-0137)
+Owner's decisions: like Shopify; a code per store that never changes; the domain tied to the
+store, not its address; merchants buy their domain anywhere and connect it themselves from the
+console (no buying through Arabat, nobody at Arabat linking domains by hand).
+- Migration 0074: `online_stores.public_code` (`st-xxxxxx`, fixed by trigger) and `store_domains`
+  (RLS, lookups through SECURITY DEFINER functions).
+- API: `CustomHostnames` driver (Cloudflare for SaaS / fake / off), `StoreDomainsService`
+  (connect, check, main address, remove, background checks, 7-day release, audit),
+  `StoreAddressService` for every store link; `/manager/online/domain` routes; merchant domains
+  served at `/store/~/…`, bare domain → `www.`, every other address → the main one; "not
+  connected" page for unknown hosts.
+- Console Domain tab: main / Arabat / permanent addresses; connect, record to add, status steps,
+  check now, main address, remove; "coming soon" while the platform switch is off.
+- Cloudflare: proxied `stores.arabatapp.com` created (CNAME target and fallback origin).
+- **Waiting on the owner (one time):** enable Cloudflare for SaaS on `arabatapp.com` with the
+  fallback origin, create the zone token, store it as `cloudflare-api-token` (OPERATIONS.md); until
+  then connecting shows "coming soon". The permanent link works at once.
+- Not built: e-mail to the merchant when a domain starts / stops working; operator list in
+  `/platform`.
+- Verified (cloud sandbox): `pnpm verify` 444, `pnpm test:integration` 325, `pnpm test:e2e` 47.
+
 ### 2026-10-23 — Fix: home page sections blank until the screen is touched (ADR-0128 amendment 7)
 Owner's report (phone recording): on a designed home page only the banner and the hours strip
 showed; the menu below stayed white until the screen was pulled. Cause: the entrance motion

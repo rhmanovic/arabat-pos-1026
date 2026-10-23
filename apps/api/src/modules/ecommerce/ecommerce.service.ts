@@ -26,6 +26,7 @@ import type {
 import {
   MAX_STORE_IMAGE_BYTES,
   RESERVED_STORE_SLUGS,
+  STORE_CODE_PATTERN,
   STORE_SLUG_PATTERN,
   normalizePhone,
 } from '@arabat/contracts';
@@ -37,7 +38,6 @@ import { type SQL, and, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import { createHash, randomBytes } from 'node:crypto';
 import type { z } from 'zod';
 import { ENV } from '../../config/config.module.js';
-import { storeAddress } from '../../kernel/http/store-host.js';
 import type { Env } from '../../config/env.js';
 import { DatabaseService, type Transaction } from '../../database/database.service.js';
 import { nextDocumentNumber } from '../../database/schema/sequences.schema.js';
@@ -77,6 +77,7 @@ import { isOpenAt, slotsFrom } from './store-hours.js';
 import { merchantTimezone } from '../../kernel/time/period.js';
 import { type PromotionLine, PromotionsService } from './promotions.service.js';
 import { type StoreCustomer, StoreAccountsService } from './store-accounts.service.js';
+import { StoreAddressService } from './store-address.service.js';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
 import { inForce, offersFor } from '../catalog/discount-offers.js';
 
@@ -160,6 +161,7 @@ export class EcommerceService {
     private readonly printJobs: PrintJobsService,
     private readonly promotions: PromotionsService,
     private readonly accounts: StoreAccountsService,
+    private readonly addresses: StoreAddressService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -169,7 +171,7 @@ export class EcommerceService {
   }
 
   private storeUrl(slug: string) {
-    return storeAddress(this.env, slug);
+    return this.addresses.of(slug);
   }
 
   private async onlineMethods(tx: Transaction) {
@@ -233,7 +235,7 @@ export class EcommerceService {
           provider: x['gateway_provider'] as string,
           ready: this.payments.gateway(x['gateway_provider'] as string).ready,
         })),
-        url: this.storeUrl(slug),
+        url: await this.storeUrl(slug),
         version: row?.version ?? 0,
       };
     });
@@ -378,7 +380,8 @@ export class EcommerceService {
         (await this.slugFree(tx, candidate, actor.merchantId));
       let reason: SlugAvailability['reason'] = null;
       if (!STORE_SLUG_PATTERN.test(slug)) reason = 'invalid';
-      else if (RESERVED_STORE_SLUGS.includes(slug)) reason = 'reserved';
+      else if (RESERVED_STORE_SLUGS.includes(slug) || STORE_CODE_PATTERN.test(slug))
+        reason = 'reserved';
       else if (!(await this.slugFree(tx, slug, actor.merchantId))) reason = 'taken';
       else if (
         current !== null &&
@@ -2159,7 +2162,7 @@ export class EcommerceService {
           phone: input.customer.phone,
           email: input.customer.email,
         },
-        returnUrl: `${this.storeUrl(slug)}/orders/${token}`,
+        returnUrl: `${await this.storeUrl(slug)}/orders/${token}`,
       });
       await this.database.withMerchantTx(merchantId, (tx) =>
         tx
@@ -2627,7 +2630,7 @@ export class EcommerceService {
         orderNumber: row['number'] as string,
         amount: money(row['amount'] as string),
         status: row['status'] as 'initiated',
-        returnUrl: `${this.storeUrl(row['slug'] as string)}/orders/${row['tracking_token'] as string}`,
+        returnUrl: `${await this.storeUrl(row['slug'] as string)}/orders/${row['tracking_token'] as string}`,
       };
     });
   }

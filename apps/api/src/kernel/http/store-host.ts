@@ -29,17 +29,58 @@ export function storeAddress(env: StoreEnv, slug: string): string {
   return `${env.PUBLIC_STORE_URL.replace(/\/+$/, '')}/${encodeURIComponent(slug)}`;
 }
 
+/** A connected domain's address (ADR-0137): `https://www.{domain}` (the port kept in development). */
+export function domainAddress(env: Pick<Env, 'PUBLIC_STORE_URL'>, domain: string): string {
+  const base = new URL(env.PUBLIC_STORE_URL);
+  return `${base.protocol}//www.${domain}${base.port ? `:${base.port}` : ''}`;
+}
+
+/** The host name of a request without port, trailing dot or case. */
+export const plainHost = (host: string | undefined) =>
+  (host ?? '').toLowerCase().replace(/:\d+$/, '').replace(/\.$/, '');
+
+/** Host names that are Arabat's own apps (never a merchant's domain). */
+export function ownHosts(
+  env: Pick<Env, 'PUBLIC_MANAGER_URL' | 'PUBLIC_POS_URL' | 'PUBLIC_STORE_URL' | 'STORE_DOMAIN'>,
+): Set<string> {
+  const hosts = new Set(['localhost', '127.0.0.1', '[::1]']);
+  for (const url of [env.PUBLIC_MANAGER_URL, env.PUBLIC_POS_URL, env.PUBLIC_STORE_URL])
+    hosts.add(new URL(url).hostname);
+  if (env.STORE_DOMAIN) {
+    hosts.add(env.STORE_DOMAIN);
+    hosts.add(`www.${env.STORE_DOMAIN}`);
+  }
+  return hosts;
+}
+
+/** Path prefix a merchant's own domain is served under (`~` is never in a store address). */
+export const DOMAIN_PATH = '/store/~';
+
 /**
  * Fastify `rewriteUrl`: on a store's host every page address is the store's page
- * (`/products/x` → `/store/{slug}/products/x`). The API and the storefront's own files
- * (`/api/…`, `/store/…`) keep their address; the other apps are not reachable there.
+ * (`/products/x` → `/store/{slug}/products/x`); on a merchant's own domain (ADR-0137) it is
+ * `/store/~/products/x`, resolved when the page is served. The API and the storefront's own
+ * files (`/api/…`, `/store/…`) keep their address; the other apps are not reachable there.
  */
-export function storeHostRewrite(storeDomain: string) {
+export function storeHostRewrite(options: {
+  storeDomain: string;
+  /** Hosts that are Arabat's own; any other host name is a merchant's domain. */
+  own: Set<string> | null;
+}) {
   return (req: IncomingMessage): string => {
     const url = req.url ?? '/';
-    const slug = storeSlugFromHost(req.headers.host, storeDomain);
-    if (!slug || url.startsWith('/api/') || url === '/store' || url.startsWith('/store/'))
-      return url;
-    return `/store/${slug}${url}`;
+    if (url.startsWith('/api/') || url === '/store' || url.startsWith('/store/')) return url;
+    const slug = storeSlugFromHost(req.headers.host, options.storeDomain);
+    if (slug) return `/store/${slug}${url}`;
+    const host = plainHost(req.headers.host);
+    if (
+      options.own &&
+      host &&
+      !options.own.has(host) &&
+      !/^[\d.]+$|^\[/.test(host) &&
+      !(options.storeDomain && host.endsWith(`.${options.storeDomain}`))
+    )
+      return `${DOMAIN_PATH}${url}`;
+    return url;
   };
 }

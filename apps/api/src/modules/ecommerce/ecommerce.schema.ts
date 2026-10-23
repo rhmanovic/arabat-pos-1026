@@ -35,6 +35,13 @@ export const onlineStores = pgTable(
       .primaryKey()
       .references(() => merchants.id),
     slug: text().notNull(),
+    /**
+     * The store's permanent code (ADR-0137), e.g. `st-4k9m2p`: given once by the database and
+     * never changed, so `st-4k9m2p.arabatapp.com` always reaches the store whatever its address.
+     */
+    publicCode: text()
+      .notNull()
+      .default(sql`new_store_code()`),
     /** draft (never public) → published ↔ paused (closed for orders, still visible). */
     status: text().notNull().default('draft'),
     nameEn: text(),
@@ -94,6 +101,8 @@ export const onlineStores = pgTable(
       sql`(${t.bannerKey} is null) = (${t.bannerContentType} is null)`,
     ),
     uniqueIndex('online_stores_slug_key').on(sql`lower(${t.slug})`),
+    uniqueIndex('online_stores_public_code_key').on(t.publicCode),
+    check('online_stores_public_code_valid', sql`${t.publicCode} ~ '^st-[a-z0-9]{6}$'`),
     foreignKey({
       columns: [t.merchantId, t.fulfillmentBranchId],
       foreignColumns: [branches.merchantId, branches.id],

@@ -144,6 +144,14 @@ export const ERROR_CODES = [
   'PIN_NOT_SET',
   // Product discounts (ADR-0133)
   'DISCOUNT_ARCHIVED',
+  // Own domains (ADR-0137).
+  'DOMAINS_UNAVAILABLE',
+  'DOMAINS_PROVIDER_ERROR',
+  'DOMAIN_NOT_ALLOWED',
+  'DOMAIN_TAKEN',
+  'DOMAIN_ALREADY_CONNECTED',
+  'DOMAIN_NOT_ACTIVE',
+  'STORE_NOT_SAVED',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

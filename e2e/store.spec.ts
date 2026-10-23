@@ -935,4 +935,39 @@ test('a product discount made in the console shows in the store with its badge a
   const long = await onHost(`/store/${slug}/cart`);
   expect(long.status()).toBe(301);
   expect(long.headers()['location']).toBe('/cart');
+
+  // The merchant connects a domain bought elsewhere, from the console (ADR-0137).
+  const own = `shop-${slug}.arabat-e2e.test`;
+  await page.goto('/online/settings?tab=domain');
+  await expect(page.getByTestId('address-permanent')).toContainText(/st-[a-z0-9]{6}\.localhost/);
+  const code = /st-[a-z0-9]{6}/.exec(
+    (await page.getByTestId('address-permanent').textContent())!,
+  )![0];
+  await page.getByLabel('Your domain').fill(`https://www.${own}/`);
+  await page.getByRole('button', { name: 'Connect' }).click();
+  await expect(page.getByTestId('domain-status')).toHaveText('Waiting for the record');
+  await expect(page.getByTestId('dns-records').first()).toContainText('stores.localhost');
+  await page.getByRole('button', { name: 'Check now' }).click();
+  await expect(page.getByTestId('domain-status')).toHaveText('Working');
+  const domainHome = `http://www.${own}:${port}`;
+  await expect(page.getByTestId('address-main')).toContainText(domainHome);
+  // Shoppers open the store on the domain; every other address moves there.
+  await page.goto(`${domainHome}/products`);
+  await expect(page.locator('[data-card]').filter({ hasText: 'Rose water' }).first()).toBeVisible();
+  const at = (host: string, path = '/') =>
+    page.request.get(`http://localhost:${port}${path}`, {
+      headers: { host: `${host}:${port}` },
+      maxRedirects: 0,
+    });
+  const bare = await at(own, '/products?x=1');
+  expect(bare.status()).toBe(301);
+  expect(bare.headers()['location']).toBe(`${domainHome}/products?x=1`);
+  for (const host of [`${slug}.localhost`, `${code}.localhost`]) {
+    const r = await at(host, '/cart');
+    expect(r.status()).toBe(301);
+    expect(r.headers()['location']).toBe(`${domainHome}/cart`);
+  }
+  const page404 = await at('unknown-shop.arabat-e2e.test');
+  expect(page404.status()).toBe(404);
+  expect(await page404.text()).toContain('This domain is not connected to a store.');
 });

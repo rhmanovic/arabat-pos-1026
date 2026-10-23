@@ -268,6 +268,8 @@ online order lines keep `regular_unit_price_minor` + `product_discount_id`. Comp
 `on delete set null` (it nulls `merchant_id`); reference the parent `id` alone.
 Stores answer at `{slug}.arabatapp.com` (ADR-0136, `STORE_DOMAIN`): the host names the store
 (`kernel/http/store-host.ts`, Fastify `rewriteUrl`), old `/store/{slug}` links answer 301 there; build
-store links only with `storeAddress` (API) and `storePath` (store-web). Plan for merchants' own domains:
-`docs/CUSTOM_DOMAINS_PLAN.md`.
+store links only with `StoreAddressService` (API) and `storePath` (store-web). Permanent store code
+`online_stores.public_code` (`st-xxxxxx`, never changes) and merchants' own domains (ADR-0137, `store_domains`,
+self-service through Cloudflare for SaaS custom hostnames, `CustomHostnames` driver cloudflare / fake / off);
+any non-Arabat host is served as `/store/~/…`. Plan: `docs/CUSTOM_DOMAINS_PLAN.md`.
 See `docs/PROGRESS.md` for the current state and `docs/ROADMAP.md` for next steps.

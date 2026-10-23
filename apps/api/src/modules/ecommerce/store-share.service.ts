@@ -3,7 +3,7 @@ import { Money } from '@arabat/money';
 import { Inject, Injectable } from '@nestjs/common';
 import sharp from 'sharp';
 import { ENV } from '../../config/config.module.js';
-import { storeAddress } from '../../kernel/http/store-host.js';
+import { StoreAddressService } from './store-address.service.js';
 import type { Env } from '../../config/env.js';
 import { AppError } from '../../kernel/errors/app-error.js';
 import { EcommerceService } from './ecommerce.service.js';
@@ -48,6 +48,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export class StoreShareService {
   constructor(
     private readonly store: EcommerceService,
+    private readonly addresses: StoreAddressService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -82,7 +83,7 @@ export class StoreShareService {
 
   private async meta(front: Storefront, rest: string[], query: URLSearchParams): Promise<Meta> {
     const storeName = name(front) || front.slug;
-    const pageUrl = storeAddress(this.env, front.slug);
+    const pageUrl = await this.addresses.of(front.slug);
     const image = (target: Partial<ShareTarget> = {}) => {
       const q = new URLSearchParams();
       if (target.product) q.set('product', target.product);

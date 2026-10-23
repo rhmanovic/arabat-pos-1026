@@ -17,9 +17,13 @@ export default defineConfig({
   use: {
     baseURL,
     trace: 'retain-on-failure',
-    ...(process.env['PLAYWRIGHT_CHROMIUM_EXECUTABLE']
-      ? { launchOptions: { executablePath: process.env['PLAYWRIGHT_CHROMIUM_EXECUTABLE'] } }
-      : {}),
+    launchOptions: {
+      // Merchants' own domains in tests (ADR-0137) reach this server.
+      args: ['--host-resolver-rules=MAP *.arabat-e2e.test 127.0.0.1'],
+      ...(process.env['PLAYWRIGHT_CHROMIUM_EXECUTABLE']
+        ? { executablePath: process.env['PLAYWRIGHT_CHROMIUM_EXECUTABLE'] }
+        : {}),
+    },
   },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
@@ -43,6 +47,8 @@ export default defineConfig({
       PUBLIC_STORE_URL: `${baseURL}/store`,
       // Stores at their own sub-domain (ADR-0136): Chromium resolves `*.localhost` to this server.
       STORE_DOMAIN: 'localhost',
+      // Merchants' own domains without Cloudflare (ADR-0137): a domain works on its first check.
+      CUSTOM_HOSTNAMES_DRIVER: 'fake',
     },
   },
 });

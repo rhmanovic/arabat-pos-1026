@@ -126,6 +126,17 @@ engineering defaults pending owner confirmation.
   merchant confirms a warning. Creating or changing discounts needs the right to manage prices.
   A discount is never deleted (archived), and each sale line keeps the regular price and the
   discount.
+- **BR-243** Store addresses and own domains (ADR-0136/0137, owner 2026-10-23): every store has a
+  permanent code (`st-xxxxxx.arabatapp.com`) that never changes, its Arabat address
+  (`{slug}.arabatapp.com`, follows the store address) and at most one own domain. The merchant
+  buys the domain anywhere (Arabat never buys or resells domains) and connects it alone from the
+  console by adding one CNAME (`www` → the platform target); nobody at Arabat acts per merchant.
+  The domain is tied to the store, never to its address. The certificate is Arabat's (issued and
+  renewed automatically). A domain works on `www.`; the bare domain moves to `www.` when the
+  merchant points it too. Once it works it becomes the main address (the merchant can keep the
+  Arabat address instead); every other address of the store moves to the main one. A domain
+  connected to one store cannot be connected to another; a domain whose record never appears is
+  released after 7 days; a removed domain is kept as a record.
 - **BR-241** Products and categories in Excel (ADR-0132, owner 2026-10-22): an uploaded file
   is checked before anything is saved, and is then saved completely or not at all. A row with
   an id changes that product or category; a row without one adds a new one; a file never

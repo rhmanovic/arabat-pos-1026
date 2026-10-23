@@ -519,6 +519,13 @@
       "when": 1792685531092,
       "tag": "0073_product_discounts",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1792791005621,
+      "tag": "0074_store_domains",
+      "breakpoints": true
     }
   ]
 }

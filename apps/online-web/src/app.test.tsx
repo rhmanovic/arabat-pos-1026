@@ -125,6 +125,15 @@ const store = {
   url: 'http://localhost:5176/store/demo',
   version: 0,
 };
+const addresses = {
+  available: true,
+  code: 'st-4k9m2p',
+  permanentUrl: 'https://st-4k9m2p.arabatapp.com',
+  storeUrl: 'https://demo.arabatapp.com',
+  primaryUrl: 'https://demo.arabatapp.com',
+  target: 'stores.arabatapp.com',
+  domain: null,
+};
 const branches = {
   branches: [
     {
@@ -1347,13 +1356,17 @@ describe('online store console', () => {
     expect(fetch.calls.some((c) => c.path.startsWith('/manager/reports'))).toBe(false);
   });
 
-  it('splits the settings into tabs; gateways and the domain are interface only for now', async () => {
+  it('splits the settings into tabs; gateways are interface only for now', async () => {
     const user = userEvent.setup();
     const fetch = fakeApiFetch({
       session: makeSession('manager', ['manager.access', 'online.manage', 'branches.read']),
       routes: {
         'GET /manager/branches': () => ({ status: 200, body: branches }),
         'GET /manager/online/store': () => ({ status: 200, body: store }),
+        'GET /manager/online/domain': () => ({
+          status: 200,
+          body: { ...addresses, available: false },
+        }),
       },
     });
     renderApp({ routes, appInterface: 'manager', i18n, path: '/settings', fetch });
@@ -1378,16 +1391,76 @@ describe('online store console', () => {
     );
     expect(screen.getByRole('button', { name: 'Save and connect' })).toBeDisabled();
     expect(screen.getByTestId('gateway-methods')).toBeDisabled();
-    // Domain: the current address, and the search / connect steps, disabled.
+    // Domain: the addresses, and connecting a domain not switched on yet.
     await user.click(within(tabs).getByRole('tab', { name: /Domain/ }));
-    expect(screen.getAllByText(store.url).length).toBeGreaterThan(0);
-    expect(screen.getByTestId('domain-search')).toBeDisabled();
-    await user.click(screen.getByRole('radio', { name: 'I already have a domain' }));
-    expect(screen.getByTestId('domain-connect')).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Check the connection' })).toBeDisabled();
-    expect(within(screen.getByTestId('domain-steps')).getAllByRole('listitem')).toHaveLength(6);
+    expect(await screen.findByTestId('address-main')).toHaveTextContent(addresses.primaryUrl);
+    expect(screen.getByTestId('address-permanent')).toHaveTextContent(addresses.permanentUrl);
+    expect(screen.getByText('Coming soon')).toBeInTheDocument();
+    expect(screen.getByLabelText('Your domain')).toBeDisabled();
     // Nothing was sent anywhere.
     expect(fetch.calls.every((c) => c.method === 'GET')).toBe(true);
+  });
+
+  it('connects the merchant’s own domain: records to add, the check, the main address (ADR-0137)', async () => {
+    const user = userEvent.setup();
+    const pending = {
+      domain: 'raghefkarak.com',
+      status: 'pending',
+      isPrimary: false,
+      www: {
+        hostname: 'www.raghefkarak.com',
+        status: 'pending',
+        certificate: 'pending',
+        errors: [],
+      },
+      root: { hostname: 'raghefkarak.com', status: 'pending', certificate: 'pending', errors: [] },
+      records: [
+        { type: 'CNAME', name: 'www', value: 'stores.arabatapp.com', purpose: 'required' },
+        { type: 'CNAME', name: '@', value: 'stores.arabatapp.com', purpose: 'root' },
+      ],
+      lastCheckedAt: '2026-10-23T10:00:00.000Z',
+      activatedAt: null,
+    };
+    const active = {
+      ...pending,
+      status: 'active',
+      isPrimary: true,
+      www: { ...pending.www, status: 'active', certificate: 'active' },
+      activatedAt: '2026-10-23T10:05:00.000Z',
+    };
+    let typed: unknown = null;
+    const fetch = fakeApiFetch({
+      session: makeSession('manager', ['manager.access', 'online.manage', 'branches.read']),
+      routes: {
+        'GET /manager/branches': () => ({ status: 200, body: branches }),
+        'GET /manager/online/store': () => ({ status: 200, body: store }),
+        'GET /manager/online/domain': () => ({ status: 200, body: addresses }),
+        'POST /manager/online/domain': (body) => {
+          typed = body;
+          return { status: 201, body: { ...addresses, domain: pending } };
+        },
+        'POST /manager/online/domain/check': () => ({
+          status: 200,
+          body: { ...addresses, primaryUrl: 'https://www.raghefkarak.com', domain: active },
+        }),
+      },
+    });
+    renderApp({ routes, appInterface: 'manager', i18n, path: '/settings?tab=domain', fetch });
+    await user.type(await screen.findByLabelText('Your domain'), 'raghefkarak.com');
+    await user.click(screen.getByRole('button', { name: 'Connect' }));
+    expect(typed).toEqual({ domain: 'raghefkarak.com' });
+    // The one record to add, and where it stands.
+    expect(await screen.findByTestId('domain-status')).toHaveTextContent('Waiting for the record');
+    const records = screen.getAllByTestId('dns-records')[0]!;
+    expect(records).toHaveTextContent('CNAME');
+    expect(records).toHaveTextContent('www');
+    expect(records).toHaveTextContent('stores.arabatapp.com');
+    await user.click(screen.getByRole('button', { name: 'Check now' }));
+    expect(await screen.findByText('Your domain works')).toBeInTheDocument();
+    expect(screen.getByTestId('domain-status')).toHaveTextContent('Working');
+    expect(screen.getByTestId('address-main')).toHaveTextContent('https://www.raghefkarak.com');
+    expect(screen.getByTestId('address-store')).toHaveTextContent(addresses.storeUrl);
+    expect(screen.getByRole('button', { name: 'Use the Arabat address instead' })).toBeEnabled();
   });
 
   it('shows the launch steps of a draft store and shares its link on WhatsApp (ADR-0127)', async () => {

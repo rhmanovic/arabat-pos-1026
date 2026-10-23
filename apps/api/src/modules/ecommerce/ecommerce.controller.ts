@@ -15,6 +15,9 @@ import {
   type StoreQuoteResult,
   type Sale,
   type SlugAvailability,
+  type StoreAddresses,
+  connectStoreDomainSchema,
+  storeDomainPrimarySchema,
   type StoreCategory,
   type StoreProduct,
   type StoreSlotList,
@@ -76,6 +79,7 @@ import { EcommerceService } from './ecommerce.service.js';
 import { FulfilmentService } from './fulfilment.service.js';
 import { PosHandoverService } from './pos-handover.service.js';
 import { PromotionsService } from './promotions.service.js';
+import { StoreDomainsService } from './store-domains.service.js';
 import { StoreShareService } from './store-share.service.js';
 import { StoreAccountsService } from './store-accounts.service.js';
 import { OnlinePaymentsService } from './online-payments.service.js';
@@ -134,7 +138,51 @@ export class OnlineManagerController {
     private readonly store: EcommerceService,
     private readonly fulfilment: FulfilmentService,
     private readonly promotions: PromotionsService,
+    private readonly domains: StoreDomainsService,
   ) {}
+
+  // ---------------------------------------------------------------- own domain (ADR-0137)
+  @RequirePermission('manager', 'online.manage')
+  @Get('domain')
+  domain(@CurrentMerchantActor() actor: MerchantActor): Promise<StoreAddresses> {
+    return this.domains.addresses(actor);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Post('domain')
+  connectDomain(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Body(new ZodPipe(connectStoreDomainSchema)) body: O<typeof connectStoreDomainSchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<StoreAddresses> {
+    return this.domains.connect(actor, body.domain, req.ip);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Post('domain/check')
+  @HttpCode(200)
+  checkDomain(@CurrentMerchantActor() actor: MerchantActor): Promise<StoreAddresses> {
+    return this.domains.check(actor);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Put('domain/primary')
+  domainPrimary(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Body(new ZodPipe(storeDomainPrimarySchema)) body: O<typeof storeDomainPrimarySchema>,
+    @Req() req: FastifyRequest,
+  ): Promise<StoreAddresses> {
+    return this.domains.setPrimary(actor, body.primary, req.ip);
+  }
+
+  @RequirePermission('manager', 'online.manage')
+  @Delete('domain')
+  removeDomain(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Req() req: FastifyRequest,
+  ): Promise<StoreAddresses> {
+    return this.domains.remove(actor, req.ip);
+  }
 
   // ---------------------------------------------------------------- promotions (ADR-0125)
   @RequirePermission('manager', 'online.manage')
