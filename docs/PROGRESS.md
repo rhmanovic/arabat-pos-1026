@@ -1280,6 +1280,13 @@ of `docs/CUSTOM_DOMAINS_PLAN.md`).
   (phase 3). A shopper's cart and sign-in start fresh once on the new address.
 - Verified (cloud sandbox): `pnpm verify` 439 unit/web, `pnpm test:integration` 321 (46 files),
   `pnpm test:e2e` 47 (with `STORE_DOMAIN=localhost`).
+- Released (ADR-0122): production `7b79f38fdafe` (revision `arabat-web-00073-fks`, migration job
+  `arabat-migrate-lz6v8`, no new migration) with `STORE_DOMAIN=arabatapp.com`. Cloud Build check
+  `73b1530d`: ready 200 (database ok); `www` `live`, `/store/`, `/manager/`, `/online/` 200;
+  `/store/store666/products?category=x` → 301 `https://store666.arabatapp.com/products?category=x`;
+  `https://store666.arabatapp.com/` 200 with `arabat-store` and `og:url` of the sub-domain, its
+  API and assets 200, `/manager/` there is the store page. Signed out, `config.env` removed; no
+  key deleted.
 
 ### 2026-10-23 — Settings tabs, gateway and domain screens (ADR-0135)
 Owner's requests: tabs in the store settings; a payment gateways tab (interface only, server
