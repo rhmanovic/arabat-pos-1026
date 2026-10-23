@@ -1287,6 +1287,9 @@ console (no buying through Arabat, nobody at Arabat linking domains by hand).
   docs only). Cloud Build check `9c74c115`: ready 200, pages 200, redirects as before. For the first
   real connection, `raghefkarak.com` (zone in the same Cloudflare account) got `CNAME www` and
   `CNAME @` → `stores.arabatapp.com` (DNS only). Signed out, `config.env` removed; no key deleted.
+- First real connection 2026-10-24: the owner connected `raghefkarak.com` from the رغيف وكرك store
+  console; Cloudflare showed both host names and certificates active (HTTP validation), "Check now"
+  turned the domain "Working" and the owner confirmed the store opens on it.
 - Not built: e-mail to the merchant when a domain starts / stops working; operator list in
   `/platform`.
 - Verified (cloud sandbox): `pnpm verify` 444, `pnpm test:integration` 325, `pnpm test:e2e` 47.
