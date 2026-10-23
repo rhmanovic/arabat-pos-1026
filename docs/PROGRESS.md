@@ -1275,6 +1275,9 @@ cart button on phones.
   flows updated to open the tabs.
 - Verified (cloud sandbox): `pnpm verify` 430 unit/web, `pnpm test:integration` 321 (46 files),
   `pnpm test:e2e` 47.
+- Released (ADR-0122): production `bbf9415d3536` (revision `arabat-web-00072-9pd`, migration job
+  `arabat-migrate-5bc98`, no new migration). Cloud Build check `5b482cc2`: ready 200, database ok;
+  `live`, `/store/`, `/manager/`, `/online/` 200. Signed out, `config.env` removed; no key deleted.
 
 ### 2026-10-23 — One search, full-width banner, "See all" (ADR-0128 amendment 8)
 Owner's requests: banner across the whole screen; "See all" also in grid / list; no second
