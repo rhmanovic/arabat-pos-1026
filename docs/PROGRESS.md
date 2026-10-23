@@ -1272,6 +1272,14 @@ page through it and followed the 301 to the sub-domain, which may not be framed 
 Production answered the frame itself correctly (200). Fix: the frame opens
 `/store/{slug}?preview=1`, which is never redirected. E2E reproduces it (service worker + 301)
 and passes with the fix.
+- Verified (cloud sandbox): `pnpm verify` 439, `pnpm test:integration` 321 (the till's payment
+  methods test now checks field names: a random id containing "fee" had failed it), `pnpm
+  test:e2e` 47.
+- Released (ADR-0122): production `eda3782aee94` (revision `arabat-web-00074-qq8`, migration job
+  `arabat-migrate-jq2rv`, no new migration). Cloud Build check `e593e470`: ready 200, database ok;
+  `www` `live`, `/store/`, `/manager/`, `/online/` 200; `/store/store666?preview=1` 200 (no
+  redirect); `/store/store666` 301 to the sub-domain; sub-domain 200. Signed out, `config.env`
+  removed; no key deleted.
 
 ### 2026-10-23 — Every store at its own sub-domain (ADR-0136)
 Owner's decision after the Cloudflare discussion: stores at `{slug}.arabatapp.com` (first phase
