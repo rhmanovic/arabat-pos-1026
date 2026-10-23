@@ -1,8 +1,8 @@
 # Operations runbook
 
-Status: staging runs on Railway (§8). Production on Google Cloud in Doha is prepared but not
-created (§9, ADR-0105); domain, e-mail provider and payment gateways still need the owner's
-decision (OQ-021, OQ-022). Commands below were run in the development environment unless marked
+Status: staging runs on Railway (§8). Production on Google Cloud in Doha is live since
+2026-10-15 at `https://www.arabatapp.com` (§9, ADR-0105); a real payment gateway and
+subscription billing still need the owner's decision (OQ-021, OQ-022). Commands below were run in the development environment unless marked
 "production".
 
 ## 1. Components
@@ -10,8 +10,8 @@ decision (OQ-021, OQ-022). Commands below were run in the development environmen
 | Component | What | Health |
 |---|---|---|
 | API | `node apps/api/dist/main.js` (NestJS + Fastify, stateless, horizontal scaling) | `GET /api/v1/health/live` (process), `GET /api/v1/health/ready` (database round trip; 503 when down) |
-| Web apps | Static builds of `apps/{manager,pos,platform,store,links}-web/dist` served under `/manager`, `/pos`, `/platform`, `/store`, `/links` by the API (`SERVE_WEB=true`) or a CDN/reverse proxy | — |
-| PostgreSQL 18 | Roles `app_owner` (schema owner, migrations, seeds, operator CLI; BYPASSRLS) and `app_runtime` (API; no BYPASSRLS) | `pg_isready` |
+| Web apps | Static builds of `apps/{manager,pos,platform,store,links,online}-web/dist` served under `/manager`, `/pos`, `/platform`, `/store`, `/links`, `/online`, plus the landing page at `/` and the device app at `/device-app/`, by the API (`SERVE_WEB=true`) or a CDN/reverse proxy | — |
+| PostgreSQL 18 | Roles `app_owner` (schema owner, migrations, seeds, operator CLI; no BYPASSRLS — exempt from RLS only as table owner, ADR-0105, migration 0048) and `app_runtime` (API; no BYPASSRLS) | `pg_isready` |
 | SMTP | Password reset, invitations, owner set-up e-mails | provider status |
 
 Single-instance limitation: the **mock** payment gateway keeps its charges in memory
@@ -56,7 +56,7 @@ never from the repository.
 
 ## 4. Backups and restore
 
-- Production: the managed database's point-in-time recovery (WAL archiving, ≥ 14 days)
+- Production: the managed database's point-in-time recovery (WAL archiving, 7 days on Cloud SQL, §9.5)
   **plus** a nightly logical backup: `DATABASE_OWNER_URL=… scripts/ops/db-backup.sh <dir>`
   (custom format, compressed, archive listed and SHA-256 written). Store copies off-site,
   encrypted; keep 30 daily / 12 monthly.
@@ -93,7 +93,7 @@ never from the repository.
 | Situation | Action |
 |---|---|
 | API unhealthy | Check `/health/ready` (database) and logs by `reqId`; restart instances; roll back to the previous build (§3) if a release caused it. |
-| Database down | Fail over (managed HA) or restore (§4). POS terminals show "server unreachable" (no offline selling, OQ-005). |
+| Database down | Fail over (managed HA) or restore (§4). The browser POS shows "server unreachable" (it is online only). Registered device tills in the Arabat app keep selling offline (up to 72 h) and upload their sales when the server is back (ADR-0112, `docs/DEVICE_API.md`). |
 | Suspected account compromise | Disable the user (manager) or operator (CLI re-key, which also ends their sessions); end sessions: `update sessions set revoked_at = now(), revoke_reason = 'incident' where user_id = '…'` (or `merchant_id` / all). Review `audit_log`. |
 | Leaked `MFA_ENCRYPTION_KEY` / SMTP / gateway secrets | Rotate the secret; re-key every operator with the CLI; rotate gateway webhook secrets at the provider. |
 | Payment taken but order not paid | Manager → Online store → orders "needs attention" (late or mismatched payments); "Check pending payments" re-asks the gateway; refunds of money taken happen at the provider (no automatic gateway refunds yet). |
@@ -281,7 +281,7 @@ user has no SUPERUSER and no BYPASSRLS: `app_owner` is exempt from RLS only as t
 1. Owner: Google Cloud account, project, billing, budget alert; give the engineer the
    Owner role on the project.
 2. `cp infra/gcp/config.example.env infra/gcp/config.env` and fill in project, domain,
-   alert e-mail and `BACKUP_BUCKET_LOCATION` (owner's choice, §9.5).
+   alert e-mail (`ALERT_EMAIL`; the example file holds only a placeholder and alerting is not configured, step 8) and `BACKUP_BUCKET_LOCATION` (owner's choice, §9.5).
 3. `bash infra/gcp/provision.sh` — APIs, repository, service accounts, Cloud SQL, secrets,
    buckets, exports, enhanced backups, load balancer, uptime check. It prints the IP.
 4. Data: either `move-from-railway.sh` (§9.6) or nothing (an empty start).
@@ -305,7 +305,8 @@ user has no SUPERUSER and no BYPASSRLS: `app_owner` is exempt from RLS only as t
    (later keys: `gcloud secrets versions add anthropic-api-key --data-file=-`), then redeploy;
    `deploy.sh` passes it as `ANTHROPIC_API_KEY` only when the secret exists. Without it the chat
    panel on `/pos` and `/manager` only says the assistant is not enabled.
-8. Monitoring → Alerting: an e-mail channel; alert policies on the `arabat-ready` uptime
+8. **Not done yet in production** (no notification channel, no alert policies; only the uptime
+   check exists). Monitoring → Alerting: an e-mail channel; alert policies on the `arabat-ready` uptime
    check, on Cloud SQL backup failures and on failed `arabat-db-export` executions.
 9. Checks in §9.4, then the first restore drill (§9.5).
 
@@ -328,8 +329,11 @@ the owner's test company after amendments 3 and 4.
 (the release stops if it fails) → new Cloud Run revision, which receives traffic only once
 its readiness probe passes. Roll back: `gcloud run services update-traffic arabat-web
 --region=me-central1 --to-revisions=PREVIOUS=100` (migrations are expand-only, §3).
-Production releases need the owner's approval each time; the standing approval covers
-Railway staging only (ADR-0088).
+Standing approval (ADR-0122, 2026-10-20): `main` is released to production once `pnpm verify`,
+`pnpm test:integration` and `pnpm test:e2e` pass, following the owner's procedure (no key,
+account or secret is ever deleted; sign out and remove `config.env` afterwards; record the
+release in PROGRESS.md). Live payments and new paid costs still need the owner's explicit
+approval. Staging has its own standing approval (ADR-0088).
 
 ### 9.4 Checks after the first deploy
 - `https://DOMAIN/api/v1/health/ready` → `ok`; `/manager`, `/pos`, `/platform`, `/store`,

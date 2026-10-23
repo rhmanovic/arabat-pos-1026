@@ -50,7 +50,7 @@ a consistent state, and the next phase builds on it without rework.
 | Console | New SPA **`apps/online-web`** served at **`/online`** (its own layout and navigation). Signs in with the manager session like `links-web` (same cookie, `appInterface="manager"`, ADR-0116), needs `online.manage` or `online.orders`. `/manager/online` becomes a redirect; the manager dashboard keeps a card. |
 | Online payment methods | **Own entity, own console section.** `payment_methods.channel` (`pos` / `online`), online rows managed only in `/online/payments`, POS rows only in `/manager/payments`. Online kinds: `pay_on_delivery`, `pay_at_pickup`, `bank_transfer`, `gateway`. The POS never sees online methods and vice-versa. |
 | Store without a payment method | **Allowed.** Orders may be placed unpaid ("pay when you receive"); the merchant records the payment when the goods are handed over. The sale (financial document) is still created only when money is received (ADR-0077 kept). |
-| Store address | Keep the path form `/store/<slug>` as the canonical address now; subdomains and custom domains come in a later phase without changing the API (ADR-0076). |
+| Store address | Since 2026-10-23 every store answers at `{slug}.arabatapp.com` (ADR-0136); old `/store/<slug>` links answer 301 there. Merchants' own domains come later (`docs/CUSTOM_DOMAINS_PLAN.md`). |
 | Money / finance | Unchanged rules: integer minor units, append-only, cash through the cash ledger, non-cash through settlement accounts (ADR-0090/0101). |
 
 ## 2. Phases
@@ -116,7 +116,7 @@ request: same backend, database, catalog, stock, customers, accounts and permiss
   link; dashboard card updated. API routes move from `manager/online/*` to `online/*`
   (old paths kept as aliases for one release).
 - i18n ar/en, tests (component tests per page, e2e: sign in to `/online`, publish, process an
-  order), user guide chapter `33-online-console.md`.
+  order), user guide chapter `24-manager-online-store.md`.
 
 **Done when:** every online-store task is done in `/online` and nothing online remains in
 `/manager` except the entry link and the sales/report views.
@@ -234,19 +234,23 @@ for real, idempotent webhooks, refunds through the provider API, credentials per
 through the platform (encrypted, never in the repo), sandbox certification from `e2e`. **Live
 activation only with the owner's explicit approval** (CLAUDE.md §3.13).
 
-### Phase 9 — Own address: subdomain and custom domain — frontend placeholder only (ADR-0126)
+### Phase 9 — Own address: subdomain ✅ (ADR-0136), custom domain frontend placeholder only (ADR-0126)
 Done 2026-10-20 as a "Store address on the web" section in `/online/settings` (current
-`/store/<slug>` address, future subdomain and custom-domain rows). **Backend not built:**
-`<slug>.arabatapp.com` (wildcard certificate, host-based resolution in `store_merchant`),
-`online_store_domains` (verification TXT, managed certificate, CSP / CORS per host), platform
-approval page.
+`/store/<slug>` address, future subdomain and custom-domain rows). **Sub-domain built
+2026-10-23 (ADR-0136):** `<slug>.arabatapp.com` through a proxied Cloudflare wildcard, host-based
+resolution (`kernel/http/store-host.ts`), 301 from the old path, links through `storeAddress` /
+`storePath`; the Domain tab shows it (ADR-0135). **Backend not built:** merchants' own domains
+(`online_store_domains`, verification, certificates, CSP / CORS per host, platform approval) —
+phases 2–3 of `docs/CUSTOM_DOMAINS_PLAN.md`.
 
 ### Phase 10 — Analytics, SEO and PWA — frontend only (ADR-0126)
 Done 2026-10-20 in the browser: `/online/analytics` (orders, revenue, average, lost rate,
 revenue per day, top products, mix, discounts; channel split from the sales report), storefront
 meta + Open Graph per page and JSON-LD `Product`, PWA manifest and service worker (app shell
 offline, API always network). **Backend not built:** `online_events` stream (visits,
-conversion, abandoned carts), sitemap, bot SSR for link previews, image CDN rules.
+conversion, abandoned carts), sitemap, image CDN rules. Link previews were built on 2026-10-23
+(ADR-0134): the served storefront page carries Open Graph tags per store / category / product and
+`GET /store/:slug/share.jpg`.
 
 ### Storefront design ✅ (ADR-0128, migration 0070, BR-227…231)
 Added on 2026-10-20 at the owner's request: header, navigation bar, side menu, footer and the

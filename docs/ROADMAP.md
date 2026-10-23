@@ -162,8 +162,11 @@ accounts (e-mail + password, no SMS), saved addresses, own orders; **Phase 7 ✅
 discount codes and automatic offers, quote endpoint, discount on the sale; **Phases 8–10
 frontend only (ADR-0126)** — gateway and domain placeholders, browser analytics, SEO meta +
 JSON-LD, PWA; **store design ✅ (ADR-0128)** — header, navigation, side menu, footer and page
-sections with shop / restaurant templates, live preview and publishing. Open backend work: a real gateway (owner's provider choice, OQ-021), host-based
-store resolution and custom domains, an `online_events` stream, bot SSR, SMS.
+sections with shop / restaurant templates, live preview and publishing; **one catalog ✅
+(ADR-0130)**, **Excel import / export ✅ (ADR-0132)**, **product discounts ✅ (ADR-0133)**, **link
+previews ✅ (ADR-0134)**, **store sub-domains `{slug}.arabatapp.com` ✅ (ADR-0136)**. Open backend
+work: a real gateway (owner's provider choice, OQ-021), merchants' own domains
+(`docs/CUSTOM_DOMAINS_PLAN.md` phases 2–3), an `online_events` stream, SMS.
 
 Acceptance criteria:
 1. Channel listings from catalog; online orders enter the orders module.
@@ -182,6 +185,7 @@ Acceptance criteria:
 
 ## M12 — Global self-service readiness (ADR-0109)
 Status: planned. Region-specific work starts once the first focus region is chosen (OQ-027).
+Already built: landing and pricing pages and the free-trial sign-up (ADR-0113…0115, part of 4 and 6).
 
 Acceptance criteria:
 1. **Currency per merchant:** chosen at registration from `currencies` (with its exponent); no
@@ -201,5 +205,7 @@ Acceptance criteria:
 7. **Operations:** hosting region per wave, data residency notes, status page, backups (OQ-011).
 
 ## Later / to be decided
-Offline POS (OQ-005), loyalty, PIN quick switch (OQ-006), card terminal / KNET
+Loyalty, card terminal / KNET
 integration (OQ-013), country e-invoicing / fiscal receipts per focus region (decided per wave).
+Offline selling and cashier PIN sign-in were built as the local-first device app (ADR-0112;
+OQ-005 / OQ-006): offline on registered device tills only, the browser POS stays online only.

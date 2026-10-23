@@ -5,7 +5,8 @@ have yet. Competitors looked at: Foodics, Rewaa, Marn, Sapaad, Square, Lightspee
 Shopify POS, Loyverse, Odoo POS, Revel. "Missing" was checked against the code in
 `apps/api/src/modules` and `docs/PROGRESS.md` on this date; a feature that exists only partly
 is marked *(partial)*. This is a backlog of ideas, not confirmed requirements: each item needs
-an owner decision before it enters `docs/ROADMAP.md`.
+an owner decision before it enters `docs/ROADMAP.md`. Items 6, 7, 8, 44 and 128 re-checked on
+2026-10-23.
 
 ## Customers and marketing
 1. **Loyalty points** — earn/redeem points per sale (Foodics, Square, Loyverse).
@@ -13,9 +14,9 @@ an owner decision before it enters `docs/ROADMAP.md`.
 3. **Gift cards** — sell, top up and redeem prepaid cards (physical or digital).
 4. **Store credit / customer wallet** — balance kept on the customer, usable at the till.
 5. **Customer accounts (sell on credit)** — "pay later" with credit limit and statement.
-6. **Promotions engine** — buy X get Y, bundles, % off a category, minimum basket.
-7. **Happy hour / scheduled prices** — prices by time of day or day of week.
-8. **Coupon codes** — single-use or campaign codes, at the till and online.
+6. **Promotions engine** *(partial: online store only — order / category / product offers, ADR-0125; not at the till)* — buy X get Y, bundles, % off a category, minimum basket.
+7. **Happy hour / scheduled prices** *(partial: product discounts with start / end dates for store and till, ADR-0133; no time-of-day or weekday prices)* — prices by time of day or day of week.
+8. **Coupon codes** *(partial: online store only, ADR-0125; not at the till)* — single-use or campaign codes, at the till and online.
 9. **SMS / WhatsApp campaigns** — marketing messages to customer segments.
 10. **Digital receipts** — receipt by SMS / WhatsApp / e-mail with a link.
 11. **Customer feedback** — rating link on the receipt.
@@ -57,7 +58,7 @@ an owner decision before it enters `docs/ROADMAP.md`.
 41. **Auto reorder suggestions** — purchase order drafted from min/max levels and sales speed.
 42. **Supplier price lists** — supplier's catalogue and last price per supplier.
 43. **Composite / bundle products** — a kit sold as one item, stock taken from parts.
-44. **Product import/export in bulk** *(check)* — Excel import of products, stock and prices.
+44. **Product import/export in bulk** *(partial: products and categories with prices in Excel, ADR-0132; no stock quantities)* — Excel import of products, stock and prices.
 45. **Mobile stock counting app** — count with phone camera scanning.
 46. **Demand forecasting** — predicted sales per item.
 47. **Central kitchen / warehouse production** — production orders between branches.
@@ -163,7 +164,7 @@ an owner decision before it enters `docs/ROADMAP.md`.
 125. **Dashboards on TV / wall display** — live sales screen.
 126. **Benchmarking** — compare with similar shops in the area.
 127. **Hourly heatmap** — busy hours by day.
-128. **Tax per item and multiple tax rates** *(check)* — mixed VAT rates on one sale.
+128. **Tax per item and multiple tax rates** (no tax at all yet; planned in ROADMAP M12) — mixed VAT rates on one sale.
 129. **Expense categories with receipts photo** *(partial: disbursements exist)* — scan bills.
 130. **Petty cash requests app** — staff request, owner approves on the phone.
 131. **Bank feed import** — bank statement import for reconciliation.

@@ -3,7 +3,7 @@
 Only record what has actually been done and verified. Mocked or partial work
 must be labeled as such.
 
-## Current state (2026-10-12, after Prompt 15 — restaurant module)
+## Current state (2026-10-23)
 
 | Area | Status | Notes |
 |---|---|---|
@@ -25,10 +25,15 @@ must be labeled as such.
 | Reporting | Done | Sales (gross, discounts, net, refunds, by day/hour/branch/employee/product/category/method, trend, comparison, gross profit under policy), payments & cash (collections, fees, pay-outs, cash), shifts (reconciliation, discrepancies), inventory (valuation, stock, movements, adjustments, quantities), purchasing (suppliers, receipts, transfers); dashboard with KPIs, charts, filters and CSV export |
 | Restaurant | Done (optional module) | Module switch, areas/tables, stations with category routing, modifier groups (required/optional), recipes and modifier ingredients, table/takeaway/pickup orders, modifiers and notes, send to kitchen, kitchen display, cancel/waste, move/combine, split bills via the checkout engine, receipts with modifiers, restaurant sales in lists and reports |
 | Cash custody (phases A, B, C) | Done | Register drawers keep their balance between shifts, a treasury per branch, counts at open/close, forced close with or without a count, register ↔ treasury transfers, manager cash page with statements, cutover of the old cash account (ADR-0090). Phase B: expenses by category and supplier payments (POS drawer or treasury, reversals, supplier page), bank deposits with `cash.deposit`, branch-to-branch transfers through in-transit (ADR-0091). Phase C: cash by type in the payments report, expenses report (category, branch, source, supplier), discrepancy sections (close type, between shifts, after an uncounted close), dashboard total cash (ADR-0092) |
-| Automated tests | Passing | 155 unit/web, 171 integration, 35 E2E (local, 2026-10-12, cash custody phase C) |
-| CI | Written, not yet run | `.github/workflows/ci.yml` |
-| Business modules | Not started | Begin in M1 |
-| Deployment | Staging on Railway; production live on Google Cloud, Doha (2026-10-15) | `https://www.arabatapp.com` (ADR-0105, OPERATIONS.md §9); started empty; SMTP, alert policies and the backup-bucket lock still open |
+| Controls remediation (2026-10-13) | Done | Cash-out and disbursement approvals, deposits in transit and bank reconciliation, stock adjustment approvals, blind counts, transfer losses, till overrides and price bounds, refund segregation, one cut-off rule, month-end close, ownership transfer / freeze, audit detail and price history (ADR-0093…0104) |
+| Platform & subscriptions | Done | Operator realm, plans and limits, public landing and pricing pages, free trials (`/start`), "Our apps" menu (ADR-0113…0117); nothing is billed |
+| Assistant | Done (needs a key) | POS and management assistant, usage record on `/platform/assistant` (ADR-0107) |
+| Receipt printing & devices | Done | Server-side print agents (ADR-0111); local-first device till in the Arabat app with cashier PINs, primary / secondary devices, browser POS PIN sign-in (ADR-0112) |
+| Link pages | Done | `/links` editor and public link page (ADR-0116) |
+| Online store | Done except real gateway | `/online` console, pay on receipt, merchandising and one catalog, fulfilment, shopper accounts, promotions, store design (headers, footers, sections, product / cart / checkout pages), Excel import / export, product discounts, link previews, stores at `{slug}.arabatapp.com` (ADR-0118…0136). Phases 8–10 frontend only; the payment gateway and own-domain screens are interface only |
+| Automated tests | Passing | 440 unit/web, 321 integration, 47 E2E (cloud sandbox, 2026-10-23) |
+| CI | Runs, failing | `.github/workflows/ci.yml` runs on every push to `main`; recent runs fail in the Cloud SQL rehearsal step. Releases rely on the sandbox runs above |
+| Deployment | Staging on Railway; production live on Google Cloud, Doha (2026-10-15) | `https://www.arabatapp.com` (ADR-0105, OPERATIONS.md §9); released under ADR-0122; e-mail through Resend (not yet seen end to end), alert policies, client-IP check, backup-bucket lock and first restore drill still open |
 
 ## Log
 
@@ -2063,10 +2068,11 @@ adds how it presents them.
   "Arabat Online Store") 200. Signed out afterwards; no key deleted.
 
 ## Next step
-Online store: Phases 1, 2, 4, 5, 6, 7 ✅ and 8–10 frontend only (ADR-0126). Open backend work
-needs the owner's decisions: a real payment gateway (provider choice, OQ-021), subdomains /
-custom domains, an `online_events` stream for visits and abandoned carts, bot SSR for link
-previews, SMS / WhatsApp. Production releases follow ADR-0122.
-Production: confirm the client IP, SMTP token, alert policies, owner's decision on the bucket
-lock, first restore drill.
+Online store: Phases 1, 2, 4, 5, 6, 7 ✅ and 8–10 frontend only (ADR-0126); store sub-domains
+(ADR-0136) and link previews (ADR-0134) ✅. Open backend work needs the owner's decisions: a real
+payment gateway (provider choice, OQ-021), merchants' own domains (`docs/CUSTOM_DOMAINS_PLAN.md`
+phases 2–3), an `online_events` stream for visits and abandoned carts, SMS / WhatsApp.
+Production releases follow ADR-0122.
+Production: confirm the client IP, the first production e-mail (Resend), alert policies, owner's
+decision on the bucket lock, first restore drill. CI: fix the failing Cloud SQL rehearsal step.
 Staging: first platform operator, SMTP; owner decisions OQ-021–025.
