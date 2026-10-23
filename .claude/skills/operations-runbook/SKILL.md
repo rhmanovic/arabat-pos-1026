@@ -123,6 +123,23 @@ are in the **deploy-production** skill; local runs in **run-api-locally** / **sa
   (15–40 min), then detach it; redeploy so the app's public URLs follow.
 - A domain's registrar and expiry: RDAP (`https://rdap.verisign.com/com/v1/domain/<name>`) through Firecrawl (the sandbox cannot reach it).
 
+### Mail DNS (Google Workspace on the root, Resend on `send.`; ADR-0108)
+- A TXT value over 255 characters (2048-bit DKIM) goes in as quoted 255-character parts
+  (`"part1" "part2"`); read the record back and compare it with the original character by character.
+- Never use Google's "Sign in to Cloudflare" (Domain Connect) while MX / SPF already exist: it can
+  add a second SPF record, which breaks SPF. Choose "Other verification options" → TXT and add it
+  through the API.
+- The proxy blocks public resolvers (`dns.google`, `cloudflare-dns.com` → 403): check records by
+  reading them back from the Cloudflare API.
+- Delivery check: the owner sends a test message to their personal Gmail; reading it needs the
+  owner's permission **every time** and covers **that test message only**. Read it with
+  `mcp__Gmail__get_message` (`RAW`): `Authentication-Results` must show `spf=pass`, `dkim=pass`,
+  `dmarc=pass`. Raise DMARC to `p=quarantine` only after all three pass.
+- Resend: domain `send.arabatapp.com`, region eu-west-1, Return-Path `send` (records on
+  `send.send` and `rsend.send`); CNAMEs **DNS only**; click and open tracking **off** (reset and
+  invitation links must not pass a tracker). The dashboard truncates values with `[…]`: ask the
+  owner to copy the full text.
+
 ## 6. E-mail delivery (OPERATIONS §8)
 - Every outgoing message is built by `renderEmail` (`apps/api/src/kernel/mail/template.ts`):
   bilingual layout (Arabic RTL, then English), subject `ar | en`, caller text HTML-escaped, and

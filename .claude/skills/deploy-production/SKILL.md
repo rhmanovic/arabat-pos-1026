@@ -64,7 +64,11 @@ or disable a test), merge to `main`, start again. Work from a `claude/*` branch 
 ## 3. Production (Google Cloud `arabat-511416`, `me-central1`, ADR-0122)
 Needs: `gcloud` (at `/usr/local/bin/gcloud` in the sandbox) and the admin service-account key in
 env var `GCP_Admin_KEY_01` (base64 of the JSON key; `GCP_ADMIN_KEY_B64` is a dead key, refused
-with `invalid_grant`). If gcloud is missing, the variable is absent, or sign-in fails: **stop**,
+with `invalid_grant`). `GCP_SA_KEY_B64` (service account `arabat-deployer`, checked 2026-10-23
+with read-only commands): signs in; lists / describes Cloud Run services and revisions, Cloud SQL
+instances, Artifact Registry, secret names, buckets and builds; refused `projects get-iam-policy`.
+Deploying with it was not tried: use it for read-only diagnosis, not as the release key.
+If gcloud is missing, the variable is absent, or sign-in fails: **stop**,
 release nothing, and tell the owner in Arabic exactly what is missing and the error text as is.
 
 ```bash
