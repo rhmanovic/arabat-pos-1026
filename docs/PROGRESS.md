@@ -1272,6 +1272,11 @@ checked once, 80 ms after the section appeared, and then only on scroll; the pag
 a still screen (data and pictures arriving) brought sections into view with no scroll event.
 Fix: sections are watched with the browser's intersection observer (the scroll check stays for
 browsers without it).
+- Verified (cloud sandbox): `pnpm verify` 440, `pnpm test:integration` 321, `pnpm test:e2e` 47.
+- Released (ADR-0122): production `b242b3c8e6f7` (revision `arabat-web-00075-mmt`, migration job
+  `arabat-migrate-j9tpl`, no new migration). Cloud Build check `69736008`: ready 200, database ok;
+  `www` pages 200, preview 200, old address 301 to the sub-domain, sub-domain 200. Signed out,
+  `config.env` removed; no key deleted.
 
 ### 2026-10-23 — Fix: live preview blocked after the sub-domain release (ADR-0136)
 Owner's report: the design editor's live preview showed "This content is blocked". Cause: a
