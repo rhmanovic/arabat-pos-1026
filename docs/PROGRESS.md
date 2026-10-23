@@ -1265,6 +1265,17 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-23 — One search, full-width banner, "See all" (ADR-0128 amendment 8)
+Owner's requests: banner across the whole screen; "See all" also in grid / list; no second
+search box on the products page; a header search button opens a bar under the header.
+- Banner "Width: inside the page / full screen width"; "See all" shown whenever ticked; the
+  products list hides its box while the header has the search and follows the header's words
+  live; the search button opens an animated bar under the header (not where a bar exists).
+- Tests: store-web (+1 wide banner and "See all" in a grid; header tests updated: the button
+  opens the bar with focus, one search box, live filtering from the header).
+- Verified (cloud sandbox): `pnpm verify` 430 unit/web, `pnpm test:integration` 321 (46 files),
+  `pnpm test:e2e` 47.
+
 ### 2026-10-23 — Link previews of the store (ADR-0134)
 Merchant's request: a store link on WhatsApp shows the logo and the store's name; a category
 link the category's name; a product link the product's name.

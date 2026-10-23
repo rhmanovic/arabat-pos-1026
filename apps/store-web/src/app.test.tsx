@@ -1109,9 +1109,49 @@ describe('storefront', () => {
     expect(screen.getByRole('button', { name: 'Buy now: Mug' })).toBeDisabled();
   });
 
+  it('stretches a banner across the screen and links "See all" from a product grid', async () => {
+    const design = templateDesign('retail');
+    design.pages.home = sectionsOf([
+      {
+        id: 'wide',
+        type: 'banner',
+        variant: 'color',
+        imageSource: 'none',
+        title: { en: 'Welcome', ar: null },
+        width: 'full',
+      },
+      {
+        id: 'grid',
+        type: 'products',
+        title: { en: 'Fruit', ar: null },
+        variant: 'grid',
+        source: 'all',
+        showViewAll: true,
+      },
+    ]);
+    renderStore('/demo', {
+      'GET /store/demo/design': () => ({ status: 200, body: { design } }),
+    });
+    const banner = (await screen.findByText('Welcome')).closest('[data-banner-width]')!;
+    expect(banner).toHaveAttribute('data-banner-width', 'full');
+    expect(banner).toHaveClass('w-screen', 'rounded-none');
+    // Every product already shows, and the link is there because the merchant asked for it.
+    expect(await screen.findByRole('link', { name: 'See all' })).toHaveAttribute(
+      'href',
+      '/demo/products',
+    );
+  });
+
   it('pages the product list with its count, card style and search hint', async () => {
     const user = userEvent.setup();
     const design = templateDesign('retail');
+    // Without a search in the header, the list has its own search box.
+    design.header = {
+      ...design.header,
+      actions: design.header.actions.map((a) =>
+        a.type === 'search' ? { ...a, visible: false } : a,
+      ),
+    };
     design.pages.products = sectionsOf([
       {
         id: 'catalog',
@@ -1228,8 +1268,16 @@ describe('storefront', () => {
     expect(
       await within(header).findByRole('searchbox', { name: 'Search the store' }),
     ).toBeInTheDocument();
-    const button = within(header).getByRole('link', { name: 'Search products' });
+    const button = within(header).getByRole('button', { name: 'Search products' });
     expect(button).toHaveClass('max-lg:hidden');
+    // On large screens the button opens a bar under the header, with the cursor in it.
+    const panel = within(header).getByTestId('search-panel');
+    expect(panel).toHaveAttribute('data-open', 'false');
+    expect(panel).toHaveClass('max-lg:hidden');
+    await userEvent.click(button);
+    expect(panel).toHaveAttribute('data-open', 'true');
+    expect(within(panel).getByRole('searchbox', { name: 'Search the store' })).toHaveFocus();
+    expect(button).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('builds the header from the design: top bar, layout, menus, mega-menu, ordered items and search', async () => {
@@ -1335,16 +1383,24 @@ describe('storefront', () => {
     );
     // Beside the centred logo the search is a button (its bar would cover the logo); the bar
     // stays under the header on phones. Searching opens the products page filtered by the words.
-    expect(within(header).getByRole('link', { name: 'Search products' })).toHaveAttribute(
-      'href',
-      '/demo/products?search=1',
+    expect(within(header).getByRole('button', { name: 'Search products' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
     );
     const search = within(header).getAllByRole('searchbox', { name: 'Search the store' })[0]!;
     await user.type(search, 'Mug{Enter}');
     const grid = await screen.findByTestId('product-grid');
     expect(within(grid).getByText('Mug')).toBeInTheDocument();
     expect(within(grid).queryByText('Coffee beans')).toBeNull();
-    expect(screen.getByRole('searchbox', { name: 'Search products' })).toHaveValue('Mug');
+    // One search only: the products page shows no box of its own while the header has one,
+    // and the header's box keeps the words and filters as the shopper types.
+    expect(screen.queryByRole('searchbox', { name: 'Search products' })).toBeNull();
+    const again = within(header).getAllByRole('searchbox', { name: 'Search the store' })[0]!;
+    expect(again).toHaveValue('Mug');
+    await user.clear(again);
+    await user.type(again, 'Coffee');
+    expect(await within(grid).findByText('Coffee beans')).toBeInTheDocument();
+    expect(within(grid).queryByText('Mug')).toBeNull();
   });
 
   it('builds the footer from the design: layout, call to action, badges, brand, folding blocks and the bottom line', async () => {

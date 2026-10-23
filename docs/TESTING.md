@@ -66,6 +66,13 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-23 (one search, wide banner, "See all")
+- `apps/store-web/src/app.test.tsx`: banner `width: full` breaks out (`w-screen`, no corners);
+  "See all" on a grid with every product shown; the header search button opens the bar under
+  the header with the cursor in it; with a header search the products page has no box of its
+  own and the header's box keeps the words and filters as the shopper types; a design without
+  a header search keeps the list's own box.
+
 ### Results 2026-10-23 (link previews, ADR-0134)
 - `ecommerce.int.test.ts` (+1): store tags without a logo (no picture) and with one, a name with
   markup escaped, product title / price / type / picture address, category title, plain page for

@@ -290,6 +290,8 @@ export const bannerSectionSchema = z.object({
   /** A slow zoom on the picture. */
   zoom: z.boolean().default(false),
   rounded: z.enum(['none', 'soft', 'round']).default('soft'),
+  /** `full` = from one side of the screen to the other, without corners. */
+  width: z.enum(['contained', 'full']).default('contained'),
 });
 /** How product cards look in a list (ADR-0128 amendment 7). */
 const cardOptions = {

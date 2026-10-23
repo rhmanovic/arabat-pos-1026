@@ -2167,6 +2167,23 @@ ADR; supersede it.
 - **Consequences:** smaller pictures for shoppers, no personal metadata kept, one place to change
   the format or the size rule.
 
+## ADR-0128 amendment 8 — One search, wide banners, "See all" everywhere (2026-10-23)
+- **Owner's requests:** a banner across the whole screen; "See all" of a product section
+  working in the grid and list too; never two search boxes; a header search button that opens
+  a bar under the header.
+- **Decision:**
+  - Banner `width`: `contained` (default) | `full` (from one side of the screen to the other,
+    without corners).
+  - A product section's "See all" shows whenever the merchant ticks it (it was shown only when
+    products were left out or for the carousel).
+  - **One search:** when the header has its search item (`headerHasSearch`), the products
+    page's list shows no search box of its own; the header's box drives `?q=` (it filters live
+    on the products page and keeps the words). Without a header search the list keeps its box.
+  - Where the header only has a search button (on large screens, or on phones without the
+    phone bar), the button opens an animated bar under the header with the cursor in it (Escape
+    closes it; it stays open on the products page with the words); no bar is added where the
+    header already shows one. `?search=1` opens it.
+
 ## ADR-0134 — Link previews of the store (WhatsApp and other apps)
 - **Status:** Accepted (2026-10-23). A merchant asked that a store link sent on WhatsApp show
   the logo and the store's name, a category link the category's name, and a product link the

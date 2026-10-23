@@ -1277,6 +1277,15 @@ function BannerEditor({ s, set }: { s: SectionOf<'banner'>; set: Patch<SectionOf
         onChange={(v) => set({ variant: v })}
       />
       <Choice
+        label={t('design.bannerWidth')}
+        value={s.width}
+        options={[
+          { value: 'contained', label: t('design.bannerWidth_contained') },
+          { value: 'full', label: t('design.bannerWidth_full') },
+        ]}
+        onChange={(v) => set({ width: v })}
+      />
+      <Choice
         label={t('design.imageSource')}
         value={s.imageSource}
         options={[

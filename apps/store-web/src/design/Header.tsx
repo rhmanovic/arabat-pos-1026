@@ -1,9 +1,9 @@
-import type { DesignLink, HeaderAction, NavItem } from '@arabat/contracts';
+import type { DesignLink, HeaderAction, NavItem, StoreDesign } from '@arabat/contracts';
 import { cn } from '@arabat/ui';
 import { LanguageSwitcher } from '@arabat/web-core';
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, NavLink, useLocation, useNavigate } from 'react-router';
+import { Link, NavLink, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { useCart } from '../cart.js';
 import { navGroups, useAccount, useLocalName, useSlug, useStorefront } from '../shared.js';
 import { linkTarget, useDesign, useText } from './context.js';
@@ -22,6 +22,14 @@ type Item = {
   kind: NavItem['kind'];
   children: { id: string; label: string; link: DesignLink }[];
 };
+
+/**
+ * Whether the header offers the store's search (a bar, or a button that opens one): the
+ * products page then shows no search box of its own, so there is only one place to type.
+ */
+export function headerHasSearch(header: StoreDesign['header']): boolean {
+  return header.actions.some((a) => a.type === 'search' && a.visible);
+}
 
 /** Navigation items; without any, the three designed pages (categories as a menu). */
 function useNavItems(): Item[] {
@@ -222,10 +230,23 @@ export function Header({ tagline, onMenu }: { tagline: string | null; onMenu: ()
       stacked={layout === 'centered' || layout === 'bold'}
     />
   );
-  const searchShown = header.actions.some((a) => a.type === 'search' && a.visible);
+  const searchShown = headerHasSearch(header);
   const searchBar = searchShown && (layout === 'stacked' || header.searchStyle === 'bar');
   // On phones the bar sits under the header row; the row then leaves out the search button.
   const phoneSearchBar = searchBar || (searchShown && header.mobileSearch);
+  // Where the header only has a search button, it opens a bar under the header.
+  const [params] = useSearchParams();
+  const [searchOpen, setSearchOpen] = useState(params.get('search') === '1');
+  const desktopBar = searchBar && !centeredBrand;
+  const searchPanel =
+    searchShown && (!desktopBar || !phoneSearchBar) ? (
+      <SearchPanel
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        className={cn(desktopBar && 'lg:hidden', phoneSearchBar && 'max-lg:hidden')}
+        inner={layout === 'floating' ? 'px-3 sm:px-4' : width}
+      />
+    ) : null;
   const navRowBelow = layout === 'centered' || layout === 'stacked' || layout === 'bold';
   const nav = (part?: 'first' | 'second') => (
     <Nav
@@ -284,9 +305,11 @@ export function Header({ tagline, onMenu }: { tagline: string | null; onMenu: ()
       )}
       {/* Beside a centred logo the search stays a button; its bar would cover the logo. */}
       <Actions
-        searchBar={searchBar && !centeredBrand}
+        searchBar={desktopBar}
         searchInRow={layout === 'stacked'}
         phoneSearchBar={phoneSearchBar}
+        searchOpen={searchOpen}
+        onSearch={() => setSearchOpen((o) => !o)}
       />
     </div>
   );
@@ -300,6 +323,7 @@ export function Header({ tagline, onMenu }: { tagline: string | null; onMenu: ()
           <SearchBar />
         </div>
       ) : null}
+      {searchPanel}
       {navShown && navRowBelow ? (
         <div
           className={cn(
@@ -346,6 +370,7 @@ export function Header({ tagline, onMenu }: { tagline: string | null; onMenu: ()
               <SearchBar />
             </div>
           ) : null}
+          {searchPanel}
         </header>
       </div>
     );
@@ -652,14 +677,38 @@ function CategoryMenu({ mega }: { mega: boolean }) {
 }
 
 // --------------------------------------------------------------------------- actions
-function SearchBar({ className }: { className?: string }) {
+/**
+ * The store's search box. On the products page it filters as the shopper types (the list reads
+ * `?q=`); elsewhere it opens the products page with the words.
+ */
+function SearchBar({
+  className,
+  autoFocus,
+  onDone,
+}: {
+  className?: string;
+  autoFocus?: boolean;
+  onDone?: () => void;
+}) {
   const slug = useSlug();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [params] = useSearchParams();
   const { t } = useTranslation();
-  const [q, setQ] = useState('');
+  const onProducts = location.pathname === `/${slug}/products`;
+  const [q, setQ] = useState(onProducts ? (params.get('q') ?? '') : '');
+  const go = (value: string, replace: boolean) => {
+    const next = new URLSearchParams(onProducts ? params : undefined);
+    next.delete('search');
+    if (value.trim()) next.set('q', value.trim());
+    else next.delete('q');
+    const query = next.toString();
+    void navigate(`/${slug}/products${query ? `?${query}` : ''}`, { replace });
+  };
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    void navigate(`/${slug}/products?q=${encodeURIComponent(q.trim())}`);
+    // The bar stays open on the products page, with the words, to change or clear them.
+    go(q, onProducts);
   };
   return (
     <form role="search" onSubmit={submit} className={cn('relative w-full', className)}>
@@ -670,7 +719,14 @@ function SearchBar({ className }: { className?: string }) {
       <input
         type="search"
         value={q}
-        onChange={(e) => setQ(e.target.value)}
+        autoFocus={autoFocus}
+        onChange={(e) => {
+          setQ(e.target.value);
+          if (onProducts) go(e.target.value, true);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') onDone?.();
+        }}
         aria-label={t('nav.searchStore')}
         placeholder={t('nav.searchPlaceholder')}
         className="h-11 w-full rounded-full border border-border bg-surface-muted ps-10 pe-4 text-sm text-fg outline-none transition-colors placeholder:text-fg-subtle focus:border-primary focus:bg-surface"
@@ -679,14 +735,51 @@ function SearchBar({ className }: { className?: string }) {
   );
 }
 
+/** The search bar that slides open under the header when its search button is pressed. */
+function SearchPanel({
+  open,
+  onClose,
+  className,
+  inner,
+}: {
+  open: boolean;
+  onClose: () => void;
+  className?: string;
+  inner: string;
+}) {
+  return (
+    <div
+      className={cn(
+        'grid transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:transition-none',
+        open ? 'grid-rows-[1fr] opacity-100' : 'pointer-events-none grid-rows-[0fr] opacity-0',
+        className,
+      )}
+      data-testid="search-panel"
+      data-open={open}
+      aria-hidden={!open}
+      inert={!open}
+    >
+      <div className="overflow-hidden">
+        <div className={cn(inner, 'border-t border-current/10 py-3')}>
+          {open ? <SearchBar autoFocus onDone={onClose} /> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Actions({
   searchBar,
   searchInRow,
   phoneSearchBar,
+  searchOpen,
+  onSearch,
 }: {
   searchBar: boolean;
   searchInRow: boolean;
   phoneSearchBar: boolean;
+  searchOpen: boolean;
+  onSearch: () => void;
 }) {
   const slug = useSlug();
   const { data: store } = useStorefront();
@@ -706,13 +799,15 @@ function Actions({
             <SearchBar />
           </div>
         ) : (
-          <Link
-            to={`/${slug}/products?search=1`}
-            className={cn(icon, phoneSearchBar && 'max-lg:hidden')}
+          <button
+            type="button"
+            onClick={onSearch}
+            aria-expanded={searchOpen}
+            className={cn(icon, phoneSearchBar && 'max-lg:hidden', searchOpen && 'bg-current/10')}
             aria-label={t('catalog.search')}
           >
-            <StoreIcon name="search" />
-          </Link>
+            <StoreIcon name={searchOpen ? 'close' : 'search'} />
+          </button>
         );
       case 'account':
         return store?.accountsEnabled || token ? (

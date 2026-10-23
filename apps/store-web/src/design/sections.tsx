@@ -36,6 +36,7 @@ import {
   useText,
 } from './context.js';
 import { SectionFrame, SectionTitle, full, shownSections } from './frame.js';
+import { headerHasSearch } from './Header.js';
 import { SaleBadge, SalePrice, productSale } from './sale.js';
 import {
   CollageSection,
@@ -343,6 +344,9 @@ function BannerSection({ s }: { s: SectionOf<'banner'> }) {
   const hasText = Boolean(eyebrow || title || subtitle || label || label2);
   if (!img && !hasText) return null;
   const testId = s.imageSource === 'store' ? 'store-banner' : undefined;
+  // Edge to edge: the banner leaves the page's width and loses its corners.
+  const wide = s.width === 'full';
+  const corners = wide ? 'rounded-none' : ROUNDED[s.rounded];
   const align = {
     start: 'items-start text-start',
     center: 'items-center text-center',
@@ -420,8 +424,8 @@ function BannerSection({ s }: { s: SectionOf<'banner'> }) {
   // The store's picture alone (the legacy banner).
   if (!hasText && img)
     return (
-      <DesignAnchor link={s.link} className="block">
-        {picture(cn('aspect-[3/1] w-full object-cover', ROUNDED[s.rounded] || 'rounded-none'))}
+      <DesignAnchor link={s.link} className={cn('block', wide && full)} data-banner-width={s.width}>
+        {picture(cn('aspect-[3/1] w-full object-cover', corners || 'rounded-none'))}
       </DesignAnchor>
     );
   if (s.variant === 'split')
@@ -429,8 +433,10 @@ function BannerSection({ s }: { s: SectionOf<'banner'> }) {
       <section
         className={cn(
           'grid items-center gap-6 overflow-hidden bg-surface-muted sm:grid-cols-2',
-          ROUNDED[s.rounded],
+          corners,
+          wide && full,
         )}
+        data-banner-width={s.width}
       >
         {picture('aspect-[4/3] size-full object-cover')}
         <div className="p-6 sm:p-10">{words(false)}</div>
@@ -438,7 +444,10 @@ function BannerSection({ s }: { s: SectionOf<'banner'> }) {
     );
   if (s.variant === 'color' || !img)
     return (
-      <section className={cn('bg-primary p-8 text-primary-fg sm:p-12', ROUNDED[s.rounded])}>
+      <section
+        className={cn('bg-primary p-8 text-primary-fg sm:p-12', corners, wide && full)}
+        data-banner-width={s.width}
+      >
         {words(false, true)}
       </section>
     );
@@ -449,7 +458,10 @@ function BannerSection({ s }: { s: SectionOf<'banner'> }) {
   }[s.position];
   const onCard = s.variant === 'card' || s.variant === 'glass';
   return (
-    <section className={cn('relative isolate overflow-hidden', ROUNDED[s.rounded])}>
+    <section
+      className={cn('relative isolate overflow-hidden', corners, wide && full)}
+      data-banner-width={s.width}
+    >
       {picture(cn('absolute inset-0 -z-10 size-full object-cover', s.zoom && 'store-zoom'))}
       <div
         className={cn(
@@ -930,7 +942,7 @@ function ProductsSection({ s }: { s: SectionOf<'products'> }) {
     <section aria-label={text(s.title) || undefined}>
       <SectionTitle
         aside={
-          s.showViewAll && (chosen.length > shown.length || s.variant === 'carousel') ? (
+          s.showViewAll ? (
             <Link to={more} className="shrink-0 text-sm font-semibold text-primary hover:underline">
               {t('design.seeAll')}
             </Link>
@@ -1682,7 +1694,10 @@ export function CatalogSection({ s }: { s: SectionOf<'catalog'> }) {
   // The header's search bar opens this page with `?q=`.
   const [searchText, setSearch] = useState(params.get('q') ?? '');
   const [sort, setSort] = useState<'default' | 'name' | 'priceAsc' | 'priceDesc'>(s.defaultSort);
-  const wantsSearch = params.get('search') === '1';
+  // When the header has the search, it is the only search box: the list follows its `?q=`.
+  const { header } = useDesign();
+  const ownSearch = s.showSearch && !headerHasSearch(header);
+  const wantsSearch = params.get('search') === '1' && ownSearch;
   useEffect(() => {
     if (wantsSearch) document.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
   }, [wantsSearch]);
@@ -1704,7 +1719,7 @@ export function CatalogSection({ s }: { s: SectionOf<'catalog'> }) {
     return (
       <div className="flex flex-col gap-4">
         {/* The bar's place too, so nothing moves when the products arrive. */}
-        {s.showSearch || s.showSort || s.showCategories ? (
+        {ownSearch || s.showSort || s.showCategories ? (
           <span
             aria-hidden
             className={cn(
@@ -1902,7 +1917,7 @@ export function CatalogSection({ s }: { s: SectionOf<'catalog'> }) {
       </Select>
     )
   ) : null;
-  const search = s.showSearch ? (
+  const search = ownSearch ? (
     <div className={cn('relative', s.searchWidth === 'full' ? 'w-full flex-1' : 'w-full max-w-xs')}>
       {s.searchIcon ? (
         <svg
