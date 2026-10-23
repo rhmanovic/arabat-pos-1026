@@ -1275,6 +1275,9 @@ search box on the products page; a header search button opens a bar under the he
   opens the bar with focus, one search box, live filtering from the header).
 - Verified (cloud sandbox): `pnpm verify` 430 unit/web, `pnpm test:integration` 321 (46 files),
   `pnpm test:e2e` 47.
+- Released (ADR-0122): production `e9ed7822f64b` (revision `arabat-web-00071-r4j`, migration job
+  `arabat-migrate-dts82`, no new migration). Cloud Build check `99ad0d5e`: ready 200, database ok;
+  `live`, `/store/`, `/manager/`, `/online/` 200. Signed out, `config.env` removed; no key deleted.
 
 ### 2026-10-23 — Link previews of the store (ADR-0134)
 Merchant's request: a store link on WhatsApp shows the logo and the store's name; a category
