@@ -853,7 +853,9 @@ function Actions({
           return (
             <Link
               to={`/${slug}/cart`}
-              className="relative inline-flex h-10 items-center gap-2 rounded-full bg-current/[0.07] px-2.5 text-sm font-semibold whitespace-nowrap transition-colors hover:bg-current/15 sm:px-4"
+              // On phones the words hide: the button is a round icon with the count on its corner.
+              className="relative inline-flex h-10 items-center gap-2 rounded-full bg-current/[0.07] text-sm font-semibold whitespace-nowrap transition-colors hover:bg-current/15 max-sm:w-10 max-sm:justify-center sm:px-4"
+              data-testid="cart-button"
             >
               <StoreIcon name="bag" />
               <span className="max-sm:sr-only">{label}</span>

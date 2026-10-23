@@ -2167,6 +2167,28 @@ ADR; supersede it.
 - **Consequences:** smaller pictures for shoppers, no personal metadata kept, one place to change
   the format or the size rule.
 
+## ADR-0135 — Store settings in tabs; payment gateway and domain screens (interface only)
+- **Status:** Accepted (2026-10-23). Owner's requests: tabs for the store settings; a payment
+  gateways tab with everything the interface needs, without backend or database work (controls
+  that need the server stay visible but disabled); the domain screens (search, buy through
+  Cloudflare, connect, verify) in the interface only, with a plan for the later phases.
+- **Decision:**
+  - Settings tabs (`?tab=`): General (address, status, branding, appearance), Delivery and hours,
+    Payment, Domain. One form and one save bar for all; a refused field opens its tab and is
+    marked with a dot on the tab.
+  - Payment tab: what works now (pay on receipt, the payment methods and their readiness) and the
+    gateway screens: provider choice (MyFatoorah, Tap, UPayments, Hesabe, Ottu; choosing only
+    changes the form's title and notification address), connection details (mode, merchant id,
+    key, secret, notification address `/api/v1/webhooks/payments/{provider}`, test / connect),
+    methods at checkout, fees and settlement, refunds through the provider; all disabled.
+  - Domain tab: the current address (copy), the future sub-domain, "buy a new domain" (name,
+    ending, results with status and yearly price) or "I already have a domain" (DNS records,
+    check the connection), and the steps; all server parts disabled. Plan:
+    `docs/CUSTOM_DOMAINS_PLAN.md`.
+  - The storefront's pill cart button is round on phones (the count sits on its corner).
+- **Consequences:** nothing is stored or sent from the new screens; each control is wired when
+  its phase is built. No gateway or domain is promised to merchants as working.
+
 ## ADR-0128 amendment 8 — One search, wide banners, "See all" everywhere (2026-10-23)
 - **Owner's requests:** a banner across the whole screen; "See all" of a product section
   working in the grid and list too; never two search boxes; a header search button that opens

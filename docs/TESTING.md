@@ -66,6 +66,14 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-23 (settings tabs, ADR-0135)
+- `apps/online-web/src/app.test.tsx`: General is the first tab; Payment shows pay on receipt and
+  five providers "Coming soon", choosing one changes the title and notification address, the
+  connection form, methods and buttons are disabled; Domain shows the current address, the search
+  and connect forms disabled and six steps; only GET requests are made.
+- `e2e/store.spec.ts`: the store settings are filled across the tabs (General, Delivery and hours,
+  Payment) with one save.
+
 ### Results 2026-10-23 (one search, wide banner, "See all")
 - `apps/store-web/src/app.test.tsx`: banner `width: full` breaks out (`w-screen`, no corners);
   "See all" on a grid with every product shown; the header search button opens the bar under

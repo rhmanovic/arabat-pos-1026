@@ -1265,6 +1265,17 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-23 — Settings tabs, gateway and domain screens (ADR-0135)
+Owner's requests: tabs in the store settings; a payment gateways tab (interface only, server
+controls disabled); domain search / buy / connect screens (interface only) and a plan; a round
+cart button on phones.
+- Tabs General / Delivery and hours / Payment / Domain with one save bar; a refused field opens
+  its tab. Gateways and domain screens built and disabled; plan in `docs/CUSTOM_DOMAINS_PLAN.md`.
+- Tests: online-web (settings test rewritten for the tabs and the disabled screens), E2E store
+  flows updated to open the tabs.
+- Verified (cloud sandbox): `pnpm verify` 430 unit/web, `pnpm test:integration` 321 (46 files),
+  `pnpm test:e2e` 47.
+
 ### 2026-10-23 — One search, full-width banner, "See all" (ADR-0128 amendment 8)
 Owner's requests: banner across the whole screen; "See all" also in grid / list; no second
 search box on the products page; a header search button opens a bar under the header.

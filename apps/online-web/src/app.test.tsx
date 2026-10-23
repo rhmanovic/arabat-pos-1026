@@ -1347,7 +1347,8 @@ describe('online store console', () => {
     expect(fetch.calls.some((c) => c.path.startsWith('/manager/reports'))).toBe(false);
   });
 
-  it('reserves the gateway and domain sections of the settings for later phases', async () => {
+  it('splits the settings into tabs; gateways and the domain are interface only for now', async () => {
+    const user = userEvent.setup();
     const fetch = fakeApiFetch({
       session: makeSession('manager', ['manager.access', 'online.manage', 'branches.read']),
       routes: {
@@ -1356,12 +1357,36 @@ describe('online store console', () => {
       },
     });
     renderApp({ routes, appInterface: 'manager', i18n, path: '/settings', fetch });
-    const gateways = await screen.findByTestId('gateway-placeholders');
-    expect(within(gateways).getAllByText('Coming soon')).toHaveLength(3);
-    expect(within(gateways).getByText('K-net')).toBeInTheDocument();
-    expect(screen.getByText('Store address on the web')).toBeInTheDocument();
-    expect(screen.getAllByText(store.url).length).toBeGreaterThan(0);
+    // General first: the address, the status, the branding.
+    const tabs = await screen.findByRole('tablist', { name: 'Settings' });
+    expect(within(tabs).getByRole('tab', { name: /General/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
     expect(screen.getByRole('checkbox', { name: /Let shoppers create accounts/ })).toBeChecked();
+    expect(screen.queryByText('Fulfilment')).toBeNull();
+    // Payment: what works now, then the gateway screens, disabled.
+    await user.click(within(tabs).getByRole('tab', { name: /Payment/ }));
+    expect(screen.getByRole('checkbox', { name: /Allow payment on receipt/ })).toBeInTheDocument();
+    const providers = screen.getByTestId('gateway-providers');
+    expect(within(providers).getAllByText('Coming soon')).toHaveLength(5);
+    await user.click(within(providers).getByRole('radio', { name: /Tap Payments/ }));
+    expect(screen.getByText('Connect Tap Payments')).toBeInTheDocument();
+    expect(screen.getByTestId('gateway-form')).toBeDisabled();
+    expect(screen.getByLabelText('Notification address')).toHaveValue(
+      `${new URL(store.url).origin}/api/v1/webhooks/payments/tap`,
+    );
+    expect(screen.getByRole('button', { name: 'Save and connect' })).toBeDisabled();
+    expect(screen.getByTestId('gateway-methods')).toBeDisabled();
+    // Domain: the current address, and the search / connect steps, disabled.
+    await user.click(within(tabs).getByRole('tab', { name: /Domain/ }));
+    expect(screen.getAllByText(store.url).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('domain-search')).toBeDisabled();
+    await user.click(screen.getByRole('radio', { name: 'I already have a domain' }));
+    expect(screen.getByTestId('domain-connect')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Check the connection' })).toBeDisabled();
+    expect(within(screen.getByTestId('domain-steps')).getAllByRole('listitem')).toHaveLength(6);
+    // Nothing was sent anywhere.
     expect(fetch.calls.every((c) => c.method === 'GET')).toBe(true);
   });
 

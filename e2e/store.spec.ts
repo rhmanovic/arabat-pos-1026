@@ -70,11 +70,14 @@ test('a shopper buys online with the sandbox gateway; the order, stock and repor
   await page.getByRole('link', { name: 'Store settings' }).click();
   await page.getByLabel('Store address').fill(slug);
   await page.getByLabel('Store name (English)').fill('Saffron House');
+  await page.getByLabel('Status').selectOption('published');
+  // The settings are in tabs; the form keeps what was typed in each.
+  await page.getByRole('tab', { name: /Delivery and hours/ }).click();
   await page.getByLabel('Fulfilment branch', { exact: true }).selectOption(main);
   await page.getByLabel('Delivery', { exact: true }).check();
   await page.getByLabel('Delivery fee').fill('0.500');
-  await page.getByLabel('Status').selectOption('published');
   await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByRole('tab', { name: /General/ }).click();
   await expect(page.getByRole('link', { name: new RegExp(`/store/${slug}$`) })).toBeVisible();
 
   // An anonymous shopper (separate browser context, no session) buys 2.
@@ -205,10 +208,13 @@ test('a shopper orders without any gateway and pays at pickup; staff confirm, re
   await expect(page.getByText('Available', { exact: true })).toBeVisible();
   await expect(page.getByTestId('store-url-preview')).toHaveText(new RegExp(`/store/${slug}$`));
   await page.getByLabel('Store name (English)').fill('Date House');
-  await page.getByLabel('Fulfilment branch', { exact: true }).selectOption(main);
-  await expect(page.getByRole('checkbox', { name: 'Allow payment on receipt' })).toBeChecked();
   await page.getByLabel('Status').selectOption('published');
-  await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByRole('tab', { name: /Delivery and hours/ }).click();
+  await page.getByLabel('Fulfilment branch', { exact: true }).selectOption(main);
+  await page.getByRole('tab', { name: /Payment/ }).click();
+  await expect(page.getByRole('checkbox', { name: 'Allow payment on receipt' })).toBeChecked();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByRole('tab', { name: /General/ }).click();
   await expect(page.getByRole('link', { name: new RegExp(`/store/${slug}$`) })).toBeVisible();
 
   // The shopper orders 2 to pay at pickup; nothing is reserved.
