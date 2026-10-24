@@ -1,7 +1,7 @@
 import { hostStore } from '../address.js';
 import { ErrorState, NotFound } from '@arabat/web-core';
 import { ApiError } from '@arabat/api-client';
-import { Navigate, useLocation } from 'react-router';
+import { Navigate, ScrollRestoration, useLocation } from 'react-router';
 import { CartProvider } from '../cart.js';
 import { StoreShell } from '../design/Shell.js';
 import { DesignProvider, useDesignQuery } from '../design/context.js';
@@ -10,6 +10,19 @@ import { AccountProvider, BranchChoiceProvider, useSlug, useStorefront } from '.
 
 /** Public storefront: the store, its providers and the designed shell (ADR-0128). */
 export function StoreLayout() {
+  return (
+    <>
+      {/*
+       * A new page opens at its top; Back returns to where the shopper was. Keyed by the path, so
+       * filtering or searching a list (query only) keeps the place on the page.
+       */}
+      <ScrollRestoration getKey={(location) => location.pathname} />
+      <StorePage />
+    </>
+  );
+}
+
+function StorePage() {
   const slug = useSlug();
   const store = useStorefront();
   // The design loads together with the store, not after it.

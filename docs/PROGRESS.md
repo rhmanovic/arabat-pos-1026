@@ -1265,6 +1265,12 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-24 — Fix: a new store page opened where the previous one was scrolled
+Owner's report (phone recording): from the bottom of the menu, "View cart" opened the cart page
+scrolled down. The storefront layout now has React Router's `ScrollRestoration` keyed by the path:
+a new page opens at its top, Back returns to the place, and filtering or searching a list (query
+only) keeps the place.
+
 ### 2026-10-24 — Delivery-app menu: quick add and cart bar (ADR-0128 amendment 9)
 Owner's request from a Talabat recording: the quick add on the dish picture, the cart bar and
 their motion, as the default of the ready "Restaurant" home page.

@@ -66,6 +66,11 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-24 (store pages open at the top)
+- `apps/store-web/src/app.test.tsx` (+1): from the menu, the cart bar's "View cart" scrolls the new
+  page to the top (fails without the fix). `vitest.web-setup.ts` stubs `window.scrollTo` (jsdom has
+  none).
+
 ### Results 2026-10-24 (delivery-app menu, ADR-0128 amendment 9)
 - `apps/store-web/src/app.test.tsx` (+1): the round + adds one and opens − 1 +, + again makes 2;
   the cart bar shows the count, "View cart" and the total, then what is left to the minimum order

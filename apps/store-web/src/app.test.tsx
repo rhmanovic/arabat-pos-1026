@@ -1774,6 +1774,28 @@ describe('storefront', () => {
     expect(within(menu).queryByRole('button', { name: 'Add one Mug to the cart' })).toBeNull();
   });
 
+  it('opens a new page at its top, not where the shopper was on the previous page', async () => {
+    const design = templateDesign('restaurant');
+    design.pages.home = sectionsOf([
+      {
+        id: 'menu',
+        type: 'menu',
+        variant: 'delivery',
+        quickAdd: true,
+        cartBar: true,
+        title: { en: 'Menu', ar: null },
+      },
+    ]);
+    renderStore('/demo', { 'GET /store/demo/design': () => ({ status: 200, body: { design } }) });
+    const menu = await screen.findByRole('region', { name: 'Menu' });
+    fireEvent.click(within(menu).getByRole('button', { name: 'Add one Coffee beans to the cart' }));
+    vi.mocked(window.scrollTo).mockClear();
+    fireEvent.click(
+      within(screen.getByTestId('cart-bar')).getByRole('link', { name: /View cart/ }),
+    );
+    await waitFor(() => expect(window.scrollTo).toHaveBeenCalledWith(0, 0));
+  });
+
   it('adds from the dish picture like a delivery app and shows the cart bar (restaurant)', async () => {
     const design = templateDesign('restaurant');
     design.pages.home = sectionsOf([
