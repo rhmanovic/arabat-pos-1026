@@ -1270,6 +1270,11 @@ Merchant's report: the brand colour is orange but the browser bar above the stor
 fixed `theme-color` of the storefront page). The served store page now carries
 `<meta name="theme-color">` with the store's brand colour (the default one removed), and the
 storefront keeps it in step while browsing.
+- Verified (cloud sandbox): `pnpm verify` 449, `pnpm test:integration` 325, `pnpm test:e2e` 47.
+- Released (ADR-0122): production `e56885421e35` (revision `arabat-web-00082-dph`, migration job
+  `arabat-migrate-8qvf7`, nothing new). Cloud Build check `a12852db`: ready 200, pages 200;
+  `https://www.raghefkarak.com/` carries `theme-color` `#f2802a` (the merchant's orange). Staging not
+  updated: no Railway access in this session. Signed out, `config.env` removed; no key deleted.
 
 ### 2026-10-24 — Type the colour code (store settings, link page)
 Owner's request: phone colour pickers have no field for the code. `ColorInput` (`@arabat/ui`): the
