@@ -1270,6 +1270,11 @@ Owner's request from a Talabat recording: the quick add on the dish picture, the
 their motion, as the default of the ready "Restaurant" home page.
 - Menu shape "Delivery app", `quickAdd` (+ → − n + → quantity bubble), `cartBar` (count, "View
   cart", total, progress to the minimum order / free delivery), console toggles, ready style.
+- Verified (cloud sandbox): `pnpm verify` 446, `pnpm test:integration` 325, `pnpm test:e2e` 47.
+- Released (ADR-0122): production `440c00a30553` (revision `arabat-web-00079-5xt`, migration job
+  `arabat-migrate-bdr6j`, nothing new). Cloud Build checks `3f31ea30` / `be2b696a`: ready 200,
+  pages 200, `www.raghefkarak.com` 200. Staging not updated: no Railway access in this session.
+  Signed out, `config.env` removed; no key deleted.
 - Also released before it: the plain Domain tab (`14b1505ae579`, revision `arabat-web-00078-jbj`,
   migration job ran with nothing new; Cloud Build checks: ready 200, every page 200, every
   raghefkarak address 301 to `https://www.raghefkarak.com`, the domain 200).
