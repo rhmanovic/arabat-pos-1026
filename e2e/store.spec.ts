@@ -916,6 +916,9 @@ test('a product discount made in the console shows in the store with its badge a
   const html = await (await onHost('/')).text();
   expect(html).toContain('<title>Rose</title>');
   expect(html).toContain('<meta property="og:title" content="Rose" />');
+  // One theme-color only: the store's brand colour replaces the default one.
+  expect(html.match(/<meta name="theme-color"/g)).toHaveLength(1);
+  expect(html).toContain('<meta name="theme-color" content="#be123c" />');
 
   // Stores at their own sub-domain (ADR-0136): the old address moves there, the page names
   // its store, the links point there, and the other apps are not served on it.

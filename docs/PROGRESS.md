@@ -1265,6 +1265,12 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-24 — The phone browser's bar in the store's brand colour
+Merchant's report: the brand colour is orange but the browser bar above the store was blue (the
+fixed `theme-color` of the storefront page). The served store page now carries
+`<meta name="theme-color">` with the store's brand colour (the default one removed), and the
+storefront keeps it in step while browsing.
+
 ### 2026-10-24 — Type the colour code (store settings, link page)
 Owner's request: phone colour pickers have no field for the code. `ColorInput` (`@arabat/ui`): the
 swatch plus a code box (`#1e3a8a`, `1E3A8A`, `#abc` accepted; the colour changes only on a valid

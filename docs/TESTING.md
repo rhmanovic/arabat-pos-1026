@@ -66,6 +66,10 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-24 (browser bar colour)
+- `ecommerce.int.test.ts` "link previews": the tags carry `theme-color` with the store's colour.
+- `e2e/store.spec.ts`: the served page has one `theme-color`, the store's (`#be123c`).
+
 ### Results 2026-10-24 (colour codes)
 - `packages/ui/src/color-input.test.tsx` (+2): codes typed or pasted (case, spaces, `#`, three
   digits); the colour changes only on a valid six-digit code while typing, three digits on leaving,

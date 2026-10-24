@@ -29,6 +29,8 @@ type Meta = {
   type: 'website' | 'product';
   siteName: string;
   price: string | null;
+  /** The store's brand colour for the phone browser's bar (`theme-color`). */
+  themeColor: string | null;
 };
 
 const escape = (v: string) =>
@@ -100,6 +102,7 @@ export class StoreShareService {
       type: 'website',
       siteName: storeName,
       price: null,
+      themeColor: /^#[0-9a-f]{6}$/i.test(front.primaryColor) ? front.primaryColor : null,
     };
     // A product: /store/:slug/products/:productId
     if (rest[0] === 'products' && rest[1] && UUID.test(rest[1])) {
@@ -122,6 +125,7 @@ export class StoreShareService {
         type: 'product',
         siteName: storeName,
         price: lowest.toDecimalString(),
+        themeColor: home.themeColor,
       };
     }
     // A category or a list: /store/:slug/products?category=… (or /categories?category=…)
@@ -197,6 +201,7 @@ function render(m: Meta): string {
   return [
     `<title>${escape(m.title)}</title>`,
     named('description', m.description),
+    named('theme-color', m.themeColor),
     `<link rel="canonical" href="${escape(m.url)}" />`,
     tag('og:type', m.type),
     tag('og:site_name', m.siteName),

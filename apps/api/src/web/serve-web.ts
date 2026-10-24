@@ -149,7 +149,12 @@ export async function serveWebApps(
         const tags = await storeMeta(`/store/${slug}/${rest.join('/')}`, url.searchParams).catch(
           () => null,
         );
-        let page = tags ? html.replace(/<title>[^<]*<\/title>/, tags) : html;
+        // The tags carry the store's own theme-color: the default one goes.
+        let page = tags
+          ? html
+              .replace(/<meta name="theme-color"[^>]*>\s*/, '')
+              .replace(/<title>[^<]*<\/title>/, tags)
+          : html;
         // On its own host the storefront runs at `/` and learns its store from this tag.
         if (hostSlug && slug === hostSlug)
           page = page.replace(

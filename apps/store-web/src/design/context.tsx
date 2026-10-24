@@ -243,9 +243,14 @@ export function useThemeVariables(primary: string) {
     const entries = Object.entries(JSON.parse(key) as Record<string, string>);
     for (const [k, v] of entries) root.style.setProperty(k, v);
     root.style.colorScheme = design.style.background === 'dark' ? 'dark' : 'light';
+    // The phone browser's bar takes the store's brand colour.
+    const bar = document.head.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    const before = bar?.content ?? null;
+    if (bar && /^#[0-9a-f]{6}$/i.test(primary)) bar.content = primary;
     return () => {
       for (const [k] of entries) root.style.removeProperty(k);
       root.style.colorScheme = '';
+      if (bar && before !== null) bar.content = before;
     };
-  }, [key, design.style.background]);
+  }, [key, design.style.background, primary]);
 }

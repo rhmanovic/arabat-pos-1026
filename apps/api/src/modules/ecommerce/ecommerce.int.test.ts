@@ -2689,6 +2689,8 @@ describe('link previews (ADR-0134)', () => {
       new RegExp(`og:image" content="[^"]+/api/v1/store/${s.slug}/share\\.jpg\\?v=`),
     );
     expect(home).toContain('<meta name="twitter:card" content="summary_large_image" />');
+    // The phone browser's bar takes the store's brand colour (set in setup()).
+    expect(home).toContain('<meta name="theme-color" content="#7c2d12" />');
     // A product: its name with the store's, its price and its own picture address.
     const product = (await page(`/store/${s.slug}/products/${s.teaProduct}`))!;
     expect(product).toContain('<meta property="og:title" content="Saffron tea | متجر');
