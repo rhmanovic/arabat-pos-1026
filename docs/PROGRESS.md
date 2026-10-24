@@ -1270,6 +1270,11 @@ Owner's report (phone recording): from the bottom of the menu, "View cart" opene
 scrolled down. The storefront layout now has React Router's `ScrollRestoration` keyed by the path:
 a new page opens at its top, Back returns to the place, and filtering or searching a list (query
 only) keeps the place.
+- Verified (cloud sandbox): `pnpm verify` 447, `pnpm test:integration` 325, `pnpm test:e2e` 47.
+- Released (ADR-0122): production `951f4cd35b3e` (revision `arabat-web-00080-m9d`, migration job
+  `arabat-migrate-45tzx`, nothing new). Cloud Build checks `023172db` / `2a8736fc`: ready 200, pages
+  200, `www.raghefkarak.com` 200. Staging not updated: no Railway access in this session. Signed
+  out, `config.env` removed; no key deleted.
 
 ### 2026-10-24 — Delivery-app menu: quick add and cart bar (ADR-0128 amendment 9)
 Owner's request from a Talabat recording: the quick add on the dish picture, the cart bar and
