@@ -1270,6 +1270,10 @@ Owner's request: phone colour pickers have no field for the code. `ColorInput` (
 swatch plus a code box (`#1e3a8a`, `1E3A8A`, `#abc` accepted; the colour changes only on a valid
 code, tidied on leaving). Used for the store's brand colour and the link page's colours; the store
 design editor already had a code box (kept, it can be cleared to fall back to the store colour).
+- Verified (cloud sandbox): `pnpm verify` 449, `pnpm test:integration` 325, `pnpm test:e2e` 47.
+- Released (ADR-0122): production `15531b3f30a6` (revision `arabat-web-00081-sfj`, migration job
+  `arabat-migrate-hzk2w`, nothing new). Cloud Build check `c6000e49`: ready 200, pages 200. Staging
+  not updated: no Railway access in this session. Signed out, `config.env` removed; no key deleted.
 
 ### 2026-10-24 — Fix: a new store page opened where the previous one was scrolled
 Owner's report (phone recording): from the bottom of the menu, "View cart" opened the cart page
