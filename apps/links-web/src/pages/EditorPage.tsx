@@ -16,6 +16,7 @@ import {
   isAllowedLinkUrl,
 } from '@arabat/contracts';
 import {
+  ColorInput,
   Badge,
   Button,
   Checkbox,
@@ -545,13 +546,12 @@ function ColorField({
     <Field label={label}>
       {(p) => (
         <div className="flex items-center gap-3">
-          <Input
-            {...p}
-            type="color"
-            className="h-10 w-16 p-1"
+          <ColorInput
+            id={p.id}
+            label={label}
             disabled={auto}
             value={value || fallback}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={onChange}
           />
           {optional ? (
             <Checkbox

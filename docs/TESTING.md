@@ -66,6 +66,11 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-24 (colour codes)
+- `packages/ui/src/color-input.test.tsx` (+2): codes typed or pasted (case, spaces, `#`, three
+  digits); the colour changes only on a valid six-digit code while typing, three digits on leaving,
+  an invalid code is dropped.
+
 ### Results 2026-10-24 (store pages open at the top)
 - `apps/store-web/src/app.test.tsx` (+1): from the menu, the cart bar's "View cart" scrolls the new
   page to the top (fails without the fix). `vitest.web-setup.ts` stubs `window.scrollTo` (jsdom has

@@ -1265,6 +1265,12 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-24 — Type the colour code (store settings, link page)
+Owner's request: phone colour pickers have no field for the code. `ColorInput` (`@arabat/ui`): the
+swatch plus a code box (`#1e3a8a`, `1E3A8A`, `#abc` accepted; the colour changes only on a valid
+code, tidied on leaving). Used for the store's brand colour and the link page's colours; the store
+design editor already had a code box (kept, it can be cleared to fall back to the store colour).
+
 ### 2026-10-24 — Fix: a new store page opened where the previous one was scrolled
 Owner's report (phone recording): from the bottom of the menu, "View cart" opened the cart page
 scrolled down. The storefront layout now has React Router's `ScrollRestoration` keyed by the path:

@@ -2,6 +2,7 @@ import type { OnlineStore, SaveOnlineStore } from '@arabat/contracts';
 import { ApiError } from '@arabat/api-client';
 import { RESERVED_STORE_SLUGS, STORE_SLUG_PATTERN } from '@arabat/contracts';
 import {
+  ColorInput,
   Alert,
   Badge,
   Button,
@@ -380,12 +381,11 @@ function SettingsForm({ store }: { store: OnlineStore }) {
                 {text('announcementEn', t('store.announcementEn'), { dir: 'ltr' })}
                 <Field label={t('store.color')}>
                   {(p) => (
-                    <Input
-                      {...p}
-                      type="color"
-                      className="h-10 w-20 p-1"
+                    <ColorInput
+                      id={p.id}
+                      label={t('store.color')}
                       value={v.primaryColor}
-                      onChange={(e) => set({ primaryColor: e.target.value })}
+                      onChange={(primaryColor) => set({ primaryColor })}
                     />
                   )}
                 </Field>

@@ -1,5 +1,5 @@
 import type { InputHTMLAttributes, LabelHTMLAttributes, ReactNode } from 'react';
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import { cn } from './cn.js';
 
 export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
@@ -53,6 +53,86 @@ export function Field({ label, error, hint, children, className }: FieldProps) {
           {hint}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+/** `#abc`, `abc123`, ` #ABC123 ` → `#aabbcc` / `#abc123`; anything else → null. */
+export function normalizeHexColor(raw: string): string | null {
+  const v = raw.trim().replace(/^#/, '').toLowerCase();
+  if (/^[0-9a-f]{6}$/.test(v)) return `#${v}`;
+  if (/^[0-9a-f]{3}$/.test(v))
+    return `#${v
+      .split('')
+      .map((c) => c + c)
+      .join('')}`;
+  return null;
+}
+
+/**
+ * A colour: the swatch opens the device's picker, and the code (`#1e3a8a`) can be typed or
+ * pasted (phone pickers often have no field for it). The value changes only on a valid code.
+ */
+export function ColorInput({
+  value,
+  onChange,
+  id,
+  disabled,
+  label,
+  className,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  id?: string;
+  disabled?: boolean;
+  /** Accessible name of the swatch and the code box. */
+  label: string;
+  className?: string;
+}) {
+  const [draft, setDraft] = useState(value);
+  const [shown, setShown] = useState(value);
+  // A new value from outside (the swatch, a reset) replaces what is being typed.
+  if (shown !== value) {
+    setShown(value);
+    setDraft(value);
+  }
+  const valid = normalizeHexColor(draft) !== null;
+  return (
+    <div className={cn('flex items-center gap-2', className)}>
+      <input
+        type="color"
+        aria-label={label}
+        disabled={disabled}
+        value={normalizeHexColor(value) ?? '#000000'}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-10 w-14 shrink-0 cursor-pointer rounded-md border border-border bg-surface p-1 disabled:cursor-not-allowed"
+      />
+      <Input
+        id={id}
+        dir="ltr"
+        aria-label={`${label} (#rrggbb)`}
+        aria-invalid={!valid || undefined}
+        disabled={disabled}
+        className="w-32 font-mono"
+        maxLength={7}
+        inputMode="text"
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
+        placeholder="#1e3a8a"
+        value={draft}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          // Six digits while typing (three would cut a longer code short); three on leaving.
+          if (/^\s*#?[0-9a-f]{6}\s*$/i.test(e.target.value))
+            onChange(normalizeHexColor(e.target.value)!);
+        }}
+        onBlur={() => {
+          const hex = normalizeHexColor(draft);
+          if (hex && hex !== value) onChange(hex);
+          setDraft(hex ?? value);
+        }}
+      />
     </div>
   );
 }
