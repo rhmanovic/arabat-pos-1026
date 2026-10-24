@@ -66,6 +66,14 @@ Milestone-level acceptance criteria are in `ROADMAP.md`.
   `postgres:18` service (roles created by `docker/postgres/init`), migrations,
   seeds, integration tests and E2E.
 
+### Results 2026-10-24 (delivery-app menu, ADR-0128 amendment 9)
+- `apps/store-web/src/app.test.tsx` (+1): the round + adds one and opens − 1 +, + again makes 2;
+  the cart bar shows the count, "View cart" and the total, then what is left to the minimum order
+  after removing one; left alone the stepper folds into a bubble with the quantity.
+- Checked on a phone viewport (Pixel 7, Arabic) against the owner's Talabat recording: + on the
+  picture, "− 1 +" in Talabat's order, the bubble, the bar above the phone bar, the footer not
+  covered.
+
 ### Results 2026-10-24 (plain Domain tab, ADR-0137)
 - `apps/online-web/src/app.test.tsx` (+1, 1 extended): a working domain shows only "Your domain
   works" (no records, steps, check button or save bar) and a tip for the bare domain; a domain that

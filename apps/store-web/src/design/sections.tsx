@@ -38,6 +38,7 @@ import {
 } from './context.js';
 import { SectionFrame, SectionTitle, full, shownSections } from './frame.js';
 import { headerHasSearch } from './Header.js';
+import { MenuCartBar, MenuQuickAdd } from './menu-parts.js';
 import { SaleBadge, SalePrice, productSale } from './sale.js';
 import {
   CollageSection,
@@ -1469,7 +1470,9 @@ function MenuSection({ s }: { s: SectionOf<'menu'> }) {
                   ? 'grid-cols-2 sm:grid-cols-3'
                   : s.variant === 'compact'
                     ? ''
-                    : 'sm:grid-cols-2',
+                    : s.variant === 'delivery'
+                      ? 'gap-0 divide-y divide-border sm:grid-cols-2 sm:gap-x-6 sm:divide-y-0'
+                      : 'sm:grid-cols-2',
               )}
             >
               {g.items.map((p) => {
@@ -1479,23 +1482,73 @@ function MenuSection({ s }: { s: SectionOf<'menu'> }) {
                   : p.descriptionEn || p.descriptionAr;
                 const available = p.variants.some((v) => v.available);
                 const lowest = lowestPrice(p);
-                const add =
-                  single && single.available ? (
-                    <button
-                      type="button"
-                      aria-label={t('design.addOne', { name: name(p) })}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        cart.add(
-                          { variantId: single.variantId, productId: p.productId, quantity: 1 },
-                          single.maxQuantity,
-                        );
-                      }}
-                      className="grid size-9 shrink-0 place-items-center rounded-full bg-primary text-lg font-bold text-primary-fg shadow"
+                const add = s.quickAdd ? (
+                  <MenuQuickAdd product={p} />
+                ) : single && single.available ? (
+                  <button
+                    type="button"
+                    aria-label={t('design.addOne', { name: name(p) })}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      cart.add(
+                        { variantId: single.variantId, productId: p.productId, quantity: 1 },
+                        single.maxQuantity,
+                      );
+                    }}
+                    className="grid size-9 shrink-0 place-items-center rounded-full bg-primary text-lg font-bold text-primary-fg shadow"
+                  >
+                    +
+                  </button>
+                ) : null;
+                if (s.variant === 'delivery')
+                  return (
+                    <li
+                      key={p.productId}
+                      className="relative flex gap-3 py-3 sm:border-b sm:border-border"
+                      data-menu-row
                     >
-                      +
-                    </button>
-                  ) : null;
+                      <div className="flex min-w-0 flex-1 flex-col gap-1">
+                        <Link
+                          to={storePath(store.slug, `/products/${p.productId}`)}
+                          className="font-bold after:absolute after:inset-0"
+                        >
+                          {name(p)}
+                        </Link>
+                        {s.showDescriptions && description ? (
+                          <p className="line-clamp-2 text-sm text-fg-muted">{description}</p>
+                        ) : null}
+                        <span className="mt-auto pt-1 font-semibold tabular-nums">
+                          {p.variants.length > 1
+                            ? t('catalog.from', { price: money(lowest) })
+                            : money(lowest)}
+                        </span>
+                        {!available ? (
+                          <Badge tone="warning" className="w-fit">
+                            {t('catalog.unavailable')}
+                          </Badge>
+                        ) : null}
+                      </div>
+                      {s.showImages ? (
+                        <div className="relative size-28 shrink-0">
+                          <div className="size-full overflow-hidden rounded-xl bg-surface-muted">
+                            {p.imageUrl ? (
+                              <img
+                                src={p.imageUrl}
+                                alt=""
+                                className="size-full object-cover"
+                                loading="lazy"
+                              />
+                            ) : null}
+                          </div>
+                          {available ? (
+                            <span className="absolute bottom-2 end-2 z-10">{add}</span>
+                          ) : null}
+                        </div>
+                      ) : available ? (
+                        <span className="relative z-10 self-end">{add}</span>
+                      ) : null}
+                    </li>
+                  );
                 if (s.variant === 'compact')
                   return (
                     <li
@@ -1573,6 +1626,7 @@ function MenuSection({ s }: { s: SectionOf<'menu'> }) {
           </div>
         ))}
       </div>
+      {s.cartBar ? <MenuCartBar /> : null}
     </section>
   );
 }

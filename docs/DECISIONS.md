@@ -2261,6 +2261,18 @@ ADR; supersede it.
 - **Consequences:** nothing is stored or sent from the new screens; each control is wired when
   its phase is built. No gateway or domain is promised to merchants as working.
 
+## ADR-0128 amendment 9 — Delivery-app menu: quick add and cart bar (2026-10-24)
+- **Owner's request:** learn from Talabat (screen recording): the quick add on the dish picture,
+  the cart bar at the bottom and their motion; make it the default of the ready "Restaurant" home.
+- **Decision:** menu section gains `variant: 'delivery'` (rows, words first, the picture at the
+  end), `quickAdd` (a round + on the picture adds one at once and opens − n +, folding after 2.5 s
+  into a bubble with the quantity; products with options open their page) and `cartBar` (fixed at
+  the bottom while the cart holds something: count, "View cart", total, and what is left to the
+  minimum order, then to the lowest free-delivery threshold, with a progress line; the page gets
+  room under it). Both default off, so existing designs keep their look; the ready home page
+  "Restaurant" and the new menu style "Delivery app" turn them on. Short pop / slide-up motion,
+  none with reduced motion.
+
 ## ADR-0128 amendment 8 — One search, wide banners, "See all" everywhere (2026-10-23)
 - **Owner's requests:** a banner across the whole screen; "See all" of a product section
   working in the grid and list too; never two search boxes; a header search button that opens

@@ -986,6 +986,13 @@ export const onlineAr: typeof onlineEn = {
     variant_card: 'بطاقة',
     variant_highlight: 'مميز',
     variant_row: 'صف واحد',
+    variant_delivery: 'تطبيق توصيل',
+    style_delivery: 'تطبيق توصيل',
+    menuQuickAdd: 'إضافة سريعة على الصورة',
+    menuQuickAddHint: 'زر + دائري يضيف واحداً فوراً ويفتح − 1 +، وبعد لحظة يعرض الكمية في دائرة.',
+    menuCartBar: 'شريط السلة أسفل الشاشة',
+    menuCartBarHint:
+      'ما دامت السلة فيها شيء: العدد و«اطّلع على سلّتك» والمجموع، وكم بقي للحد الأدنى للطلب أو للتوصيل المجاني.',
     variant_compact: 'مختصر',
     variant_strip: 'شريط',
     type_slider: 'سلايدر (عرض شرائح)',

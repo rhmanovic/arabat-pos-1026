@@ -1000,6 +1000,14 @@ export const onlineEn = {
     variant_card: 'Card',
     variant_highlight: 'Highlighted',
     variant_row: 'One row',
+    variant_delivery: 'Delivery app',
+    style_delivery: 'Delivery app',
+    menuQuickAdd: 'Quick add on the picture',
+    menuQuickAddHint:
+      'A round + adds one at once and opens − 1 +; after a moment it shows the quantity in a bubble.',
+    menuCartBar: 'Cart bar at the bottom',
+    menuCartBarHint:
+      'While something is in the cart: the count, “View cart”, the total, and how much is left to the minimum order or free delivery.',
     variant_compact: 'Compact',
     variant_strip: 'Strip',
     type_slider: 'Slider',

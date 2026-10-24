@@ -151,3 +151,38 @@
     transform: none;
   }
 }
+
+/*
+ * Delivery-app touches of the menu (quick add, cart bar): a short pop when the stepper or the
+ * count appears and a slide up of the cart bar; none with reduced motion.
+ */
+@keyframes quick-pop {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes cart-bar-in {
+  from {
+    transform: translateY(110%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+.quick-pop {
+  animation: quick-pop 0.18s ease-out;
+}
+.cart-bar {
+  animation: cart-bar-in 0.28s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .quick-pop,
+  .cart-bar {
+    animation: none;
+  }
+}

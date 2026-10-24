@@ -1265,6 +1265,15 @@ deleted). Phase 5 implemented as one slice:
   afterwards; `infra/gcp/config.env` removed; no key deleted. Rollback if ever needed:
   `--to-revisions=arabat-web-00040-xgz=100`.
 
+### 2026-10-24 — Delivery-app menu: quick add and cart bar (ADR-0128 amendment 9)
+Owner's request from a Talabat recording: the quick add on the dish picture, the cart bar and
+their motion, as the default of the ready "Restaurant" home page.
+- Menu shape "Delivery app", `quickAdd` (+ → − n + → quantity bubble), `cartBar` (count, "View
+  cart", total, progress to the minimum order / free delivery), console toggles, ready style.
+- Also released before it: the plain Domain tab (`14b1505ae579`, revision `arabat-web-00078-jbj`,
+  migration job ran with nothing new; Cloud Build checks: ready 200, every page 200, every
+  raghefkarak address 301 to `https://www.raghefkarak.com`, the domain 200).
+
 ### 2026-10-23 — Permanent store code and merchants' own domains (ADR-0137)
 Owner's decisions: like Shopify; a code per store that never changes; the domain tied to the
 store, not its address; merchants buy their domain anywhere and connect it themselves from the

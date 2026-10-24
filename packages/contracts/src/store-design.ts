@@ -423,12 +423,23 @@ export const featuresSectionSchema = z.object({
 export const menuSectionSchema = z.object({
   ...base,
   type: z.literal('menu'),
-  variant: z.enum(['list', 'grid', 'compact']).default('list'),
+  /** `delivery`: rows like a delivery app (words first, the picture at the end). */
+  variant: z.enum(['list', 'grid', 'compact', 'delivery']).default('list'),
   title: localized(80),
   stickyTabs: z.boolean().default(true),
   showImages: z.boolean().default(true),
   showDescriptions: z.boolean().default(true),
   categoryIds: z.array(uuidLike).max(40).default([]),
+  /**
+   * Quick add (like delivery apps): a round + on the picture adds one at once and opens − n +;
+   * after a moment it folds into a bubble with the quantity.
+   */
+  quickAdd: z.boolean().default(false),
+  /**
+   * A cart bar at the bottom of the screen while something is in the cart: count, "View cart",
+   * total, and how much is left to the minimum order or to free delivery.
+   */
+  cartBar: z.boolean().default(false),
 });
 /** Opening state, preparation / delivery times, minimum order and branches. */
 export const infoSectionSchema = z.object({
@@ -2211,7 +2222,13 @@ export function homeLayout(layout: HomeLayout): DesignSection[] {
         }),
         one('info', { type: 'info', variant: 'strip' }),
         r('featured', { variant: 'carousel', title: l('Most ordered', 'الأكثر طلبًا') }),
-        one('menu', { type: 'menu', variant: 'list', title: l('Menu', 'المنيو') }),
+        one('menu', {
+          type: 'menu',
+          variant: 'delivery',
+          quickAdd: true,
+          cartBar: true,
+          title: l('Menu', 'المنيو'),
+        }),
         r('reviews'),
         r('contactCta', {
           title: l('Planning an event?', 'عندك مناسبة؟'),
@@ -2383,6 +2400,13 @@ export const SECTION_STYLES = {
     list: { variant: 'list', showImages: true, showDescriptions: true },
     grid: { variant: 'grid', showImages: true, showDescriptions: false },
     compact: { variant: 'compact', showImages: false, showDescriptions: false },
+    delivery: {
+      variant: 'delivery',
+      showImages: true,
+      showDescriptions: true,
+      quickAdd: true,
+      cartBar: true,
+    },
   },
   info: { strip: { variant: 'strip' }, cards: { variant: 'cards' } },
   catalog: {

@@ -10,7 +10,7 @@ import {
 import { flattenKeys } from '@arabat/i18n';
 import { createQueryClient } from '@arabat/web-core';
 import { fakeApiFetch, type FakeRoute } from '@arabat/web-core/testing';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RouterProvider, createMemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -1772,6 +1772,43 @@ describe('storefront', () => {
     expect(await screen.findByRole('link', { name: 'Cart (1)' })).toBeInTheDocument();
     // A sold-out dish has no quick add.
     expect(within(menu).queryByRole('button', { name: 'Add one Mug to the cart' })).toBeNull();
+  });
+
+  it('adds from the dish picture like a delivery app and shows the cart bar (restaurant)', async () => {
+    const design = templateDesign('restaurant');
+    design.pages.home = sectionsOf([
+      {
+        id: 'menu',
+        type: 'menu',
+        variant: 'delivery',
+        quickAdd: true,
+        cartBar: true,
+        title: { en: 'Menu', ar: null },
+      },
+    ]);
+    renderStore('/demo', { 'GET /store/demo/design': () => ({ status: 200, body: { design } }) });
+    const menu = await screen.findByRole('region', { name: 'Menu' });
+    expect(screen.queryByTestId('cart-bar')).toBeNull();
+    // The round + adds one at once and opens − 1 +.
+    fireEvent.click(within(menu).getByRole('button', { name: 'Add one Coffee beans to the cart' }));
+    const stepper = await within(menu).findByTestId('quick-stepper');
+    expect(stepper).toHaveTextContent('1');
+    fireEvent.click(
+      within(stepper).getByRole('button', { name: 'Add one Coffee beans to the cart' }),
+    );
+    expect(stepper).toHaveTextContent('2');
+    // The cart bar: count, "View cart", total, and what is left to the minimum order (2.000).
+    const bar = screen.getByTestId('cart-bar');
+    expect(within(bar).getByRole('link', { name: /View cart/ })).toHaveTextContent('2');
+    expect(bar).toHaveTextContent('2.500');
+    fireEvent.click(
+      within(stepper).getByRole('button', { name: 'Remove one Coffee beans from the cart' }),
+    );
+    expect(bar).toHaveTextContent('Add KWD 0.750 to reach the minimum order');
+    // Left alone, the stepper folds into a bubble with the quantity.
+    expect(await within(menu).findByTestId('quick-count', {}, { timeout: 4000 })).toHaveTextContent(
+      '1',
+    );
   });
 
   it('previews the draft inside the console frame and follows the editor live', async () => {

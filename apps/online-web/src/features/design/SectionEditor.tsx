@@ -1873,7 +1873,7 @@ function MenuEditor({ s, set }: { s: SectionOf<'menu'>; set: Patch<SectionOf<'me
       <Choice
         label={t('design.shape')}
         value={s.variant}
-        options={useVariants(['list', 'grid', 'compact'] as const)}
+        options={useVariants(['list', 'grid', 'compact', 'delivery'] as const)}
         onChange={(v) => set({ variant: v })}
       />
       <Toggle
@@ -1891,6 +1891,22 @@ function MenuEditor({ s, set }: { s: SectionOf<'menu'>; set: Patch<SectionOf<'me
         checked={s.showDescriptions}
         onChange={(v) => set({ showDescriptions: v })}
       />
+      <div className="flex flex-col gap-1">
+        <Toggle
+          label={t('design.menuQuickAdd')}
+          checked={s.quickAdd}
+          onChange={(v) => set({ quickAdd: v })}
+        />
+        <p className="text-xs text-fg-muted">{t('design.menuQuickAddHint')}</p>
+      </div>
+      <div className="flex flex-col gap-1">
+        <Toggle
+          label={t('design.menuCartBar')}
+          checked={s.cartBar}
+          onChange={(v) => set({ cartBar: v })}
+        />
+        <p className="text-xs text-fg-muted">{t('design.menuCartBarHint')}</p>
+      </div>
       <MultiPick
         label={t('design.chooseCategories')}
         options={groups}
